@@ -5,9 +5,9 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
-      '/entries': 'http://localhost:3001',
-      '/tags': 'http://localhost:3001',
-      '/open-questions': 'http://localhost:3001',
+      '/entries': 'http://localhost:3004',
+      '/tags': 'http://localhost:3004',
+      '/open-questions': 'http://localhost:3004',
     },
   },
 });

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import Entry from '../server/src/models/Entry.js';
+import Entry from '../src/models/Entry.js';
 
 const entries = [
   {title:'Eldan Elias',category:'Characters',summary:'Protagonist. Near-future Pennsylvania carpenter and avid gamer, unwitting Vurdaal agent.',body:'Lives in Adams County near Gettysburg in a small house in a valley with his wife and children. Privately motivated, hands-on, athletically gifted, family-first. Possesses extraordinarily rare and powerful magical potential hidden from both him and the reader for much of the story. Believes he is beta-testing an advanced holodeck-like gaming experience. Eventually captured by Kol Emet, learns the truth, becomes a double agent to protect his family. Name is an anagram of Daniel (author). Elias chosen for its Hebrew meaning and allegorical resonance.',tags:['Eldan','Protagonist','Vurdaal','KolEmet','Earth'],open_question:''},

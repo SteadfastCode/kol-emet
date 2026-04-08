@@ -15,7 +15,7 @@ yarn start        # production
 yarn seed         # seed MongoDB with the 18 initial entries
 
 # Frontend (client/)
-yarn dev          # Vite dev server (proxies API to localhost:3001)
+yarn dev          # Vite dev server (proxies API to localhost:3004)
 yarn build        # production build to client/dist/
 
 # MCP server (mcp/)
