@@ -1,5 +1,5 @@
 <template>
-  <div class="entry-card" :class="{ open: expanded, editing: isEditing }" @click="handleCardClick">
+  <div ref="cardEl" class="entry-card" :class="{ open: expanded, editing: isEditing }" @click="handleCardClick">
     <div class="entry-header">
       <div class="entry-meta">
         <input
@@ -69,7 +69,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, nextTick } from 'vue';
 import { updateEntry } from '../api/entries.js';
 
 const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline'];
@@ -85,6 +85,7 @@ const CAT_COLORS = {
   'Timeline':        { bg: '#FAC775', color: '#633806' },
 };
 
+const cardEl = ref(null);
 const isEditing = ref(false);
 const isSaving = ref(false);
 
@@ -116,6 +117,9 @@ function startEdit() {
   form.body = props.entry.body;
   form.tagsRaw = props.entry.tags.join(', ');
   isEditing.value = true;
+  nextTick(() => {
+    cardEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
 function resetForm() {
@@ -128,9 +132,9 @@ function resetForm() {
 
 function cancelOrUndo() {
   if (isDirty.value) {
-    resetForm(); // Undo: stay in edit mode, button reverts to Cancel
+    resetForm();
   } else {
-    isEditing.value = false; // Cancel: exit edit mode
+    isEditing.value = false;
   }
 }
 
@@ -138,7 +142,7 @@ async function handleSave() {
   if (isSaving.value) return;
   isSaving.value = true;
   try {
-    await updateEntry(props.entry._id, {
+    const updated = await updateEntry(props.entry._id, {
       title: form.title.trim(),
       category: form.category,
       summary: form.summary.trim(),
@@ -146,7 +150,7 @@ async function handleSave() {
       tags: form.tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
     });
     isEditing.value = false;
-    emit('saved');
+    emit('saved', updated);
   } finally {
     isSaving.value = false;
   }
@@ -202,7 +206,6 @@ function handleDelete() {
 
 .edit-tags-row { margin-top: 8px; }
 
-/* Spinner */
 .spinner {
   display: inline-block;
   width: 10px;

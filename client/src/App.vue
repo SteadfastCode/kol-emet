@@ -28,7 +28,7 @@
         :expanded="expandedId === entry._id"
         @toggle="toggleEntry(entry._id)"
         @tag-click="setTag"
-        @saved="load"
+        @saved="handleSaved"
         @delete="handleDelete(entry._id)"
       />
     </div>
@@ -146,6 +146,11 @@ async function saveEntry() {
   await load();
 }
 
+function handleSaved(updated) {
+  const idx = entries.value.findIndex(e => e._id === updated._id);
+  if (idx !== -1) entries.value[idx] = updated;
+}
+
 async function handleDelete(id) {
   await deleteEntry(id);
   if (expandedId.value === id) expandedId.value = null;
@@ -218,6 +223,13 @@ body {
 }
 .entry-card:hover { border-color: #3a3a3a; }
 .entry-card.open { border-color: #4a4a4a; }
+.entry-card.editing {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-color: #555;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.8);
+}
 
 .entry-header {
   display: flex; align-items: flex-start;
