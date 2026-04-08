@@ -26,10 +26,13 @@
         v-for="entry in filtered" :key="entry._id"
         :entry="entry"
         :expanded="expandedId === entry._id"
+        :is-another-editing="editingId !== null && editingId !== entry._id"
         @toggle="toggleEntry(entry._id)"
         @tag-click="setTag"
         @saved="handleSaved"
         @delete="handleDelete(entry._id)"
+        @edit-start="editingId = entry._id"
+        @edit-end="editingId = null"
       />
     </div>
 
@@ -77,6 +80,7 @@ const searchQuery = ref('');
 const activeCat = ref('All');
 const activeTag = ref(null);
 const expandedId = ref(null);
+const editingId = ref(null);
 const modal = ref({ open: false, entry: null });
 const form = ref(emptyForm());
 
@@ -223,13 +227,6 @@ body {
 }
 .entry-card:hover { border-color: #3a3a3a; }
 .entry-card.open { border-color: #4a4a4a; }
-.entry-card.editing {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  border-color: #555;
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.8);
-}
 
 .entry-header {
   display: flex; align-items: flex-start;
