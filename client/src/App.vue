@@ -55,9 +55,6 @@
         <label>Tags <span class="hint">(comma separated)</span></label>
         <input v-model="form.tagsRaw" placeholder="e.g. WorldTrain, Xor, Founder" />
 
-        <label>Open question <span class="hint">(optional)</span></label>
-        <input v-model="form.open_question" placeholder="Unresolved question…" />
-
         <div class="modal-actions">
           <button class="btn-sm" @click="closeModal">Cancel</button>
           <button class="btn-sm primary" @click="saveEntry" :disabled="!form.title.trim()">Save</button>
@@ -72,7 +69,7 @@ import { ref, computed, onMounted } from 'vue';
 import EntryCard from './components/EntryCard.vue';
 import { getEntries, createEntry, updateEntry, deleteEntry } from './api/entries.js';
 
-const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline', 'Open Questions'];
+const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline'];
 
 const entries = ref([]);
 const loading = ref(true);
@@ -84,7 +81,7 @@ const modal = ref({ open: false, entry: null });
 const form = ref(emptyForm());
 
 function emptyForm() {
-  return { title: '', category: 'Characters', summary: '', body: '', tagsRaw: '', open_question: '' };
+  return { title: '', category: 'Characters', summary: '', body: '', tagsRaw: '' };
 }
 
 onMounted(async () => {
@@ -124,7 +121,6 @@ function openModal(entry = null) {
       summary: entry.summary,
       body: entry.body,
       tagsRaw: entry.tags.join(', '),
-      open_question: entry.open_question ?? '',
     };
   } else {
     form.value = emptyForm();
@@ -140,7 +136,6 @@ async function saveEntry() {
     summary: form.value.summary.trim(),
     body: form.value.body.trim(),
     tags: form.value.tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
-    open_question: form.value.open_question.trim(),
   };
   if (modal.value.entry) {
     await updateEntry(modal.value.entry._id, data);
@@ -248,12 +243,17 @@ body {
 }
 .entry-body p { margin-bottom: 8px; }
 .entry-body p:last-of-type { margin-bottom: 0; }
+.linked-oqs { margin-top: 10px; }
+.oq-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: #c07020; margin-bottom: 5px;
+}
 .linked-oq {
-  margin-top: 10px; padding: 8px 10px;
+  padding: 7px 10px; margin-bottom: 5px;
   background: #2a1800; border-radius: 7px;
   font-size: 12px; color: #f0a040;
 }
-.linked-oq strong { display: block; margin-bottom: 3px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #c07020; }
+.linked-oq:last-child { margin-bottom: 0; }
 .entry-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
 .tag {
   font-size: 11px; padding: 2px 8px; border-radius: 999px;

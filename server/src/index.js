@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import entriesRouter from './routes/entries.js';
 import tagsRouter from './routes/tags.js';
 import openQuestionsRouter from './routes/openQuestions.js';
+import './models/OpenQuestion.js'; // ensure model is registered for population
 import { requireAuth } from './middleware/auth.js';
 
 const app = express();

@@ -3,7 +3,7 @@ import Entry from '../models/Entry.js';
 
 const router = Router();
 
-// GET /entries — list all, with optional filters
+// GET /entries
 router.get('/', async (req, res) => {
   try {
     const filter = {};
@@ -13,7 +13,9 @@ router.get('/', async (req, res) => {
       const re = new RegExp(req.query.q, 'i');
       filter.$or = [{ title: re }, { summary: re }, { body: re }];
     }
-    const entries = await Entry.find(filter).sort({ title: 1 });
+    const entries = await Entry.find(filter)
+      .sort({ title: 1 })
+      .populate('open_questions', 'question status');
     res.json(entries);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,7 +25,8 @@ router.get('/', async (req, res) => {
 // GET /entries/:id
 router.get('/:id', async (req, res) => {
   try {
-    const entry = await Entry.findById(req.params.id);
+    const entry = await Entry.findById(req.params.id)
+      .populate('open_questions', 'question status');
     if (!entry) return res.status(404).json({ error: 'Not found' });
     res.json(entry);
   } catch (err) {
@@ -47,7 +50,7 @@ router.put('/:id', async (req, res) => {
     const entry = await Entry.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
-    });
+    }).populate('open_questions', 'question status');
     if (!entry) return res.status(404).json({ error: 'Not found' });
     res.json(entry);
   } catch (err) {

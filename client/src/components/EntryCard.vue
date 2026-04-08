@@ -3,7 +3,9 @@
     <div class="entry-header">
       <div class="entry-meta">
         <span class="entry-title">{{ entry.title }}</span>
-        <span v-if="entry.open_question" class="oq-badge">open question</span>
+        <span v-if="entry.open_questions?.length" class="oq-badge">
+          {{ entry.open_questions.length === 1 ? 'open question' : `${entry.open_questions.length} open questions` }}
+        </span>
       </div>
       <span class="entry-cat" :style="catStyle">{{ entry.category }}</span>
     </div>
@@ -11,10 +13,14 @@
 
     <div v-if="expanded" class="entry-body" @click.stop>
       <p v-for="(para, i) in bodyParagraphs" :key="i">{{ para }}</p>
-      <div v-if="entry.open_question" class="linked-oq">
-        <strong>Open question</strong>
-        {{ entry.open_question }}
+
+      <div v-if="entry.open_questions?.length" class="linked-oqs">
+        <div class="oq-label">Open questions</div>
+        <div v-for="oq in entry.open_questions" :key="oq._id" class="linked-oq">
+          {{ oq.question }}
+        </div>
       </div>
+
       <div v-if="entry.tags.length" class="entry-tags">
         <span v-for="tag in entry.tags" :key="tag" class="tag"
           @click.stop="$emit('tag-click', tag)">#{{ tag }}</span>
@@ -39,7 +45,6 @@ const CAT_COLORS = {
   'Organizations':   { bg: '#F5C4B3', color: '#712B13' },
   'Lore & Mechanics':{ bg: '#CECBF6', color: '#3C3489' },
   'Timeline':        { bg: '#FAC775', color: '#633806' },
-  'Open Questions':  { bg: '#F4C0D1', color: '#72243E' },
 };
 
 const catStyle = computed(() => CAT_COLORS[props.entry.category] ?? { bg: '#333', color: '#aaa' });

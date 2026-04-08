@@ -7,7 +7,8 @@
       "Bash(gh auth:*)",
       "Bash(gh org:*)",
       "Bash(gh repo:*)",
-      "Bash(yarn:*)"
+      "Bash(yarn:*)",
+      "Bash(git push:*)"
     ]
   }
 }
