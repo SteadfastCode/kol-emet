@@ -28,7 +28,7 @@
         :expanded="expandedId === entry._id"
         @toggle="toggleEntry(entry._id)"
         @tag-click="setTag"
-        @edit="openModal(entry)"
+        @saved="load"
         @delete="handleDelete(entry._id)"
       />
     </div>
