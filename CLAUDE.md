@@ -10,15 +10,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Backend (server/)
-npm install && npm run dev     # dev server with --watch (Node 18+)
-npm start                      # production
+yarn dev          # dev server with --watch (Node 18+)
+yarn start        # production
+yarn seed         # seed MongoDB with the 18 initial entries
 
 # Frontend (client/)
-npm install && npm run dev     # Vite dev server (proxies API to localhost:3001)
-npm run build                  # production build to client/dist/
+yarn dev          # Vite dev server (proxies API to localhost:3001)
+yarn build        # production build to client/dist/
 
 # MCP server (mcp/)
-npm install && npm start       # stdio transport
+yarn start        # stdio transport
 ```
 
 Copy `.env.example` to `.env` in both `server/` and `mcp/` before running.
