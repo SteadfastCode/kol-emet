@@ -1,10 +1,12 @@
+const BASE_URL = import.meta.env.VITE_API_URL ?? '';
+
 const HEADERS = {
   'Content-Type': 'application/json',
   Authorization: `Bearer ${import.meta.env.VITE_BEARER_TOKEN}`,
 };
 
-async function req(url, options = {}) {
-  const res = await fetch(url, { ...options, headers: HEADERS });
+async function req(path, options = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers: HEADERS });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.status === 204 ? null : res.json();
 }
