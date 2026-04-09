@@ -1,12 +1,12 @@
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
-const HEADERS = {
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${import.meta.env.VITE_BEARER_TOKEN}`,
-};
-
 async function req(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers: HEADERS });
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+  });
+  if (res.status === 401) throw Object.assign(new Error('Unauthorized'), { status: 401 });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.status === 204 ? null : res.json();
 }

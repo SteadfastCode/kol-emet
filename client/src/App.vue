@@ -1,10 +1,12 @@
 <template>
-  <div class="app">
+  <LoginView v-if="!isAuthenticated" @login-success="onLoginSuccess" />
+  <div v-else class="app">
     <header class="app-header">
       <h1>Kol Emet</h1>
       <div class="top-bar">
         <input v-model="searchQuery" class="search" placeholder="Search entries..." />
         <button class="btn" @click="openModal()">+ Add entry</button>
+        <button class="btn" @click="handleLogout">Sign out</button>
       </div>
     </header>
 
@@ -71,6 +73,8 @@
 import { ref, computed, onMounted } from 'vue';
 import EntryCard from './components/EntryCard.vue';
 import { getEntries, createEntry, updateEntry, deleteEntry } from './api/entries.js';
+import { getSession, logout } from './api/auth.js';
+import LoginView from './views/LoginView.vue';
 
 const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline'];
 
@@ -83,14 +87,31 @@ const expandedId = ref(null);
 const editingId = ref(null);
 const modal = ref({ open: false, entry: null });
 const form = ref(emptyForm());
+const isAuthenticated = ref(false);
 
 function emptyForm() {
   return { title: '', category: 'Characters', summary: '', body: '', tagsRaw: '' };
 }
 
 onMounted(async () => {
-  await load();
+  try {
+    await getSession();
+    isAuthenticated.value = true;
+    await load();
+  } catch {
+    isAuthenticated.value = false;
+  }
 });
+
+function onLoginSuccess() {
+  isAuthenticated.value = true;
+  load();
+}
+
+async function handleLogout() {
+  await logout();
+  isAuthenticated.value = false;
+}
 
 async function load() {
   loading.value = true;

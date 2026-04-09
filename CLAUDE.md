@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Kol Emet** (Hebrew: *Voice of Truth*) is a privately hosted wiki/CMS app serving as the living source of truth for the World Train creative writing series bible. The internal codename is `kol-emet`; it will be marketed under the **Steadfast Code** brand with a separate product name TBD. Personal instance hosted at danielecker.dev.
+**Kol Emet** (Hebrew: *Voice of Truth*) is a wiki/CMS platform being built for public release under the **Steadfast Code** brand (product name TBD). Daniel's personal instance (hosted at danielecker.dev, used for his World Train creative writing series bible) is the first deployment — but it is not the target. The target is a multi-tenant SaaS product that any user can sign up for and use.
+
+**Every implementation decision should be made with the public product in mind.** The fact that Daniel is the only current user is a deployment detail, not a design constraint.
 
 ## Commands
 
@@ -30,7 +32,7 @@ Copy `.env.example` to `.env` in both `server/` and `mcp/` before running.
 - **Backend:** Node.js + Express
 - **Database:** MongoDB (tags stored as string arrays, not comma-separated strings)
 - **MCP server:** Lightweight REST API wrapper for Claude integration
-- **Auth:** Simple bearer token (private instance, no complex auth needed)
+- **Auth:** Session cookies with bcrypt password hashing. Users stored in MongoDB with email + passwordHash. Open registration — anyone can create an account.
 
 ## Architecture
 
@@ -45,7 +47,9 @@ The MCP server is a thin wrapper around the same REST API the frontend uses — 
 
 ### Key Design Principles
 
-- **Multi-tenancy from the start** — never hardcode single-user assumptions, even in the personal instance. This keeps productization costs low.
+- **Multi-tenant SaaS product** — this is a public product, not a personal tool. Never design for single-user scenarios. Open registration, per-user data isolation, and scalability to many users are baseline requirements, not future features.
+- **Daniel's instance is not the template** — the fact that the first deployment is personal does not mean auth should be simplified, registration should be gated, or features should be scoped to one user's needs. Always build the real thing.
+- **Auth UX must be modern and frictionless** — login and registration forms must be compatible with password managers (proper `autocomplete` attributes on all inputs) and passkeys (WebAuthn) should be supported. Never build auth flows that block or frustrate standard credential tooling.
 - **Model-agnostic MCP layer** — must work with both cloud APIs (Anthropic, OpenAI) and local models (Ollama). Do not tie the MCP layer to a specific provider.
 - **Decision logging** — add significant technical decisions to the Decision Log in `kol_emet_spec.md` with reasoning.
 
