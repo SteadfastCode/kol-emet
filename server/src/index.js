@@ -17,6 +17,8 @@ const app = express();
 const PORT = process.env.API_PORT ?? 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
+app.set('trust proxy', 1); // trust Railway's reverse proxy so secure cookies work
+
 app.use(cors({
   origin: process.env.CLIENT_ORIGIN,
   credentials: true,
