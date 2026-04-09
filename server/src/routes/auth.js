@@ -31,7 +31,10 @@ router.post('/register', async (req, res) => {
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
     req.session.userId = user._id.toString();
-    res.status(201).json({ ok: true });
+    req.session.save((saveErr) => {
+      if (saveErr) return res.status(500).json({ error: 'Session save error' });
+      res.status(201).json({ ok: true });
+    });
   });
 });
 
@@ -51,7 +54,10 @@ router.post('/login', async (req, res) => {
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
     req.session.userId = user._id.toString();
-    res.json({ ok: true });
+    req.session.save((saveErr) => {
+      if (saveErr) return res.status(500).json({ error: 'Session save error' });
+      res.json({ ok: true });
+    });
   });
 });
 
@@ -196,7 +202,10 @@ router.post('/webauthn/login/complete', async (req, res) => {
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
     req.session.userId = user._id.toString();
-    res.json({ ok: true });
+    req.session.save((saveErr) => {
+      if (saveErr) return res.status(500).json({ error: 'Session save error' });
+      res.json({ ok: true });
+    });
   });
 });
 
