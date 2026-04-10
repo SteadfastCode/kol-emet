@@ -211,11 +211,11 @@ function handleDelete() {
 /* Fixed card when editing */
 .entry-card.editing {
   position: fixed;
-  top: 1rem;
+  top: calc(var(--header-height, 0px) + 0.75rem);
   left: 50%;
   transform: translateX(-50%);
   width: min(760px, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100vh - var(--header-height, 0px) - 1.5rem);
   overflow-y: auto;
   z-index: 100;
   border-color: #555;

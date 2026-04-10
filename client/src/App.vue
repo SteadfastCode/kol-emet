@@ -1,25 +1,27 @@
 <template>
   <LoginView v-if="!isAuthenticated" @login-success="onLoginSuccess" />
-  <div v-else class="app">
-    <header class="app-header">
-      <h1>Kol Emet</h1>
-      <div class="top-bar">
-        <input v-model="searchQuery" class="search" placeholder="Search entries..." />
-        <button class="btn" @click="openModal()">+ Add entry</button>
-        <button class="btn" @click="handleLogout">Sign out</button>
+  <div v-else class="app" :style="headerHeight ? { '--header-height': headerHeight + 'px' } : {}">
+    <div ref="stickyHeaderEl" class="sticky-header">
+      <header class="app-header">
+        <h1>Kol Emet</h1>
+        <div class="top-bar">
+          <input v-model="searchQuery" class="search" placeholder="Search entries..." />
+          <button class="btn" @click="openModal()">+ Add entry</button>
+          <button class="btn" @click="handleLogout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="cat-pills">
+        <span
+          v-for="cat in ['All', ...CATEGORIES]" :key="cat"
+          class="pill" :class="{ active: activeCat === cat && !activeTag }"
+          @click="setCat(cat)"
+        >{{ cat }}</span>
+        <span v-if="activeTag" class="pill active" @click="clearTag">#{{ activeTag }} ✕</span>
       </div>
-    </header>
 
-    <div class="cat-pills">
-      <span
-        v-for="cat in ['All', ...CATEGORIES]" :key="cat"
-        class="pill" :class="{ active: activeCat === cat && !activeTag }"
-        @click="setCat(cat)"
-      >{{ cat }}</span>
-      <span v-if="activeTag" class="pill active" @click="clearTag">#{{ activeTag }} ✕</span>
+      <div class="stats">{{ filtered.length }} of {{ entries.length }} entries</div>
     </div>
-
-    <div class="stats">{{ filtered.length }} of {{ entries.length }} entries</div>
 
     <div v-if="loading" class="empty">Loading…</div>
     <div v-else-if="!filtered.length" class="empty">No entries found.</div>
@@ -71,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import EntryCard from './components/EntryCard.vue';
 import { getEntries, createEntry, updateEntry, deleteEntry } from './api/entries.js';
 import { getSession, logout } from './api/auth.js';
@@ -90,6 +92,9 @@ const modal = ref({ open: false, entry: null });
 const form = ref(emptyForm());
 const isAuthenticated = ref(false);
 const editingCardHeight = ref(0);
+const stickyHeaderEl = ref(null);
+const headerHeight = ref(0);
+let headerResizeObserver = null;
 
 function emptyForm() {
   return { title: '', category: 'Characters', summary: '', body: '', tagsRaw: '' };
@@ -103,7 +108,15 @@ onMounted(async () => {
   } catch {
     isAuthenticated.value = false;
   }
+  if (stickyHeaderEl.value) {
+    headerResizeObserver = new ResizeObserver(() => {
+      headerHeight.value = stickyHeaderEl.value.getBoundingClientRect().height;
+    });
+    headerResizeObserver.observe(stickyHeaderEl.value);
+  }
 });
+
+onBeforeUnmount(() => headerResizeObserver?.disconnect());
 
 function onLoginSuccess() {
   isAuthenticated.value = true;
@@ -196,6 +209,15 @@ body {
 }
 
 .app { max-width: 760px; margin: 0 auto; }
+
+/* Sticky header */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #121212;
+  padding-bottom: 0.5rem;
+}
 
 /* Header */
 .app-header { margin-bottom: 1.25rem; }
