@@ -23,7 +23,7 @@
 
     <div v-if="loading" class="empty">Loading…</div>
     <div v-else-if="!filtered.length" class="empty">No entries found.</div>
-    <div v-else class="entries">
+    <div v-else class="entries" :style="editingCardHeight ? { paddingTop: editingCardHeight + 16 + 'px' } : {}">
       <EntryCard
         v-for="entry in filtered" :key="entry._id"
         :entry="entry"
@@ -35,6 +35,7 @@
         @delete="handleDelete(entry._id)"
         @edit-start="editingId = entry._id"
         @edit-end="editingId = null"
+        @edit-height="editingCardHeight = $event"
       />
     </div>
 
@@ -88,6 +89,7 @@ const editingId = ref(null);
 const modal = ref({ open: false, entry: null });
 const form = ref(emptyForm());
 const isAuthenticated = ref(false);
+const editingCardHeight = ref(0);
 
 function emptyForm() {
   return { title: '', category: 'Characters', summary: '', body: '', tagsRaw: '' };

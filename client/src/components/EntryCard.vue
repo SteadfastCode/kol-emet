@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, nextTick } from 'vue';
+import { ref, computed, reactive, nextTick, onBeforeUnmount } from 'vue';
 import { updateEntry } from '../api/entries.js';
 
 const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline'];
@@ -96,7 +96,7 @@ const props = defineProps({
   isAnotherEditing: Boolean,
 });
 
-const emit = defineEmits(['toggle', 'tag-click', 'delete', 'saved', 'edit-start', 'edit-end']);
+const emit = defineEmits(['toggle', 'tag-click', 'delete', 'saved', 'edit-start', 'edit-end', 'edit-height']);
 
 const CAT_COLORS = {
   'Characters':       { bg: '#B5D4F4', color: '#0C447C' },
@@ -109,7 +109,7 @@ const CAT_COLORS = {
 const cardEl = ref(null);
 const isEditing = ref(false);
 const isSaving = ref(false);
-const rawGhostHeight = ref(0);
+let resizeObserver = null;
 
 const form = reactive({ title: '', category: '', summary: '', body: '', tagsRaw: '' });
 
@@ -127,11 +127,7 @@ const isDirty = computed(() =>
   form.tagsRaw  !== props.entry.tags.join(', ')
 );
 
-const ghostStyle = computed(() =>
-  isEditing.value
-    ? { height: rawGhostHeight.value + 'px', visibility: 'hidden' }
-    : { height: '0px' }
-);
+const ghostStyle = computed(() => ({ height: '0px' }));
 
 function handleCardClick() {
   if (isEditing.value) return;
@@ -148,16 +144,30 @@ function populateForm() {
 
 function startEdit() {
   populateForm();
-  rawGhostHeight.value = cardEl.value.getBoundingClientRect().height;
   isEditing.value = true;
   emit('edit-start');
+  nextTick(() => {
+    resizeObserver = new ResizeObserver(() => {
+      emit('edit-height', cardEl.value?.getBoundingClientRect().height ?? 0);
+    });
+    resizeObserver.observe(cardEl.value);
+  });
 }
+
+function stopEditTracking() {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  emit('edit-height', 0);
+}
+
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 function cancelOrUndo() {
   if (isDirty.value) {
     populateForm();
   } else {
     isEditing.value = false;
+    stopEditTracking();
     emit('edit-end');
   }
 }
@@ -174,6 +184,7 @@ async function handleSave() {
       tags:     form.tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
     });
     isEditing.value = false;
+    stopEditTracking();
     emit('saved', updated);
     emit('edit-end');
   } finally {
