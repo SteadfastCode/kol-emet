@@ -12,6 +12,7 @@ async function req(path, options = {}) {
 }
 
 export const getEntries = () => req('/entries');
+export const getEntry = (id) => req(`/entries/${id}`);
 export const createEntry = (data) => req('/entries', { method: 'POST', body: JSON.stringify(data) });
 export const updateEntry = (id, data) => req(`/entries/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteEntry = (id) => req(`/entries/${id}`, { method: 'DELETE' });
