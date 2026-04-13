@@ -1,10 +1,10 @@
 <template>
-  <aside class="sidebar">
+  <div class="entry-list">
     <!-- Header -->
-    <div class="sidebar-header">
-      <div class="sidebar-top">
-        <span class="sidebar-title">Kol Emet</span>
-        <div class="sidebar-actions">
+    <div class="list-header">
+      <div class="header-top">
+        <span class="site-title">Kol Emet</span>
+        <div class="header-actions">
           <button class="btn-sm primary" @click="$emit('new-entry')">+ New</button>
           <button class="btn-sm" @click="$emit('logout')">Sign out</button>
         </div>
@@ -19,8 +19,10 @@
 
       <div class="cat-pills">
         <span
-          v-for="cat in ['All', ...CATEGORIES]" :key="cat"
-          class="pill" :class="{ active: activeCat === cat && !activeTag }"
+          v-for="cat in ['All', ...CATEGORIES]"
+          :key="cat"
+          class="pill"
+          :class="{ active: (activeCat === cat || (cat === 'All' && !activeCat)) && !activeTag }"
           @click="$emit('set-cat', cat)"
         >{{ cat }}</span>
         <span v-if="activeTag" class="pill active" @click="$emit('clear-tag')">#{{ activeTag }} ✕</span>
@@ -29,8 +31,9 @@
       <div class="entry-count">{{ entries.length }} entries</div>
     </div>
 
-    <!-- Virtualized list -->
-    <VirtualList v-if="!loading && entries.length" :items="entries">
+    <!-- Entry list -->
+    <div v-if="loading" class="list-empty">Loading…</div>
+    <VirtualList v-else-if="entries.length" :items="entries">
       <template #default="{ item }">
         <SidebarCard
           :entry="item"
@@ -39,10 +42,8 @@
         />
       </template>
     </VirtualList>
-
-    <div v-else-if="loading" class="sidebar-empty">Loading…</div>
-    <div v-else class="sidebar-empty">No entries found.</div>
-  </aside>
+    <div v-else class="list-empty">No entries found.</div>
+  </div>
 </template>
 
 <script setup>
@@ -63,53 +64,54 @@ defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry',
 </script>
 
 <style scoped>
-.sidebar {
+.entry-list {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  border-right: 1px solid #1e1e1e;
   background: #0f0f0f;
   overflow: hidden;
 }
 
-.sidebar-header {
+.list-header {
   flex-shrink: 0;
-  padding: 12px;
+  padding: 14px 20px 10px;
   border-bottom: 1px solid #1e1e1e;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.sidebar-top {
+.header-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
 }
 
-.sidebar-title {
-  font-size: 14px;
-  font-weight: 600;
+.site-title {
+  font-size: 15px;
+  font-weight: 700;
   color: #e0e0e0;
+  letter-spacing: 0.01em;
 }
 
-.sidebar-actions {
+.header-actions {
   display: flex;
   gap: 6px;
 }
 
 .search-input {
   width: 100%;
-  padding: 6px 10px;
+  padding: 8px 12px;
   font-size: 13px;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid #2a2a2a;
   background: #161616;
   color: #e0e0e0;
   font-family: inherit;
+  box-sizing: border-box;
 }
 .search-input:focus { outline: none; border-color: #444; }
+.search-input::placeholder { color: #444; }
 
 .cat-pills {
   display: flex;
@@ -119,15 +121,20 @@ defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry',
 
 .entry-count {
   font-size: 11px;
-  color: #444;
+  color: #3a3a3a;
 }
 
-.sidebar-empty {
+/* Entry list scroll area */
+.list-scroll {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.list-empty {
+  padding: 40px 20px;
   color: #444;
+  font-size: 13px;
+  text-align: center;
 }
 </style>

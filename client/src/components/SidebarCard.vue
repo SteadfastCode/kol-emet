@@ -23,25 +23,28 @@ const props = defineProps({
 
 defineEmits(['select']);
 
-const catStyle = computed(() => CAT_COLORS[props.entry.category] ?? { bg: '#333', color: '#aaa' });
+const catStyle = computed(() => {
+  const c = CAT_COLORS[props.entry.category];
+  return c ? { background: c.bg, color: c.color } : { background: '#333', color: '#aaa' };
+});
 </script>
 
 <style scoped>
 .sidebar-card {
   height: 64px;
-  padding: 0 12px;
+  padding: 0 20px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 3px;
   cursor: pointer;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid #1a1a1a;
   transition: background 0.1s;
   user-select: none;
 }
 
-.sidebar-card:hover { background: #1a1a1a; }
-.sidebar-card.selected { background: #1e1e1e; border-left: 2px solid #e0e0e0; }
+.sidebar-card:hover { background: #141414; }
+.sidebar-card.selected { background: #1a1a1a; border-left: 2px solid #e0e0e0; padding-left: 18px; }
 
 .card-top {
   display: flex;
@@ -59,6 +62,16 @@ const catStyle = computed(() => CAT_COLORS[props.entry.category] ?? { bg: '#333'
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+}
+
+.entry-cat {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .card-summary {

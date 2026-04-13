@@ -19,7 +19,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useVirtualizer } from '@tanstack/vue-virtual';
 
 const props = defineProps({
@@ -30,12 +30,16 @@ const props = defineProps({
 
 const scrollEl = ref(null);
 
-const virtualizer = useVirtualizer({
-  count: () => props.items.length,
-  getScrollElement: () => scrollEl.value,
-  estimateSize: () => props.itemHeight,
-  overscan: props.overscan,
-});
+// Options must be a computed ref so the watcher inside useVirtualizer
+// calls setOptions() with the new count when items change.
+const virtualizer = useVirtualizer(
+  computed(() => ({
+    count: props.items?.length ?? 0,
+    getScrollElement: () => scrollEl.value,
+    estimateSize: () => props.itemHeight,
+    overscan: props.overscan,
+  }))
+);
 </script>
 
 <style scoped>
