@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "kol-emet": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["src/index.js"],
+      "cwd": "mcp"
+    }
+  }
+}
