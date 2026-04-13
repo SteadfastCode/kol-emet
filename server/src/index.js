@@ -8,9 +8,11 @@ import mongoose from 'mongoose';
 import entriesRouter from './routes/entries.js';
 import tagsRouter from './routes/tags.js';
 import openQuestionsRouter from './routes/openQuestions.js';
+import relationshipTypesRouter from './routes/relationshipTypes.js';
 import authRouter from './routes/auth.js';
 import './models/User.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
+import './models/RelationshipType.js';
 import { requireAuth } from './middleware/auth.js';
 
 const app = express();
@@ -43,6 +45,7 @@ app.use('/auth', authRouter);
 app.use('/entries', requireAuth, entriesRouter);
 app.use('/tags', requireAuth, tagsRouter);
 app.use('/open-questions', requireAuth, openQuestionsRouter);
+app.use('/relationship-types', requireAuth, relationshipTypesRouter);
 
 mongoose
   .connect(process.env.MONGO_URI)

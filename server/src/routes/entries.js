@@ -1,7 +1,23 @@
 import { Router } from 'express';
-import Entry from '../models/Entry.js';
+import Entry, { BLOCK_TYPES } from '../models/Entry.js';
 
 const router = Router();
+
+function validateBlocks(blocks) {
+  if (!Array.isArray(blocks)) return 'blocks must be an array';
+  for (const block of blocks) {
+    if (!BLOCK_TYPES.includes(block.type)) return `Invalid block type: ${block.type}`;
+    if (typeof block.order !== 'number') return 'Each block must have a numeric order';
+    if (!block.data || typeof block.data !== 'object') return 'Each block must have a data object';
+  }
+  return null;
+}
+
+function normalizeBlockOrder(blocks) {
+  return [...blocks]
+    .sort((a, b) => a.order - b.order)
+    .map((block, i) => ({ ...block, order: i }));
+}
 
 // GET /entries
 router.get('/', async (req, res) => {
@@ -11,7 +27,12 @@ router.get('/', async (req, res) => {
     if (req.query.tag) filter.tags = req.query.tag;
     if (req.query.q) {
       const re = new RegExp(req.query.q, 'i');
-      filter.$or = [{ title: re }, { summary: re }, { body: re }];
+      filter.$or = [
+        { title: re },
+        { summary: re },
+        { body: re },
+        { blocks: { $elemMatch: { 'data.markdown': re } } },
+      ];
     }
     const entries = await Entry.find(filter)
       .sort({ title: 1 })
@@ -37,7 +58,18 @@ router.get('/:id', async (req, res) => {
 // POST /entries
 router.post('/', async (req, res) => {
   try {
-    const entry = await Entry.create(req.body);
+    const data = { ...req.body };
+
+    if (data.blocks) {
+      const err = validateBlocks(data.blocks);
+      if (err) return res.status(400).json({ error: err });
+      data.blocks = normalizeBlockOrder(data.blocks);
+    } else if (data.body) {
+      // Bridge: if client sends body but no blocks, auto-create a text block
+      data.blocks = [{ type: 'text', order: 0, data: { markdown: data.body } }];
+    }
+
+    const entry = await Entry.create(data);
     res.status(201).json(entry);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -47,7 +79,15 @@ router.post('/', async (req, res) => {
 // PUT /entries/:id
 router.put('/:id', async (req, res) => {
   try {
-    const entry = await Entry.findByIdAndUpdate(req.params.id, req.body, {
+    const data = { ...req.body };
+
+    if (data.blocks) {
+      const err = validateBlocks(data.blocks);
+      if (err) return res.status(400).json({ error: err });
+      data.blocks = normalizeBlockOrder(data.blocks);
+    }
+
+    const entry = await Entry.findByIdAndUpdate(req.params.id, data, {
       new: true,
       runValidators: true,
     }).populate('open_questions', 'question status');

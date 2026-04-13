@@ -9,6 +9,7 @@ export default defineConfig({
       '/tags': 'http://localhost:3004',
       '/open-questions': 'http://localhost:3004',
       '/auth': 'http://localhost:3004',
+      '/relationship-types': 'http://localhost:3004',
     },
   },
 });

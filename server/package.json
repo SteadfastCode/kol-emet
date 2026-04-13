@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "migrate:blocks": "node scripts/migrate-blocks.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.0",
