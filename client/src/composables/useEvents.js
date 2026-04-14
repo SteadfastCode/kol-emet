@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted } from 'vue';
 
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+const BASE = import.meta.env.VITE_API_URL ?? '';
 
 export function useEvents({ onEntryCreated, onEntryUpdated, onEntryDeleted } = {}) {
   let es = null;
