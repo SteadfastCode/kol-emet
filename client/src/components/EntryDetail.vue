@@ -94,6 +94,7 @@ function confirmDelete() {
 .blocks-section {
   margin-top: 20px;
   flex: 1;
+  padding: 0 24px;
 }
 
 .entry-footer {

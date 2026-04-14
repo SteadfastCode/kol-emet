@@ -7,7 +7,7 @@
           <h2 class="entry-title">{{ entry.title }}</h2>
           <div class="header-right">
             <span class="entry-cat" :style="catStyle">{{ entry.category }}</span>
-            <button class="icon-btn" title="Edit header" @click="startEdit">✏</button>
+            <button class="icon-btn" title="Edit header" @click="startEdit"><PencilIcon /></button>
           </div>
         </div>
         <p class="entry-summary">{{ entry.summary }}</p>
@@ -63,6 +63,7 @@
 <script setup>
 import { ref, computed, reactive } from 'vue';
 import { CAT_COLORS, CATEGORIES } from '../config/categories.js';
+import PencilIcon from './icons/PencilIcon.vue';
 
 const props = defineProps({ entry: Object });
 const emit = defineEmits(['save', 'set-tag']);

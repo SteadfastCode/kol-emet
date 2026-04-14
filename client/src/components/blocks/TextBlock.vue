@@ -2,7 +2,7 @@
   <div class="block text-block">
     <div class="block-toolbar">
       <span class="block-type-label">Text</span>
-      <button v-if="!isEditing && canEdit" class="icon-btn" @click="startEdit">✏</button>
+      <button v-if="!isEditing && canEdit" class="icon-btn" @click="startEdit"><PencilIcon /></button>
     </div>
 
     <!-- View mode -->
@@ -28,6 +28,7 @@
 
 <script setup>
 import { ref, computed, inject } from 'vue';
+import PencilIcon from '../icons/PencilIcon.vue';
 import { marked } from 'marked';
 
 marked.use({ breaks: true, gfm: true });

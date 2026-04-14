@@ -2,7 +2,7 @@
   <div class="block relationship-block">
     <div class="block-toolbar">
       <span class="block-type-label">Relationship</span>
-      <button v-if="!isEditing && canEdit" class="icon-btn" @click="startEdit">✏</button>
+      <button v-if="!isEditing && canEdit" class="icon-btn" @click="startEdit"><PencilIcon /></button>
     </div>
 
     <!-- View mode -->
@@ -65,6 +65,7 @@
 <script setup>
 import { ref, computed, inject } from 'vue';
 import RelationshipTypeInput from '../RelationshipTypeInput.vue';
+import PencilIcon from '../icons/PencilIcon.vue';
 
 const props = defineProps({ block: Object, canEdit: Boolean });
 const emit = defineEmits(['save']);

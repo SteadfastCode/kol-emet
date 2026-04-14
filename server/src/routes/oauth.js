@@ -50,7 +50,10 @@ router.get('/authorize', (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Authorize — Kol Emet</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: system-ui, sans-serif; background: #111; color: #eee; }
+    .center { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
     .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 2rem; max-width: 400px; width: 90%; text-align: center; }
     h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
     p { color: #aaa; font-size: 0.9rem; margin: 0 0 1.5rem; }
@@ -60,7 +63,7 @@ router.get('/authorize', (req, res) => {
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="center"><div class="card">
     <h1>Authorize Access</h1>
     <p><span class="client">${escapeHtml(client_id ?? 'Unknown client')}</span> wants to read and write your Kol Emet wiki.</p>
     <form method="POST" action="/authorize">
@@ -70,7 +73,7 @@ router.get('/authorize', (req, res) => {
       <input type="hidden" name="state" value="${escapeHtml(state ?? '')}">
       <button type="submit">Allow</button>
     </form>
-  </div>
+  </div></div>
 </body>
 </html>`);
 });

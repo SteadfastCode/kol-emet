@@ -73,6 +73,41 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Block shared styles */
+.block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  padding-right: 28px;
+  border-bottom: 1px solid #1e1e1e;
+  margin-bottom: 12px;
+}
+.block-type-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #555;
+}
+.icon-btn {
+  background: none;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: color 0.1s;
+  line-height: 1;
+}
+.icon-btn:hover { color: #aaa; }
+.block-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

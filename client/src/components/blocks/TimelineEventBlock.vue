@@ -2,7 +2,7 @@
   <div class="block timeline-event-block">
     <div class="block-toolbar">
       <span class="block-type-label">Timeline Event</span>
-      <button v-if="!isEditing && canEdit" class="icon-btn" @click="startEdit">✏</button>
+      <button v-if="!isEditing && canEdit" class="icon-btn" @click="startEdit"><PencilIcon /></button>
     </div>
 
     <div v-if="!isEditing" class="event-view">
@@ -37,6 +37,7 @@
 
 <script setup>
 import { ref, computed, inject, reactive } from 'vue';
+import PencilIcon from '../icons/PencilIcon.vue';
 
 const props = defineProps({ block: Object, canEdit: Boolean });
 const emit = defineEmits(['save']);

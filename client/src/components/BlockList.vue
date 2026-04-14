@@ -156,13 +156,15 @@ function addBlock(type) {
 .block-wrap {
   position: relative;
   transition: opacity 0.1s;
+  padding: 14px 0;
+  border-bottom: 1px solid #1a1a1a;
 }
 .block-wrap.other-editing { opacity: 0.4; pointer-events: none; }
 
 .block-delete-btn {
   position: absolute;
-  top: 12px;
-  right: 24px;
+  top: 14px;
+  right: 0;
   background: none;
   border: none;
   color: #333;
@@ -186,7 +188,7 @@ function addBlock(type) {
 }
 
 .add-block-section {
-  padding: 8px 24px 16px;
+  padding: 14px 0 16px;
 }
 
 .add-block-trigger {
