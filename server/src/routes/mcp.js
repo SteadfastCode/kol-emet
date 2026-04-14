@@ -191,7 +191,15 @@ router.post('/', async (req, res) => {
     sessions.delete(newId);
   };
 
-  const server = createMcpServer();
+  let server;
+  try {
+    server = createMcpServer();
+    const toolNames = Object.keys(server._registeredTools ?? {});
+    console.log('[mcp] registered tools:', toolNames.length ? toolNames : '(none — registration may have failed)');
+  } catch (err) {
+    console.error('[mcp] createMcpServer() threw:', err.message);
+    return res.status(500).json({ error: 'mcp_init_failed' });
+  }
   await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
 });
