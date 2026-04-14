@@ -1,18 +1,22 @@
 <template>
   <div class="block-list">
     <template v-if="timelineEvents.length >= 2">
-      <!-- Auto-render timeline view for 2+ events -->
-      <TimelineView :events="timelineEvents" />
-      <!-- Individual edit blocks for each timeline event (hidden in view, accessible via edit) -->
-      <div class="timeline-individual">
-        <TimelineEventBlock
-          v-for="block in timelineEvents"
-          :key="block._id"
-          :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
-          @save="data => saveBlock(block, data)"
-        />
+      <div v-if="!isEditingTimeline" class="block-wrap timeline-wrap">
+        <TimelineView :events="timelineEvents" :can-edit="canEdit" @edit="isEditingTimeline = true" />
       </div>
+      <template v-else>
+        <div class="timeline-edit-header">
+          <span class="block-type-label">Timeline — editing events</span>
+          <button class="btn-sm" @click="isEditingTimeline = false">Done</button>
+        </div>
+        <div class="block-wrap" v-for="block in timelineEvents" :key="block._id">
+          <TimelineEventBlock
+            :block="block"
+            :can-edit="!editingBlockId || editingBlockId === block._id"
+            @save="data => saveBlock(block, data)"
+          />
+        </div>
+      </template>
     </template>
 
     <template v-for="block in nonTimelineBlocks" :key="block._id">
@@ -121,6 +125,7 @@ const emit = defineEmits(['save-block', 'delete-block', 'add-block']);
 
 const editingBlockId = ref(null);
 const showAddMenu = ref(false);
+const isEditingTimeline = ref(false);
 
 const sorted = computed(() => [...(props.blocks ?? [])].sort((a, b) => a.order - b.order));
 const timelineEvents = computed(() => sorted.value.filter(b => b.type === 'timeline_event'));
@@ -177,14 +182,13 @@ function addBlock(type) {
 }
 .block-wrap:hover .block-delete-btn { color: #e07070; }
 
-.timeline-individual {
-  display: none; /* hidden in view mode; edit access via individual block pencils */
-}
-
-/* Show individual timeline events when editing is possible */
-.block-list:has(.block-wrap):not(.no-edit) .timeline-individual {
+.timeline-edit-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0 6px;
+  border-bottom: 1px solid #1e1e1e;
+  margin-bottom: 4px;
 }
 
 .add-block-section {

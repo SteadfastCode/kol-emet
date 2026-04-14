@@ -2,6 +2,7 @@
   <div class="timeline-view">
     <div class="block-toolbar">
       <span class="block-type-label">Timeline</span>
+      <button v-if="canEdit" class="icon-btn" title="Edit timeline events" @click="$emit('edit')"><PencilIcon /></button>
     </div>
     <div class="timeline">
       <div
@@ -29,8 +30,10 @@
 
 <script setup>
 import { computed, inject, ref } from 'vue';
+import PencilIcon from '../icons/PencilIcon.vue';
 
-const props = defineProps({ events: Array });
+const props = defineProps({ events: Array, canEdit: Boolean });
+defineEmits(['edit']);
 const entries = inject('entries', ref([]));
 const followLink = inject('followLink', () => {});
 
