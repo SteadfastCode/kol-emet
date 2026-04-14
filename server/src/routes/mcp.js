@@ -13,9 +13,11 @@ const router = Router();
 const MCP_TOKEN = process.env.MCP_BEARER_TOKEN;
 
 router.use((req, res, next) => {
+  console.log(`[mcp] ${req.method} ${req.path} — session: ${req.headers['mcp-session-id'] ?? 'none'} — auth: ${req.headers['authorization'] ? 'present' : 'missing'}`);
   if (!MCP_TOKEN) return next(); // dev mode: no token required
   const auth = req.headers['authorization'];
   if (auth !== `Bearer ${MCP_TOKEN}`) {
+    console.log('[mcp] auth failed — got:', auth);
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
@@ -166,19 +168,28 @@ const sessions = new Map(); // sessionId -> StreamableHTTPServerTransport
 
 router.post('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
+  console.log('[mcp] POST body:', JSON.stringify(req.body)?.slice(0, 200));
 
   if (sessionId && sessions.has(sessionId)) {
+    console.log('[mcp] existing session:', sessionId);
     const transport = sessions.get(sessionId);
     await transport.handleRequest(req, res, req.body);
     return;
   }
 
+  console.log('[mcp] new session — creating McpServer');
   const newId = randomUUID();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => newId,
-    onsessioninitialized: (id) => sessions.set(id, transport),
+    onsessioninitialized: (id) => {
+      console.log('[mcp] session initialized:', id);
+      sessions.set(id, transport);
+    },
   });
-  transport.onclose = () => sessions.delete(newId);
+  transport.onclose = () => {
+    console.log('[mcp] session closed:', newId);
+    sessions.delete(newId);
+  };
 
   const server = createMcpServer();
   await server.connect(transport);
@@ -188,13 +199,16 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
   if (!sessionId || !sessions.has(sessionId)) {
+    console.log('[mcp] GET — invalid session:', sessionId);
     return res.status(400).json({ error: 'Invalid or missing session ID' });
   }
+  console.log('[mcp] GET SSE stream for session:', sessionId);
   await sessions.get(sessionId).handleRequest(req, res);
 });
 
 router.delete('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
+  console.log('[mcp] DELETE session:', sessionId);
   if (sessionId && sessions.has(sessionId)) {
     await sessions.get(sessionId).close();
     sessions.delete(sessionId);
