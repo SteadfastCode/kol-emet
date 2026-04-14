@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import Entry, { BLOCK_TYPES } from '../models/Entry.js';
 import OpenQuestion from '../models/OpenQuestion.js';
@@ -177,42 +178,42 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  console.log('[mcp] new session — creating McpServer');
-  const newId = randomUUID();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => newId,
-    enableJsonResponse: true,
-    onsessioninitialized: (id) => {
-      console.log('[mcp] session initialized:', id);
-      sessions.set(id, transport);
-    },
-  });
-  transport.onclose = () => {
-    console.log('[mcp] session closed:', newId);
-    sessions.delete(newId);
-  };
+  if (!sessionId && isInitializeRequest(req.body)) {
+    console.log('[mcp] new session — creating McpServer');
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
+      onsessioninitialized: (id) => {
+        console.log('[mcp] session initialized:', id);
+        sessions.set(id, transport);
+      },
+    });
+    transport.onclose = () => {
+      console.log('[mcp] session closed');
+      for (const [k, v] of sessions) { if (v === transport) sessions.delete(k); }
+    };
 
-  let server;
-  try {
-    server = createMcpServer();
-    const toolNames = Object.keys(server._registeredTools ?? {});
-    console.log('[mcp] registered tools:', toolNames.length ? toolNames : '(none — registration may have failed)');
-  } catch (err) {
-    console.error('[mcp] createMcpServer() threw:', err.message);
-    return res.status(500).json({ error: 'mcp_init_failed' });
+    let server;
+    try {
+      server = createMcpServer();
+      const toolNames = Object.keys(server._registeredTools ?? {});
+      console.log('[mcp] registered tools:', toolNames.length ? toolNames : '(none)');
+    } catch (err) {
+      console.error('[mcp] createMcpServer() threw:', err.message);
+      return res.status(500).json({ error: 'mcp_init_failed' });
+    }
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+    return;
   }
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+
+  console.log('[mcp] rejected — no session and not an initialize request');
+  res.status(400).json({ error: 'Bad request: missing or invalid session ID' });
 });
 
-router.get('/', async (req, res) => {
-  const sessionId = req.headers['mcp-session-id'];
-  if (!sessionId || !sessions.has(sessionId)) {
-    console.log('[mcp] GET — invalid session:', sessionId);
-    return res.status(400).json({ error: 'Invalid or missing session ID' });
-  }
-  console.log('[mcp] GET SSE stream for session:', sessionId);
-  await sessions.get(sessionId).handleRequest(req, res);
+// JSON response mode does not use a persistent GET SSE stream
+router.get('/', (req, res) => {
+  res.status(405).set('Allow', 'POST').send('Method Not Allowed');
 });
 
 router.delete('/', async (req, res) => {
