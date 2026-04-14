@@ -10,6 +10,7 @@ import tagsRouter from './routes/tags.js';
 import openQuestionsRouter from './routes/openQuestions.js';
 import relationshipTypesRouter from './routes/relationshipTypes.js';
 import authRouter from './routes/auth.js';
+import mcpRouter from './routes/mcp.js';
 import './models/User.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
 import './models/RelationshipType.js';
@@ -42,6 +43,7 @@ app.use(session({
 }));
 
 app.use('/auth', authRouter);
+app.use('/mcp', mcpRouter);
 app.use('/entries', requireAuth, entriesRouter);
 app.use('/tags', requireAuth, tagsRouter);
 app.use('/open-questions', requireAuth, openQuestionsRouter);
