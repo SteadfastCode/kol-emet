@@ -10,5 +10,9 @@
       "Bash(yarn:*)",
       "Bash(git push:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "kol-emet"
+  ],
+  "enableAllProjectMcpServers": true
 }

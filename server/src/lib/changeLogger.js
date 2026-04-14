@@ -34,7 +34,7 @@ export function computeDiff(before, after) {
   return { fieldsChanged, blocksAdded, blocksUpdated, blocksDeleted };
 }
 
-export async function logCreate(entry, actor) {
+export async function logCreate(entry, actor, excludeClientId = null) {
   const changes = {
     fieldsChanged: [],
     blocksAdded: (entry.blocks ?? []).map(b => ({ type: b.type, order: b.order })),
@@ -55,10 +55,10 @@ export async function logCreate(entry, actor) {
     entry,
     actor:   { label: actor.label, type: actor.type },
     changes,
-  });
+  }, excludeClientId);
 }
 
-export async function logUpdate(before, after, actor) {
+export async function logUpdate(before, after, actor, excludeClientId = null) {
   const changes = computeDiff(before, after);
   await ChangeLog.create({
     entryId:    after._id,
@@ -74,10 +74,10 @@ export async function logUpdate(before, after, actor) {
     entry:   after,
     actor:   { label: actor.label, type: actor.type },
     changes,
-  });
+  }, excludeClientId);
 }
 
-export async function logDelete(entry, actor) {
+export async function logDelete(entry, actor, excludeClientId = null) {
   const deletedAt = new Date().toISOString();
   await ChangeLog.create({
     entryId:    entry._id,
@@ -95,5 +95,5 @@ export async function logDelete(entry, actor) {
     actor:      { label: actor.label, type: actor.type },
     snapshot:   entry,
     deletedAt,
-  });
+  }, excludeClientId);
 }

@@ -72,7 +72,8 @@ router.post('/', requireActor, async (req, res) => {
     }
 
     const entry = await Entry.create(data);
-    logCreate(entry.toObject(), req.actor).catch(err => console.error('[changelog] logCreate failed:', err));
+    const clientId = req.headers['x-sse-client-id'] ?? null;
+    logCreate(entry.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logCreate failed:', err));
     res.status(201).json(entry);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -99,7 +100,8 @@ router.put('/:id', requireActor, async (req, res) => {
     }).populate('open_questions', 'question status');
     if (!after) return res.status(404).json({ error: 'Not found' });
 
-    logUpdate(before, after.toObject(), req.actor).catch(err => console.error('[changelog] logUpdate failed:', err));
+    const clientId = req.headers['x-sse-client-id'] ?? null;
+    logUpdate(before, after.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logUpdate failed:', err));
     res.json(after);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -111,7 +113,8 @@ router.delete('/:id', requireActor, async (req, res) => {
   try {
     const entry = await Entry.findByIdAndDelete(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
-    logDelete(entry.toObject(), req.actor).catch(err => console.error('[changelog] logDelete failed:', err));
+    const clientId = req.headers['x-sse-client-id'] ?? null;
+    logDelete(entry.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logDelete failed:', err));
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });
