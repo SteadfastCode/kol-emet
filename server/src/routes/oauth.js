@@ -11,30 +11,37 @@ const authCodes = new Map();
 // RFC 8414 discovery — Claude.ai fetches this first
 router.get('/.well-known/oauth-authorization-server', (req, res) => {
   const base = `${req.protocol}://${req.get('host')}`;
-  res.json({
+  const doc = {
     issuer: base,
     authorization_endpoint: `${base}/authorize`,
     token_endpoint: `${base}/oauth/token`,
     grant_types_supported: ['authorization_code'],
     response_types_supported: ['code'],
     code_challenge_methods_supported: ['S256'],
-  });
+  };
+  console.log('[oauth] discovery fetched', doc);
+  res.json(doc);
 });
 
 // GET /authorize — show approval page
 router.get('/authorize', (req, res) => {
+  console.log('[oauth] GET /authorize query:', req.query);
   const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state } = req.query;
 
   if (response_type !== 'code') {
+    console.log('[oauth] bad response_type:', response_type);
     return res.status(400).send('unsupported_response_type');
   }
   if (code_challenge_method !== 'S256') {
+    console.log('[oauth] bad code_challenge_method:', code_challenge_method);
     return res.status(400).send('code_challenge_method must be S256');
   }
   if (!code_challenge || !redirect_uri) {
+    console.log('[oauth] missing params — code_challenge:', code_challenge, 'redirect_uri:', redirect_uri);
     return res.status(400).send('missing required parameters');
   }
 
+  console.log('[oauth] serving Allow page for client_id:', client_id);
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -68,10 +75,12 @@ router.get('/authorize', (req, res) => {
 });
 
 // POST /authorize — issue code and redirect back
-router.post('/authorize', express_urlencoded, (req, res) => {
+router.post('/authorize', (req, res) => {
+  console.log('[oauth] POST /authorize body:', req.body);
   const { redirect_uri, code_challenge, state } = req.body;
 
   if (!redirect_uri || !code_challenge) {
+    console.log('[oauth] POST /authorize missing params — body was:', req.body);
     return res.status(400).send('missing required parameters');
   }
 
@@ -79,60 +88,58 @@ router.post('/authorize', express_urlencoded, (req, res) => {
   authCodes.set(code, {
     codeChallenge: code_challenge,
     redirectUri: redirect_uri,
-    expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+    expiresAt: Date.now() + 5 * 60 * 1000,
   });
 
   const url = new URL(redirect_uri);
   url.searchParams.set('code', code);
   if (state) url.searchParams.set('state', state);
 
+  console.log('[oauth] issuing code, redirecting to:', url.toString());
   res.redirect(url.toString());
 });
 
 // POST /oauth/token — exchange code for access token
 router.post('/oauth/token', (req, res) => {
+  console.log('[oauth] POST /oauth/token body:', req.body);
   const { grant_type, code, code_verifier } = req.body;
 
   if (grant_type !== 'authorization_code') {
+    console.log('[oauth] unsupported grant_type:', grant_type);
     return res.status(400).json({ error: 'unsupported_grant_type' });
   }
 
   if (!MCP_TOKEN) {
+    console.log('[oauth] MCP_BEARER_TOKEN not set');
     return res.status(500).json({ error: 'server_misconfigured' });
   }
 
   const stored = authCodes.get(code);
-  if (!stored || Date.now() > stored.expiresAt) {
-    return res.status(400).json({ error: 'invalid_grant' });
+  if (!stored) {
+    console.log('[oauth] code not found:', code, '— stored codes:', [...authCodes.keys()]);
+    return res.status(400).json({ error: 'invalid_grant', detail: 'code not found' });
+  }
+  if (Date.now() > stored.expiresAt) {
+    console.log('[oauth] code expired');
+    return res.status(400).json({ error: 'invalid_grant', detail: 'code expired' });
   }
 
-  // Verify PKCE: BASE64URL(SHA256(code_verifier)) must equal stored code_challenge
-  const challenge = createHash('sha256')
-    .update(code_verifier)
-    .digest('base64url');
+  const challenge = createHash('sha256').update(code_verifier).digest('base64url');
+  console.log('[oauth] PKCE check — computed:', challenge, 'stored:', stored.codeChallenge, 'match:', challenge === stored.codeChallenge);
 
   if (challenge !== stored.codeChallenge) {
-    return res.status(400).json({ error: 'invalid_grant' });
+    return res.status(400).json({ error: 'invalid_grant', detail: 'pkce mismatch' });
   }
 
   authCodes.delete(code);
+  console.log('[oauth] token issued successfully');
 
   res.json({
     access_token: MCP_TOKEN,
     token_type: 'Bearer',
-    expires_in: 315360000, // 10 years
+    expires_in: 315360000,
   });
 });
-
-// Middleware to parse form bodies on the POST /authorize route only
-function express_urlencoded(req, res, next) {
-  let body = '';
-  req.on('data', chunk => { body += chunk; });
-  req.on('end', () => {
-    req.body = Object.fromEntries(new URLSearchParams(body));
-    next();
-  });
-}
 
 function escapeHtml(str) {
   return String(str)
