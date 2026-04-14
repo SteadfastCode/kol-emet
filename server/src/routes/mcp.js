@@ -181,6 +181,7 @@ router.post('/', async (req, res) => {
   const newId = randomUUID();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => newId,
+    enableJsonResponse: true,
     onsessioninitialized: (id) => {
       console.log('[mcp] session initialized:', id);
       sessions.set(id, transport);
