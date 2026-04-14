@@ -76,13 +76,13 @@ router.get('/authorize', (req, res) => {
 });
 
 // POST /authorize — issue code and redirect back
-router.post('/authorize', (req, res) => {
+router.post('/authorize', async (req, res) => {
   console.log('[oauth] POST /authorize body:', req.body);
   const { redirect_uri, code_challenge, state } = req.body;
 
   // Associate the MCP connector with the currently logged-in user
   if (req.session?.userId) {
-    setMcpUser(req.session.userId);
+    await setMcpUser(req.session.userId);
     console.log('[oauth] MCP user set to', req.session.userId);
   } else {
     console.log('[oauth] POST /authorize — no session, MCP writes will be rejected until re-authorized');

@@ -1,11 +1,14 @@
-// Stores the userId of the wiki user who authorized the MCP connector via OAuth.
-// Reset on server restart — user must re-authorize after deploy.
-let mcpUserId = null;
+import Settings from '../models/Settings.js';
 
-export function setMcpUser(userId) {
-  mcpUserId = String(userId);
+export async function setMcpUser(userId) {
+  await Settings.findByIdAndUpdate(
+    'global',
+    { mcpUserId: userId },
+    { upsert: true, new: true }
+  );
 }
 
-export function getMcpUser() {
-  return mcpUserId;
+export async function getMcpUser() {
+  const settings = await Settings.findById('global').lean();
+  return settings?.mcpUserId ? String(settings.mcpUserId) : null;
 }

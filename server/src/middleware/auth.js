@@ -27,7 +27,7 @@ export async function requireActor(req, res, next) {
     let actorType;
 
     if (isMcp) {
-      userId = getMcpUser();
+      userId = await getMcpUser();
       if (!userId) {
         return res.status(401).json({ error: 'MCP connector not authorized — re-authorize in wiki settings' });
       }

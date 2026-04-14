@@ -15,7 +15,7 @@ const router = Router();
 // ─── Actor resolution ─────────────────────────────────────────────────────────
 
 async function resolveMcpActor() {
-  const userId = getMcpUser();
+  const userId = await getMcpUser();
   if (!userId) return null;
   const user = await User.findById(userId).select('email').lean();
   if (!user) return null;
