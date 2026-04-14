@@ -174,6 +174,18 @@ router.post('/', async (req, res) => {
   if (sessionId && sessions.has(sessionId)) {
     console.log('[mcp] existing session:', sessionId);
     const transport = sessions.get(sessionId);
+
+    // Intercept response to log what we're actually sending back
+    const origWrite = res.write.bind(res);
+    const origEnd = res.end.bind(res);
+    let responseBody = '';
+    res.write = (chunk, ...args) => { responseBody += chunk; return origWrite(chunk, ...args); };
+    res.end = (chunk, ...args) => {
+      if (chunk) responseBody += chunk;
+      console.log(`[mcp] response for ${req.body?.method}: status=${res.statusCode} body=${responseBody.slice(0, 500)}`);
+      return origEnd(chunk, ...args);
+    };
+
     await transport.handleRequest(req, res, req.body);
     return;
   }
