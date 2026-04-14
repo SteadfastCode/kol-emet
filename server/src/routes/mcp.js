@@ -6,8 +6,21 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import Entry, { BLOCK_TYPES } from '../models/Entry.js';
 import OpenQuestion from '../models/OpenQuestion.js';
+import User from '../models/User.js';
+import { getMcpUser } from '../lib/mcpUserStore.js';
+import { logCreate, logUpdate } from '../lib/changeLogger.js';
 
 const router = Router();
+
+// ─── Actor resolution ─────────────────────────────────────────────────────────
+
+async function resolveMcpActor() {
+  const userId = getMcpUser();
+  if (!userId) return null;
+  const user = await User.findById(userId).select('email').lean();
+  if (!user) return null;
+  return { type: 'mcp', userId, label: `${user.email} via AI` };
+}
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -98,6 +111,10 @@ function createMcpServer() {
           .map((b, i) => ({ ...b, order: i }));
       }
       const entry = await Entry.create(data);
+      const actor = await resolveMcpActor();
+      if (actor) {
+        logCreate(entry.toObject(), actor).catch(err => console.error('[changelog] logCreate failed:', err));
+      }
       return { content: [{ type: 'text', text: JSON.stringify(entry, null, 2) }] };
     }
   );
@@ -119,10 +136,16 @@ function createMcpServer() {
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
       }
-      const entry = await Entry.findByIdAndUpdate(id, data, { new: true, runValidators: true })
+      const before = await Entry.findById(id).lean();
+      if (!before) throw new Error(`Entry not found: ${id}`);
+      const after = await Entry.findByIdAndUpdate(id, data, { new: true, runValidators: true })
         .populate('open_questions', 'question status');
-      if (!entry) throw new Error(`Entry not found: ${id}`);
-      return { content: [{ type: 'text', text: JSON.stringify(entry, null, 2) }] };
+      if (!after) throw new Error(`Entry not found: ${id}`);
+      const actor = await resolveMcpActor();
+      if (actor) {
+        logUpdate(before, after.toObject(), actor).catch(err => console.error('[changelog] logUpdate failed:', err));
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(after, null, 2) }] };
     }
   );
 

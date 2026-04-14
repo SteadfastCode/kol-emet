@@ -12,6 +12,8 @@ import relationshipTypesRouter from './routes/relationshipTypes.js';
 import authRouter from './routes/auth.js';
 import mcpRouter from './routes/mcp.js';
 import oauthRouter from './routes/oauth.js';
+import eventsRouter from './routes/events.js';
+import changelogRouter from './routes/changelog.js';
 import './models/User.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
 import './models/RelationshipType.js';
@@ -28,7 +30,6 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 app.use(express.urlencoded({ extended: false }));
 
 app.use(session({
@@ -48,7 +49,9 @@ app.use(session({
 app.use('/', oauthRouter);
 app.use('/auth', authRouter);
 app.use('/mcp', mcpRouter);
+app.use('/events', requireAuth, eventsRouter);
 app.use('/entries', requireAuth, entriesRouter);
+app.use('/', requireAuth, changelogRouter);
 app.use('/tags', requireAuth, tagsRouter);
 app.use('/open-questions', requireAuth, openQuestionsRouter);
 app.use('/relationship-types', requireAuth, relationshipTypesRouter);

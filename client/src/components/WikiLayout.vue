@@ -35,6 +35,14 @@
             @saved="onEntrySaved"
             @cancel="closePanel(activePanelId)"
           />
+          <template v-else-if="activePanel?.mode === 'snapshot'">
+            <div class="deleted-badge">DELETED — {{ activePanel.deletedAt }}</div>
+            <EntryDetail
+              :entry="activePanel.snapshotEntry"
+              :loading="false"
+              :breadcrumbs="[]"
+            />
+          </template>
           <EntryDetail
             v-else-if="selectedEntry"
             :entry="selectedEntry"
@@ -67,6 +75,8 @@
         </div>
       </div>
     </Transition>
+
+    <ToastNotification />
   </div>
 </template>
 
@@ -75,9 +85,12 @@ import { ref, computed, provide, onMounted } from 'vue';
 import EntrySidebar from './EntrySidebar.vue';
 import EntryDetail from './EntryDetail.vue';
 import EntryEditor from './EntryEditor.vue';
+import ToastNotification from './ToastNotification.vue';
 import { useEntries } from '../composables/useEntries.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
+import { useEvents } from '../composables/useEvents.js';
+import { useToasts } from '../composables/useToasts.js';
 
 const EDITOR_ID = '__new_entry__';
 
@@ -90,8 +103,9 @@ const {
 
 const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag } = useFilters(entries);
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
+const { addToast } = useToasts();
 
-// Panel state: array of { id, title, mode: 'entry' | 'editor' }
+// Panel state: array of { id, title, mode: 'entry' | 'editor' | 'snapshot', snapshotEntry?, deletedAt? }
 const panels = ref([]);
 const activePanelId = ref(null);
 
@@ -117,6 +131,16 @@ function openEntry(id, title) {
   selectEntry(id);
 }
 
+function openSnapshot(snapshot) {
+  const id = `__snapshot_${snapshot._id}__`;
+  const deletedAt = new Date().toLocaleString();
+  const existing = panels.value.find(p => p.id === id);
+  if (!existing) {
+    panels.value.push({ id, title: `${snapshot.title} [DELETED]`, mode: 'snapshot', snapshotEntry: snapshot, deletedAt });
+  }
+  activePanelId.value = id;
+}
+
 function openEditor() {
   const existing = panels.value.find(p => p.id === EDITOR_ID);
   if (!existing) {
@@ -126,7 +150,6 @@ function openEditor() {
 }
 
 function minimizePanel() {
-  // Remove from active; panel stays in array → visible in taskbar
   activePanelId.value = null;
 }
 
@@ -148,7 +171,6 @@ function restorePanel(id) {
 
 function followLink(id, title) {
   pushCrumb(id, title);
-  // Update the active panel title + entry
   const panel = panels.value.find(p => p.id === activePanelId.value);
   if (panel) panel.title = title;
   selectEntry(id);
@@ -176,8 +198,78 @@ async function onEntryDeleted(id) {
   closePanel(id);
 }
 
+// ─── SSE change summary helpers ───────────────────────────────────────────────
+
+function buildChangeMessage(changes) {
+  const parts = [];
+  if (changes.fieldsChanged?.length) {
+    parts.push(changes.fieldsChanged.join(', '));
+  }
+  const blockParts = [];
+  if (changes.blocksAdded?.length)   blockParts.push(`${changes.blocksAdded.length} block${changes.blocksAdded.length > 1 ? 's' : ''} added`);
+  if (changes.blocksUpdated?.length) blockParts.push(`${changes.blocksUpdated.length} block${changes.blocksUpdated.length > 1 ? 's' : ''} changed`);
+  if (changes.blocksDeleted?.length) blockParts.push(`${changes.blocksDeleted.length} block${changes.blocksDeleted.length > 1 ? 's' : ''} removed`);
+  if (blockParts.length) parts.push(blockParts.join(', '));
+  return parts.length ? `updated — ${parts.join('; ')}` : 'updated';
+}
+
+// ─── SSE event handlers ───────────────────────────────────────────────────────
+
+useEvents({
+  onEntryCreated({ entry, actor }) {
+    // Insert into sidebar (sorted by title)
+    const idx = entries.value.findIndex(e => e.title.localeCompare(entry.title) > 0);
+    if (idx === -1) entries.value.push(entry);
+    else entries.value.splice(idx, 0, entry);
+
+    addToast({
+      actorLabel:  actor.label,
+      actorType:   actor.type,
+      message:     'added',
+      entryId:     entry._id,
+      entryTitle:  entry.title,
+      changeType:  'created',
+    });
+  },
+
+  onEntryUpdated({ entry, actor, changes }) {
+    const idx = entries.value.findIndex(e => e._id === entry._id);
+    if (idx !== -1) entries.value[idx] = entry;
+    if (selectedEntry.value?._id === entry._id) selectedEntry.value = entry;
+
+    addToast({
+      actorLabel:  actor.label,
+      actorType:   actor.type,
+      message:     buildChangeMessage(changes),
+      entryId:     entry._id,
+      entryTitle:  entry.title,
+      changeType:  'updated',
+    });
+  },
+
+  onEntryDeleted({ entryId, entryTitle, actor, snapshot }) {
+    entries.value = entries.value.filter(e => e._id !== entryId);
+    if (selectedEntry.value?._id === entryId) {
+      selectedEntry.value = null;
+      closePanel(entryId);
+    }
+
+    addToast({
+      actorLabel:  actor.label,
+      actorType:   actor.type,
+      message:     'deleted',
+      entryId,
+      entryTitle,
+      snapshot,
+      changeType:  'deleted',
+    });
+  },
+});
+
 provide('entries', entries);
 provide('followLink', followLink);
+provide('openEntry', openEntry);
+provide('openSnapshot', openSnapshot);
 </script>
 
 <style scoped>
@@ -334,4 +426,17 @@ provide('followLink', followLink);
 .taskbar-fade-leave-active { transition: opacity 0.2s; }
 .taskbar-fade-enter-from,
 .taskbar-fade-leave-to { opacity: 0; }
+
+/* Deleted entry snapshot badge */
+.deleted-badge {
+  background: #7f1d1d;
+  color: #fca5a5;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-align: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid #991b1b;
+  flex-shrink: 0;
+}
 </style>

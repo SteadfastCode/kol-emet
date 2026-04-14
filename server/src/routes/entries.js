@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import Entry, { BLOCK_TYPES } from '../models/Entry.js';
+import { requireActor } from '../middleware/auth.js';
+import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
 
 const router = Router();
 
@@ -56,7 +58,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /entries
-router.post('/', async (req, res) => {
+router.post('/', requireActor, async (req, res) => {
   try {
     const data = { ...req.body };
 
@@ -70,6 +72,7 @@ router.post('/', async (req, res) => {
     }
 
     const entry = await Entry.create(data);
+    logCreate(entry.toObject(), req.actor).catch(err => console.error('[changelog] logCreate failed:', err));
     res.status(201).json(entry);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -77,7 +80,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /entries/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireActor, async (req, res) => {
   try {
     const data = { ...req.body };
 
@@ -87,22 +90,28 @@ router.put('/:id', async (req, res) => {
       data.blocks = normalizeBlockOrder(data.blocks);
     }
 
-    const entry = await Entry.findByIdAndUpdate(req.params.id, data, {
+    const before = await Entry.findById(req.params.id).lean();
+    if (!before) return res.status(404).json({ error: 'Not found' });
+
+    const after = await Entry.findByIdAndUpdate(req.params.id, data, {
       new: true,
       runValidators: true,
     }).populate('open_questions', 'question status');
-    if (!entry) return res.status(404).json({ error: 'Not found' });
-    res.json(entry);
+    if (!after) return res.status(404).json({ error: 'Not found' });
+
+    logUpdate(before, after.toObject(), req.actor).catch(err => console.error('[changelog] logUpdate failed:', err));
+    res.json(after);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 // DELETE /entries/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireActor, async (req, res) => {
   try {
     const entry = await Entry.findByIdAndDelete(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
+    logDelete(entry.toObject(), req.actor).catch(err => console.error('[changelog] logDelete failed:', err));
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomUUID, createHash } from 'crypto';
+import { setMcpUser } from '../lib/mcpUserStore.js';
 
 const router = Router();
 
@@ -78,6 +79,14 @@ router.get('/authorize', (req, res) => {
 router.post('/authorize', (req, res) => {
   console.log('[oauth] POST /authorize body:', req.body);
   const { redirect_uri, code_challenge, state } = req.body;
+
+  // Associate the MCP connector with the currently logged-in user
+  if (req.session?.userId) {
+    setMcpUser(req.session.userId);
+    console.log('[oauth] MCP user set to', req.session.userId);
+  } else {
+    console.log('[oauth] POST /authorize — no session, MCP writes will be rejected until re-authorized');
+  }
 
   if (!redirect_uri || !code_challenge) {
     console.log('[oauth] POST /authorize missing params — body was:', req.body);
