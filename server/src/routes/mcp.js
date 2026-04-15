@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import Entry, { BLOCK_TYPES } from '../models/Entry.js';
+import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import User from '../models/User.js';
 import { getMcpUser } from '../lib/mcpUserStore.js';
@@ -99,9 +100,9 @@ function createMcpServer() {
       tags: z.array(z.string()).optional(),
       blocks: z.array(BlockInput).optional().describe(
         'Content blocks. Types: text ({markdown}), attribute ({label, value}), ' +
-        'quote ({text, attribution?}), timeline_event ({date, description, sortKey?, era?, linkedEntryId?}), ' +
-        'relationship ({relationshipType, targetId?, targetTitle?, notes?}). ' +
-        'If omitted, a single empty text block is created.'
+        'quote ({text, attribution?}), timeline_event ({date, description, sortKey?, era?, linkedEntryId?}). ' +
+        'If omitted, a single empty text block is created. ' +
+        'IMPORTANT: Relationships between entries are NOT created via blocks — use add_relationship instead.'
       ),
     },
     async (data) => {
@@ -180,6 +181,88 @@ function createMcpServer() {
         .sort({ createdAt: -1 })
         .populate('entry_ids', 'title category');
       return { content: [{ type: 'text', text: JSON.stringify(questions, null, 2) }] };
+    }
+  );
+
+  // ─── Relationships ───────────────────────────────────────────────────────────
+
+  server.tool(
+    'add_relationship',
+    'Create a bidirectional relationship between two entries. This is the ONLY way to link entries — do NOT use blocks for this. ' +
+    'Labels are optional at every level. Use myLabel/theirLabel for asymmetric roles (e.g. "father"/"son"). ' +
+    'Use the same label on both sides for symmetric roles (e.g. both "sibling"). ' +
+    'groupLabel names the relationship group itself (e.g. "parentage", "siblings"). ' +
+    'Returns the created relationship group.',
+    {
+      myEntryId:    z.string().describe('MongoDB ObjectId of the first entry'),
+      theirEntryId: z.string().describe('MongoDB ObjectId of the second entry'),
+      myLabel:      z.string().optional().describe('Label for the first entry, e.g. "father"'),
+      theirLabel:   z.string().optional().describe('Label for the second entry, e.g. "son"'),
+      groupLabel:   z.string().optional().describe('Label for the group itself, e.g. "parentage"'),
+      notes:        z.string().optional().describe("Notes on the first entry's membership"),
+    },
+    async ({ myEntryId, theirEntryId, myLabel, theirLabel, groupLabel, notes }) => {
+      const group = await RelationshipGroup.create({
+        label: groupLabel ?? null,
+        members: [
+          { entityId: myEntryId,    label: myLabel    ?? null, notes: notes ?? null },
+          { entityId: theirEntryId, label: theirLabel ?? null },
+        ],
+      });
+      await Entry.updateMany(
+        { _id: { $in: [myEntryId, theirEntryId] } },
+        { $addToSet: { relationships: group._id } }
+      );
+      const populated = await RelationshipGroup.findById(group._id)
+        .populate({ path: 'members.entityId', select: 'title' });
+      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'remove_relationship',
+    "Remove an entry's membership from a relationship group. If fewer than 2 members remain, the group is deleted.",
+    {
+      groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
+      entityId: z.string().describe('MongoDB ObjectId of the entry to remove'),
+    },
+    async ({ groupId, entityId }) => {
+      const group = await RelationshipGroup.findById(groupId);
+      if (!group) throw new Error(`Relationship group not found: ${groupId}`);
+      group.members = group.members.filter(m => String(m.entityId) !== String(entityId));
+      await Entry.updateOne({ _id: entityId }, { $pull: { relationships: group._id } });
+      if (group.members.length < 2) {
+        for (const m of group.members) {
+          await Entry.updateOne({ _id: m.entityId }, { $pull: { relationships: group._id } });
+        }
+        await group.deleteOne();
+        return { content: [{ type: 'text', text: 'Relationship removed and orphaned group deleted.' }] };
+      }
+      await group.save();
+      return { content: [{ type: 'text', text: 'Relationship removed.' }] };
+    }
+  );
+
+  server.tool(
+    'update_relationship_label',
+    "Update a member's label or notes within a relationship group.",
+    {
+      groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
+      entityId: z.string().describe('MongoDB ObjectId of the entry to update'),
+      label:    z.string().nullable().optional().describe('New label, or null to clear it'),
+      notes:    z.string().nullable().optional().describe('New notes, or null to clear them'),
+    },
+    async ({ groupId, entityId, label, notes }) => {
+      const group = await RelationshipGroup.findById(groupId);
+      if (!group) throw new Error(`Relationship group not found: ${groupId}`);
+      const member = group.members.find(m => String(m.entityId) === String(entityId));
+      if (!member) throw new Error(`Member ${entityId} not found in group ${groupId}`);
+      if (label !== undefined) member.label = label;
+      if (notes !== undefined) member.notes = notes;
+      await group.save();
+      const populated = await RelationshipGroup.findById(group._id)
+        .populate({ path: 'members.entityId', select: 'title' });
+      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
     }
   );
 
