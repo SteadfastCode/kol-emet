@@ -7,7 +7,10 @@
 
     <!-- Existing relationships -->
     <template v-for="group in entry.relationships" :key="group._id">
-      <div v-if="group.label" class="group-label">{{ group.label }}</div>
+      <div v-if="group.label" class="group-label">
+        
+        {{ group.label }}
+      </div>
       <template v-for="coMember in coMembersOf(group)" :key="coMember.entityId._id">
         <!-- Edit row -->
         <div v-if="editingKey === rowKey(group._id, coMember.entityId._id)" class="rel-edit-row">
@@ -255,7 +258,7 @@ async function saveNew() {
 }
 
 .section-label {
-  font-size: 11px;
+  font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #555;
@@ -273,10 +276,10 @@ async function saveNew() {
 .add-btn:hover { color: #7ab4f5; }
 
 .group-label {
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #444;
+  color: #754219;
   margin: 8px 0 2px;
 }
 
