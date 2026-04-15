@@ -33,22 +33,14 @@ const TimelineEventBlockData = z.object({
   description: z.string(),
   linkedEntryId: z.string().nullable().optional(),
 });
-const RelationshipBlockData = z.object({
-  relationshipType: z.string(),
-  targetId: z.string().nullable().optional(),
-  targetTitle: z.string().optional(),
-  notes: z.string().optional(),
-});
-
 const BlockInput = z.object({
-  type: z.enum(['text', 'relationship', 'timeline_event', 'attribute', 'quote', 'gallery']),
+  type: z.enum(['text', 'timeline_event', 'attribute', 'quote', 'gallery']),
   order: z.number().optional(),
   data: z.union([
     TextBlockData,
     AttributeBlockData,
     QuoteBlockData,
     TimelineEventBlockData,
-    RelationshipBlockData,
     z.record(z.unknown()),
   ]),
 });
@@ -99,10 +91,10 @@ server.tool(
     tags: z.array(z.string()).optional(),
     open_question: z.string().optional().describe('An unresolved question to attach'),
     blocks: z.array(BlockInput).optional().describe(
-      'Content blocks. Each block has a type (text, attribute, quote, timeline_event, relationship, gallery) and a data object. ' +
+      'Content blocks. Each block has a type (text, attribute, quote, timeline_event, gallery) and a data object. ' +
       'Text blocks: { markdown }. Attribute blocks: { label, value }. ' +
+      'Quote blocks: { text, attribution }. ' +
       'Timeline event blocks: { date, sortKey, era, description, linkedEntryId }. ' +
-      'Relationship blocks: { relationshipType, targetId, notes }. ' +
       'If omitted, a single empty text block is created automatically.'
     ),
   },
@@ -159,6 +151,69 @@ server.tool(
   async () => {
     const entries = await apiFetch('/open-questions');
     return { content: [{ type: 'text', text: JSON.stringify(entries, null, 2) }] };
+  }
+);
+
+// ─── Relationships ───────────────────────────────────────────────────────────
+
+server.tool(
+  'add_relationship',
+  'Create a bidirectional relationship between two entries. Labels are optional at every level. ' +
+  'Use myLabel/theirLabel for asymmetric roles (e.g. "father"/"son"). ' +
+  'groupLabel names the relationship group itself (e.g. "parentage"). ' +
+  'Returns the created relationship group.',
+  {
+    myEntryId:   z.string().describe('MongoDB ObjectId of the first entry (your perspective)'),
+    theirEntryId: z.string().describe('MongoDB ObjectId of the second entry'),
+    myLabel:     z.string().optional().describe('Label for the first entry in this relationship, e.g. "father"'),
+    theirLabel:  z.string().optional().describe('Label for the second entry, e.g. "son"'),
+    groupLabel:  z.string().optional().describe('Label for the relationship group itself, e.g. "parentage"'),
+    notes:       z.string().optional().describe('Notes attached to the first entry\'s membership'),
+  },
+  async ({ myEntryId, theirEntryId, myLabel, theirLabel, groupLabel, notes }) => {
+    const group = await apiFetch('/relationship-groups', {
+      method: 'POST',
+      body: JSON.stringify({
+        label: groupLabel ?? null,
+        members: [
+          { entityId: myEntryId,   label: myLabel   ?? null, notes: notes ?? null },
+          { entityId: theirEntryId, label: theirLabel ?? null },
+        ],
+      }),
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
+  }
+);
+
+server.tool(
+  'remove_relationship',
+  'Remove an entry\'s membership from a relationship group. ' +
+  'If fewer than 2 members remain after removal, the group is automatically deleted.',
+  {
+    groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
+    entityId: z.string().describe('MongoDB ObjectId of the entry to remove from the group'),
+  },
+  async ({ groupId, entityId }) => {
+    await apiFetch(`/relationship-groups/${groupId}/members/${entityId}`, { method: 'DELETE' });
+    return { content: [{ type: 'text', text: 'Relationship removed.' }] };
+  }
+);
+
+server.tool(
+  'update_relationship_label',
+  'Update a member\'s label or notes within a relationship group.',
+  {
+    groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
+    entityId: z.string().describe('MongoDB ObjectId of the entry whose label to update'),
+    label:    z.string().nullable().optional().describe('New label, or null to clear it'),
+    notes:    z.string().nullable().optional().describe('New notes, or null to clear them'),
+  },
+  async ({ groupId, entityId, label, notes }) => {
+    const group = await apiFetch(`/relationship-groups/${groupId}/members/${entityId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ label: label ?? null, notes: notes ?? null }),
+    });
+    return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
   }
 );
 
