@@ -83,7 +83,8 @@ server.tool(
 
 server.tool(
   'create_entry',
-  'Add a new wiki entry. Provide at least title and category. Use blocks for structured content.',
+  'Add a new wiki entry. Provide at least title and category. Use blocks for structured content. ' +
+  'IMPORTANT: Relationships between entries are NOT created via blocks — use the add_relationship tool after creating the entry.',
   {
     title: z.string(),
     category: z.enum(['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline', 'Open Questions']),
@@ -108,7 +109,8 @@ server.tool(
 
 server.tool(
   'update_entry',
-  'Edit an existing wiki entry. Only provided fields are updated. To update block content, pass the full blocks array.',
+  'Edit an existing wiki entry. Only provided fields are updated. To update block content, pass the full blocks array. ' +
+  'IMPORTANT: Relationships between entries are NOT managed here — use add_relationship / remove_relationship / update_relationship_label instead.',
   {
     id: z.string().describe('MongoDB ObjectId of the entry'),
     title: z.string().optional(),
@@ -158,9 +160,11 @@ server.tool(
 
 server.tool(
   'add_relationship',
-  'Create a bidirectional relationship between two entries. Labels are optional at every level. ' +
+  'Create a bidirectional relationship between two entries. This is the ONLY way to link entries to each other — ' +
+  'do NOT use blocks for this. Labels are optional at every level. ' +
   'Use myLabel/theirLabel for asymmetric roles (e.g. "father"/"son"). ' +
-  'groupLabel names the relationship group itself (e.g. "parentage"). ' +
+  'Use the same label on both sides for symmetric roles (e.g. both "sibling"). ' +
+  'groupLabel names the relationship group itself (e.g. "parentage", "siblings"). ' +
   'Returns the created relationship group.',
   {
     myEntryId:   z.string().describe('MongoDB ObjectId of the first entry (your perspective)'),
