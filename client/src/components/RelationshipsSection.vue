@@ -32,7 +32,7 @@
 
         <!-- View row -->
         <div v-else class="rel-row">
-          <span class="rel-label">{{ myLabelIn(group) || '—' }}</span>
+          <span class="rel-label">{{ coMember.label || '—' }}</span>
           <span
             class="rel-target wiki-link"
             @click="followLink(coMember.entityId._id, coMember.entityId.title)"
