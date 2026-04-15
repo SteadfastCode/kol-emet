@@ -2,22 +2,40 @@
   <div class="relationships-section">
     <div class="section-header">
       <span class="section-label">Relationships</span>
-      <button v-if="canEdit && !addingNew" class="add-btn" @click="startAdd">+ Add</button>
+      <button v-if="canEdit && !addingNew && !addToGroupId" class="add-btn" @click="startAdd">+ Add</button>
     </div>
 
     <!-- Existing relationships -->
     <template v-for="group in entry.relationships" :key="group._id">
-      <div v-if="group.label" class="group-label">
-        
-        {{ group.label }}
+
+      <!-- Group label row — always show when canEdit so actions are accessible -->
+      <div v-if="group.label || canEdit" class="group-label-row">
+        <template v-if="editingGroupId === group._id">
+          <input v-model="groupLabelDraft" class="input input-sm" placeholder="Group label (optional)" />
+          <div class="row-actions" style="margin-top: 4px;">
+            <button class="btn-sm" @click="cancelGroupEdit">Cancel</button>
+            <button class="btn-sm primary" :disabled="groupLabelSaving" @click="saveGroupLabel(group._id)">
+              <span v-if="groupLabelSaving" class="spinner" /><span v-else>Save</span>
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <span class="group-label-text">{{ group.label || '' }}</span>
+          <div v-if="canEdit" class="group-label-actions">
+            <button class="icon-btn" title="Edit group label" @click="startGroupEdit(group)">✎</button>
+            <button class="icon-btn" title="Add member to group" @click="startAddToGroup(group._id)">+</button>
+            <button class="icon-btn danger" title="Delete group" @click="confirmDeleteGroup(group)">✕</button>
+          </div>
+        </template>
       </div>
+
       <template v-for="coMember in coMembersOf(group)" :key="coMember.entityId._id">
         <!-- Edit row -->
         <div v-if="editingKey === rowKey(group._id, coMember.entityId._id)" class="rel-edit-row">
           <input
             v-model="editDraft.label"
             class="input input-sm"
-            placeholder="Your label (optional)"
+            placeholder="Label (optional)"
           />
           <textarea
             v-model="editDraft.notes"
@@ -56,6 +74,53 @@
           </div>
         </div>
       </template>
+
+      <!-- Add-to-group form -->
+      <div v-if="addToGroupId === group._id" class="rel-add-form">
+        <div class="form-field">
+          <label class="field-label">New member</label>
+          <input
+            v-model="addToGroupForm.targetSearch"
+            class="input input-sm"
+            placeholder="Search entries…"
+            @input="filterAddToGroupTargets(group)"
+          />
+          <div v-if="addToGroupResults.length" class="target-dropdown">
+            <div
+              v-for="e in addToGroupResults"
+              :key="e._id"
+              class="target-option"
+              @click="selectAddToGroupTarget(e)"
+            >{{ e.title }}</div>
+          </div>
+          <div v-if="addToGroupForm.targetId" class="selected-target">
+            ✓ {{ addToGroupForm.targetTitle }}
+            <button class="icon-btn" @click="clearAddToGroupTarget">✕</button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label class="field-label">Their label</label>
+          <input v-model="addToGroupForm.label" class="input input-sm" placeholder="e.g. sibling (optional)" />
+        </div>
+
+        <div class="form-field">
+          <label class="field-label">Notes</label>
+          <textarea v-model="addToGroupForm.notes" class="block-textarea" placeholder="Optional" rows="2" />
+        </div>
+
+        <div class="row-actions">
+          <button class="btn-sm" @click="cancelAddToGroup">Cancel</button>
+          <button
+            class="btn-sm primary"
+            :disabled="addToGroupSaving || !addToGroupForm.targetId"
+            @click="saveAddToGroup"
+          >
+            <span v-if="addToGroupSaving" class="spinner" /><span v-else>Add</span>
+          </button>
+        </div>
+      </div>
+
     </template>
 
     <!-- Empty state -->
@@ -124,7 +189,7 @@
 
 <script setup>
 import { ref, inject } from 'vue';
-import { createGroup, updateMember, removeMember, deleteGroup } from '../api/relationshipGroups.js';
+import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, deleteGroup } from '../api/relationshipGroups.js';
 
 const props = defineProps({ entry: Object, canEdit: Boolean });
 const emit = defineEmits(['refresh']);
@@ -134,11 +199,6 @@ const followLink = inject('followLink', () => {});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function myLabelIn(group) {
-  const m = group.members.find(m => String(m.entityId._id) === String(props.entry._id));
-  return m?.label ?? null;
-}
-
 function coMembersOf(group) {
   return group.members.filter(m => String(m.entityId._id) !== String(props.entry._id));
 }
@@ -147,24 +207,108 @@ function rowKey(groupId, coMemberId) {
   return `${groupId}:${coMemberId}`;
 }
 
-// ─── Edit existing ────────────────────────────────────────────────────────────
+// ─── Group label edit ─────────────────────────────────────────────────────────
+
+const editingGroupId  = ref(null);
+const groupLabelDraft = ref('');
+const groupLabelSaving = ref(false);
+
+function startGroupEdit(group) {
+  groupLabelDraft.value = group.label ?? '';
+  editingGroupId.value = group._id;
+}
+
+function cancelGroupEdit() { editingGroupId.value = null; }
+
+async function saveGroupLabel(groupId) {
+  groupLabelSaving.value = true;
+  try {
+    await updateGroupLabel(groupId, groupLabelDraft.value || null);
+    editingGroupId.value = null;
+    emit('refresh');
+  } finally {
+    groupLabelSaving.value = false;
+  }
+}
+
+async function confirmDeleteGroup(group) {
+  if (!window.confirm('Delete this entire relationship group? This cannot be undone.')) return;
+  await deleteGroup(group._id);
+  emit('refresh');
+}
+
+// ─── Add member to existing group ────────────────────────────────────────────
+
+const addToGroupId      = ref(null);
+const addToGroupSaving  = ref(false);
+const addToGroupForm    = ref({ targetId: null, targetTitle: '', targetSearch: '', label: '', notes: '' });
+const addToGroupResults = ref([]);
+
+function startAddToGroup(groupId) { addToGroupId.value = groupId; }
+
+function cancelAddToGroup() {
+  addToGroupId.value = null;
+  addToGroupForm.value = { targetId: null, targetTitle: '', targetSearch: '', label: '', notes: '' };
+  addToGroupResults.value = [];
+}
+
+function filterAddToGroupTargets(group) {
+  const q = addToGroupForm.value.targetSearch.toLowerCase();
+  if (!q) { addToGroupResults.value = []; return; }
+  const existingIds = new Set(group.members.map(m => String(m.entityId._id)));
+  addToGroupResults.value = (entries.value ?? [])
+    .filter(e => e.title.toLowerCase().includes(q) && !existingIds.has(String(e._id)))
+    .slice(0, 8);
+}
+
+function selectAddToGroupTarget(e) {
+  addToGroupForm.value.targetId = e._id;
+  addToGroupForm.value.targetTitle = e.title;
+  addToGroupForm.value.targetSearch = e.title;
+  addToGroupResults.value = [];
+}
+
+function clearAddToGroupTarget() {
+  addToGroupForm.value.targetId = null;
+  addToGroupForm.value.targetTitle = '';
+  addToGroupForm.value.targetSearch = '';
+}
+
+async function saveAddToGroup() {
+  if (!addToGroupForm.value.targetId) return;
+  addToGroupSaving.value = true;
+  try {
+    await addMember(addToGroupId.value, {
+      entityId: addToGroupForm.value.targetId,
+      label:    addToGroupForm.value.label || null,
+      notes:    addToGroupForm.value.notes || null,
+    });
+    cancelAddToGroup();
+    emit('refresh');
+  } finally {
+    addToGroupSaving.value = false;
+  }
+}
+
+// ─── Edit existing member ─────────────────────────────────────────────────────
 
 const editingKey = ref(null);
 const editDraft  = ref({ label: '', notes: '' });
 const editSaving = ref(false);
 
 function startEdit(group, coMemberId) {
-  const myMember = group.members.find(m => String(m.entityId._id) === String(props.entry._id));
-  editDraft.value = { label: myMember?.label ?? '', notes: myMember?.notes ?? '' };
+  // Load the co-member's label/notes — that's what's displayed in the row
+  const coMember = group.members.find(m => String(m.entityId._id) === String(coMemberId));
+  editDraft.value = { label: coMember?.label ?? '', notes: coMember?.notes ?? '' };
   editingKey.value = rowKey(group._id, coMemberId);
 }
 
 function cancelEdit() { editingKey.value = null; }
 
-async function saveEdit(group, _coMemberId) {
+async function saveEdit(group, coMemberId) {
   editSaving.value = true;
   try {
-    await updateMember(group._id, props.entry._id, {
+    await updateMember(group._id, coMemberId, {
       label: editDraft.value.label || null,
       notes: editDraft.value.notes || null,
     });
@@ -275,13 +419,28 @@ async function saveNew() {
 }
 .add-btn:hover { color: #7ab4f5; }
 
-.group-label {
+.group-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 2px;
+  min-height: 20px;
+}
+
+.group-label-text {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #754219;
-  margin: 8px 0 2px;
 }
+
+.group-label-actions {
+  display: flex;
+  gap: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.group-label-row:hover .group-label-actions { opacity: 1; }
 
 .rel-row {
   display: flex;

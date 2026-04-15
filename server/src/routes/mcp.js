@@ -84,9 +84,11 @@ function createMcpServer() {
     'Retrieve a single wiki entry by its id, including all blocks.',
     { id: z.string().describe('MongoDB ObjectId of the entry') },
     async ({ id }) => {
-      const entry = await Entry.findById(id).populate('open_questions', 'question status');
+      const entry = await Entry.findById(id).populate('open_questions', 'question status').lean();
       if (!entry) throw new Error(`Entry not found: ${id}`);
-      return { content: [{ type: 'text', text: JSON.stringify(entry, null, 2) }] };
+      const relationships = await RelationshipGroup.find({ 'members.entityId': id })
+        .populate({ path: 'members.entityId', select: 'title' });
+      return { content: [{ type: 'text', text: JSON.stringify({ ...entry, relationships }, null, 2) }] };
     }
   );
 
@@ -216,6 +218,46 @@ function createMcpServer() {
       const populated = await RelationshipGroup.findById(group._id)
         .populate({ path: 'members.entityId', select: 'title' });
       return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'add_member_to_relationship',
+    'Add a new entry to an existing relationship group. Use this to extend a group beyond its initial two members ' +
+    '(e.g. adding a third sibling to a sibling group). The entry must not already be in the group.',
+    {
+      groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
+      entityId: z.string().describe('MongoDB ObjectId of the entry to add'),
+      label:    z.string().optional().describe('Label for this entry in the group, e.g. "sibling"'),
+      notes:    z.string().optional().describe('Notes on this membership'),
+    },
+    async ({ groupId, entityId, label, notes }) => {
+      const group = await RelationshipGroup.findById(groupId);
+      if (!group) throw new Error(`Relationship group not found: ${groupId}`);
+      const alreadyMember = group.members.some(m => String(m.entityId) === String(entityId));
+      if (alreadyMember) throw new Error(`Entry ${entityId} is already a member of this group`);
+      group.members.push({ entityId, label: label ?? null, notes: notes ?? null });
+      await group.save();
+      await Entry.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
+      const populated = await RelationshipGroup.findById(group._id)
+        .populate({ path: 'members.entityId', select: 'title' });
+      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'update_group_label',
+    'Update or clear the label of a relationship group (e.g. rename "parentage" to "family", or null to remove it).',
+    {
+      groupId: z.string().describe('MongoDB ObjectId of the relationship group'),
+      label:   z.string().nullable().describe('New group label, or null to clear it'),
+    },
+    async ({ groupId, label }) => {
+      const group = await RelationshipGroup.findByIdAndUpdate(
+        groupId, { label: label ?? null }, { new: true, runValidators: true }
+      ).populate({ path: 'members.entityId', select: 'title' });
+      if (!group) throw new Error(`Relationship group not found: ${groupId}`);
+      return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
     }
   );
 

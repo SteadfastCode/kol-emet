@@ -20,4 +20,6 @@ const relationshipGroupSchema = new mongoose.Schema({
   createdAt:     { type: Date, default: Date.now },
 }, { timestamps: false });
 
+relationshipGroupSchema.index({ 'members.entityId': 1 });
+
 export default mongoose.model('RelationshipGroup', relationshipGroupSchema);

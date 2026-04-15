@@ -51,9 +51,14 @@ router.get('/:id', async (req, res) => {
   try {
     const entry = await Entry.findById(req.params.id)
       .populate('open_questions', 'question status')
-      .populate({ path: 'relationships', populate: { path: 'members.entityId', select: 'title' } });
+      .lean();
     if (!entry) return res.status(404).json({ error: 'Not found' });
-    res.json(entry);
+
+    // Query groups dynamically — source of truth is the group's members array, not the back-reference on Entry
+    const relationships = await RelationshipGroup.find({ 'members.entityId': req.params.id })
+      .populate({ path: 'members.entityId', select: 'title' });
+
+    res.json({ ...entry, relationships });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -116,23 +121,18 @@ router.delete('/:id', requireActor, async (req, res) => {
     const entry = await Entry.findByIdAndDelete(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
 
-    // Clean up relationship groups: remove this entry from all groups it belongs to,
-    // and delete any groups that would fall below 2 members as a result.
-    if (entry.relationships?.length) {
-      for (const groupId of entry.relationships) {
-        const group = await RelationshipGroup.findById(groupId);
-        if (!group) continue;
-        group.members = group.members.filter(m => String(m.entityId) !== String(entry._id));
-        if (group.members.length < 2) {
-          // Remove from remaining members and delete
-          await Entry.updateMany(
-            { _id: { $in: group.members.map(m => m.entityId) } },
-            { $pull: { relationships: group._id } }
-          );
-          await RelationshipGroup.findByIdAndDelete(group._id);
-        } else {
-          await group.save();
-        }
+    // Clean up relationship groups: query dynamically so we catch all groups regardless of back-reference state
+    const groups = await RelationshipGroup.find({ 'members.entityId': entry._id });
+    for (const group of groups) {
+      group.members = group.members.filter(m => String(m.entityId) !== String(entry._id));
+      if (group.members.length < 2) {
+        await Entry.updateMany(
+          { _id: { $in: group.members.map(m => m.entityId) } },
+          { $pull: { relationships: group._id } }
+        );
+        await RelationshipGroup.findByIdAndDelete(group._id);
+      } else {
+        await group.save();
       }
     }
 
