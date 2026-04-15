@@ -24,6 +24,12 @@
         />
       </div>
 
+      <RelationshipsSection
+        :entry="entry"
+        :can-edit="true"
+        @refresh="$emit('refresh')"
+      />
+
       <div class="entry-footer">
         <button class="btn-sm danger" @click="confirmDelete">Delete entry</button>
       </div>
@@ -35,6 +41,7 @@
 import BreadcrumbBar from './BreadcrumbBar.vue';
 import EntryHeader from './EntryHeader.vue';
 import BlockList from './BlockList.vue';
+import RelationshipsSection from './RelationshipsSection.vue';
 
 const props = defineProps({
   entry: Object,
@@ -42,7 +49,7 @@ const props = defineProps({
   breadcrumbs: Array,
 });
 
-const emit = defineEmits(['crumb-click', 'follow-link', 'set-tag', 'saved', 'deleted']);
+const emit = defineEmits(['crumb-click', 'follow-link', 'set-tag', 'saved', 'deleted', 'refresh']);
 
 async function saveHeader(headerData) {
   emit('saved', props.entry._id, {

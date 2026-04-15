@@ -37,12 +37,6 @@
           @edit-start="editingBlockId = block._id"
           @edit-end="editingBlockId = null"
         />
-        <RelationshipBlock
-          v-else-if="block.type === 'relationship'"
-          :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
-          @save="data => saveBlock(block, data)"
-        />
         <TimelineEventBlock
           v-else-if="block.type === 'timeline_event'"
           :block="block"
@@ -91,17 +85,15 @@
 <script setup>
 import { ref, computed } from 'vue';
 import TextBlock from './blocks/TextBlock.vue';
-import RelationshipBlock from './blocks/RelationshipBlock.vue';
 import TimelineEventBlock from './blocks/TimelineEventBlock.vue';
 import TimelineView from './blocks/TimelineView.vue';
 import AttributeBlock from './blocks/AttributeBlock.vue';
 import QuoteBlock from './blocks/QuoteBlock.vue';
 import GalleryBlock from './blocks/GalleryBlock.vue';
 
-const BLOCK_TYPES = ['text', 'relationship', 'timeline_event', 'attribute', 'quote', 'gallery'];
+const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
 const BLOCK_TYPE_LABELS = {
   text: 'Text',
-  relationship: 'Relationship',
   timeline_event: 'Timeline Event',
   attribute: 'Attribute',
   quote: 'Quote',
@@ -110,7 +102,6 @@ const BLOCK_TYPE_LABELS = {
 
 const BLOCK_DEFAULTS = {
   text: { markdown: '' },
-  relationship: { targetId: null, relationshipType: '', notes: '' },
   timeline_event: { date: '', sortKey: 0, era: '', description: '', linkedEntryId: null },
   attribute: { label: '', value: '' },
   quote: { text: '', attribution: '' },

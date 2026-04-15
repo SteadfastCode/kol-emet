@@ -14,9 +14,11 @@ import mcpRouter from './routes/mcp.js';
 import oauthRouter from './routes/oauth.js';
 import eventsRouter from './routes/events.js';
 import changelogRouter from './routes/changelog.js';
+import relationshipGroupsRouter from './routes/relationshipGroups.js';
 import './models/User.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
 import './models/RelationshipType.js';
+import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
 
 const app = express();
@@ -52,6 +54,7 @@ app.use('/mcp', mcpRouter);
 app.use('/events', requireAuth, eventsRouter);
 app.use('/entries', requireAuth, entriesRouter);
 app.use('/', requireAuth, changelogRouter);
+app.use('/relationship-groups', requireAuth, relationshipGroupsRouter);
 app.use('/tags', requireAuth, tagsRouter);
 app.use('/open-questions', requireAuth, openQuestionsRouter);
 app.use('/relationship-types', requireAuth, relationshipTypesRouter);

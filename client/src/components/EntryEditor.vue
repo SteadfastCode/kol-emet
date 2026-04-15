@@ -76,32 +76,6 @@
               <textarea v-model="block.data.description" class="block-textarea" placeholder="Description" rows="2" style="margin-top:6px" />
             </div>
 
-            <!-- Relationship block -->
-            <div v-else-if="block.type === 'relationship'" class="rel-fields">
-              <RelationshipTypeInput v-model="block.data.relationshipType" />
-              <div class="target-search" style="margin-top:8px">
-                <input
-                  v-model="block._targetSearch"
-                  class="input"
-                  placeholder="Target entry (search…)"
-                  @input="filterTargets(block)"
-                />
-                <div v-if="block._targetResults?.length" class="target-dropdown">
-                  <div
-                    v-for="e in block._targetResults"
-                    :key="e._id"
-                    class="target-option"
-                    @click="selectTarget(block, e)"
-                  >{{ e.title }}</div>
-                </div>
-                <div v-if="block.data.targetId" class="selected-target">
-                  ✓ {{ block.data.targetTitle }}
-                  <button class="icon-btn small" @click="clearTarget(block)">✕</button>
-                </div>
-              </div>
-              <textarea v-model="block.data.notes" class="block-textarea" placeholder="Notes (optional)" rows="2" style="margin-top:8px" />
-            </div>
-
             <!-- Quote block -->
             <div v-else-if="block.type === 'quote'" class="quote-fields">
               <textarea v-model="block.data.text" class="block-textarea" placeholder="Quote text" rows="3" />
@@ -144,16 +118,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject } from 'vue';
+import { ref, reactive } from 'vue';
 import draggable from 'vuedraggable';
-import RelationshipTypeInput from './RelationshipTypeInput.vue';
 import { CATEGORIES } from '../config/categories.js';
 import { getDefaultBlocks } from '../config/defaultBlocks.js';
 
-const BLOCK_TYPES = ['text', 'relationship', 'timeline_event', 'attribute', 'quote', 'gallery'];
+const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
 const BLOCK_TYPE_LABELS = {
   text: 'Text',
-  relationship: 'Relationship',
   timeline_event: 'Timeline Event',
   attribute: 'Attribute',
   quote: 'Quote',
@@ -161,7 +133,6 @@ const BLOCK_TYPE_LABELS = {
 };
 const BLOCK_DEFAULTS = {
   text: { markdown: '' },
-  relationship: { relationshipType: '', targetId: null, targetTitle: '', notes: '' },
   timeline_event: { date: '', sortKey: 0, era: '', description: '', linkedEntryId: null },
   attribute: { label: '', value: '' },
   quote: { text: '', attribution: '' },
@@ -169,7 +140,6 @@ const BLOCK_DEFAULTS = {
 };
 
 const emit = defineEmits(['saved', 'cancel']);
-const entries = inject('entries', ref([]));
 
 const form = reactive({ title: '', category: '', summary: '' });
 const tagsInput = ref('');
@@ -193,37 +163,12 @@ function addBlock(type) {
     order: blocks.value.length,
     data: { ...BLOCK_DEFAULTS[type] },
     _key: makeKey(),
-    _targetSearch: '',
-    _targetResults: [],
   });
   showAddMenu.value = false;
 }
 
 function removeBlock(index) {
   blocks.value.splice(index, 1);
-}
-
-// Relationship target search
-function filterTargets(block) {
-  const q = (block._targetSearch ?? '').toLowerCase();
-  if (!q) { block._targetResults = []; return; }
-  block._targetResults = (entries.value ?? [])
-    .filter(e => e.title.toLowerCase().includes(q))
-    .slice(0, 8);
-}
-
-function selectTarget(block, entry) {
-  block.data.targetId = entry._id;
-  block.data.targetTitle = entry.title;
-  block._targetSearch = entry.title;
-  block._targetResults = [];
-}
-
-function clearTarget(block) {
-  block.data.targetId = null;
-  block.data.targetTitle = '';
-  block._targetSearch = '';
-  block._targetResults = [];
 }
 
 async function save() {
@@ -236,7 +181,7 @@ async function save() {
       .filter(Boolean);
 
     const cleanBlocks = blocks.value.map((b, i) => {
-      const { _key, _targetSearch, _targetResults, ...rest } = b;
+      const { _key, ...rest } = b;
       return { ...rest, order: i };
     });
 
@@ -338,22 +283,6 @@ async function save() {
   color: #e0e0e0; font-family: inherit; font-size: 13px; padding: 8px 10px; resize: vertical;
 }
 .block-textarea:focus { outline: none; border-color: #555; }
-
-.rel-fields { display: flex; flex-direction: column; }
-
-.target-dropdown {
-  background: #1a1a1a; border: 1px solid #333; border-radius: 7px;
-  margin-top: 4px; max-height: 160px; overflow-y: auto;
-}
-.target-option {
-  padding: 7px 10px; font-size: 13px; cursor: pointer; color: #ccc;
-}
-.target-option:hover { background: #252525; }
-
-.selected-target {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: #6dca6d; margin-top: 4px;
-}
 
 .gallery-placeholder {
   font-size: 12px;

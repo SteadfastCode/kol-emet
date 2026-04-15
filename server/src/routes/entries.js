@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import Entry, { BLOCK_TYPES } from '../models/Entry.js';
+import RelationshipGroup from '../models/RelationshipGroup.js';
 import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
 
@@ -49,7 +50,8 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const entry = await Entry.findById(req.params.id)
-      .populate('open_questions', 'question status');
+      .populate('open_questions', 'question status')
+      .populate({ path: 'relationships', populate: { path: 'members.entityId', select: 'title' } });
     if (!entry) return res.status(404).json({ error: 'Not found' });
     res.json(entry);
   } catch (err) {
@@ -113,6 +115,27 @@ router.delete('/:id', requireActor, async (req, res) => {
   try {
     const entry = await Entry.findByIdAndDelete(req.params.id);
     if (!entry) return res.status(404).json({ error: 'Not found' });
+
+    // Clean up relationship groups: remove this entry from all groups it belongs to,
+    // and delete any groups that would fall below 2 members as a result.
+    if (entry.relationships?.length) {
+      for (const groupId of entry.relationships) {
+        const group = await RelationshipGroup.findById(groupId);
+        if (!group) continue;
+        group.members = group.members.filter(m => String(m.entityId) !== String(entry._id));
+        if (group.members.length < 2) {
+          // Remove from remaining members and delete
+          await Entry.updateMany(
+            { _id: { $in: group.members.map(m => m.entityId) } },
+            { $pull: { relationships: group._id } }
+          );
+          await RelationshipGroup.findByIdAndDelete(group._id);
+        } else {
+          await group.save();
+        }
+      }
+    }
+
     const clientId = req.headers['x-sse-client-id'] ?? null;
     logDelete(entry.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logDelete failed:', err));
     res.status(204).send();

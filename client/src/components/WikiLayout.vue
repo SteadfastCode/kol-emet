@@ -53,6 +53,7 @@
             @set-tag="setTag"
             @saved="onEntryUpdated"
             @deleted="onEntryDeleted"
+            @refresh="selectEntry(activePanelId)"
           />
           <div v-else class="panel-loading">Loading…</div>
         </div>

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const BLOCK_TYPES = ['text', 'relationship', 'timeline_event', 'attribute', 'quote', 'gallery'];
+const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
 
 const blockSchema = new mongoose.Schema({
   type: { type: String, required: true, enum: BLOCK_TYPES },
@@ -20,6 +20,7 @@ const entrySchema = new mongoose.Schema(
     body: { type: String, default: '' },   // kept for migration bridge; removed in Phase 3
     tags: { type: [String], default: [] },
     blocks: { type: [blockSchema], default: [] },
+    relationships: [{ type: mongoose.Schema.Types.ObjectId, ref: 'RelationshipGroup' }],
     open_questions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'OpenQuestion' }],
     workspaceId: { type: mongoose.Schema.Types.ObjectId, default: null },
   },
