@@ -724,7 +724,11 @@ async function sendMessage() {
 .sidebar-backdrop { display: none; }
 
 @media (orientation: portrait) and (max-width: 768px) {
-  .chat-panel { width: 100% !important; left: 0; }
+  .chat-panel {
+    width: 100% !important;
+    left: 0;
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
 
   /* Sidebar overlays the chat instead of pushing it */
   .chat-sidebar {

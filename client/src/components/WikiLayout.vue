@@ -1,5 +1,5 @@
 <template>
-  <div class="wiki-root" :class="{ 'panel-open': !!activePanelId, 'chat-open': chatOpen }">
+  <div :class="['wiki-root', { 'panel-open': !!activePanelId, 'chat-open': chatOpen }, `tab-${mobileTab}`]">
     <!-- Full-width list -->
     <div class="list-view">
       <EntitySidebar
@@ -81,7 +81,53 @@
     <ToastNotification />
 
     <!-- Chat panel -->
-    <ChatPanel :open="chatOpen" @close="chatOpen = false" />
+    <ChatPanel :open="chatOpen" @close="onChatClose" />
+
+    <!-- Settings panel (mobile only) -->
+    <div class="mobile-settings-panel">
+      <div class="settings-group">
+        <div class="settings-group-title">Account</div>
+        <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
+      </div>
+    </div>
+
+    <!-- Bottom tab bar (mobile portrait only) -->
+    <nav class="mobile-tab-bar">
+      <button class="tab-btn" :class="{ active: mobileTab === 'list' }" @click="setMobileTab('list')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <line x1="3" y1="5"  x2="17" y2="5"/>
+          <line x1="3" y1="10" x2="17" y2="10"/>
+          <line x1="3" y1="15" x2="17" y2="15"/>
+        </svg>
+        <span>List</span>
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: mobileTab === 'detail', dimmed: !activePanelId }"
+        @click="setMobileTab('detail')"
+      >
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <rect x="4" y="2" width="12" height="16" rx="1.5"/>
+          <line x1="7" y1="7"  x2="13" y2="7"/>
+          <line x1="7" y1="10" x2="13" y2="10"/>
+          <line x1="7" y1="13" x2="10" y2="13"/>
+        </svg>
+        <span>Detail</span>
+      </button>
+      <button class="tab-btn" :class="{ active: mobileTab === 'chat' }" @click="setMobileTab('chat')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 4h14a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7.5L3 17V5a1 1 0 0 1 1-1z"/>
+        </svg>
+        <span>AI Chat</span>
+      </button>
+      <button class="tab-btn" :class="{ active: mobileTab === 'settings' }" @click="setMobileTab('settings')">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="10" cy="10" r="2.5"/>
+          <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.1 4.1l1.4 1.4M14.5 14.5l1.4 1.4M4.1 15.9l1.4-1.4M14.5 5.5l1.4-1.4"/>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </nav>
   </div>
 </template>
 
@@ -115,6 +161,18 @@ const { addToast } = useToasts();
 const panels = ref([]);
 const activePanelId = ref(null);
 const chatOpen = ref(false);
+const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
+
+function setMobileTab(tab) {
+  if (tab === 'detail' && !activePanelId.value) return;
+  mobileTab.value = tab;
+  chatOpen.value = (tab === 'chat');
+}
+
+function onChatClose() {
+  chatOpen.value = false;
+  if (mobileTab.value === 'chat') mobileTab.value = activePanelId.value ? 'detail' : 'list';
+}
 
 const activePanel = computed(() =>
   panels.value.find(p => p.id === activePanelId.value) ?? null
@@ -134,6 +192,7 @@ function openEntry(id, title) {
     existing.title = title; // keep title fresh
   }
   activePanelId.value = id;
+  mobileTab.value = 'detail';
   startNavigation(id, title);
   selectEntity(id);
 }
@@ -146,6 +205,7 @@ function openSnapshot(snapshot) {
     panels.value.push({ id, title: `${snapshot.title} [DELETED]`, mode: 'snapshot', snapshotEntry: snapshot, deletedAt });
   }
   activePanelId.value = id;
+  mobileTab.value = 'detail';
 }
 
 function openEditor() {
@@ -154,6 +214,7 @@ function openEditor() {
     panels.value.push({ id: EDITOR_ID, title: 'New Entity', mode: 'editor' });
   }
   activePanelId.value = EDITOR_ID;
+  mobileTab.value = 'detail';
 }
 
 function minimizePanel() {
@@ -165,7 +226,9 @@ function closePanel(id) {
   if (activePanelId.value === id) {
     activePanelId.value = panels.value.at(-1)?.id ?? null;
     if (activePanelId.value && activePanel.value?.mode === 'entity') {
-      selectEntry(activePanelId.value);
+      selectEntity(activePanelId.value);
+    } else if (!activePanelId.value) {
+      mobileTab.value = 'list';
     }
   }
 }
@@ -440,23 +503,119 @@ provide('openSnapshot', openSnapshot);
   transition: margin-right 0.25s ease;
 }
 
-/* ─── Mobile portrait ─────────────────────────────────────────────── */
+/* ─── Mobile settings panel ───────────────────────────────────────── */
+.mobile-settings-panel {
+  display: none; /* shown by tab CSS below */
+  flex: 1;
+  overflow-y: auto;
+  background: #0a0a0a;
+  padding: 32px 20px 24px;
+}
+
+.settings-group { margin-bottom: 32px; }
+
+.settings-group-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #444;
+  margin-bottom: 8px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px;
+  background: #111;
+  border: 1px solid #1e1e1e;
+  border-radius: 8px;
+  color: #ccc;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.settings-row:hover { background: #1a1a1a; }
+.settings-row.danger { color: #e07070; }
+.settings-row.danger:hover { background: #1a0a0a; }
+
+/* ─── Mobile bottom tab bar ───────────────────────────────────────── */
+.mobile-tab-bar {
+  display: none; /* shown only on mobile portrait */
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #0a0a0a;
+  border-top: 1px solid #1e1e1e;
+  z-index: 400;
+  align-items: stretch;
+  justify-content: space-around;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  color: #444;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: inherit;
+  padding: 6px 4px;
+  transition: color 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-btn:hover  { color: #888; }
+.tab-btn.active { color: #7ab4f5; }
+.tab-btn.dimmed { opacity: 0.3; cursor: default; }
+
+.tab-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+/* ─── Mobile portrait layout ──────────────────────────────────────── */
 @media (orientation: portrait) and (max-width: 768px) {
-  /* When a detail panel is open, hide the sidebar and use full width */
-  .wiki-root.panel-open .list-view {
-    flex: 0 0 0 !important;
-    overflow: hidden;
-  }
+  .mobile-tab-bar { display: flex; }
 
-  /* Chat panel is full-width on portrait (handled in ChatPanel.vue) */
-  .wiki-root.chat-open .detail-panel {
-    margin-right: 0;
-  }
+  /* Make room for the fixed tab bar */
+  .wiki-root { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
 
-  /* Right taskbar — too narrow for portrait, hide it */
-  .right-taskbar {
-    display: none;
-  }
+  /* Disable right taskbar and desktop chat margin */
+  .right-taskbar { display: none; }
+  .wiki-root.chat-open .detail-panel { margin-right: 0; }
+
+  /* ── Tab: list ── */
+  .wiki-root.tab-list .list-view    { display: flex !important; flex: 1 !important; }
+  .wiki-root.tab-list .detail-panel { display: none !important; }
+
+  /* ── Tab: detail ── */
+  .wiki-root.tab-detail .list-view    { display: none !important; }
+  .wiki-root.tab-detail .detail-panel { display: flex !important; flex: 1 !important; }
+
+  /* ── Tab: chat ── */
+  .wiki-root.tab-chat .list-view    { display: none !important; }
+  .wiki-root.tab-chat .detail-panel { display: none !important; }
+
+  /* ── Tab: settings ── */
+  .wiki-root.tab-settings .list-view           { display: none !important; }
+  .wiki-root.tab-settings .detail-panel        { display: none !important; }
+  .wiki-root.tab-settings .mobile-settings-panel { display: block; }
+
+  /* Override old panel-open flex rules — tabs own the layout */
+  .wiki-root.panel-open .list-view    { flex: 1 !important; }
+  .wiki-root.panel-open .detail-panel { flex: 1 !important; }
 }
 
 /* Deleted entry snapshot badge */
