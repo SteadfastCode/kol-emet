@@ -32,8 +32,8 @@ const PROVIDERS = {
     name: 'xAI (Grok)',
     envKey: 'XAI_API_KEY',
     baseURL: 'https://api.x.ai/v1',
-    models: ['grok-3', 'grok-3-mini', 'grok-3-fast', 'grok-4.1-fast', 'grok-4.20-reasoning'],
-    defaultModel: 'grok-3',
+    models: ['grok-4-1-fast-reasoning', 'grok-4.20-0309-reasoning'],
+    defaultModel: 'grok-4-1-fast-reasoning',
     responsesApi: true,
   },
   openai: {
