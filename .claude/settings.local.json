@@ -8,11 +8,17 @@
       "Bash(gh org:*)",
       "Bash(gh repo:*)",
       "Bash(yarn:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(sed -i 's/defineProps\\({ entry: Object/defineProps\\({ entity: Object/g; s/props\\\\.entry\\\\./props.entity./g' C:/repos/kol-emet/client/src/components/EntityHeader.vue)",
+      "Bash(sed -i 's/defineProps\\({ entry: Object/defineProps\\({ entity: Object/g; s/props\\\\.entry\\\\./props.entity./g' C:/repos/kol-emet/client/src/components/EntityDetail.vue)",
+      "Bash(sed -i 's/defineProps\\({ entry: Object/defineProps\\({ entity: Object/g; s/props\\\\.entry\\\\./props.entity./g' C:/repos/kol-emet/client/src/components/RelationshipsSection.vue)",
+      "Bash(sed -i 's/defineProps\\({ entry: Object/defineProps\\({ entity: Object/g; s/props\\\\.entry\\\\./props.entity./g' C:/repos/kol-emet/client/src/components/SidebarCard.vue)",
+      "Bash(sed -i 's/defineProps\\({ entry: Object/defineProps\\({ entity: Object/g; s/props\\\\.entry\\\\./props.entity./g' C:/repos/kol-emet/client/src/components/EntityCard.vue)",
+      "Bash(grep -v \"entry-\\\\|entry_\\\\|//\")"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "kol-emet"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

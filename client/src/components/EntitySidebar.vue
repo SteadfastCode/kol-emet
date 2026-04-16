@@ -6,6 +6,7 @@
         <span class="site-title">Kol Emet</span>
         <div class="header-actions">
           <button class="btn-sm primary" @click="$emit('new-entry')">+ New</button>
+          <button class="btn-sm" title="AI Chat" @click="$emit('chat')">AI</button>
           <button class="btn-sm" @click="$emit('logout')">Sign out</button>
         </div>
       </div>
@@ -60,7 +61,7 @@ defineProps({
   loading: Boolean,
 });
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat']);
 </script>
 
 <style scoped>

@@ -6,6 +6,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
+import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import User from '../models/User.js';
 import { getMcpUser } from '../lib/mcpUserStore.js';
@@ -81,13 +82,17 @@ function createMcpServer() {
 
   server.tool(
     'get_entity',
-    'Retrieve a single wiki entity by its id, including all blocks.',
+    'Retrieve a single wiki entity by its id, including all blocks and resolved relationship labels. ' +
+    'Relationship labels in the response are already resolved using the sub-group label resolution system — ' +
+    'use resolvedLabel on each member for the correct contextual label.',
     { id: z.string().describe('MongoDB ObjectId of the entity') },
     async ({ id }) => {
       const entity = await Entity.findById(id).populate('open_questions', 'question status').lean();
       if (!entity) throw new Error(`Entity not found: ${id}`);
-      const relationships = await RelationshipGroup.find({ 'members.entityId': id })
-        .populate({ path: 'members.entityId', select: 'title' });
+      const rawGroups = await RelationshipGroup.find({ 'members.entityId': id })
+        .populate({ path: 'members.entityId', select: 'title' })
+        .lean();
+      const relationships = await resolveGroupLabels(rawGroups, id);
       return { content: [{ type: 'text', text: JSON.stringify({ ...entity, relationships }, null, 2) }] };
     }
   );
@@ -154,10 +159,10 @@ function createMcpServer() {
 
   server.tool(
     'add_open_question',
-    'Create a new open question and link it to one or more entries',
+    'Create a new open question and link it to one or more entities.',
     {
       question: z.string().describe('The unresolved question'),
-      entry_ids: z.array(z.string()).describe('MongoDB ObjectIds of entries to link this question to'),
+      entry_ids: z.array(z.string()).describe('MongoDB ObjectIds of entities to link this question to'),
     },
     async ({ question, entry_ids }) => {
       const oq = await OpenQuestion.create({ question, entry_ids });
@@ -187,20 +192,54 @@ function createMcpServer() {
   );
 
   // ─── Relationships ───────────────────────────────────────────────────────────
+  //
+  // RELATIONSHIP DATA MODEL
+  // ─────────────────────────────────────────────────────────────────────────
+  // Relationships are stored as RelationshipGroups — named groups of 2+ entities
+  // where each member has a label (their role in the group) and optional notes.
+  //
+  // Groups can be nested: a sub-group is a more specific slice of a parent group.
+  // When displaying co-members, the label from the MOST SPECIFIC shared group wins.
+  // "Most specific" = deepest in the tree; tie-break = smallest group.
+  //
+  // BUILDING TIERED RELATIONSHIPS (e.g. a family):
+  //   Step 1 — Create the broad parent group with ALL members + their general labels:
+  //     add_relationship(father, mother, myLabel:"husband", theirLabel:"wife", groupLabel:"Elias Marriage")
+  //     add_relationship(father, son1, myLabel:"father", theirLabel:"son", groupLabel:"Elias Family")
+  //     add_member_to_relationship(familyGroupId, son2, label:"son")
+  //     add_member_to_relationship(familyGroupId, daughter, label:"daughter")
+  //     add_member_to_relationship(familyGroupId, mother, label:"mother")
+  //     (also add father/mother to any marriage group, etc.)
+  //
+  //   Step 2 — Create a narrower group for the subset with their specific labels:
+  //     add_relationship(son1, son2, myLabel:"sibling", theirLabel:"sibling", groupLabel:"Elias Siblings")
+  //     add_member_to_relationship(siblingsGroupId, daughter, label:"sibling")
+  //
+  //   Step 3 — Link the narrow group as a sub-group of the broad group:
+  //     add_subgroup_to_relationship(familyGroupId, siblingsGroupId)
+  //
+  //   Result: when son1 views the family group, son2 and daughter show as "sibling"
+  //   (from the siblings sub-group) instead of "son"/"daughter" (from the family group).
+  //   Father and mother show their family labels since they are not in the siblings sub-group.
+  //
+  //   KEY RULE: for the label override to work, members must be in BOTH the parent group
+  //   AND the sub-group. Add them to both.
+  // ─────────────────────────────────────────────────────────────────────────
 
   server.tool(
     'add_relationship',
-    'Create a bidirectional relationship between two entities. This is the ONLY way to link entities — do NOT use blocks for this. ' +
-    'Labels are optional at every level. Use myLabel/theirLabel for asymmetric roles (e.g. "father"/"son"). ' +
-    'Use the same label on both sides for symmetric roles (e.g. both "sibling"). ' +
-    'groupLabel names the relationship group itself (e.g. "parentage", "siblings"). ' +
-    'Returns the created relationship group.',
+    'Create a relationship group between exactly two entities. This is the ONLY way to link entities — never use blocks for this. ' +
+    'Labels describe each entity\'s role (e.g. myLabel:"father", theirLabel:"son"). Use the same label on both sides for symmetric roles (e.g. both "sibling"). ' +
+    'groupLabel names the group (e.g. "Elias Family"). ' +
+    'To add more members beyond the initial two, use add_member_to_relationship. ' +
+    'To make sibling-style relationships work correctly inside a larger family group, see the BUILDING TIERED RELATIONSHIPS guide in the relationship tools section. ' +
+    'Returns the created group with its _id — save it for add_member_to_relationship and add_subgroup_to_relationship calls.',
     {
       myEntityId:    z.string().describe('MongoDB ObjectId of the first entity'),
       theirEntityId: z.string().describe('MongoDB ObjectId of the second entity'),
-      myLabel:       z.string().optional().describe('Label for the first entity, e.g. "father"'),
-      theirLabel:    z.string().optional().describe('Label for the second entity, e.g. "son"'),
-      groupLabel:    z.string().optional().describe('Label for the group itself, e.g. "parentage"'),
+      myLabel:       z.string().optional().describe('Role label for the first entity, e.g. "father"'),
+      theirLabel:    z.string().optional().describe('Role label for the second entity, e.g. "son"'),
+      groupLabel:    z.string().optional().describe('Name of the relationship group itself, e.g. "Elias Family"'),
       notes:         z.string().optional().describe("Notes on the first entity's membership"),
     },
     async ({ myEntityId, theirEntityId, myLabel, theirLabel, groupLabel, notes }) => {
@@ -223,12 +262,14 @@ function createMcpServer() {
 
   server.tool(
     'add_member_to_relationship',
-    'Add a new entity to an existing relationship group. Use this to extend a group beyond its initial two members ' +
-    '(e.g. adding a third sibling to a sibling group). The entity must not already be in the group.',
+    'Add a third (or more) entity to an existing relationship group. ' +
+    'Use this after add_relationship to build groups with more than two members — for example, adding a third sibling to a siblings group or a third child to a family group. ' +
+    'The label should match the role convention already used in the group (e.g. "sibling" if all other members have label "sibling"). ' +
+    'If building tiered relationships, add members to BOTH the parent group and the relevant sub-group so the label resolution can pick up the most specific label.',
     {
-      groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
+      groupId:  z.string().describe('MongoDB ObjectId of the relationship group (from add_relationship response)'),
       entityId: z.string().describe('MongoDB ObjectId of the entity to add'),
-      label:    z.string().optional().describe('Label for this entity in the group, e.g. "sibling"'),
+      label:    z.string().optional().describe('Role label for this entity in the group, e.g. "sibling" or "daughter"'),
       notes:    z.string().optional().describe('Notes on this membership'),
     },
     async ({ groupId, entityId, label, notes }) => {
@@ -247,7 +288,7 @@ function createMcpServer() {
 
   server.tool(
     'update_group_label',
-    'Update or clear the label of a relationship group (e.g. rename "parentage" to "family", or null to remove it).',
+    'Rename or clear the label of a relationship group (e.g. rename "parentage" to "Elias Family", or pass null to remove the label).',
     {
       groupId: z.string().describe('MongoDB ObjectId of the relationship group'),
       label:   z.string().nullable().describe('New group label, or null to clear it'),
@@ -263,7 +304,8 @@ function createMcpServer() {
 
   server.tool(
     'remove_relationship',
-    "Remove an entity's membership from a relationship group. If fewer than 2 members remain, the group is deleted.",
+    "Remove an entity's membership from a relationship group. If the group drops below 2 members it is automatically deleted. " +
+    "Does NOT remove the entity from any sub-groups — use remove_subgroup_from_relationship first if you are dismantling a tiered structure.",
     {
       groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
       entityId: z.string().describe('MongoDB ObjectId of the entity to remove'),
@@ -287,10 +329,13 @@ function createMcpServer() {
 
   server.tool(
     'update_relationship_label',
-    "Update a member's label or notes within a relationship group.",
+    "Update a specific member's label or notes within a relationship group. " +
+    "Use this to correct a label after creation (e.g. change 'son' to 'adopted son'). " +
+    "Remember: when sub-groups are in play, the displayed label uses the most specific shared group — " +
+    "updating a label in the parent group may have no visible effect if a sub-group label takes precedence.",
     {
       groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
-      entityId: z.string().describe('MongoDB ObjectId of the entity to update'),
+      entityId: z.string().describe('MongoDB ObjectId of the entity whose label to update'),
       label:    z.string().nullable().optional().describe('New label, or null to clear it'),
       notes:    z.string().nullable().optional().describe('New notes, or null to clear them'),
     },
@@ -310,10 +355,19 @@ function createMcpServer() {
 
   server.tool(
     'add_subgroup_to_relationship',
-    'Link an existing relationship group as a sub-group of another group. Members of the sub-group will inherit their labels from the most specific (deepest) shared group when viewed from any entity in that group.',
+    'Link an existing relationship group as a sub-group of a broader group, enabling context-correct label display. ' +
+    'When viewing a co-member, the label comes from the most specific (deepest) group that contains BOTH the viewer and that co-member. ' +
+    'Sub-groups are more specific than their parent, so their labels take precedence. ' +
+    '\n\nTYPICAL USE CASE — family with siblings:\n' +
+    '  1. "Elias Family" group: all members with general labels (father, mother, son, daughter)\n' +
+    '  2. "Elias Siblings" group: only the children, all labeled "sibling"\n' +
+    '  3. add_subgroup_to_relationship(familyGroupId, siblingsGroupId)\n' +
+    '  → Result: when a sibling views the family group, other siblings show as "sibling" not "son/daughter"\n' +
+    '\nKEY REQUIREMENT: members must be in BOTH the parent group and the sub-group for label resolution to work. ' +
+    'If a member is only in the sub-group, they will not appear in the parent group view at all.',
     {
-      parentGroupId: z.string().describe('MongoDB ObjectId of the parent relationship group'),
-      subGroupId:    z.string().describe('MongoDB ObjectId of the group to nest as a sub-group'),
+      parentGroupId: z.string().describe('MongoDB ObjectId of the broader/parent group'),
+      subGroupId:    z.string().describe('MongoDB ObjectId of the narrower group to nest inside the parent'),
     },
     async ({ parentGroupId, subGroupId }) => {
       const parent = await RelationshipGroup.findById(parentGroupId);
@@ -333,7 +387,8 @@ function createMcpServer() {
 
   server.tool(
     'remove_subgroup_from_relationship',
-    'Unlink a sub-group from its parent relationship group. Any members of the sub-group who are not already direct members of the parent will be re-added to the parent automatically.',
+    'Unlink a sub-group from its parent relationship group. ' +
+    'Any members of the sub-group who are not already direct members of the parent group will be automatically re-added to the parent (using the label they had in the sub-group) so no one disappears from the parent view.',
     {
       parentGroupId: z.string().describe('MongoDB ObjectId of the parent relationship group'),
       subGroupId:    z.string().describe('MongoDB ObjectId of the sub-group to unlink'),

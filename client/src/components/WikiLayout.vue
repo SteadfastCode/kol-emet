@@ -1,5 +1,5 @@
 <template>
-  <div class="wiki-root" :class="{ 'panel-open': !!activePanelId }">
+  <div class="wiki-root" :class="{ 'panel-open': !!activePanelId, 'chat-open': chatOpen }">
     <!-- Full-width list -->
     <div class="list-view">
       <EntitySidebar
@@ -16,6 +16,7 @@
         @select="openEntry"
         @new-entry="openEditor"
         @logout="$emit('logout')"
+        @chat="chatOpen = !chatOpen"
       />
     </div>
 
@@ -78,6 +79,9 @@
     </Transition>
 
     <ToastNotification />
+
+    <!-- Chat panel -->
+    <ChatPanel :open="chatOpen" @close="chatOpen = false" />
   </div>
 </template>
 
@@ -87,6 +91,7 @@ import EntitySidebar from './EntitySidebar.vue';
 import EntityDetail from './EntityDetail.vue';
 import EntityEditor from './EntityEditor.vue';
 import ToastNotification from './ToastNotification.vue';
+import ChatPanel from './ChatPanel.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -109,6 +114,7 @@ const { addToast } = useToasts();
 // Panel state: array of { id, title, mode: 'entry' | 'editor' | 'snapshot', snapshotEntry?, deletedAt? }
 const panels = ref([]);
 const activePanelId = ref(null);
+const chatOpen = ref(false);
 
 const activePanel = computed(() =>
   panels.value.find(p => p.id === activePanelId.value) ?? null
@@ -427,6 +433,31 @@ provide('openSnapshot', openSnapshot);
 .taskbar-fade-leave-active { transition: opacity 0.2s; }
 .taskbar-fade-enter-from,
 .taskbar-fade-leave-to { opacity: 0; }
+
+/* When chat panel is open, keep main layout from being hidden under it */
+.wiki-root.chat-open .detail-panel {
+  margin-right: 380px;
+  transition: margin-right 0.25s ease;
+}
+
+/* ─── Mobile portrait ─────────────────────────────────────────────── */
+@media (orientation: portrait) and (max-width: 768px) {
+  /* When a detail panel is open, hide the sidebar and use full width */
+  .wiki-root.panel-open .list-view {
+    flex: 0 0 0 !important;
+    overflow: hidden;
+  }
+
+  /* Chat panel is full-width on portrait (handled in ChatPanel.vue) */
+  .wiki-root.chat-open .detail-panel {
+    margin-right: 0;
+  }
+
+  /* Right taskbar — too narrow for portrait, hide it */
+  .right-taskbar {
+    display: none;
+  }
+}
 
 /* Deleted entry snapshot badge */
 .deleted-badge {
