@@ -11,57 +11,23 @@
  *                    type:'function' tools executed server-side against the database.
  *
  * Both paths emit identical SSE events to the client:
- *   { type: 'delta',  content: string }  — text chunk
- *   { type: 'done' }                     — stream complete
- *   { type: 'error',  message: string }  — fatal error
+ *   { type: 'delta',   content: string }  — text chunk
+ *   { type: 'done' }                      — stream complete
+ *   { type: 'error',   message: string }  — fatal error
+ *
+ * When conversationId is provided the new user message and assistant response
+ * are appended to the stored Conversation document after streaming completes.
  */
 
 import { Router } from 'express';
-import OpenAI from 'openai';
 import { requireAuth } from '../middleware/auth.js';
+import { PROVIDERS, makeClient } from '../lib/aiProviders.js';
+import Conversation from '../models/Conversation.js';
 import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 
 const router = Router();
-
-// ─── Provider registry ────────────────────────────────────────────────────────
-
-const PROVIDERS = {
-  xai: {
-    name: 'xAI (Grok)',
-    envKey: 'XAI_API_KEY',
-    baseURL: 'https://api.x.ai/v1',
-    models: ['grok-4-1-fast-reasoning', 'grok-4.20-0309-reasoning'],
-    defaultModel: 'grok-4-1-fast-reasoning',
-    responsesApi: true,
-  },
-  openai: {
-    name: 'OpenAI',
-    envKey: 'OPENAI_API_KEY',
-    baseURL: null,
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
-    defaultModel: 'gpt-4o',
-    responsesApi: true,
-  },
-  gemini: {
-    name: 'Google Gemini',
-    envKey: 'GEMINI_API_KEY',
-    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-    models: ['gemini-2.0-flash', 'gemini-2.0-flash-thinking-exp', 'gemini-1.5-pro'],
-    defaultModel: 'gemini-2.0-flash',
-    responsesApi: false,
-  },
-};
-
-function makeClient(providerId) {
-  const p = PROVIDERS[providerId];
-  const apiKey = process.env[p.envKey];
-  if (!apiKey) throw new Error(`${p.envKey} is not configured on the server`);
-  const opts = { apiKey };
-  if (p.baseURL) opts.baseURL = p.baseURL;
-  return new OpenAI(opts);
-}
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -87,12 +53,9 @@ function mcpToolDef() {
 }
 
 /**
- * Stream a response using the Responses API with an MCP tool.
- * The provider calls the MCP server directly — no local tool execution needed.
+ * Stream via Responses API (MCP tools). Returns the full assistant text.
  */
 async function streamViaResponsesApi(client, model, systemPrompt, messages, send) {
-  // responses.create uses 'instructions' for the system prompt; strip any
-  // system-role messages from the input array to avoid duplication.
   const input = messages.filter((m) => m.role !== 'system');
 
   const stream = await client.responses.create({
@@ -103,11 +66,14 @@ async function streamViaResponsesApi(client, model, systemPrompt, messages, send
     stream: true,
   });
 
+  let assistantText = '';
   for await (const event of stream) {
     if (event.type === 'response.output_text.delta') {
+      assistantText += event.delta;
       send({ type: 'delta', content: event.delta });
     }
   }
+  return assistantText;
 }
 
 // ─── Completions API path (function tools, local execution) ──────────────────
@@ -186,12 +152,8 @@ async function executeTool(name, args) {
 }
 
 /**
- * Stream a response using the Chat Completions API with function-calling tools.
- * Tool calls are executed locally against the database (no external HTTP calls).
- *
- * Two-phase flow:
- *   Phase 1 — stream with tools available; accumulate tool_call deltas.
- *   Phase 2 — if tools were called, execute them, inject results, stream final answer.
+ * Stream via Chat Completions API (function calling, local execution).
+ * Returns the full assistant text (from whichever phase produced it).
  */
 async function streamViaCompletions(client, model, systemPrompt, messages, send) {
   let currentMessages = [
@@ -209,7 +171,7 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send)
   });
 
   let assistantContent = '';
-  const pendingToolCalls = {}; // keyed by index
+  const pendingToolCalls = {};
 
   for await (const chunk of firstStream) {
     const choice = chunk.choices?.[0];
@@ -238,7 +200,7 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send)
   }
 
   const toolCallsList = Object.values(pendingToolCalls);
-  if (toolCallsList.length === 0) return; // no tools called — done
+  if (toolCallsList.length === 0) return assistantContent;
 
   // Phase 2: execute tools and stream the final answer
   currentMessages = [
@@ -267,10 +229,15 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send)
     stream:   true,
   });
 
+  let finalContent = '';
   for await (const chunk of finalStream) {
     const delta = chunk.choices?.[0]?.delta;
-    if (delta?.content) send({ type: 'delta', content: delta.content });
+    if (delta?.content) {
+      finalContent += delta.content;
+      send({ type: 'delta', content: delta.content });
+    }
   }
+  return finalContent || assistantContent;
 }
 
 // ─── GET /chat/providers ──────────────────────────────────────────────────────
@@ -290,7 +257,7 @@ router.get('/providers', requireAuth, (req, res) => {
 // ─── POST /chat ───────────────────────────────────────────────────────────────
 
 router.post('/', requireAuth, async (req, res) => {
-  const { provider = 'xai', model, messages = [], systemPrompt } = req.body;
+  const { provider = 'xai', model, messages = [], systemPrompt, conversationId } = req.body;
 
   const providerCfg = PROVIDERS[provider];
   if (!providerCfg) return res.status(400).json({ error: `Unknown provider: ${provider}` });
@@ -300,6 +267,14 @@ router.post('/', requireAuth, async (req, res) => {
 
   const effectiveModel  = model || providerCfg.defaultModel;
   const effectiveSystem = systemPrompt || WIKI_SYSTEM_PROMPT;
+
+  // Validate conversation ownership if provided
+  const userId = req.session?.userId;
+  let conversation = null;
+  if (conversationId && userId) {
+    conversation = await Conversation.findOne({ _id: conversationId, userId });
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+  }
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -315,10 +290,20 @@ router.post('/', requireAuth, async (req, res) => {
     const useResponsesApi =
       providerCfg.responsesApi === true && !!process.env.MCP_SERVER_URL;
 
-    if (useResponsesApi) {
-      await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send);
-    } else {
-      await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send);
+    const assistantText = useResponsesApi
+      ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send)
+      : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send);
+
+    // Persist the new exchange to the conversation
+    if (conversation && assistantText) {
+      const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+      if (lastUserMsg) {
+        conversation.messages.push(
+          { role: 'user',      content: lastUserMsg.content },
+          { role: 'assistant', content: assistantText },
+        );
+        await conversation.save();
+      }
     }
 
     send({ type: 'done' });

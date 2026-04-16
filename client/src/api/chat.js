@@ -12,12 +12,12 @@ export async function getProviders() {
  *   { type: 'done' }
  *   { type: 'error',  message: string }
  */
-export async function* streamChat({ provider, model, messages }) {
+export async function* streamChat({ provider, model, messages, conversationId }) {
   const res = await fetch(`${BASE_URL}/chat`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, model, messages }),
+    body: JSON.stringify({ provider, model, messages, conversationId }),
   });
 
   if (!res.ok) {

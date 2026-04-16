@@ -16,7 +16,9 @@ import eventsRouter from './routes/events.js';
 import changelogRouter from './routes/changelog.js';
 import relationshipGroupsRouter from './routes/relationshipGroups.js';
 import chatRouter from './routes/chat.js';
+import conversationsRouter from './routes/conversations.js';
 import './models/User.js';
+import './models/Conversation.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
 import './models/RelationshipType.js';
 import './models/RelationshipGroup.js';
@@ -60,6 +62,7 @@ app.use('/tags', requireAuth, tagsRouter);
 app.use('/open-questions', requireAuth, openQuestionsRouter);
 app.use('/relationship-types', requireAuth, relationshipTypesRouter);
 app.use('/chat', chatRouter);
+app.use('/conversations', requireAuth, conversationsRouter);
 
 mongoose
   .connect(process.env.MONGO_URI)
