@@ -37,3 +37,9 @@ export const removeMember = (groupId, entityId) =>
 
 export const deleteGroup = (groupId) =>
   req(`/relationship-groups/${groupId}`, { method: 'DELETE' });
+
+export const addSubGroup = (parentGroupId, subGroupId) =>
+  req(`/relationship-groups/${parentGroupId}/subgroups`, { method: 'POST', body: JSON.stringify({ groupId: subGroupId }) });
+
+export const removeSubGroup = (parentGroupId, subGroupId) =>
+  req(`/relationship-groups/${parentGroupId}/subgroups/${subGroupId}`, { method: 'DELETE' });

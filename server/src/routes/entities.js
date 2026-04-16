@@ -3,6 +3,7 @@ import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
+import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 
 const router = Router();
 
@@ -55,8 +56,11 @@ router.get('/:id', async (req, res) => {
     if (!entity) return res.status(404).json({ error: 'Not found' });
 
     // Query groups dynamically — source of truth is the group's members array, not the back-reference on Entity
-    const relationships = await RelationshipGroup.find({ 'members.entityId': req.params.id })
-      .populate({ path: 'members.entityId', select: 'title' });
+    const rawGroups = await RelationshipGroup.find({ 'members.entityId': req.params.id })
+      .populate({ path: 'members.entityId', select: 'title' })
+      .lean();
+
+    const relationships = await resolveGroupLabels(rawGroups, req.params.id);
 
     res.json({ ...entity, relationships });
   } catch (err) {

@@ -15,7 +15,7 @@ const groupLinkSchema = new mongoose.Schema({
 const relationshipGroupSchema = new mongoose.Schema({
   label:         { type: String, default: null },
   members:       { type: [memberSchema], default: [] },
-  relationships: { type: [groupLinkSchema], default: [] },  // group-to-group (future)
+  relationships: { type: [groupLinkSchema], default: [] },  // sub-group links
   entityId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Entity', default: null },
   createdAt:     { type: Date, default: Date.now },
 }, { timestamps: false });

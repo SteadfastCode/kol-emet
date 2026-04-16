@@ -308,6 +308,64 @@ function createMcpServer() {
     }
   );
 
+  server.tool(
+    'add_subgroup_to_relationship',
+    'Link an existing relationship group as a sub-group of another group. Members of the sub-group will inherit their labels from the most specific (deepest) shared group when viewed from any entity in that group.',
+    {
+      parentGroupId: z.string().describe('MongoDB ObjectId of the parent relationship group'),
+      subGroupId:    z.string().describe('MongoDB ObjectId of the group to nest as a sub-group'),
+    },
+    async ({ parentGroupId, subGroupId }) => {
+      const parent = await RelationshipGroup.findById(parentGroupId);
+      if (!parent) throw new Error(`Parent group not found: ${parentGroupId}`);
+      const child = await RelationshipGroup.findById(subGroupId);
+      if (!child) throw new Error(`Sub-group not found: ${subGroupId}`);
+      if (String(parent._id) === String(child._id)) throw new Error('A group cannot be its own sub-group');
+      const alreadyLinked = parent.relationships.some(r => String(r.groupId) === String(subGroupId));
+      if (alreadyLinked) throw new Error('Group is already a sub-group of this parent');
+      parent.relationships.push({ groupId: subGroupId });
+      await parent.save();
+      const populated = await RelationshipGroup.findById(parent._id)
+        .populate({ path: 'members.entityId', select: 'title' });
+      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'remove_subgroup_from_relationship',
+    'Unlink a sub-group from its parent relationship group. Any members of the sub-group who are not already direct members of the parent will be re-added to the parent automatically.',
+    {
+      parentGroupId: z.string().describe('MongoDB ObjectId of the parent relationship group'),
+      subGroupId:    z.string().describe('MongoDB ObjectId of the sub-group to unlink'),
+    },
+    async ({ parentGroupId, subGroupId }) => {
+      const parent = await RelationshipGroup.findById(parentGroupId);
+      if (!parent) throw new Error(`Parent group not found: ${parentGroupId}`);
+      const linked = parent.relationships.some(r => String(r.groupId) === String(subGroupId));
+      if (!linked) throw new Error(`Group ${subGroupId} is not a sub-group of ${parentGroupId}`);
+      parent.relationships = parent.relationships.filter(r => String(r.groupId) !== String(subGroupId));
+      const subGroup = await RelationshipGroup.findById(subGroupId);
+      const reAdded = [];
+      if (subGroup) {
+        for (const subMember of subGroup.members) {
+          const alreadyInParent = parent.members.some(
+            m => String(m.entityId) === String(subMember.entityId)
+          );
+          if (!alreadyInParent) {
+            parent.members.push({ entityId: subMember.entityId, label: subMember.label, notes: subMember.notes });
+            await Entity.updateOne({ _id: subMember.entityId }, { $addToSet: { relationships: parent._id } });
+            reAdded.push(String(subMember.entityId));
+          }
+        }
+      }
+      await parent.save();
+      const msg = reAdded.length
+        ? `Sub-group unlinked. Re-added ${reAdded.length} member(s) to parent: ${reAdded.join(', ')}`
+        : 'Sub-group unlinked. No members needed to be re-added.';
+      return { content: [{ type: 'text', text: msg }] };
+    }
+  );
+
   return server;
 }
 

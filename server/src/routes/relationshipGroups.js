@@ -135,6 +135,74 @@ router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
   }
 });
 
+// POST /relationship-groups/:id/subgroups — link an existing group as a sub-group
+// Body: { groupId }
+router.post('/:id/subgroups', requireActor, async (req, res) => {
+  try {
+    const { groupId } = req.body;
+    if (!groupId) return res.status(400).json({ error: 'groupId is required' });
+
+    const parent = await RelationshipGroup.findById(req.params.id);
+    if (!parent) return res.status(404).json({ error: 'Parent group not found' });
+
+    const child = await RelationshipGroup.findById(groupId);
+    if (!child) return res.status(404).json({ error: 'Sub-group not found' });
+
+    if (String(parent._id) === String(child._id)) {
+      return res.status(400).json({ error: 'A group cannot be its own sub-group' });
+    }
+
+    const alreadyLinked = parent.relationships.some(r => String(r.groupId) === String(groupId));
+    if (alreadyLinked) return res.status(409).json({ error: 'Group is already a sub-group' });
+
+    parent.relationships.push({ groupId });
+    await parent.save();
+
+    const populated = await populateGroup(RelationshipGroup.findById(parent._id));
+    res.status(201).json(populated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /relationship-groups/:id/subgroups/:subGroupId — unlink a sub-group
+// Any members of the sub-group that are not already in the parent are re-added.
+router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res) => {
+  try {
+    const parent = await RelationshipGroup.findById(req.params.id);
+    if (!parent) return res.status(404).json({ error: 'Parent group not found' });
+
+    const linked = parent.relationships.some(r => String(r.groupId) === req.params.subGroupId);
+    if (!linked) return res.status(404).json({ error: 'Sub-group link not found' });
+
+    // Remove the sub-group link
+    parent.relationships = parent.relationships.filter(r => String(r.groupId) !== req.params.subGroupId);
+
+    // Re-add sub-group members to the parent if they're not already there
+    const subGroup = await RelationshipGroup.findById(req.params.subGroupId);
+    if (subGroup) {
+      for (const subMember of subGroup.members) {
+        const alreadyInParent = parent.members.some(
+          m => String(m.entityId) === String(subMember.entityId)
+        );
+        if (!alreadyInParent) {
+          parent.members.push({
+            entityId: subMember.entityId,
+            label:    subMember.label,
+            notes:    subMember.notes,
+          });
+          await Entity.findByIdAndUpdate(subMember.entityId, { $addToSet: { relationships: parent._id } });
+        }
+      }
+    }
+
+    await parent.save();
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /relationship-groups/:id — delete entire group and clean up all member entries
 router.delete('/:id', requireActor, async (req, res) => {
   try {

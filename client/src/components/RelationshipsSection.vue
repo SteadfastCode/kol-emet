@@ -24,6 +24,7 @@
           <div v-if="canEdit" class="group-label-actions">
             <button class="icon-btn" title="Edit group label" @click="startGroupEdit(group)">✎</button>
             <button class="icon-btn" title="Add member to group" @click="startAddToGroup(group._id)">+</button>
+            <button class="icon-btn" title="Link sub-group" @click="startLinkSubGroup(group._id)">⤵</button>
             <button class="icon-btn danger" title="Delete group" @click="confirmDeleteGroup(group)">✕</button>
           </div>
         </template>
@@ -53,7 +54,7 @@
 
         <!-- View row -->
         <div v-else class="rel-row">
-          <span class="rel-label">{{ coMember.label || '—' }}</span>
+          <span class="rel-label">{{ coMember.resolvedLabel || '—' }}</span>
           <span
             class="rel-target wiki-link"
             @click="followLink(coMember.entityId._id, coMember.entityId.title)"
@@ -74,6 +75,57 @@
           </div>
         </div>
       </template>
+
+      <!-- Linked sub-groups -->
+      <div v-if="group.relationships?.length" class="subgroups-row">
+        <span class="subgroups-label">sub-groups:</span>
+        <template v-for="sub in group.relationships" :key="sub.groupId">
+          <span class="subgroup-chip">
+            {{ subGroupTitle(sub.groupId, group) }}
+            <button
+              v-if="canEdit"
+              class="icon-btn chip-remove"
+              title="Unlink sub-group"
+              @click="unlinkSubGroup(group._id, sub.groupId)"
+            >✕</button>
+          </span>
+        </template>
+      </div>
+
+      <!-- Link sub-group form -->
+      <div v-if="linkSubGroupParentId === group._id" class="rel-add-form">
+        <div class="form-field">
+          <label class="field-label">Sub-group to link</label>
+          <input
+            v-model="linkSubGroupSearch"
+            class="input input-sm"
+            placeholder="Search groups by label…"
+            @input="filterSubGroupTargets(group)"
+          />
+          <div v-if="linkSubGroupResults.length" class="target-dropdown">
+            <div
+              v-for="g in linkSubGroupResults"
+              :key="g._id"
+              class="target-option"
+              @click="selectSubGroupTarget(g)"
+            >{{ g.label || '(unlabeled group)' }}</div>
+          </div>
+          <div v-if="linkSubGroupTargetId" class="selected-target">
+            ✓ {{ linkSubGroupTargetLabel }}
+            <button class="icon-btn" @click="clearSubGroupTarget">✕</button>
+          </div>
+        </div>
+        <div class="row-actions">
+          <button class="btn-sm" @click="cancelLinkSubGroup">Cancel</button>
+          <button
+            class="btn-sm primary"
+            :disabled="linkSubGroupSaving || !linkSubGroupTargetId"
+            @click="saveLinkSubGroup(group._id)"
+          >
+            <span v-if="linkSubGroupSaving" class="spinner" /><span v-else>Link</span>
+          </button>
+        </div>
+      </div>
 
       <!-- Add-to-group form -->
       <div v-if="addToGroupId === group._id" class="rel-add-form">
@@ -189,7 +241,7 @@
 
 <script setup>
 import { ref, inject } from 'vue';
-import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, deleteGroup } from '../api/relationshipGroups.js';
+import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, deleteGroup, addSubGroup, removeSubGroup } from '../api/relationshipGroups.js';
 
 const props = defineProps({ entity: Object, canEdit: Boolean });
 const emit = defineEmits(['refresh']);
@@ -325,6 +377,76 @@ async function removeRelationship(group) {
   // If this entry is the only member besides one other, removing triggers group deletion
   await removeMember(group._id, props.entity._id);
   emit('refresh');
+}
+
+// ─── Link / unlink sub-group ─────────────────────────────────────────────────
+
+const linkSubGroupParentId  = ref(null);
+const linkSubGroupSearch    = ref('');
+const linkSubGroupResults   = ref([]);
+const linkSubGroupTargetId  = ref(null);
+const linkSubGroupTargetLabel = ref('');
+const linkSubGroupSaving    = ref(false);
+
+function startLinkSubGroup(groupId) {
+  linkSubGroupParentId.value = groupId;
+  linkSubGroupSearch.value   = '';
+  linkSubGroupResults.value  = [];
+  linkSubGroupTargetId.value = null;
+}
+
+function cancelLinkSubGroup() {
+  linkSubGroupParentId.value = null;
+}
+
+function clearSubGroupTarget() {
+  linkSubGroupTargetId.value   = null;
+  linkSubGroupTargetLabel.value = '';
+  linkSubGroupSearch.value     = '';
+}
+
+function filterSubGroupTargets(currentGroup) {
+  const q = linkSubGroupSearch.value.toLowerCase();
+  if (!q) { linkSubGroupResults.value = []; return; }
+  const existingSubIds = new Set((currentGroup.relationships ?? []).map(r => String(r.groupId)));
+  linkSubGroupResults.value = (props.entity.relationships ?? [])
+    .filter(g =>
+      String(g._id) !== String(currentGroup._id) &&
+      !existingSubIds.has(String(g._id)) &&
+      (g.label ?? '').toLowerCase().includes(q)
+    )
+    .slice(0, 8);
+}
+
+function selectSubGroupTarget(g) {
+  linkSubGroupTargetId.value    = g._id;
+  linkSubGroupTargetLabel.value = g.label || '(unlabeled group)';
+  linkSubGroupSearch.value      = g.label || '';
+  linkSubGroupResults.value     = [];
+}
+
+async function saveLinkSubGroup(parentGroupId) {
+  if (!linkSubGroupTargetId.value) return;
+  linkSubGroupSaving.value = true;
+  try {
+    await addSubGroup(parentGroupId, linkSubGroupTargetId.value);
+    cancelLinkSubGroup();
+    emit('refresh');
+  } finally {
+    linkSubGroupSaving.value = false;
+  }
+}
+
+async function unlinkSubGroup(parentGroupId, subGroupId) {
+  if (!window.confirm('Unlink this sub-group? Members not already in the parent group will be re-added to it.')) return;
+  await removeSubGroup(parentGroupId, subGroupId);
+  emit('refresh');
+}
+
+// Helper: given a sub-group ID, find its label from the entity's relationship groups
+function subGroupTitle(groupId, currentGroup) {
+  const g = (props.entity.relationships ?? []).find(r => String(r._id) === String(groupId));
+  return g?.label || '(unlabeled group)';
 }
 
 // ─── Add new ─────────────────────────────────────────────────────────────────
@@ -591,4 +713,41 @@ async function saveNew() {
   color: #6dca6d;
   margin-top: 2px;
 }
+
+/* Sub-group chips */
+.subgroups-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px 0 5px;
+  font-size: 11px;
+  color: #444;
+}
+
+.subgroups-label {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.subgroup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 999px;
+  padding: 1px 6px 1px 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.chip-remove {
+  font-size: 10px;
+  padding: 0 2px;
+  color: #333;
+}
+.chip-remove:hover { color: #e07070; }
 </style>
