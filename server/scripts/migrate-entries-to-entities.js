@@ -18,13 +18,36 @@ await mongoose.connect(MONGO_URI);
 console.log('Connected to MongoDB');
 
 const db = mongoose.connection.db;
-const collections = await db.listCollections({ name: 'entries' }).toArray();
 
-if (collections.length === 0) {
-  console.log("Collection 'entries' not found — nothing to migrate (may already be 'entities')");
+const hasEntries  = (await db.listCollections({ name: 'entries'  }).toArray()).length > 0;
+const hasEntities = (await db.listCollections({ name: 'entities' }).toArray()).length > 0;
+
+if (!hasEntries) {
+  console.log("Collection 'entries' not found — nothing to migrate.");
 } else {
-  await db.collection('entries').rename('entities');
-  console.log("Renamed 'entries' → 'entities'");
+  const entriesCount  = await db.collection('entries').countDocuments();
+  const entitiesCount = hasEntities ? await db.collection('entities').countDocuments() : 0;
+
+  console.log(`entries: ${entriesCount} docs  |  entities: ${entitiesCount} docs`);
+
+  if (entitiesCount > 0 && entriesCount === 0) {
+    console.log("'entities' already has data and 'entries' is empty — nothing to do.");
+  } else if (hasEntities && entitiesCount === 0) {
+    // Empty entities shell created by Mongoose on startup — drop it, then rename
+    console.log("Dropping empty 'entities' collection created by Mongoose...");
+    await db.collection('entities').drop();
+    await db.collection('entries').rename('entities');
+    console.log("Renamed 'entries' → 'entities'");
+  } else if (!hasEntities) {
+    await db.collection('entries').rename('entities');
+    console.log("Renamed 'entries' → 'entities'");
+  } else {
+    console.error(
+      `Both collections have data (entries: ${entriesCount}, entities: ${entitiesCount}). ` +
+      'Manual intervention required — inspect both collections before proceeding.'
+    );
+    process.exit(1);
+  }
 }
 
 await mongoose.disconnect();
