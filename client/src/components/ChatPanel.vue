@@ -118,7 +118,7 @@
           <textarea
             v-model="inputText"
             class="chat-input"
-            placeholder="Ask about the wiki…"
+            placeholder="Ask about the wiki… (Shift+Enter for new line)"
             rows="3"
             :disabled="streaming"
             @keydown="onKeydown"
@@ -311,7 +311,7 @@ watch(
 // ─── Send ─────────────────────────────────────────────────────────────────────
 
 function onKeydown(e) {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessage();
   }
