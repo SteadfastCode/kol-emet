@@ -41,14 +41,16 @@
         <template v-for="msg in messages" :key="msg.id">
           <div class="chat-msg" :class="msg.role">
             <div class="msg-role">{{ msg.role === 'user' ? 'You' : selectedProviderName }}</div>
-            <div class="msg-content">{{ msg.content }}</div>
+            <div v-if="msg.role === 'assistant'" class="msg-content markdown" v-html="renderMarkdown(msg.content)" />
+            <div v-else class="msg-content">{{ msg.content }}</div>
           </div>
         </template>
 
         <!-- Streaming message -->
         <div v-if="streaming" class="chat-msg assistant">
           <div class="msg-role">{{ selectedProviderName }}</div>
-          <div class="msg-content">{{ streamBuffer }}<span class="cursor">▋</span></div>
+          <div class="msg-content markdown" v-html="renderMarkdown(streamBuffer)" />
+          <span class="cursor">▋</span>
         </div>
 
         <!-- Error -->
@@ -80,7 +82,13 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { marked } from 'marked';
 import { getProviders, streamChat } from '../api/chat.js';
+
+marked.setOptions({ breaks: true, gfm: true });
+function renderMarkdown(text) {
+  return marked.parse(text || '');
+}
 
 defineProps({ open: Boolean });
 defineEmits(['close']);
@@ -321,6 +329,81 @@ async function send() {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Markdown-rendered assistant messages */
+.msg-content.markdown {
+  white-space: normal;
+}
+.msg-content.markdown :deep(p) {
+  margin: 0 0 0.6em;
+}
+.msg-content.markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.msg-content.markdown :deep(h1),
+.msg-content.markdown :deep(h2),
+.msg-content.markdown :deep(h3),
+.msg-content.markdown :deep(h4) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin: 0.8em 0 0.3em;
+}
+.msg-content.markdown :deep(h1:first-child),
+.msg-content.markdown :deep(h2:first-child),
+.msg-content.markdown :deep(h3:first-child) {
+  margin-top: 0;
+}
+.msg-content.markdown :deep(ul),
+.msg-content.markdown :deep(ol) {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+.msg-content.markdown :deep(li) {
+  margin: 0.2em 0;
+}
+.msg-content.markdown :deep(code) {
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 12px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  color: #c8d3e0;
+}
+.msg-content.markdown :deep(pre) {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.msg-content.markdown :deep(pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: #c8d3e0;
+}
+.msg-content.markdown :deep(blockquote) {
+  border-left: 3px solid #333;
+  margin: 0.5em 0;
+  padding: 2px 10px;
+  color: #888;
+}
+.msg-content.markdown :deep(strong) { color: #e8e8e8; }
+.msg-content.markdown :deep(em)     { color: #bbb; }
+.msg-content.markdown :deep(a) {
+  color: #7ab4f5;
+  text-decoration: none;
+}
+.msg-content.markdown :deep(a:hover) { text-decoration: underline; }
+.msg-content.markdown :deep(hr) {
+  border: none;
+  border-top: 1px solid #222;
+  margin: 0.6em 0;
 }
 
 .chat-msg.user .msg-content {
