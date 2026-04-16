@@ -201,38 +201,65 @@ function createMcpServer() {
   // Groups can be nested: a sub-group is a more specific slice of a parent group.
   // When displaying co-members, the label from the MOST SPECIFIC shared group wins.
   // "Most specific" = deepest in the tree; tie-break = smallest group.
+  // CRITICAL: both the viewer AND the co-member must be in a sub-group for that
+  // sub-group's label to apply. Add every person to every group they belong to —
+  // this feels redundant but is required for correct label resolution.
   //
-  // BUILDING TIERED RELATIONSHIPS (e.g. a family):
-  //   Step 1 — Create the broad parent group with ALL members + their general labels:
-  //     add_relationship(father, mother, myLabel:"husband", theirLabel:"wife", groupLabel:"Elias Marriage")
-  //     add_relationship(father, son1, myLabel:"father", theirLabel:"son", groupLabel:"Elias Family")
-  //     add_member_to_relationship(familyGroupId, son2, label:"son")
-  //     add_member_to_relationship(familyGroupId, daughter, label:"daughter")
-  //     add_member_to_relationship(familyGroupId, mother, label:"mother")
-  //     (also add father/mother to any marriage group, etc.)
+  // BUILDING TIERED RELATIONSHIPS — the Elias family as a worked example:
   //
-  //   Step 2 — Create a narrower group for the subset with their specific labels:
-  //     add_relationship(son1, son2, myLabel:"sibling", theirLabel:"sibling", groupLabel:"Elias Siblings")
-  //     add_member_to_relationship(siblingsGroupId, daughter, label:"sibling")
+  // Target tree:
+  //   Elias Family                          ← top-level group (all family members)
+  //   ├── Eldan-Ruth Marriage               ← sub-group (only Eldan + Ruth)
+  //   └── Elias Parentage                   ← sub-group (parents + all children)
+  //       └── Elias Siblings                ← sub-group (children only)
+  //           └── Elias Twins               ← sub-group (only the twin pair)
   //
-  //   Step 3 — Link the narrow group as a sub-group of the broad group:
-  //     add_subgroup_to_relationship(familyGroupId, siblingsGroupId)
+  // Step 1 — Create every group with its members and their correct labels.
+  //          (add_relationship for the first two members, then
+  //           add_member_to_relationship for each additional member.)
   //
-  //   Result: when son1 views the family group, son2 and daughter show as "sibling"
-  //   (from the siblings sub-group) instead of "son"/"daughter" (from the family group).
-  //   Father and mother show their family labels since they are not in the siblings sub-group.
+  //   "Elias Family" — all family members, general labels:
+  //     Eldan:"father", Ruth:"mother", Ethan:"son", Naomi:"daughter",
+  //     TwinA:"son", TwinB:"son"
   //
-  //   KEY RULE: for the label override to work, members must be in BOTH the parent group
-  //   AND the sub-group. Add them to both.
+  //   "Eldan-Ruth Marriage" — only the couple:
+  //     Eldan:"husband", Ruth:"wife"
+  //
+  //   "Elias Parentage" — parents + all children, same general labels as family:
+  //     Eldan:"father", Ruth:"mother", Ethan:"son", Naomi:"daughter",
+  //     TwinA:"son", TwinB:"son"
+  //
+  //   "Elias Siblings" — children only, gendered labels (NOT "sibling"):
+  //     Ethan:"brother", Naomi:"sister", TwinA:"brother", TwinB:"brother"
+  //
+  //   "Elias Twins" — only the twin pair, most specific labels:
+  //     TwinA:"twin brother", TwinB:"twin brother"
+  //
+  // Step 2 — Link sub-groups (build bottom-up so each link is already valid):
+  //   add_subgroup_to_relationship(siblingsGroupId, twinsGroupId)      // twins ⊂ siblings
+  //   add_subgroup_to_relationship(parentageGroupId, siblingsGroupId)  // siblings ⊂ parentage
+  //   add_subgroup_to_relationship(familyGroupId, parentageGroupId)    // parentage ⊂ family
+  //   add_subgroup_to_relationship(familyGroupId, marriageGroupId)     // marriage ⊂ family
+  //
+  // How label resolution plays out when any member views "Elias Family":
+  //   • Ethan viewing Naomi  → siblings (depth 2 via parentage) → "sister" ✓
+  //   • Ethan viewing TwinA  → twins (depth 3) → "twin brother" ✓
+  //   • Ethan viewing Eldan  → marriage doesn't apply (Ethan isn't in it);
+  //                            parentage (depth 1) → "father" ✓
+  //   • Eldan viewing Ruth   → both in marriage (depth 1, 2 members) AND parentage
+  //                            (depth 1, larger); marriage wins the tie by being
+  //                            smaller → "wife" ✓
+  //   • Eldan viewing Ethan  → siblings doesn't apply (Eldan isn't in it);
+  //                            parentage (depth 1) → "son" ✓
   // ─────────────────────────────────────────────────────────────────────────
 
   server.tool(
     'add_relationship',
     'Create a relationship group between exactly two entities. This is the ONLY way to link entities — never use blocks for this. ' +
-    'Labels describe each entity\'s role (e.g. myLabel:"father", theirLabel:"son"). Use the same label on both sides for symmetric roles (e.g. both "sibling"). ' +
+    'Labels describe each entity\'s role (e.g. myLabel:"father", theirLabel:"son"). Be specific: use "brother"/"sister" not "sibling", "twin brother" not "twin". ' +
     'groupLabel names the group (e.g. "Elias Family"). ' +
     'To add more members beyond the initial two, use add_member_to_relationship. ' +
-    'To make sibling-style relationships work correctly inside a larger family group, see the BUILDING TIERED RELATIONSHIPS guide in the relationship tools section. ' +
+    'For tiered families (where siblings should show as "brother"/"sister" rather than "son"/"daughter"), follow the BUILDING TIERED RELATIONSHIPS guide in the relationship tools section. ' +
     'Returns the created group with its _id — save it for add_member_to_relationship and add_subgroup_to_relationship calls.',
     {
       myEntityId:    z.string().describe('MongoDB ObjectId of the first entity'),
@@ -263,9 +290,9 @@ function createMcpServer() {
   server.tool(
     'add_member_to_relationship',
     'Add a third (or more) entity to an existing relationship group. ' +
-    'Use this after add_relationship to build groups with more than two members — for example, adding a third sibling to a siblings group or a third child to a family group. ' +
-    'The label should match the role convention already used in the group (e.g. "sibling" if all other members have label "sibling"). ' +
-    'If building tiered relationships, add members to BOTH the parent group and the relevant sub-group so the label resolution can pick up the most specific label.',
+    'Use this after add_relationship to extend a group beyond two members — for example, adding a third child to a siblings group or a third child to a family group. ' +
+    'The label must be specific to the person\'s gender and role (e.g. "brother" or "sister", not "sibling"; "twin brother" not "twin"). ' +
+    'When building tiered relationships, add the same person to BOTH the broad group and the narrow sub-group — each with the label appropriate to that group\'s level of specificity.',
     {
       groupId:  z.string().describe('MongoDB ObjectId of the relationship group (from add_relationship response)'),
       entityId: z.string().describe('MongoDB ObjectId of the entity to add'),
@@ -358,13 +385,16 @@ function createMcpServer() {
     'Link an existing relationship group as a sub-group of a broader group, enabling context-correct label display. ' +
     'When viewing a co-member, the label comes from the most specific (deepest) group that contains BOTH the viewer and that co-member. ' +
     'Sub-groups are more specific than their parent, so their labels take precedence. ' +
-    '\n\nTYPICAL USE CASE — family with siblings:\n' +
-    '  1. "Elias Family" group: all members with general labels (father, mother, son, daughter)\n' +
-    '  2. "Elias Siblings" group: only the children, all labeled "sibling"\n' +
-    '  3. add_subgroup_to_relationship(familyGroupId, siblingsGroupId)\n' +
-    '  → Result: when a sibling views the family group, other siblings show as "sibling" not "son/daughter"\n' +
-    '\nKEY REQUIREMENT: members must be in BOTH the parent group and the sub-group for label resolution to work. ' +
-    'If a member is only in the sub-group, they will not appear in the parent group view at all.',
+    '\n\nEXAMPLE — the Elias family tree (build all groups first, then link bottom-up):\n' +
+    '  add_subgroup_to_relationship(siblingsGroupId, twinsGroupId)      // twins ⊂ siblings\n' +
+    '  add_subgroup_to_relationship(parentageGroupId, siblingsGroupId)  // siblings ⊂ parentage\n' +
+    '  add_subgroup_to_relationship(familyGroupId, parentageGroupId)    // parentage ⊂ family\n' +
+    '  add_subgroup_to_relationship(familyGroupId, marriageGroupId)     // marriage ⊂ family\n' +
+    '  → Ethan viewing Naomi in the family group shows "sister" (from siblings, depth 2)\n' +
+    '    not "daughter" (from family/parentage, depth 0-1). TwinA viewing TwinB shows\n' +
+    '    "twin brother" (from twins, depth 3).\n' +
+    '\nKEY REQUIREMENT: members must be in BOTH the parent group and the sub-group. ' +
+    'If a member is only in the sub-group they will not appear in the parent group view at all.',
     {
       parentGroupId: z.string().describe('MongoDB ObjectId of the broader/parent group'),
       subGroupId:    z.string().describe('MongoDB ObjectId of the narrower group to nest inside the parent'),
