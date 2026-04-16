@@ -39,7 +39,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['save']);
 
-const entries = inject('entries', ref([]));
+const entities = inject('entities', ref([]));
 const followLink = inject('followLink', () => {});
 
 const isEditing = ref(false);
@@ -48,9 +48,9 @@ const draft = ref('');
 
 function processWikiLinks(text) {
   return text.replace(/\[\[([^\]]+)\]\]/g, (_, title) => {
-    const entry = entries.value?.find(e => e.title.toLowerCase() === title.toLowerCase());
-    const cls = entry ? 'wiki-link' : 'wiki-link wiki-link--dangling';
-    const id = entry?._id ?? '';
+    const entity = entities.value?.find(e => e.title.toLowerCase() === title.toLowerCase());
+    const cls = entity ? 'wiki-link' : 'wiki-link wiki-link--dangling';
+    const id = entity?._id ?? '';
     return `<span class="${cls}" data-wiki-id="${id}" data-wiki-title="${title}">${title}</span>`;
   });
 }

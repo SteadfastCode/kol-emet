@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import OpenQuestion from '../models/OpenQuestion.js';
-import Entry from '../models/Entry.js';
+import Entity from '../models/Entity.js';
 
 const router = Router();
 
@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
 
     // Back-link on each entry
     if (entry_ids.length) {
-      await Entry.updateMany(
+      await Entity.updateMany(
         { _id: { $in: entry_ids } },
         { $addToSet: { open_questions: oq._id } }
       );
@@ -69,13 +69,13 @@ router.put('/:id', async (req, res) => {
       const added = newIds.filter(id => !oldIds.includes(id));
 
       if (removed.length) {
-        await Entry.updateMany(
+        await Entity.updateMany(
           { _id: { $in: removed } },
           { $pull: { open_questions: existing._id } }
         );
       }
       if (added.length) {
-        await Entry.updateMany(
+        await Entity.updateMany(
           { _id: { $in: added } },
           { $addToSet: { open_questions: existing._id } }
         );
@@ -100,7 +100,7 @@ router.delete('/:id', async (req, res) => {
     if (!oq) return res.status(404).json({ error: 'Not found' });
 
     // Remove back-links from entries
-    await Entry.updateMany(
+    await Entity.updateMany(
       { _id: { $in: oq.entry_ids } },
       { $pull: { open_questions: oq._id } }
     );

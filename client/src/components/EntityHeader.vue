@@ -1,26 +1,26 @@
 <template>
-  <div class="entry-header-wrap">
+  <div class="entity-header-wrap">
     <!-- View mode -->
     <template v-if="!isEditing">
-      <div class="entry-header">
+      <div class="entity-header">
         <div class="header-top">
-          <h2 class="entry-title">{{ entry.title }}</h2>
+          <h2 class="entity-title">{{ entity.title }}</h2>
           <div class="header-right">
-            <span class="entry-cat" :style="catStyle">{{ entry.category }}</span>
+            <span class="entity-cat" :style="catStyle">{{ entity.category }}</span>
             <button class="icon-btn" title="Edit header" @click="startEdit"><PencilIcon /></button>
           </div>
         </div>
-        <p class="entry-summary">{{ entry.summary }}</p>
-        <div v-if="entry.tags?.length" class="entry-tags">
+        <p class="entity-summary">{{ entity.summary }}</p>
+        <div v-if="entity.tags?.length" class="entity-tags">
           <span
-            v-for="tag in entry.tags" :key="tag"
+            v-for="tag in entity.tags" :key="tag"
             class="tag"
             @click="$emit('set-tag', tag)"
           >#{{ tag }}</span>
         </div>
-        <div v-if="entry.open_questions?.length" class="oq-list">
+        <div v-if="entity.open_questions?.length" class="oq-list">
           <div class="oq-label">Open questions</div>
-          <div v-for="oq in entry.open_questions" :key="oq._id" class="oq-item">
+          <div v-for="oq in entity.open_questions" :key="oq._id" class="oq-item">
             <span class="oq-badge">{{ oq.status }}</span>
             {{ oq.question }}
           </div>
@@ -65,20 +65,20 @@ import { ref, computed, reactive } from 'vue';
 import { CAT_COLORS, CATEGORIES } from '../config/categories.js';
 import PencilIcon from './icons/PencilIcon.vue';
 
-const props = defineProps({ entry: Object });
+const props = defineProps({ entity: Object });
 const emit = defineEmits(['save', 'set-tag']);
 
 const isEditing = ref(false);
 const isSaving = ref(false);
 const form = reactive({ title: '', category: '', summary: '', tagsRaw: '' });
 
-const catStyle = computed(() => CAT_COLORS[props.entry.category] ?? { bg: '#333', color: '#aaa' });
+const catStyle = computed(() => CAT_COLORS[props.entity.category] ?? { bg: '#333', color: '#aaa' });
 
 function startEdit() {
-  form.title = props.entry.title;
-  form.category = props.entry.category;
-  form.summary = props.entry.summary;
-  form.tagsRaw = (props.entry.tags ?? []).join(', ');
+  form.title = props.entity.title;
+  form.category = props.entity.category;
+  form.summary = props.entity.summary;
+  form.tagsRaw = (props.entity.tags ?? []).join(', ');
   isEditing.value = true;
 }
 
@@ -101,9 +101,9 @@ async function save() {
 </script>
 
 <style scoped>
-.entry-header-wrap { padding: 20px 24px 0; }
+.entity-header-wrap { padding: 20px 24px 0; }
 
-.entry-header { display: flex; flex-direction: column; gap: 10px; }
+.entity-header { display: flex; flex-direction: column; gap: 10px; }
 
 .header-top {
   display: flex;
@@ -112,13 +112,13 @@ async function save() {
   gap: 12px;
 }
 
-.entry-title { font-size: 1.4rem; font-weight: 600; color: #e0e0e0; }
+.entity-title { font-size: 1.4rem; font-weight: 600; color: #e0e0e0; }
 
 .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-.entry-summary { font-size: 14px; color: #888; line-height: 1.5; }
+.entity-summary { font-size: 14px; color: #888; line-height: 1.5; }
 
-.entry-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.entity-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .oq-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .oq-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #c07020; }

@@ -4,9 +4,9 @@ const toasts = ref([]);
 let nextId = 1;
 
 export function useToasts() {
-  function addToast({ message, actorLabel, actorType, entryId, entryTitle, snapshot, changeType }) {
+  function addToast({ message, actorLabel, actorType, entityId, entityTitle, snapshot, changeType }) {
     const id = nextId++;
-    toasts.value.push({ id, message, actorLabel, actorType, entryId, entryTitle, snapshot, changeType });
+    toasts.value.push({ id, message, actorLabel, actorType, entityId, entityTitle, snapshot, changeType });
     setTimeout(() => {
       toasts.value = toasts.value.filter(t => t.id !== id);
     }, 6000);

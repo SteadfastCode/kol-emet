@@ -8,7 +8,7 @@ const blockSchema = new mongoose.Schema({
   data: { type: mongoose.Schema.Types.Mixed, required: true },
 }, { _id: true });
 
-const entrySchema = new mongoose.Schema(
+const entitySchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     category: {
@@ -28,4 +28,4 @@ const entrySchema = new mongoose.Schema(
 );
 
 export { BLOCK_TYPES };
-export default mongoose.model('Entry', entrySchema);
+export default mongoose.model('Entity', entitySchema, 'entities');

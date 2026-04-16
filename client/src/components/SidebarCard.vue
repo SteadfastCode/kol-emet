@@ -2,13 +2,13 @@
   <div
     class="sidebar-card"
     :class="{ selected }"
-    @click="$emit('select', entry._id, entry.title)"
+    @click="$emit('select', entity._id, entity.title)"
   >
     <div class="card-top">
-      <span class="card-title">{{ entry.title }}</span>
-      <span class="entry-cat" :style="catStyle">{{ entry.category }}</span>
+      <span class="card-title">{{ entity.title }}</span>
+      <span class="entity-cat" :style="catStyle">{{ entity.category }}</span>
     </div>
-    <div class="card-summary">{{ entry.summary }}</div>
+    <div class="card-summary">{{ entity.summary }}</div>
   </div>
 </template>
 
@@ -17,14 +17,14 @@ import { computed } from 'vue';
 import { CAT_COLORS } from '../config/categories.js';
 
 const props = defineProps({
-  entry: Object,
+  entity: Object,
   selected: Boolean,
 });
 
 defineEmits(['select']);
 
 const catStyle = computed(() => {
-  const c = CAT_COLORS[props.entry.category];
+  const c = CAT_COLORS[props.entity.category];
   return c ? { background: c.bg, color: c.color } : { background: '#333', color: '#aaa' };
 });
 </script>
@@ -64,7 +64,7 @@ const catStyle = computed(() => {
   min-width: 0;
 }
 
-.entry-cat {
+.entity-cat {
   font-size: 10px;
   font-weight: 600;
   padding: 2px 7px;

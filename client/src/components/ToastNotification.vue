@@ -11,13 +11,13 @@
           <span class="actor" :class="{ ai: toast.actorType === 'mcp' }">{{ toast.actorLabel }}</span>
           {{ ' ' }}
           <span class="action">{{ toast.message }}</span>
-          <template v-if="toast.entryTitle">
+          <template v-if="toast.entityTitle">
             {{ ' ' }}
             <a
-              class="entry-link"
+              class="entity-link"
               href="#"
               @click.prevent.stop="openEntry(toast)"
-            >{{ toast.entryTitle }}</a>
+            >{{ toast.entityTitle }}</a>
           </template>
           <button class="dismiss" @click.stop="dismiss(toast.id)" aria-label="Dismiss">×</button>
         </div>
@@ -42,8 +42,8 @@ function dismiss(id) {
 function openEntry(toast) {
   if (toast.changeType === 'deleted' && toast.snapshot) {
     openSnapshotFn?.(toast.snapshot);
-  } else if (toast.entryId) {
-    openEntryFn?.(toast.entryId, toast.entryTitle);
+  } else if (toast.entityId) {
+    openEntryFn?.(toast.entityId, toast.entityTitle);
   }
 }
 </script>
@@ -93,13 +93,13 @@ function openEntry(toast) {
   color: #aaa;
 }
 
-.entry-link {
+.entity-link {
   color: #60a5fa;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.entry-link:hover {
+.entity-link:hover {
   color: #93c5fd;
 }
 

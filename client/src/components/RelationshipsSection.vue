@@ -6,7 +6,7 @@
     </div>
 
     <!-- Existing relationships -->
-    <template v-for="group in entry.relationships" :key="group._id">
+    <template v-for="group in entity.relationships" :key="group._id">
 
       <!-- Group label row — always show when canEdit so actions are accessible -->
       <div v-if="group.label || canEdit" class="group-label-row">
@@ -124,7 +124,7 @@
     </template>
 
     <!-- Empty state -->
-    <div v-if="!entry.relationships?.length && !addingNew" class="rel-empty">
+    <div v-if="!entity.relationships?.length && !addingNew" class="rel-empty">
       No relationships yet.
     </div>
 
@@ -191,16 +191,16 @@
 import { ref, inject } from 'vue';
 import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, deleteGroup } from '../api/relationshipGroups.js';
 
-const props = defineProps({ entry: Object, canEdit: Boolean });
+const props = defineProps({ entity: Object, canEdit: Boolean });
 const emit = defineEmits(['refresh']);
 
-const entries  = inject('entries', ref([]));
+const entities = inject('entities', ref([]));
 const followLink = inject('followLink', () => {});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function coMembersOf(group) {
-  return group.members.filter(m => String(m.entityId._id) !== String(props.entry._id));
+  return group.members.filter(m => String(m.entityId._id) !== String(props.entity._id));
 }
 
 function rowKey(groupId, coMemberId) {
@@ -256,7 +256,7 @@ function filterAddToGroupTargets(group) {
   const q = addToGroupForm.value.targetSearch.toLowerCase();
   if (!q) { addToGroupResults.value = []; return; }
   const existingIds = new Set(group.members.map(m => String(m.entityId._id)));
-  addToGroupResults.value = (entries.value ?? [])
+  addToGroupResults.value = (entities.value ?? [])
     .filter(e => e.title.toLowerCase().includes(q) && !existingIds.has(String(e._id)))
     .slice(0, 8);
 }
@@ -323,7 +323,7 @@ async function saveEdit(group, coMemberId) {
 
 async function removeRelationship(group) {
   // If this entry is the only member besides one other, removing triggers group deletion
-  await removeMember(group._id, props.entry._id);
+  await removeMember(group._id, props.entity._id);
   emit('refresh');
 }
 
@@ -349,8 +349,8 @@ function resetForm() {
 function filterTargets() {
   const q = newForm.value.targetSearch.toLowerCase();
   if (!q) { targetResults.value = []; return; }
-  targetResults.value = (entries.value ?? [])
-    .filter(e => e.title.toLowerCase().includes(q) && e._id !== props.entry._id)
+  targetResults.value = (entities.value ?? [])
+    .filter(e => e.title.toLowerCase().includes(q) && e._id !== props.entity._id)
     .slice(0, 8);
 }
 
@@ -374,7 +374,7 @@ async function saveNew() {
     await createGroup({
       label: newForm.value.groupLabel || null,
       members: [
-        { entityId: props.entry._id, label: newForm.value.myLabel || null, notes: newForm.value.notes || null },
+        { entityId: props.entity._id, label: newForm.value.myLabel || null, notes: newForm.value.notes || null },
         { entityId: newForm.value.targetId, label: newForm.value.theirLabel || null },
       ],
     });

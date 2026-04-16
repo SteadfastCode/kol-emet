@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const memberSchema = new mongoose.Schema({
-  entityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Entry', required: true },
+  entityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Entity', required: true },
   label:    { type: String, default: null },
   notes:    { type: String, default: null },
 }, { _id: false });
@@ -16,7 +16,7 @@ const relationshipGroupSchema = new mongoose.Schema({
   label:         { type: String, default: null },
   members:       { type: [memberSchema], default: [] },
   relationships: { type: [groupLinkSchema], default: [] },  // group-to-group (future)
-  entityId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Entry', default: null },
+  entityId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Entity', default: null },
   createdAt:     { type: Date, default: Date.now },
 }, { timestamps: false });
 

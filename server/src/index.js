@@ -5,7 +5,7 @@ import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import mongoose from 'mongoose';
 
-import entriesRouter from './routes/entries.js';
+import entitiesRouter from './routes/entities.js';
 import tagsRouter from './routes/tags.js';
 import openQuestionsRouter from './routes/openQuestions.js';
 import relationshipTypesRouter from './routes/relationshipTypes.js';
@@ -52,7 +52,7 @@ app.use('/', oauthRouter);
 app.use('/auth', authRouter);
 app.use('/mcp', mcpRouter);
 app.use('/events', requireAuth, eventsRouter);
-app.use('/entries', requireAuth, entriesRouter);
+app.use('/entities', requireAuth, entitiesRouter);
 app.use('/', requireAuth, changelogRouter);
 app.use('/relationship-groups', requireAuth, relationshipGroupsRouter);
 app.use('/tags', requireAuth, tagsRouter);

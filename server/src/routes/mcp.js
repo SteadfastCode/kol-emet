@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import Entry, { BLOCK_TYPES } from '../models/Entry.js';
+import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import User from '../models/User.js';
@@ -52,8 +52,8 @@ function createMcpServer() {
   const server = new McpServer({ name: 'kol-emet', version: '0.1.0' });
 
   server.tool(
-    'search_entries',
-    'Search wiki entries by keyword, tag, or category. Returns id, title, category, summary, and tags.',
+    'search_entities',
+    'Search wiki entities by keyword, tag, or category. Returns id, title, category, summary, and tags.',
     {
       q: z.string().optional().describe('Keyword to search title, summary, and block content'),
       tag: z.string().optional().describe('Filter by tag'),
@@ -72,29 +72,29 @@ function createMcpServer() {
           { blocks: { $elemMatch: { 'data.markdown': re } } },
         ];
       }
-      const entries = await Entry.find(filter)
+      const entities = await Entity.find(filter)
         .sort({ title: 1 })
         .populate('open_questions', 'question status');
-      return { content: [{ type: 'text', text: JSON.stringify(entries, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(entities, null, 2) }] };
     }
   );
 
   server.tool(
-    'get_entry',
-    'Retrieve a single wiki entry by its id, including all blocks.',
-    { id: z.string().describe('MongoDB ObjectId of the entry') },
+    'get_entity',
+    'Retrieve a single wiki entity by its id, including all blocks.',
+    { id: z.string().describe('MongoDB ObjectId of the entity') },
     async ({ id }) => {
-      const entry = await Entry.findById(id).populate('open_questions', 'question status').lean();
-      if (!entry) throw new Error(`Entry not found: ${id}`);
+      const entity = await Entity.findById(id).populate('open_questions', 'question status').lean();
+      if (!entity) throw new Error(`Entity not found: ${id}`);
       const relationships = await RelationshipGroup.find({ 'members.entityId': id })
         .populate({ path: 'members.entityId', select: 'title' });
-      return { content: [{ type: 'text', text: JSON.stringify({ ...entry, relationships }, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify({ ...entity, relationships }, null, 2) }] };
     }
   );
 
   server.tool(
-    'create_entry',
-    'Add a new wiki entry. Use blocks for structured content.',
+    'create_entity',
+    'Add a new wiki entity. Use blocks for structured content.',
     {
       title: z.string(),
       category: z.enum(CATEGORIES),
@@ -104,7 +104,7 @@ function createMcpServer() {
         'Content blocks. Types: text ({markdown}), attribute ({label, value}), ' +
         'quote ({text, attribution?}), timeline_event ({date, description, sortKey?, era?, linkedEntryId?}). ' +
         'If omitted, a single empty text block is created. ' +
-        'IMPORTANT: Relationships between entries are NOT created via blocks — use add_relationship instead.'
+        'IMPORTANT: Relationships between entities are NOT created via blocks — use add_relationship instead.'
       ),
     },
     async (data) => {
@@ -113,20 +113,20 @@ function createMcpServer() {
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
       }
-      const entry = await Entry.create(data);
+      const entity = await Entity.create(data);
       const actor = await resolveMcpActor();
       if (actor) {
-        logCreate(entry.toObject(), actor).catch(err => console.error('[changelog] logCreate failed:', err));
+        logCreate(entity.toObject(), actor).catch(err => console.error('[changelog] logCreate failed:', err));
       }
-      return { content: [{ type: 'text', text: JSON.stringify(entry, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(entity, null, 2) }] };
     }
   );
 
   server.tool(
-    'update_entry',
-    'Edit an existing wiki entry. Only provided fields are updated. To update blocks, pass the full blocks array — unlisted blocks are removed.',
+    'update_entity',
+    'Edit an existing wiki entity. Only provided fields are updated. To update blocks, pass the full blocks array — unlisted blocks are removed.',
     {
-      id: z.string().describe('MongoDB ObjectId of the entry'),
+      id: z.string().describe('MongoDB ObjectId of the entity'),
       title: z.string().optional(),
       category: z.enum(CATEGORIES).optional(),
       summary: z.string().optional(),
@@ -139,11 +139,11 @@ function createMcpServer() {
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
       }
-      const before = await Entry.findById(id).lean();
-      if (!before) throw new Error(`Entry not found: ${id}`);
-      const after = await Entry.findByIdAndUpdate(id, data, { new: true, runValidators: true })
+      const before = await Entity.findById(id).lean();
+      if (!before) throw new Error(`Entity not found: ${id}`);
+      const after = await Entity.findByIdAndUpdate(id, data, { new: true, runValidators: true })
         .populate('open_questions', 'question status');
-      if (!after) throw new Error(`Entry not found: ${id}`);
+      if (!after) throw new Error(`Entity not found: ${id}`);
       const actor = await resolveMcpActor();
       if (actor) {
         logUpdate(before, after.toObject(), actor).catch(err => console.error('[changelog] logUpdate failed:', err));
@@ -162,7 +162,7 @@ function createMcpServer() {
     async ({ question, entry_ids }) => {
       const oq = await OpenQuestion.create({ question, entry_ids });
       if (entry_ids.length) {
-        await Entry.updateMany(
+        await Entity.updateMany(
           { _id: { $in: entry_ids } },
           { $addToSet: { open_questions: oq._id } }
         );
@@ -190,29 +190,29 @@ function createMcpServer() {
 
   server.tool(
     'add_relationship',
-    'Create a bidirectional relationship between two entries. This is the ONLY way to link entries — do NOT use blocks for this. ' +
+    'Create a bidirectional relationship between two entities. This is the ONLY way to link entities — do NOT use blocks for this. ' +
     'Labels are optional at every level. Use myLabel/theirLabel for asymmetric roles (e.g. "father"/"son"). ' +
     'Use the same label on both sides for symmetric roles (e.g. both "sibling"). ' +
     'groupLabel names the relationship group itself (e.g. "parentage", "siblings"). ' +
     'Returns the created relationship group.',
     {
-      myEntryId:    z.string().describe('MongoDB ObjectId of the first entry'),
-      theirEntryId: z.string().describe('MongoDB ObjectId of the second entry'),
-      myLabel:      z.string().optional().describe('Label for the first entry, e.g. "father"'),
-      theirLabel:   z.string().optional().describe('Label for the second entry, e.g. "son"'),
-      groupLabel:   z.string().optional().describe('Label for the group itself, e.g. "parentage"'),
-      notes:        z.string().optional().describe("Notes on the first entry's membership"),
+      myEntityId:    z.string().describe('MongoDB ObjectId of the first entity'),
+      theirEntityId: z.string().describe('MongoDB ObjectId of the second entity'),
+      myLabel:       z.string().optional().describe('Label for the first entity, e.g. "father"'),
+      theirLabel:    z.string().optional().describe('Label for the second entity, e.g. "son"'),
+      groupLabel:    z.string().optional().describe('Label for the group itself, e.g. "parentage"'),
+      notes:         z.string().optional().describe("Notes on the first entity's membership"),
     },
-    async ({ myEntryId, theirEntryId, myLabel, theirLabel, groupLabel, notes }) => {
+    async ({ myEntityId, theirEntityId, myLabel, theirLabel, groupLabel, notes }) => {
       const group = await RelationshipGroup.create({
         label: groupLabel ?? null,
         members: [
-          { entityId: myEntryId,    label: myLabel    ?? null, notes: notes ?? null },
-          { entityId: theirEntryId, label: theirLabel ?? null },
+          { entityId: myEntityId,    label: myLabel    ?? null, notes: notes ?? null },
+          { entityId: theirEntityId, label: theirLabel ?? null },
         ],
       });
-      await Entry.updateMany(
-        { _id: { $in: [myEntryId, theirEntryId] } },
+      await Entity.updateMany(
+        { _id: { $in: [myEntityId, theirEntityId] } },
         { $addToSet: { relationships: group._id } }
       );
       const populated = await RelationshipGroup.findById(group._id)
@@ -223,22 +223,22 @@ function createMcpServer() {
 
   server.tool(
     'add_member_to_relationship',
-    'Add a new entry to an existing relationship group. Use this to extend a group beyond its initial two members ' +
-    '(e.g. adding a third sibling to a sibling group). The entry must not already be in the group.',
+    'Add a new entity to an existing relationship group. Use this to extend a group beyond its initial two members ' +
+    '(e.g. adding a third sibling to a sibling group). The entity must not already be in the group.',
     {
       groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
-      entityId: z.string().describe('MongoDB ObjectId of the entry to add'),
-      label:    z.string().optional().describe('Label for this entry in the group, e.g. "sibling"'),
+      entityId: z.string().describe('MongoDB ObjectId of the entity to add'),
+      label:    z.string().optional().describe('Label for this entity in the group, e.g. "sibling"'),
       notes:    z.string().optional().describe('Notes on this membership'),
     },
     async ({ groupId, entityId, label, notes }) => {
       const group = await RelationshipGroup.findById(groupId);
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
       const alreadyMember = group.members.some(m => String(m.entityId) === String(entityId));
-      if (alreadyMember) throw new Error(`Entry ${entityId} is already a member of this group`);
+      if (alreadyMember) throw new Error(`Entity ${entityId} is already a member of this group`);
       group.members.push({ entityId, label: label ?? null, notes: notes ?? null });
       await group.save();
-      await Entry.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
+      await Entity.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
       const populated = await RelationshipGroup.findById(group._id)
         .populate({ path: 'members.entityId', select: 'title' });
       return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
@@ -263,19 +263,19 @@ function createMcpServer() {
 
   server.tool(
     'remove_relationship',
-    "Remove an entry's membership from a relationship group. If fewer than 2 members remain, the group is deleted.",
+    "Remove an entity's membership from a relationship group. If fewer than 2 members remain, the group is deleted.",
     {
       groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
-      entityId: z.string().describe('MongoDB ObjectId of the entry to remove'),
+      entityId: z.string().describe('MongoDB ObjectId of the entity to remove'),
     },
     async ({ groupId, entityId }) => {
       const group = await RelationshipGroup.findById(groupId);
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
       group.members = group.members.filter(m => String(m.entityId) !== String(entityId));
-      await Entry.updateOne({ _id: entityId }, { $pull: { relationships: group._id } });
+      await Entity.updateOne({ _id: entityId }, { $pull: { relationships: group._id } });
       if (group.members.length < 2) {
         for (const m of group.members) {
-          await Entry.updateOne({ _id: m.entityId }, { $pull: { relationships: group._id } });
+          await Entity.updateOne({ _id: m.entityId }, { $pull: { relationships: group._id } });
         }
         await group.deleteOne();
         return { content: [{ type: 'text', text: 'Relationship removed and orphaned group deleted.' }] };
@@ -290,7 +290,7 @@ function createMcpServer() {
     "Update a member's label or notes within a relationship group.",
     {
       groupId:  z.string().describe('MongoDB ObjectId of the relationship group'),
-      entityId: z.string().describe('MongoDB ObjectId of the entry to update'),
+      entityId: z.string().describe('MongoDB ObjectId of the entity to update'),
       label:    z.string().nullable().optional().describe('New label, or null to clear it'),
       notes:    z.string().nullable().optional().describe('New notes, or null to clear them'),
     },

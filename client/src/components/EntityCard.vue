@@ -5,27 +5,27 @@
 
     <div
       ref="cardEl"
-      class="entry-card"
+      class="entity-card"
       :class="{ open: expanded, editing: isEditing }"
       @click="handleCardClick"
     >
-      <div class="entry-header">
-        <div class="entry-meta">
+      <div class="entity-header">
+        <div class="entity-meta">
           <input
             v-if="isEditing"
             v-model="form.title"
             class="edit-input title-input"
             @click.stop
           />
-          <span v-else class="entry-title">{{ entry.title }}</span>
-          <span v-if="!isEditing && entry.open_questions?.length" class="oq-badge">
-            {{ entry.open_questions.length === 1 ? 'open question' : `${entry.open_questions.length} open questions` }}
+          <span v-else class="entity-title">{{ entity.title }}</span>
+          <span v-if="!isEditing && entity.open_questions?.length" class="oq-badge">
+            {{ entity.open_questions.length === 1 ? 'open question' : `${entity.open_questions.length} open questions` }}
           </span>
         </div>
         <select v-if="isEditing" v-model="form.category" class="edit-select" @click.stop>
           <option v-for="cat in CATEGORIES" :key="cat">{{ cat }}</option>
         </select>
-        <span v-else class="entry-cat" :style="catStyle">{{ entry.category }}</span>
+        <span v-else class="entity-cat" :style="catStyle">{{ entity.category }}</span>
       </div>
 
       <input
@@ -35,7 +35,7 @@
         placeholder="Summary"
         @click.stop
       />
-      <div v-else class="entry-summary">{{ entry.summary }}</div>
+      <div v-else class="entity-summary">{{ entity.summary }}</div>
 
       <!-- Animated body wrapper using CSS grid trick -->
       <div class="body-wrapper" :class="{ open: expanded || isEditing }">
@@ -47,15 +47,15 @@
             </div>
             <div v-else key="view" class="body-content">
               <p v-for="(para, i) in bodyParagraphs" :key="i">{{ para }}</p>
-              <div v-if="entry.open_questions?.length" class="linked-oqs">
+              <div v-if="entity.open_questions?.length" class="linked-oqs">
                 <div class="oq-label">Open questions</div>
-                <div v-for="oq in entry.open_questions" :key="oq._id" class="linked-oq">
+                <div v-for="oq in entity.open_questions" :key="oq._id" class="linked-oq">
                   {{ oq.question }}
                 </div>
               </div>
-              <div v-if="entry.tags.length" class="entry-tags">
+              <div v-if="entity.tags.length" class="entity-tags">
                 <span
-                  v-for="tag in entry.tags" :key="tag"
+                  v-for="tag in entity.tags" :key="tag"
                   class="tag"
                   @click.stop="$emit('tag-click', tag)"
                 >#{{ tag }}</span>
@@ -63,7 +63,7 @@
             </div>
           </Transition>
 
-          <div class="entry-actions">
+          <div class="entity-actions">
             <template v-if="isEditing">
               <button class="btn-sm" :disabled="isSaving" @click.stop="cancelOrUndo">
                 {{ isDirty ? 'Undo' : 'Cancel' }}
@@ -86,12 +86,12 @@
 
 <script setup>
 import { ref, computed, reactive, nextTick, onBeforeUnmount } from 'vue';
-import { updateEntry } from '../api/entries.js';
+import { updateEntity } from '../api/entities.js';
 
 const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline'];
 
 const props = defineProps({
-  entry: Object,
+  entity: Object,
   expanded: Boolean,
   isAnotherEditing: Boolean,
 });
@@ -113,18 +113,18 @@ let resizeObserver = null;
 
 const form = reactive({ title: '', category: '', summary: '', body: '', tagsRaw: '' });
 
-const catStyle = computed(() => CAT_COLORS[props.entry.category] ?? { bg: '#333', color: '#aaa' });
+const catStyle = computed(() => CAT_COLORS[props.entity.category] ?? { bg: '#333', color: '#aaa' });
 
 const bodyParagraphs = computed(() =>
-  props.entry.body.split('\n').filter(p => p.trim())
+  props.entity.body.split('\n').filter(p => p.trim())
 );
 
 const isDirty = computed(() =>
-  form.title    !== props.entry.title    ||
-  form.category !== props.entry.category ||
-  form.summary  !== props.entry.summary  ||
-  form.body     !== props.entry.body     ||
-  form.tagsRaw  !== props.entry.tags.join(', ')
+  form.title    !== props.entity.title    ||
+  form.category !== props.entity.category ||
+  form.summary  !== props.entity.summary  ||
+  form.body     !== props.entity.body     ||
+  form.tagsRaw  !== props.entity.tags.join(', ')
 );
 
 const ghostStyle = computed(() => ({ height: '0px' }));
@@ -135,11 +135,11 @@ function handleCardClick() {
 }
 
 function populateForm() {
-  form.title    = props.entry.title;
-  form.category = props.entry.category;
-  form.summary  = props.entry.summary;
-  form.body     = props.entry.body;
-  form.tagsRaw  = props.entry.tags.join(', ');
+  form.title    = props.entity.title;
+  form.category = props.entity.category;
+  form.summary  = props.entity.summary;
+  form.body     = props.entity.body;
+  form.tagsRaw  = props.entity.tags.join(', ');
 }
 
 function startEdit() {
@@ -176,7 +176,7 @@ async function handleSave() {
   if (isSaving.value) return;
   isSaving.value = true;
   try {
-    const updated = await updateEntry(props.entry._id, {
+    const updated = await updateEntity(props.entity._id, {
       title:    form.title.trim(),
       category: form.category,
       summary:  form.summary.trim(),
@@ -193,7 +193,7 @@ async function handleSave() {
 }
 
 function handleDelete() {
-  if (confirm(`Delete "${props.entry.title}"?`)) emit('delete');
+  if (confirm(`Delete "${props.entity.title}"?`)) emit('delete');
 }
 </script>
 
@@ -209,7 +209,7 @@ function handleDelete() {
 }
 
 /* Fixed card when editing */
-.entry-card.editing {
+.entity-card.editing {
   position: fixed;
   top: calc(var(--header-height, 0px) + 0.75rem);
   left: 50%;

@@ -34,16 +34,16 @@ export function computeDiff(before, after) {
   return { fieldsChanged, blocksAdded, blocksUpdated, blocksDeleted };
 }
 
-export async function logCreate(entry, actor, excludeClientId = null) {
+export async function logCreate(entity, actor, excludeClientId = null) {
   const changes = {
     fieldsChanged: [],
-    blocksAdded: (entry.blocks ?? []).map(b => ({ type: b.type, order: b.order })),
+    blocksAdded: (entity.blocks ?? []).map(b => ({ type: b.type, order: b.order })),
     blocksUpdated: [],
     blocksDeleted: [],
   };
   await ChangeLog.create({
-    entryId:    entry._id,
-    entryTitle: entry.title,
+    entityId:    entity._id,
+    entityTitle: entity.title,
     changeType: 'created',
     actorId:    actor.userId,
     actorType:  actor.type,
@@ -51,8 +51,8 @@ export async function logCreate(entry, actor, excludeClientId = null) {
     changes,
     snapshot:   null,
   });
-  broadcast('entry:created', {
-    entry,
+  broadcast('entity:created', {
+    entity,
     actor:   { label: actor.label, type: actor.type },
     changes,
   }, excludeClientId);
@@ -61,8 +61,8 @@ export async function logCreate(entry, actor, excludeClientId = null) {
 export async function logUpdate(before, after, actor, excludeClientId = null) {
   const changes = computeDiff(before, after);
   await ChangeLog.create({
-    entryId:    after._id,
-    entryTitle: after.title,
+    entityId:    after._id,
+    entityTitle: after.title,
     changeType: 'updated',
     actorId:    actor.userId,
     actorType:  actor.type,
@@ -70,30 +70,30 @@ export async function logUpdate(before, after, actor, excludeClientId = null) {
     changes,
     snapshot:   before,
   });
-  broadcast('entry:updated', {
-    entry:   after,
-    actor:   { label: actor.label, type: actor.type },
+  broadcast('entity:updated', {
+    entity:   after,
+    actor:    { label: actor.label, type: actor.type },
     changes,
   }, excludeClientId);
 }
 
-export async function logDelete(entry, actor, excludeClientId = null) {
+export async function logDelete(entity, actor, excludeClientId = null) {
   const deletedAt = new Date().toISOString();
   await ChangeLog.create({
-    entryId:    entry._id,
-    entryTitle: entry.title,
+    entityId:    entity._id,
+    entityTitle: entity.title,
     changeType: 'deleted',
     actorId:    actor.userId,
     actorType:  actor.type,
     actorLabel: actor.label,
     changes:    { fieldsChanged: [], blocksAdded: [], blocksUpdated: [], blocksDeleted: [] },
-    snapshot:   entry,
+    snapshot:   entity,
   });
-  broadcast('entry:deleted', {
-    entryId:    String(entry._id),
-    entryTitle: entry.title,
-    actor:      { label: actor.label, type: actor.type },
-    snapshot:   entry,
+  broadcast('entity:deleted', {
+    entityId:    String(entity._id),
+    entityTitle: entity.title,
+    actor:       { label: actor.label, type: actor.type },
+    snapshot:    entity,
     deletedAt,
   }, excludeClientId);
 }

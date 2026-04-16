@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import RelationshipGroup from '../models/RelationshipGroup.js';
-import Entry from '../models/Entry.js';
+import Entity from '../models/Entity.js';
 import { requireActor } from '../middleware/auth.js';
 
 const router = Router();
@@ -37,7 +37,7 @@ router.post('/', requireActor, async (req, res) => {
     const group = await RelationshipGroup.create({ label, members });
 
     // Push groupId onto each member's entry
-    await Entry.updateMany(
+    await Entity.updateMany(
       { _id: { $in: members.map(m => m.entityId) } },
       { $addToSet: { relationships: group._id } }
     );
@@ -79,7 +79,7 @@ router.post('/:id/members', requireActor, async (req, res) => {
     group.members.push({ entityId, label, notes });
     await group.save();
 
-    await Entry.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
+    await Entity.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
 
     const populated = await populateGroup(RelationshipGroup.findById(group._id));
     res.status(201).json(populated);
@@ -116,11 +116,11 @@ router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
     if (!group) return res.status(404).json({ error: 'Not found' });
 
     group.members = group.members.filter(m => String(m.entityId) !== req.params.entityId);
-    await Entry.findByIdAndUpdate(req.params.entityId, { $pull: { relationships: group._id } });
+    await Entity.findByIdAndUpdate(req.params.entityId, { $pull: { relationships: group._id } });
 
     // If fewer than 2 members remain, the group is orphaned — delete it and clean up
     if (group.members.length < 2) {
-      await Entry.updateMany(
+      await Entity.updateMany(
         { _id: { $in: group.members.map(m => m.entityId) } },
         { $pull: { relationships: group._id } }
       );
@@ -141,7 +141,7 @@ router.delete('/:id', requireActor, async (req, res) => {
     const group = await RelationshipGroup.findByIdAndDelete(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
-    await Entry.updateMany(
+    await Entity.updateMany(
       { _id: { $in: group.members.map(m => m.entityId) } },
       { $pull: { relationships: group._id } }
     );

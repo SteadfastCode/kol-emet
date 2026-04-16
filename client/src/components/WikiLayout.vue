@@ -2,8 +2,8 @@
   <div class="wiki-root" :class="{ 'panel-open': !!activePanelId }">
     <!-- Full-width list -->
     <div class="list-view">
-      <EntrySidebar
-        :entries="filtered"
+      <EntitySidebar
+        :entities="filtered"
         :active-cat="activeCat"
         :active-tag="activeTag"
         :search-query="searchQuery"
@@ -30,30 +30,30 @@
           </div>
         </div>
         <div class="panel-body">
-          <EntryEditor
+          <EntityEditor
             v-if="activePanel?.mode === 'editor'"
-            @saved="onEntrySaved"
+            @saved="onEntitySaved"
             @cancel="closePanel(activePanelId)"
           />
           <template v-else-if="activePanel?.mode === 'snapshot'">
             <div class="deleted-badge">DELETED — {{ activePanel.deletedAt }}</div>
-            <EntryDetail
-              :entry="activePanel.snapshotEntry"
+            <EntityDetail
+              :entity="activePanel.snapshotEntry"
               :loading="false"
               :breadcrumbs="[]"
             />
           </template>
-          <EntryDetail
-            v-else-if="selectedEntry"
-            :entry="selectedEntry"
+          <EntityDetail
+            v-else-if="selectedEntity"
+            :entity="selectedEntity"
             :loading="detailLoading"
             :breadcrumbs="breadcrumbs"
             @crumb-click="onCrumbClick"
             @follow-link="followLink"
             @set-tag="setTag"
-            @saved="onEntryUpdated"
-            @deleted="onEntryDeleted"
-            @refresh="selectEntry(activePanelId)"
+            @saved="onEntityUpdated"
+            @deleted="onEntityDeleted"
+            @refresh="selectEntity(activePanelId)"
           />
           <div v-else class="panel-loading">Loading…</div>
         </div>
@@ -83,26 +83,26 @@
 
 <script setup>
 import { ref, computed, provide, onMounted } from 'vue';
-import EntrySidebar from './EntrySidebar.vue';
-import EntryDetail from './EntryDetail.vue';
-import EntryEditor from './EntryEditor.vue';
+import EntitySidebar from './EntitySidebar.vue';
+import EntityDetail from './EntityDetail.vue';
+import EntityEditor from './EntityEditor.vue';
 import ToastNotification from './ToastNotification.vue';
-import { useEntries } from '../composables/useEntries.js';
+import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
 import { useEvents } from '../composables/useEvents.js';
 import { useToasts } from '../composables/useToasts.js';
 
-const EDITOR_ID = '__new_entry__';
+const EDITOR_ID = '__new_entity__';
 
 const emit = defineEmits(['logout']);
 
 const {
-  entries, selectedEntry, sidebarLoading, detailLoading,
-  loadEntries, selectEntry, addEntry, editEntry, removeEntry,
-} = useEntries();
+  entities, selectedEntity, sidebarLoading, detailLoading,
+  loadEntities, selectEntity, addEntity, editEntity, removeEntity,
+} = useEntities();
 
-const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag } = useFilters(entries);
+const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag } = useFilters(entities);
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
 
@@ -118,18 +118,18 @@ const minimizedPanels = computed(() =>
   panels.value.filter(p => p.id !== activePanelId.value)
 );
 
-onMounted(() => loadEntries());
+onMounted(() => loadEntities());
 
 function openEntry(id, title) {
   const existing = panels.value.find(p => p.id === id);
   if (!existing) {
-    panels.value.push({ id, title, mode: 'entry' });
+    panels.value.push({ id, title, mode: 'entity' });
   } else {
     existing.title = title; // keep title fresh
   }
   activePanelId.value = id;
   startNavigation(id, title);
-  selectEntry(id);
+  selectEntity(id);
 }
 
 function openSnapshot(snapshot) {
@@ -145,7 +145,7 @@ function openSnapshot(snapshot) {
 function openEditor() {
   const existing = panels.value.find(p => p.id === EDITOR_ID);
   if (!existing) {
-    panels.value.push({ id: EDITOR_ID, title: 'New Entry', mode: 'editor' });
+    panels.value.push({ id: EDITOR_ID, title: 'New Entity', mode: 'editor' });
   }
   activePanelId.value = EDITOR_ID;
 }
@@ -158,7 +158,7 @@ function closePanel(id) {
   panels.value = panels.value.filter(p => p.id !== id);
   if (activePanelId.value === id) {
     activePanelId.value = panels.value.at(-1)?.id ?? null;
-    if (activePanelId.value && activePanel.value?.mode === 'entry') {
+    if (activePanelId.value && activePanel.value?.mode === 'entity') {
       selectEntry(activePanelId.value);
     }
   }
@@ -167,35 +167,35 @@ function closePanel(id) {
 function restorePanel(id) {
   activePanelId.value = id;
   const panel = panels.value.find(p => p.id === id);
-  if (panel?.mode === 'entry') selectEntry(id);
+  if (panel?.mode === 'entity') selectEntity(id);
 }
 
 function followLink(id, title) {
   pushCrumb(id, title);
   const panel = panels.value.find(p => p.id === activePanelId.value);
   if (panel) panel.title = title;
-  selectEntry(id);
+  selectEntity(id);
 }
 
 function onCrumbClick(index) {
   const crumb = navigateToIndex(index);
   const panel = panels.value.find(p => p.id === activePanelId.value);
   if (panel) panel.title = crumb.title;
-  selectEntry(crumb.id);
+  selectEntity(crumb.id);
 }
 
-async function onEntrySaved(data) {
-  const entry = await addEntry(data);
+async function onEntitySaved(data) {
+  const entity = await addEntity(data);
   closePanel(EDITOR_ID);
-  openEntry(entry._id, entry.title);
+  openEntry(entity._id, entity.title);
 }
 
-async function onEntryUpdated(id, data) {
-  await editEntry(id, data);
+async function onEntityUpdated(id, data) {
+  await editEntity(id, data);
 }
 
-async function onEntryDeleted(id) {
-  await removeEntry(id);
+async function onEntityDeleted(id) {
+  await removeEntity(id);
   closePanel(id);
 }
 
@@ -217,57 +217,57 @@ function buildChangeMessage(changes) {
 // ─── SSE event handlers ───────────────────────────────────────────────────────
 
 useEvents({
-  onEntryCreated({ entry, actor }) {
+  onEntityCreated({ entity, actor }) {
     // Insert into sidebar (sorted by title)
-    const idx = entries.value.findIndex(e => e.title.localeCompare(entry.title) > 0);
-    if (idx === -1) entries.value.push(entry);
-    else entries.value.splice(idx, 0, entry);
+    const idx = entities.value.findIndex(e => e.title.localeCompare(entity.title) > 0);
+    if (idx === -1) entities.value.push(entity);
+    else entities.value.splice(idx, 0, entity);
 
     addToast({
       actorLabel:  actor.label,
       actorType:   actor.type,
       message:     'added',
-      entryId:     entry._id,
-      entryTitle:  entry.title,
+      entityId:    entity._id,
+      entityTitle: entity.title,
       changeType:  'created',
     });
   },
 
-  onEntryUpdated({ entry, actor, changes }) {
-    const idx = entries.value.findIndex(e => e._id === entry._id);
-    if (idx !== -1) entries.value[idx] = entry;
-    if (selectedEntry.value?._id === entry._id) selectedEntry.value = entry;
+  onEntityUpdated({ entity, actor, changes }) {
+    const idx = entities.value.findIndex(e => e._id === entity._id);
+    if (idx !== -1) entities.value[idx] = entity;
+    if (selectedEntity.value?._id === entity._id) selectedEntity.value = entity;
 
     addToast({
       actorLabel:  actor.label,
       actorType:   actor.type,
       message:     buildChangeMessage(changes),
-      entryId:     entry._id,
-      entryTitle:  entry.title,
+      entityId:    entity._id,
+      entityTitle: entity.title,
       changeType:  'updated',
     });
   },
 
-  onEntryDeleted({ entryId, entryTitle, actor, snapshot }) {
-    entries.value = entries.value.filter(e => e._id !== entryId);
-    if (selectedEntry.value?._id === entryId) {
-      selectedEntry.value = null;
-      closePanel(entryId);
+  onEntityDeleted({ entityId, entityTitle, actor, snapshot }) {
+    entities.value = entities.value.filter(e => e._id !== entityId);
+    if (selectedEntity.value?._id === entityId) {
+      selectedEntity.value = null;
+      closePanel(entityId);
     }
 
     addToast({
       actorLabel:  actor.label,
       actorType:   actor.type,
       message:     'deleted',
-      entryId,
-      entryTitle,
+      entityId,
+      entityTitle,
       snapshot,
       changeType:  'deleted',
     });
   },
 });
 
-provide('entries', entries);
+provide('entities', entities);
 provide('followLink', followLink);
 provide('openEntry', openEntry);
 provide('openSnapshot', openSnapshot);

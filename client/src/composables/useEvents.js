@@ -5,7 +5,7 @@ const BASE = import.meta.env.VITE_API_URL ?? '';
 // Module-level so the API layer can read it for X-SSE-Client-Id headers
 export let sseClientId = null;
 
-export function useEvents({ onEntryCreated, onEntryUpdated, onEntryDeleted } = {}) {
+export function useEvents({ onEntityCreated, onEntityUpdated, onEntityDeleted } = {}) {
   let es = null;
   let reconnectTimer = null;
 
@@ -23,27 +23,27 @@ export function useEvents({ onEntryCreated, onEntryUpdated, onEntryDeleted } = {
       } catch (err) { console.error('[sse] parse error (client:id):', err); }
     });
 
-    es.addEventListener('entry:created', (e) => {
-      console.log('[sse] entry:created', e.data);
+    es.addEventListener('entity:created', (e) => {
+      console.log('[sse] entity:created', e.data);
       try {
         const payload = JSON.parse(e.data);
-        onEntryCreated?.(payload);
+        onEntityCreated?.(payload);
       } catch (err) { console.error('[sse] parse error (created):', err); }
     });
 
-    es.addEventListener('entry:updated', (e) => {
-      console.log('[sse] entry:updated', e.data);
+    es.addEventListener('entity:updated', (e) => {
+      console.log('[sse] entity:updated', e.data);
       try {
         const payload = JSON.parse(e.data);
-        onEntryUpdated?.(payload);
+        onEntityUpdated?.(payload);
       } catch (err) { console.error('[sse] parse error (updated):', err); }
     });
 
-    es.addEventListener('entry:deleted', (e) => {
-      console.log('[sse] entry:deleted', e.data);
+    es.addEventListener('entity:deleted', (e) => {
+      console.log('[sse] entity:deleted', e.data);
       try {
         const payload = JSON.parse(e.data);
-        onEntryDeleted?.(payload);
+        onEntityDeleted?.(payload);
       } catch (err) { console.error('[sse] parse error (deleted):', err); }
     });
 

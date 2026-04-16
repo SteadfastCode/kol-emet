@@ -1,5 +1,5 @@
 <template>
-  <div class="entry-list">
+  <div class="entity-list">
     <!-- Header -->
     <div class="list-header">
       <div class="header-top">
@@ -28,21 +28,21 @@
         <span v-if="activeTag" class="pill active" @click="$emit('clear-tag')">#{{ activeTag }} ✕</span>
       </div>
 
-      <div class="entry-count">{{ entries.length }} entries</div>
+      <div class="entity-count">{{ entities.length }} entities</div>
     </div>
 
-    <!-- Entry list -->
+    <!-- Entity list -->
     <div v-if="loading" class="list-empty">Loading…</div>
-    <VirtualList v-else-if="entries.length" :items="entries">
+    <VirtualList v-else-if="entities.length" :items="entities">
       <template #default="{ item }">
         <SidebarCard
-          :entry="item"
+          :entity="item"
           :selected="item._id === selectedId"
           @select="$emit('select', $event, item.title)"
         />
       </template>
     </VirtualList>
-    <div v-else class="list-empty">No entries found.</div>
+    <div v-else class="list-empty">No entities found.</div>
   </div>
 </template>
 
@@ -52,7 +52,7 @@ import SidebarCard from './SidebarCard.vue';
 import { CATEGORIES } from '../config/categories.js';
 
 defineProps({
-  entries: Array,
+  entities: Array,
   activeCat: String,
   activeTag: String,
   searchQuery: String,
@@ -64,7 +64,7 @@ defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry',
 </script>
 
 <style scoped>
-.entry-list {
+.entity-list {
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -119,7 +119,7 @@ defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry',
   flex-wrap: wrap;
 }
 
-.entry-count {
+.entity-count {
   font-size: 11px;
   color: #3a3a3a;
 }

@@ -17,8 +17,8 @@ async function req(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-export const getEntries = () => req('/entries');
-export const getEntry = (id) => req(`/entries/${id}`);
-export const createEntry = (data) => req('/entries', { method: 'POST', body: JSON.stringify(data) });
-export const updateEntry = (id, data) => req(`/entries/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-export const deleteEntry = (id) => req(`/entries/${id}`, { method: 'DELETE' });
+export const getEntities = () => req('/entities');
+export const getEntity = (id) => req(`/entities/${id}`);
+export const createEntity = (data) => req('/entities', { method: 'POST', body: JSON.stringify(data) });
+export const updateEntity = (id, data) => req(`/entities/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteEntity = (id) => req(`/entities/${id}`, { method: 'DELETE' });

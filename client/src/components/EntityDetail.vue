@@ -1,5 +1,5 @@
 <template>
-  <div class="entry-detail">
+  <div class="entity-detail">
     <BreadcrumbBar
       :breadcrumbs="breadcrumbs"
       @crumb-click="$emit('crumb-click', $event)"
@@ -7,16 +7,16 @@
 
     <div v-if="loading" class="detail-loading">Loading…</div>
 
-    <template v-else-if="entry">
-      <EntryHeader
-        :entry="entry"
+    <template v-else-if="entity">
+      <EntityHeader
+        :entity="entity"
         @save="saveHeader"
         @set-tag="$emit('set-tag', $event)"
       />
 
       <div class="blocks-section">
         <BlockList
-          :blocks="entry.blocks"
+          :blocks="entity.blocks"
           :can-edit="true"
           @save-block="saveBlock"
           @delete-block="deleteBlock"
@@ -25,13 +25,13 @@
       </div>
 
       <RelationshipsSection
-        :entry="entry"
+        :entity="entity"
         :can-edit="true"
         @refresh="$emit('refresh')"
       />
 
-      <div class="entry-footer">
-        <button class="btn-sm danger" @click="confirmDelete">Delete entry</button>
+      <div class="entity-footer">
+        <button class="btn-sm danger" @click="confirmDelete">Delete entity</button>
       </div>
     </template>
   </div>
@@ -39,12 +39,12 @@
 
 <script setup>
 import BreadcrumbBar from './BreadcrumbBar.vue';
-import EntryHeader from './EntryHeader.vue';
+import EntityHeader from './EntityHeader.vue';
 import BlockList from './BlockList.vue';
 import RelationshipsSection from './RelationshipsSection.vue';
 
 const props = defineProps({
-  entry: Object,
+  entity: Object,
   loading: Boolean,
   breadcrumbs: Array,
 });
@@ -52,38 +52,38 @@ const props = defineProps({
 const emit = defineEmits(['crumb-click', 'follow-link', 'set-tag', 'saved', 'deleted', 'refresh']);
 
 async function saveHeader(headerData) {
-  emit('saved', props.entry._id, {
+  emit('saved', props.entity._id, {
     ...headerData,
-    blocks: props.entry.blocks,
+    blocks: props.entity.blocks,
   });
 }
 
 async function saveBlock(updatedBlock) {
-  const blocks = props.entry.blocks.map(b =>
+  const blocks = props.entity.blocks.map(b =>
     b._id === updatedBlock._id ? updatedBlock : b
   );
-  emit('saved', props.entry._id, { blocks });
+  emit('saved', props.entity._id, { blocks });
 }
 
 async function deleteBlock(blockId) {
-  const blocks = props.entry.blocks.filter(b => b._id !== blockId);
-  emit('saved', props.entry._id, { blocks });
+  const blocks = props.entity.blocks.filter(b => b._id !== blockId);
+  emit('saved', props.entity._id, { blocks });
 }
 
 async function addBlock(newBlock) {
-  const blocks = [...props.entry.blocks, newBlock];
-  emit('saved', props.entry._id, { blocks });
+  const blocks = [...props.entity.blocks, newBlock];
+  emit('saved', props.entity._id, { blocks });
 }
 
 function confirmDelete() {
-  if (confirm(`Delete "${props.entry.title}"? This cannot be undone.`)) {
-    emit('deleted', props.entry._id);
+  if (confirm(`Delete "${props.entity.title}"? This cannot be undone.`)) {
+    emit('deleted', props.entity._id);
   }
 }
 </script>
 
 <style scoped>
-.entry-detail {
+.entity-detail {
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -104,7 +104,7 @@ function confirmDelete() {
   padding: 0 24px;
 }
 
-.entry-footer {
+.entity-footer {
   padding: 16px 24px 32px;
   border-top: 1px solid #1e1e1e;
   margin-top: 24px;

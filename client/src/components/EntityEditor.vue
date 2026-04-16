@@ -1,7 +1,7 @@
 <template>
-  <div class="entry-editor">
+  <div class="entity-editor">
     <div class="editor-header">
-      <h2 class="editor-title">New Entry</h2>
+      <h2 class="editor-title">New Entity</h2>
       <button class="icon-btn" title="Cancel" @click="$emit('cancel')">✕</button>
     </div>
 
@@ -10,7 +10,7 @@
       <input
         v-model="form.title"
         class="input title-input"
-        placeholder="Entry title"
+        placeholder="Entity title"
         @blur="applyDefaultBlocks"
       />
 
@@ -111,7 +111,7 @@
     <div class="editor-footer">
       <button class="btn-sm" @click="$emit('cancel')">Cancel</button>
       <button class="btn-sm primary" :disabled="isSaving || !form.title.trim()" @click="save">
-        <span v-if="isSaving" class="spinner" /><span v-else>Create entry</span>
+        <span v-if="isSaving" class="spinner" /><span v-else>Create entity</span>
       </button>
     </div>
   </div>
@@ -199,7 +199,7 @@ async function save() {
 </script>
 
 <style scoped>
-.entry-editor {
+.entity-editor {
   display: flex;
   flex-direction: column;
   height: 100%;

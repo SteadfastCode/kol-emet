@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import Entry, { BLOCK_TYPES } from '../models/Entry.js';
+import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
@@ -22,7 +22,7 @@ function normalizeBlockOrder(blocks) {
     .map((block, i) => ({ ...block, order: i }));
 }
 
-// GET /entries
+// GET /entities
 router.get('/', async (req, res) => {
   try {
     const filter = {};
@@ -37,34 +37,34 @@ router.get('/', async (req, res) => {
         { blocks: { $elemMatch: { 'data.markdown': re } } },
       ];
     }
-    const entries = await Entry.find(filter)
+    const entities = await Entity.find(filter)
       .sort({ title: 1 })
       .populate('open_questions', 'question status');
-    res.json(entries);
+    res.json(entities);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /entries/:id
+// GET /entities/:id
 router.get('/:id', async (req, res) => {
   try {
-    const entry = await Entry.findById(req.params.id)
+    const entity = await Entity.findById(req.params.id)
       .populate('open_questions', 'question status')
       .lean();
-    if (!entry) return res.status(404).json({ error: 'Not found' });
+    if (!entity) return res.status(404).json({ error: 'Not found' });
 
-    // Query groups dynamically — source of truth is the group's members array, not the back-reference on Entry
+    // Query groups dynamically — source of truth is the group's members array, not the back-reference on Entity
     const relationships = await RelationshipGroup.find({ 'members.entityId': req.params.id })
       .populate({ path: 'members.entityId', select: 'title' });
 
-    res.json({ ...entry, relationships });
+    res.json({ ...entity, relationships });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /entries
+// POST /entities
 router.post('/', requireActor, async (req, res) => {
   try {
     const data = { ...req.body };
@@ -78,16 +78,16 @@ router.post('/', requireActor, async (req, res) => {
       data.blocks = [{ type: 'text', order: 0, data: { markdown: data.body } }];
     }
 
-    const entry = await Entry.create(data);
+    const entity = await Entity.create(data);
     const clientId = req.headers['x-sse-client-id'] ?? null;
-    logCreate(entry.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logCreate failed:', err));
-    res.status(201).json(entry);
+    logCreate(entity.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logCreate failed:', err));
+    res.status(201).json(entity);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// PUT /entries/:id
+// PUT /entities/:id
 router.put('/:id', requireActor, async (req, res) => {
   try {
     const data = { ...req.body };
@@ -98,10 +98,10 @@ router.put('/:id', requireActor, async (req, res) => {
       data.blocks = normalizeBlockOrder(data.blocks);
     }
 
-    const before = await Entry.findById(req.params.id).lean();
+    const before = await Entity.findById(req.params.id).lean();
     if (!before) return res.status(404).json({ error: 'Not found' });
 
-    const after = await Entry.findByIdAndUpdate(req.params.id, data, {
+    const after = await Entity.findByIdAndUpdate(req.params.id, data, {
       new: true,
       runValidators: true,
     }).populate('open_questions', 'question status');
@@ -115,18 +115,18 @@ router.put('/:id', requireActor, async (req, res) => {
   }
 });
 
-// DELETE /entries/:id
+// DELETE /entities/:id
 router.delete('/:id', requireActor, async (req, res) => {
   try {
-    const entry = await Entry.findByIdAndDelete(req.params.id);
-    if (!entry) return res.status(404).json({ error: 'Not found' });
+    const entity = await Entity.findByIdAndDelete(req.params.id);
+    if (!entity) return res.status(404).json({ error: 'Not found' });
 
     // Clean up relationship groups: query dynamically so we catch all groups regardless of back-reference state
-    const groups = await RelationshipGroup.find({ 'members.entityId': entry._id });
+    const groups = await RelationshipGroup.find({ 'members.entityId': entity._id });
     for (const group of groups) {
-      group.members = group.members.filter(m => String(m.entityId) !== String(entry._id));
+      group.members = group.members.filter(m => String(m.entityId) !== String(entity._id));
       if (group.members.length < 2) {
-        await Entry.updateMany(
+        await Entity.updateMany(
           { _id: { $in: group.members.map(m => m.entityId) } },
           { $pull: { relationships: group._id } }
         );
@@ -137,7 +137,7 @@ router.delete('/:id', requireActor, async (req, res) => {
     }
 
     const clientId = req.headers['x-sse-client-id'] ?? null;
-    logDelete(entry.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logDelete failed:', err));
+    logDelete(entity.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logDelete failed:', err));
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });
