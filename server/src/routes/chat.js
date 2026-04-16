@@ -26,7 +26,7 @@ const PROVIDERS = {
     name: 'xAI (Grok)',
     envKey: 'XAI_API_KEY',
     baseURL: 'https://api.x.ai/v1',
-    models: ['grok-3', 'grok-3-mini', 'grok-3-fast'],
+    models: ['grok-3', 'grok-3-mini', 'grok-3-fast', 'grok-4.1-fast', 'grok-4.20-reasoning'],
     defaultModel: 'grok-3',
     remoteMcp: true,
   },
@@ -57,11 +57,21 @@ function makeClient(providerId) {
   return new OpenAI(opts);
 }
 
-const WIKI_SYSTEM_PROMPT =
+// System prompt when the MCP tool is wired in — AI has real search access
+const WIKI_SYSTEM_PROMPT_WITH_TOOLS =
   'You are an AI assistant integrated into Kol Emet, a world-building wiki. ' +
-  'You have access to wiki tools — use them to look up entities, check relationships, ' +
-  'and make edits when asked. Be concise. When referencing wiki content always cite entity names. ' +
-  'Never invent wiki facts; if you are unsure, search first.';
+  'You have access to wiki search and edit tools. ' +
+  'CRITICAL: ALWAYS call search_entities or get_entity BEFORE answering any question about wiki content. ' +
+  'NEVER answer from memory or make up entity names, relationships, places, or lore. ' +
+  'If the search returns no results, say so explicitly — do not fill the gap with invented content. ' +
+  'Be concise. Cite entity names when referencing wiki content.';
+
+// System prompt when no MCP URL is configured — AI has no tools
+const WIKI_SYSTEM_PROMPT_NO_TOOLS =
+  'You are an AI assistant integrated into Kol Emet, a world-building wiki. ' +
+  'You do NOT currently have access to wiki search tools (the MCP server URL is not configured). ' +
+  'Do NOT invent or guess any wiki content. ' +
+  'If the user asks about wiki content, tell them the wiki tools are not connected and they need to set MCP_SERVER_URL on the server.';
 
 // ─── GET /chat/providers ──────────────────────────────────────────────────────
 
@@ -90,19 +100,13 @@ router.post('/', requireAuth, async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: `${providerCfg.name} API key is not configured` });
 
   const effectiveModel = model || providerCfg.defaultModel;
-  const effectiveSystem = systemPrompt || WIKI_SYSTEM_PROMPT;
-
-  // Build message list with system prompt
-  const allMessages = [
-    { role: 'system', content: effectiveSystem },
-    ...messages,
-  ];
 
   // Inject remote MCP tool if provider supports it and we have a URL
   const mcpUrl = process.env.MCP_SERVER_URL;
   const mcpToken = process.env.MCP_BEARER_TOKEN;
   const tools = [];
-  if (providerCfg.remoteMcp && mcpUrl) {
+  const toolsAvailable = providerCfg.remoteMcp && !!mcpUrl;
+  if (toolsAvailable) {
     const mcpTool = {
       type: 'mcp',
       server_url: mcpUrl,
@@ -111,6 +115,16 @@ router.post('/', requireAuth, async (req, res) => {
     if (mcpToken) mcpTool.headers = { Authorization: `Bearer ${mcpToken}` };
     tools.push(mcpTool);
   }
+
+  // Pick system prompt based on whether tools are actually wired up
+  const defaultSystem = toolsAvailable ? WIKI_SYSTEM_PROMPT_WITH_TOOLS : WIKI_SYSTEM_PROMPT_NO_TOOLS;
+  const effectiveSystem = systemPrompt || defaultSystem;
+
+  // Build message list with system prompt
+  const allMessages = [
+    { role: 'system', content: effectiveSystem },
+    ...messages,
+  ];
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
