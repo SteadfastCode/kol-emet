@@ -2,6 +2,9 @@
   <Transition name="chat-slide">
     <div v-if="open" class="chat-panel" :class="{ 'sidebar-open': sidebarOpen }">
 
+      <!-- Backdrop: mobile portrait only — tap outside sidebar to close -->
+      <div v-if="sidebarOpen" class="sidebar-backdrop" @click="sidebarOpen = false" />
+
       <!-- ── Conversation sidebar ─────────────────────────────────────── -->
       <div class="chat-sidebar">
         <div class="sidebar-header">
@@ -71,7 +74,7 @@
               v-if="currentModels.length"
               v-model="selectedModel"
               class="model-select"
-              :disabled="streaming || !!activeConvId"
+              :disabled="streaming"
             >
               <option v-for="m in currentModels" :key="m" :value="m">{{ m }}</option>
             </select>
@@ -718,8 +721,26 @@ async function sendMessage() {
 .chat-slide-leave-to     { transform: translateX(100%); opacity: 0; }
 
 /* ─── Mobile portrait ────────────────────────────────────────────── */
+.sidebar-backdrop { display: none; }
+
 @media (orientation: portrait) and (max-width: 768px) {
-  .chat-panel            { width: 100% !important; left: 0; }
-  .sidebar-open .chat-sidebar { width: 150px; }
+  .chat-panel { width: 100% !important; left: 0; }
+
+  /* Sidebar overlays the chat instead of pushing it */
+  .chat-sidebar {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    z-index: 10;
+  }
+  .chat-panel.sidebar-open .chat-sidebar { width: 200px; }
+
+  /* Translucent backdrop covers the chat content */
+  .sidebar-backdrop {
+    display: block;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9;
+    background: rgba(0, 0, 0, 0.5);
+  }
 }
 </style>

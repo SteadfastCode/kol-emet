@@ -99,9 +99,22 @@ router.delete('/:id', requireAuth, async (req, res) => {
 // Ask the AI to generate (or refresh) a short title from the conversation history.
 // No-ops if the user has manually renamed (autoTitle === false).
 
-const TITLE_SYSTEM_PROMPT =
+// Prompt used when there is no title yet — generate unconditionally.
+const TITLE_INITIAL_PROMPT =
   'Generate a short title (3–7 words, no quotes, no trailing punctuation) that ' +
   'captures the topic of this conversation. Respond with ONLY the title.';
+
+// Prompt used when a title already exists (10+ messages) — only update if the
+// topic has shifted significantly; otherwise respond with the sentinel "KEEP".
+function titleRefreshPrompt(existingTitle) {
+  return (
+    `This conversation is currently titled: "${existingTitle}". ` +
+    'Only suggest a new title if the conversation has meaningfully changed topic since then. ' +
+    'If the current title still fits, respond with exactly: KEEP\n' +
+    'Otherwise generate a short title (3–7 words, no quotes, no trailing punctuation). ' +
+    'Respond with ONLY the new title or KEEP.'
+  );
+}
 
 router.post('/:id/title', requireAuth, async (req, res) => {
   const userId = sessionUserId(req, res);
@@ -116,8 +129,18 @@ router.post('/:id/title', requireAuth, async (req, res) => {
     // Need at least one exchange to generate a meaningful title.
     if (conv.messages.length < 2) return res.json({ title: conv.title });
 
+    const hasTitle  = !!conv.title;
+    const msgCount  = conv.messages.length;
+
+    // If the conversation already has a title, only reconsider after 10+ messages.
+    if (hasTitle && msgCount < 10) return res.json({ title: conv.title });
+
+    const systemPrompt = hasTitle
+      ? titleRefreshPrompt(conv.title)
+      : TITLE_INITIAL_PROMPT;
+
     // Build a trimmed history (avoid sending huge conversations for a title)
-    const history = conv.messages.slice(0, 10).map(m => ({
+    const history = conv.messages.slice(0, 20).map(m => ({
       role: m.role, content: m.content,
     }));
 
@@ -127,14 +150,14 @@ router.post('/:id/title', requireAuth, async (req, res) => {
       const response = await client.chat.completions.create({
         model:    conv.model,
         messages: [
-          { role: 'system', content: TITLE_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           ...history,
         ],
         max_tokens: 30,
         stream:     false,
       });
-      const raw = response.choices?.[0]?.message?.content?.trim() ?? '';
-      if (raw) title = raw.replace(/^["']|["']$/g, '').trim(); // strip surrounding quotes
+      const raw = (response.choices?.[0]?.message?.content?.trim() ?? '').replace(/^["']|["']$/g, '').trim();
+      if (raw && raw.toUpperCase() !== 'KEEP') title = raw;
     } catch {
       // If the AI call fails, keep the existing title — don't surface the error.
     }
