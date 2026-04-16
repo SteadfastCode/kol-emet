@@ -63,23 +63,36 @@ router.patch('/:id', requireActor, async (req, res) => {
   }
 });
 
-// POST /relationship-groups/:id/members — add a member to an existing group
+// POST /relationship-groups/:id/members — add one or more members to an existing group
+// Body: { members: [{ entityId, label?, notes? }] }
 router.post('/:id/members', requireActor, async (req, res) => {
   try {
-    const { entityId, label = null, notes = null } = req.body;
-    if (!entityId) return res.status(400).json({ error: 'entityId is required' });
+    const { members } = req.body;
+    if (!Array.isArray(members) || members.length === 0) {
+      return res.status(400).json({ error: 'members must be a non-empty array' });
+    }
+    if (members.some(m => !m.entityId)) {
+      return res.status(400).json({ error: 'each member must have an entityId' });
+    }
 
     const group = await RelationshipGroup.findById(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
-    // Prevent duplicate members
-    const alreadyMember = group.members.some(m => String(m.entityId) === String(entityId));
-    if (alreadyMember) return res.status(409).json({ error: 'Entity is already a member of this group' });
+    const existingIds = new Set(group.members.map(m => String(m.entityId)));
+    const duplicates = members.filter(m => existingIds.has(String(m.entityId)));
+    if (duplicates.length) {
+      return res.status(409).json({ error: `Already a member: ${duplicates.map(m => m.entityId).join(', ')}` });
+    }
 
-    group.members.push({ entityId, label, notes });
+    for (const m of members) {
+      group.members.push({ entityId: m.entityId, label: m.label ?? null, notes: m.notes ?? null });
+    }
     await group.save();
 
-    await Entity.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
+    await Entity.updateMany(
+      { _id: { $in: members.map(m => m.entityId) } },
+      { $addToSet: { relationships: group._id } }
+    );
 
     const populated = await populateGroup(RelationshipGroup.findById(group._id));
     res.status(201).json(populated);

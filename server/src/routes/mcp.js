@@ -214,26 +214,29 @@ function createMcpServer() {
   //       └── Elias Siblings                ← sub-group (children only)
   //           └── Elias Twins               ← sub-group (only the twin pair)
   //
-  // Step 1 — Create every group with its members and their correct labels.
-  //          (add_relationship for the first two members, then
-  //           add_member_to_relationship for each additional member.)
+  // Step 1 — Create every group in one add_relationship call each.
+  //          Pass all members upfront; use add_member_to_relationship only
+  //          if you discover additional members later.
   //
-  //   "Elias Family" — all family members, general labels:
-  //     Eldan:"father", Ruth:"mother", Ethan:"son", Naomi:"daughter",
-  //     TwinA:"son", TwinB:"son"
+  //   add_relationship(groupLabel:"Elias Family", members:[
+  //     {entityId:Eldan, label:"father"}, {entityId:Ruth,  label:"mother"},
+  //     {entityId:Ethan, label:"son"},    {entityId:Naomi, label:"daughter"},
+  //     {entityId:TwinA, label:"son"},    {entityId:TwinB, label:"son"} ])
   //
-  //   "Eldan-Ruth Marriage" — only the couple:
-  //     Eldan:"husband", Ruth:"wife"
+  //   add_relationship(groupLabel:"Eldan-Ruth Marriage", members:[
+  //     {entityId:Eldan, label:"husband"}, {entityId:Ruth, label:"wife"} ])
   //
-  //   "Elias Parentage" — parents + all children, same general labels as family:
-  //     Eldan:"father", Ruth:"mother", Ethan:"son", Naomi:"daughter",
-  //     TwinA:"son", TwinB:"son"
+  //   add_relationship(groupLabel:"Elias Parentage", members:[
+  //     {entityId:Eldan, label:"father"}, {entityId:Ruth,  label:"mother"},
+  //     {entityId:Ethan, label:"son"},    {entityId:Naomi, label:"daughter"},
+  //     {entityId:TwinA, label:"son"},    {entityId:TwinB, label:"son"} ])
   //
-  //   "Elias Siblings" — children only, gendered labels (NOT "sibling"):
-  //     Ethan:"brother", Naomi:"sister", TwinA:"brother", TwinB:"brother"
+  //   add_relationship(groupLabel:"Elias Siblings", members:[
+  //     {entityId:Ethan, label:"brother"}, {entityId:Naomi, label:"sister"},
+  //     {entityId:TwinA, label:"brother"}, {entityId:TwinB, label:"brother"} ])
   //
-  //   "Elias Twins" — only the twin pair, most specific labels:
-  //     TwinA:"twin brother", TwinB:"twin brother"
+  //   add_relationship(groupLabel:"Elias Twins", members:[
+  //     {entityId:TwinA, label:"twin brother"}, {entityId:TwinB, label:"twin brother"} ])
   //
   // Step 2 — Link sub-groups (build bottom-up so each link is already valid):
   //   add_subgroup_to_relationship(siblingsGroupId, twinsGroupId)      // twins ⊂ siblings
@@ -255,30 +258,27 @@ function createMcpServer() {
 
   server.tool(
     'add_relationship',
-    'Create a relationship group between exactly two entities. This is the ONLY way to link entities — never use blocks for this. ' +
-    'Labels describe each entity\'s role (e.g. myLabel:"father", theirLabel:"son"). Be specific: use "brother"/"sister" not "sibling", "twin brother" not "twin". ' +
-    'groupLabel names the group (e.g. "Elias Family"). ' +
-    'To add more members beyond the initial two, use add_member_to_relationship. ' +
+    'Create a relationship group with all its members in one call. This is the ONLY way to link entities — never use blocks for this. ' +
+    'Pass every member upfront in the members array (minimum 2). Each member needs an entityId and a role label. ' +
+    'Be specific with labels: use "brother"/"sister" not "sibling", "twin brother" not "twin". ' +
+    'groupLabel names the group itself (e.g. "Elias Family"). ' +
     'For tiered families (where siblings should show as "brother"/"sister" rather than "son"/"daughter"), follow the BUILDING TIERED RELATIONSHIPS guide in the relationship tools section. ' +
     'Returns the created group with its _id — save it for add_member_to_relationship and add_subgroup_to_relationship calls.',
     {
-      myEntityId:    z.string().describe('MongoDB ObjectId of the first entity'),
-      theirEntityId: z.string().describe('MongoDB ObjectId of the second entity'),
-      myLabel:       z.string().optional().describe('Role label for the first entity, e.g. "father"'),
-      theirLabel:    z.string().optional().describe('Role label for the second entity, e.g. "son"'),
-      groupLabel:    z.string().optional().describe('Name of the relationship group itself, e.g. "Elias Family"'),
-      notes:         z.string().optional().describe("Notes on the first entity's membership"),
+      groupLabel: z.string().optional().describe('Name for the relationship group, e.g. "Elias Family"'),
+      members: z.array(z.object({
+        entityId: z.string().describe('MongoDB ObjectId of the entity'),
+        label:    z.string().optional().describe('Role label, e.g. "father", "sister", "twin brother"'),
+        notes:    z.string().optional().describe('Optional notes on this membership'),
+      })).min(2).describe('All members of the group. Minimum 2.'),
     },
-    async ({ myEntityId, theirEntityId, myLabel, theirLabel, groupLabel, notes }) => {
+    async ({ groupLabel, members }) => {
       const group = await RelationshipGroup.create({
         label: groupLabel ?? null,
-        members: [
-          { entityId: myEntityId,    label: myLabel    ?? null, notes: notes ?? null },
-          { entityId: theirEntityId, label: theirLabel ?? null },
-        ],
+        members: members.map(m => ({ entityId: m.entityId, label: m.label ?? null, notes: m.notes ?? null })),
       });
       await Entity.updateMany(
-        { _id: { $in: [myEntityId, theirEntityId] } },
+        { _id: { $in: members.map(m => m.entityId) } },
         { $addToSet: { relationships: group._id } }
       );
       const populated = await RelationshipGroup.findById(group._id)
@@ -289,24 +289,34 @@ function createMcpServer() {
 
   server.tool(
     'add_member_to_relationship',
-    'Add a third (or more) entity to an existing relationship group. ' +
-    'Use this after add_relationship to extend a group beyond two members — for example, adding a third child to a siblings group or a third child to a family group. ' +
-    'The label must be specific to the person\'s gender and role (e.g. "brother" or "sister", not "sibling"; "twin brother" not "twin"). ' +
+    'Add one or more members to an existing relationship group in a single call. ' +
+    'Use this when you have additional members to add after the group was created, or when adding the same person to multiple groups as part of building a tiered structure. ' +
+    'Labels must be specific to each person\'s gender and role (e.g. "brother" or "sister", not "sibling"; "twin brother" not "twin"). ' +
     'When building tiered relationships, add the same person to BOTH the broad group and the narrow sub-group — each with the label appropriate to that group\'s level of specificity.',
     {
-      groupId:  z.string().describe('MongoDB ObjectId of the relationship group (from add_relationship response)'),
-      entityId: z.string().describe('MongoDB ObjectId of the entity to add'),
-      label:    z.string().optional().describe('Role label for this entity in the group, e.g. "sibling" or "daughter"'),
-      notes:    z.string().optional().describe('Notes on this membership'),
+      groupId: z.string().describe('MongoDB ObjectId of the relationship group'),
+      members: z.array(z.object({
+        entityId: z.string().describe('MongoDB ObjectId of the entity to add'),
+        label:    z.string().optional().describe('Role label for this entity, e.g. "daughter", "brother"'),
+        notes:    z.string().optional().describe('Optional notes on this membership'),
+      })).min(1).describe('One or more members to add. All must be new to this group.'),
     },
-    async ({ groupId, entityId, label, notes }) => {
+    async ({ groupId, members }) => {
       const group = await RelationshipGroup.findById(groupId);
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
-      const alreadyMember = group.members.some(m => String(m.entityId) === String(entityId));
-      if (alreadyMember) throw new Error(`Entity ${entityId} is already a member of this group`);
-      group.members.push({ entityId, label: label ?? null, notes: notes ?? null });
+      const existingIds = new Set(group.members.map(m => String(m.entityId)));
+      const duplicates = members.filter(m => existingIds.has(String(m.entityId)));
+      if (duplicates.length) {
+        throw new Error(`Already a member of this group: ${duplicates.map(m => m.entityId).join(', ')}`);
+      }
+      for (const m of members) {
+        group.members.push({ entityId: m.entityId, label: m.label ?? null, notes: m.notes ?? null });
+      }
       await group.save();
-      await Entity.findByIdAndUpdate(entityId, { $addToSet: { relationships: group._id } });
+      await Entity.updateMany(
+        { _id: { $in: members.map(m => m.entityId) } },
+        { $addToSet: { relationships: group._id } }
+      );
       const populated = await RelationshipGroup.findById(group._id)
         .populate({ path: 'members.entityId', select: 'title' });
       return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };

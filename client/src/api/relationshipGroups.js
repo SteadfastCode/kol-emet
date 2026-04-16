@@ -26,8 +26,11 @@ export const getGroup = (id) =>
 export const updateGroupLabel = (id, label) =>
   req(`/relationship-groups/${id}`, { method: 'PATCH', body: JSON.stringify({ label }) });
 
-export const addMember = (groupId, data) =>
-  req(`/relationship-groups/${groupId}/members`, { method: 'POST', body: JSON.stringify(data) });
+// data: single { entityId, label?, notes? } or array of them
+export const addMember = (groupId, data) => {
+  const members = Array.isArray(data) ? data : [data];
+  return req(`/relationship-groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ members }) });
+};
 
 export const updateMember = (groupId, entityId, data) =>
   req(`/relationship-groups/${groupId}/members/${entityId}`, { method: 'PATCH', body: JSON.stringify(data) });
