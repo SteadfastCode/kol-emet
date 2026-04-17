@@ -61,13 +61,13 @@
           >{{ coMember.entityId.title }}</span>
           <div class="rel-row-actions">
             <button
-              v-if="canEdit && !coMember._fromSubGroup"
+              v-if="canEdit"
               class="icon-btn"
               title="Edit"
               @click="startEdit(group, coMember.entityId._id)"
             >✎</button>
             <button
-              v-if="canEdit && !coMember._fromSubGroup"
+              v-if="canEdit"
               class="icon-btn danger"
               title="Remove"
               @click="removeRelationship(group, coMember.entityId._id)"
@@ -76,7 +76,33 @@
         </div>
       </template>
 
-      <!-- Collapsed sub-group reference rows (labeled sub-groups) -->
+      <!-- Expanded sub-group trees (labeled sub-groups, viewer not a member) -->
+      <template v-for="sub in (group.expandedSubGroups ?? [])" :key="sub.groupId">
+        <div class="subgroup-tree-header">
+          <span class="subgroup-tree-name">{{ sub.groupLabel || '(group)' }}</span>
+          <div class="group-label-actions">
+            <button
+              v-if="canEdit"
+              class="icon-btn danger"
+              title="Unlink sub-group"
+              @click="unlinkSubGroup(group._id, sub.groupId)"
+            >✕</button>
+          </div>
+        </div>
+        <div
+          v-for="m in sub.members"
+          :key="m.entityId._id"
+          class="rel-row subgroup-member-row"
+        >
+          <span class="rel-label">{{ m.resolvedLabel || '—' }}</span>
+          <span
+            class="rel-target wiki-link"
+            @click="followLink(m.entityId._id, m.entityId.title)"
+          >{{ m.entityId.title }}</span>
+        </div>
+      </template>
+
+      <!-- Collapsed sub-group reference rows (labeled sub-groups, viewer IS a member) -->
       <template v-for="ref in collapsedSubGroupRefs(group)" :key="ref.groupId">
         <div class="rel-row subgroup-ref-row">
           <span class="rel-label">{{ pluralize(ref.linkLabel) }}</span>
@@ -330,7 +356,7 @@ function collapsedMemberIds(group) {
 
 function coMembersOf(group) {
   const collapsed = collapsedMemberIds(group);
-  return group.members.filter(m => {
+  return (group.members ?? []).filter(m => {
     const mid = String(m.entityId._id ?? m.entityId);
     return mid !== String(props.entity._id) && !collapsed.has(mid);
   });
@@ -795,6 +821,36 @@ async function saveNew() {
   font-size: 12px;
   color: #6dca6d;
   margin-top: 2px;
+}
+
+/* Expanded sub-group tree — header */
+.subgroup-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 6px 0 2px;
+  padding-left: 4px;
+  min-height: 18px;
+}
+
+.subgroup-tree-name {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #4a6a4a;
+}
+
+.subgroup-tree-header .group-label-actions {
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.subgroup-tree-header:hover .group-label-actions { opacity: 1; }
+
+/* Expanded sub-group tree — indented member rows */
+.subgroup-member-row {
+  padding-left: 16px;
+  border-left: 1px solid #1e2e1e;
+  margin-left: 4px;
 }
 
 /* Collapsed sub-group reference row */
