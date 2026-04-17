@@ -30,9 +30,9 @@
         </template>
       </div>
 
-      <template v-for="coMember in coMembersOf(group)" :key="coMember.entityId._id">
+      <template v-for="coMember in coMembersOf(group)" :key="String(coMember.refId)">
         <!-- Edit row -->
-        <div v-if="editingKey === rowKey(group._id, coMember.entityId._id)" class="rel-edit-row">
+        <div v-if="editingKey === rowKey(group._id, coMember.refId)" class="rel-edit-row">
           <input
             v-model="editDraft.label"
             class="input input-sm"
@@ -46,7 +46,7 @@
           />
           <div class="row-actions">
             <button class="btn-sm" @click="cancelEdit">Cancel</button>
-            <button class="btn-sm primary" :disabled="editSaving" @click="saveEdit(group, coMember.entityId._id)">
+            <button class="btn-sm primary" :disabled="editSaving" @click="saveEdit(group, coMember.refId)">
               <span v-if="editSaving" class="spinner" /><span v-else>Save</span>
             </button>
           </div>
@@ -57,34 +57,34 @@
           v-else
           class="rel-row"
           :class="{
-            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(coMember.entityId._id),
-            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(coMember.entityId._id) && drag.srcId !== String(coMember.entityId._id),
+            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(coMember.refId),
+            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(coMember.refId) && drag.srcId !== String(coMember.refId),
           }"
           :draggable="canEdit ? 'true' : 'false'"
-          @dragstart="canEdit && onDragStart($event, group._id, coMember.entityId._id)"
-          @dragover="onDragOver($event, group._id, coMember.entityId._id)"
+          @dragstart="canEdit && onDragStart($event, group._id, coMember.refId)"
+          @dragover="onDragOver($event, group._id, coMember.refId)"
           @dragleave="onDragLeave"
           @dragend="onDragEnd"
-          @drop="onDrop($event, group, coMember.entityId._id)"
+          @drop="onDrop($event, group, coMember.refId)"
         >
           <span v-if="canEdit" class="drag-handle">⠿</span>
           <span class="rel-label">{{ coMember.resolvedLabel || '—' }}</span>
           <span
             class="rel-target wiki-link"
-            @click="followLink(coMember.entityId._id, coMember.entityId.title)"
-          >{{ coMember.entityId.title }}</span>
+            @click="followLink(coMember.ref._id, coMember.ref.title)"
+          >{{ coMember.ref.title }}</span>
           <div class="rel-row-actions">
             <button
               v-if="canEdit"
               class="icon-btn"
               title="Edit"
-              @click="startEdit(group, coMember.entityId._id)"
+              @click="startEdit(group, coMember.refId)"
             >✎</button>
             <button
               v-if="canEdit"
               class="icon-btn danger"
               title="Remove"
-              @click="removeRelationship(group, coMember.entityId._id)"
+              @click="removeRelationship(group, coMember.refId)"
             >✕</button>
           </div>
         </div>
@@ -105,14 +105,14 @@
         </div>
         <div
           v-for="m in sub.members"
-          :key="m.entityId._id"
+          :key="String(m.refId)"
           class="rel-row subgroup-member-row"
         >
           <span class="rel-label">{{ m.resolvedLabel || '—' }}</span>
           <span
             class="rel-target wiki-link"
-            @click="followLink(m.entityId._id, m.entityId.title)"
-          >{{ m.entityId.title }}</span>
+            @click="followLink(m.ref._id, m.ref.title)"
+          >{{ m.ref.title }}</span>
         </div>
       </template>
 
@@ -133,15 +133,15 @@
       </template>
 
       <!-- Unlabeled sub-group links (edit-only management row) -->
-      <div v-if="canEdit && group.relationships?.some(r => !r.label)" class="subgroups-row">
+      <div v-if="canEdit && groupRefs(group).some(r => !r.label)" class="subgroups-row">
         <span class="subgroups-label">sub-groups:</span>
-        <template v-for="sub in group.relationships.filter(r => !r.label)" :key="sub.groupId">
+        <template v-for="sub in groupRefs(group).filter(r => !r.label)" :key="String(sub.refId)">
           <span class="subgroup-chip">
-            {{ subGroupTitle(sub) }}
+            {{ sub.ref?.label || '(unlabeled group)' }}
             <button
               class="icon-btn chip-remove"
               title="Unlink sub-group"
-              @click="unlinkSubGroup(group._id, sub.groupId)"
+              @click="unlinkSubGroup(group._id, sub.refId)"
             >✕</button>
           </span>
         </template>
@@ -323,8 +323,8 @@ function pluralize(word) {
 const subGroupLinkMap = computed(() => {
   const map = new Map();
   for (const group of (props.entity.relationships ?? [])) {
-    for (const link of (group.relationships ?? [])) {
-      map.set(String(link.groupId), { parentId: String(group._id), linkLabel: link.label });
+    for (const m of (group.members ?? []).filter(m => m.refModel === 'RelationshipGroup')) {
+      map.set(String(m.refId), { parentId: String(group._id), linkLabel: m.label });
     }
   }
   return map;
@@ -340,29 +340,34 @@ const topLevelGroups = computed(() =>
   })
 );
 
-// For a given parent group, return the sub-group links that have a label.
-// These sub-groups are "collapsed" — shown as a reference row, members excluded from direct display.
+// Shorthand: group-ref entries in a group's members array
+function groupRefs(group) {
+  return (group.members ?? []).filter(m => m.refModel === 'RelationshipGroup');
+}
+
+// For a given parent group, return the sub-group members that have a label
+// AND the viewer is in that sub-group (collapsed ref rows).
 function collapsedSubGroupRefs(group) {
-  return (group.relationships ?? [])
-    .filter(link => {
-      const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(link.groupId));
-      return sg && link.label;
+  return groupRefs(group)
+    .filter(m => {
+      if (!m.label) return false;
+      return (props.entity.relationships ?? []).some(g => String(g._id) === String(m.refId));
     })
-    .map(link => {
-      const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(link.groupId));
-      return { groupId: link.groupId, linkLabel: link.label, groupLabel: sg?.label || null };
+    .map(m => {
+      const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(m.refId));
+      return { groupId: m.refId, linkLabel: m.label, groupLabel: sg?.label || null };
     });
 }
 
-// Set of member IDs that belong to collapsed sub-groups (should be hidden from direct display).
+// Set of entity refIds that belong to collapsed sub-groups (hidden from direct display).
 function collapsedMemberIds(group) {
   const ids = new Set();
-  for (const link of (group.relationships ?? [])) {
-    const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(link.groupId));
-    if (sg && link.label) {
-      for (const m of sg.members) {
-        ids.add(String(m.entityId?._id ?? m.entityId));
-      }
+  for (const m of groupRefs(group)) {
+    if (!m.label) continue;
+    const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(m.refId));
+    if (!sg) continue; // viewer not in this sub-group
+    for (const sgm of (sg.members ?? [])) {
+      if (sgm.refModel === 'Entity') ids.add(String(sgm.refId));
     }
   }
   return ids;
@@ -371,7 +376,8 @@ function collapsedMemberIds(group) {
 function coMembersOf(group) {
   const collapsed = collapsedMemberIds(group);
   return (group.members ?? []).filter(m => {
-    const mid = String(m.entityId._id ?? m.entityId);
+    if (m.refModel !== 'Entity') return false;
+    const mid = String(m.refId);
     return mid !== String(props.entity._id) && !collapsed.has(mid);
   });
 }
@@ -428,7 +434,9 @@ function cancelAddToGroup() {
 function filterAddToGroupTargets(group) {
   const q = addToGroupForm.value.targetSearch.toLowerCase();
   if (!q) { addToGroupResults.value = []; return; }
-  const existingIds = new Set(group.members.map(m => String(m.entityId._id)));
+  const existingIds = new Set(
+    (group.members ?? []).filter(m => m.refModel === 'Entity').map(m => String(m.refId))
+  );
   addToGroupResults.value = (entities.value ?? [])
     .filter(e => e.title.toLowerCase().includes(q) && !existingIds.has(String(e._id)))
     .slice(0, 8);
@@ -470,8 +478,9 @@ const editDraft  = ref({ label: '', notes: '' });
 const editSaving = ref(false);
 
 function startEdit(group, coMemberId) {
-  // Load the co-member's label/notes — that's what's displayed in the row
-  const coMember = group.members.find(m => String(m.entityId._id) === String(coMemberId));
+  const coMember = group.members.find(
+    m => m.refModel === 'Entity' && String(m.refId) === String(coMemberId)
+  );
   editDraft.value = { label: coMember?.label ?? '', notes: coMember?.notes ?? '' };
   editingKey.value = rowKey(group._id, coMemberId);
 }
@@ -529,15 +538,27 @@ async function onDrop(e, group, targetEntityId) {
   const targetId = String(targetEntityId);
   if (!srcId || String(groupId) !== String(group._id) || srcId === targetId) return;
 
-  const allIds = group.members.map(m => String(m.entityId._id));
-  const fromIdx = allIds.indexOf(srcId);
-  const toIdx   = allIds.indexOf(targetId);
+  // Reorder entity members while preserving relative positions of group-ref members
+  const entityIds = group.members
+    .filter(m => m.refModel === 'Entity')
+    .map(m => String(m.refId));
+  const fromIdx = entityIds.indexOf(srcId);
+  const toIdx   = entityIds.indexOf(targetId);
   if (fromIdx === -1 || toIdx === -1) return;
 
-  allIds.splice(fromIdx, 1);
-  allIds.splice(toIdx, 0, srcId);
+  entityIds.splice(fromIdx, 1);
+  entityIds.splice(toIdx, 0, srcId);
 
-  await reorderMembers(group._id, allIds);
+  // Build full ordered members: replace entity slots with the reordered IDs
+  let entityIdx = 0;
+  const orderedMembers = group.members.map(m => {
+    if (m.refModel === 'Entity') {
+      return { refModel: 'Entity', refId: entityIds[entityIdx++] };
+    }
+    return { refModel: m.refModel, refId: String(m.refId) };
+  });
+
+  await reorderMembers(group._id, orderedMembers);
   emit('refresh');
 }
 
@@ -573,7 +594,7 @@ function clearSubGroupTarget() {
 function filterSubGroupTargets(currentGroup) {
   const q = linkSubGroupSearch.value.toLowerCase();
   if (!q) { linkSubGroupResults.value = []; return; }
-  const existingSubIds = new Set((currentGroup.relationships ?? []).map(r => String(r.groupId)));
+  const existingSubIds = new Set(groupRefs(currentGroup).map(m => String(m.refId)));
   linkSubGroupResults.value = (props.entity.relationships ?? [])
     .filter(g =>
       String(g._id) !== String(currentGroup._id) &&
@@ -606,11 +627,6 @@ async function unlinkSubGroup(parentGroupId, subGroupId) {
   if (!window.confirm('Unlink this sub-group? Members not already in the parent group will be re-added to it.')) return;
   await removeSubGroup(parentGroupId, subGroupId);
   emit('refresh');
-}
-
-// The resolver now enriches each relationship link with groupLabel, so we use it directly.
-function subGroupTitle(sub) {
-  return sub.groupLabel || '(unlabeled group)';
 }
 
 // ─── Add new ─────────────────────────────────────────────────────────────────

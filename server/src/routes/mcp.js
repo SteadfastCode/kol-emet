@@ -89,9 +89,9 @@ function createMcpServer() {
     async ({ id }) => {
       const entity = await Entity.findById(id).populate('open_questions', 'question status').lean();
       if (!entity) throw new Error(`Entity not found: ${id}`);
-      const rawGroups = await RelationshipGroup.find({ 'members.entityId': id })
-        .populate({ path: 'members.entityId', select: 'title' })
-        .lean();
+      const rawGroups = await RelationshipGroup.find({
+        members: { $elemMatch: { refId: id, refModel: 'Entity' } },
+      }).lean();
       const relationships = await resolveGroupLabels(rawGroups, id);
       return { content: [{ type: 'text', text: JSON.stringify({ ...entity, relationships }, null, 2) }] };
     }
@@ -275,15 +275,13 @@ function createMcpServer() {
     async ({ groupLabel, members }) => {
       const group = await RelationshipGroup.create({
         label: groupLabel ?? null,
-        members: members.map(m => ({ entityId: m.entityId, label: m.label ?? null, notes: m.notes ?? null })),
+        members: members.map(m => ({ refId: m.entityId, refModel: 'Entity', label: m.label ?? null, notes: m.notes ?? null })),
       });
       await Entity.updateMany(
         { _id: { $in: members.map(m => m.entityId) } },
         { $addToSet: { relationships: group._id } }
       );
-      const populated = await RelationshipGroup.findById(group._id)
-        .populate({ path: 'members.entityId', select: 'title' });
-      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
     }
   );
 
@@ -304,22 +302,22 @@ function createMcpServer() {
     async ({ groupId, members }) => {
       const group = await RelationshipGroup.findById(groupId);
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
-      const existingIds = new Set(group.members.map(m => String(m.entityId)));
+      const existingIds = new Set(
+        group.members.filter(m => m.refModel === 'Entity').map(m => String(m.refId))
+      );
       const duplicates = members.filter(m => existingIds.has(String(m.entityId)));
       if (duplicates.length) {
         throw new Error(`Already a member of this group: ${duplicates.map(m => m.entityId).join(', ')}`);
       }
       for (const m of members) {
-        group.members.push({ entityId: m.entityId, label: m.label ?? null, notes: m.notes ?? null });
+        group.members.push({ refId: m.entityId, refModel: 'Entity', label: m.label ?? null, notes: m.notes ?? null });
       }
       await group.save();
       await Entity.updateMany(
         { _id: { $in: members.map(m => m.entityId) } },
         { $addToSet: { relationships: group._id } }
       );
-      const populated = await RelationshipGroup.findById(group._id)
-        .populate({ path: 'members.entityId', select: 'title' });
-      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
     }
   );
 
@@ -333,7 +331,7 @@ function createMcpServer() {
     async ({ groupId, label }) => {
       const group = await RelationshipGroup.findByIdAndUpdate(
         groupId, { label: label ?? null }, { new: true, runValidators: true }
-      ).populate({ path: 'members.entityId', select: 'title' });
+      );
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
       return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
     }
@@ -350,11 +348,14 @@ function createMcpServer() {
     async ({ groupId, entityId }) => {
       const group = await RelationshipGroup.findById(groupId);
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
-      group.members = group.members.filter(m => String(m.entityId) !== String(entityId));
+      group.members = group.members.filter(
+        m => !(m.refModel === 'Entity' && String(m.refId) === String(entityId))
+      );
       await Entity.updateOne({ _id: entityId }, { $pull: { relationships: group._id } });
-      if (group.members.length < 2) {
-        for (const m of group.members) {
-          await Entity.updateOne({ _id: m.entityId }, { $pull: { relationships: group._id } });
+      const entityMembers = group.members.filter(m => m.refModel === 'Entity');
+      if (entityMembers.length < 2) {
+        for (const m of entityMembers) {
+          await Entity.updateOne({ _id: m.refId }, { $pull: { relationships: group._id } });
         }
         await group.deleteOne();
         return { content: [{ type: 'text', text: 'Relationship removed and orphaned group deleted.' }] };
@@ -379,14 +380,14 @@ function createMcpServer() {
     async ({ groupId, entityId, label, notes }) => {
       const group = await RelationshipGroup.findById(groupId);
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
-      const member = group.members.find(m => String(m.entityId) === String(entityId));
+      const member = group.members.find(
+        m => m.refModel === 'Entity' && String(m.refId) === String(entityId)
+      );
       if (!member) throw new Error(`Member ${entityId} not found in group ${groupId}`);
       if (label !== undefined) member.label = label;
       if (notes !== undefined) member.notes = notes;
       await group.save();
-      const populated = await RelationshipGroup.findById(group._id)
-        .populate({ path: 'members.entityId', select: 'title' });
-      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(group, null, 2) }] };
     }
   );
 
@@ -424,13 +425,13 @@ function createMcpServer() {
       const child = await RelationshipGroup.findById(subGroupId);
       if (!child) throw new Error(`Sub-group not found: ${subGroupId}`);
       if (String(parent._id) === String(child._id)) throw new Error('A group cannot be its own sub-group');
-      const alreadyLinked = parent.relationships.some(r => String(r.groupId) === String(subGroupId));
+      const alreadyLinked = parent.members.some(
+        m => m.refModel === 'RelationshipGroup' && String(m.refId) === String(subGroupId)
+      );
       if (alreadyLinked) throw new Error('Group is already a sub-group of this parent');
-      parent.relationships.push({ groupId: subGroupId, label: linkLabel ?? null });
+      parent.members.push({ refId: subGroupId, refModel: 'RelationshipGroup', label: linkLabel ?? null, notes: null });
       await parent.save();
-      const populated = await RelationshipGroup.findById(parent._id)
-        .populate({ path: 'members.entityId', select: 'title' });
-      return { content: [{ type: 'text', text: JSON.stringify(populated, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(parent, null, 2) }] };
     }
   );
 
@@ -445,20 +446,24 @@ function createMcpServer() {
     async ({ parentGroupId, subGroupId }) => {
       const parent = await RelationshipGroup.findById(parentGroupId);
       if (!parent) throw new Error(`Parent group not found: ${parentGroupId}`);
-      const linked = parent.relationships.some(r => String(r.groupId) === String(subGroupId));
+      const linked = parent.members.some(
+        m => m.refModel === 'RelationshipGroup' && String(m.refId) === String(subGroupId)
+      );
       if (!linked) throw new Error(`Group ${subGroupId} is not a sub-group of ${parentGroupId}`);
-      parent.relationships = parent.relationships.filter(r => String(r.groupId) !== String(subGroupId));
+      parent.members = parent.members.filter(
+        m => !(m.refModel === 'RelationshipGroup' && String(m.refId) === String(subGroupId))
+      );
       const subGroup = await RelationshipGroup.findById(subGroupId);
       const reAdded = [];
       if (subGroup) {
-        for (const subMember of subGroup.members) {
-          const alreadyInParent = parent.members.some(
-            m => String(m.entityId) === String(subMember.entityId)
-          );
-          if (!alreadyInParent) {
-            parent.members.push({ entityId: subMember.entityId, label: subMember.label, notes: subMember.notes });
-            await Entity.updateOne({ _id: subMember.entityId }, { $addToSet: { relationships: parent._id } });
-            reAdded.push(String(subMember.entityId));
+        const existingEntityIds = new Set(
+          parent.members.filter(m => m.refModel === 'Entity').map(m => String(m.refId))
+        );
+        for (const subMember of subGroup.members.filter(m => m.refModel === 'Entity')) {
+          if (!existingEntityIds.has(String(subMember.refId))) {
+            parent.members.push({ refId: subMember.refId, refModel: 'Entity', label: subMember.label, notes: subMember.notes });
+            await Entity.updateOne({ _id: subMember.refId }, { $addToSet: { relationships: parent._id } });
+            reAdded.push(String(subMember.refId));
           }
         }
       }

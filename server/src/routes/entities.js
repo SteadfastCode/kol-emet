@@ -56,9 +56,9 @@ router.get('/:id', async (req, res) => {
     if (!entity) return res.status(404).json({ error: 'Not found' });
 
     // Query groups dynamically — source of truth is the group's members array, not the back-reference on Entity
-    const rawGroups = await RelationshipGroup.find({ 'members.entityId': req.params.id })
-      .populate({ path: 'members.entityId', select: 'title' })
-      .lean();
+    const rawGroups = await RelationshipGroup.find({
+      members: { $elemMatch: { refId: req.params.id, refModel: 'Entity' } },
+    }).lean();
 
     const relationships = await resolveGroupLabels(rawGroups, req.params.id);
 
@@ -126,12 +126,17 @@ router.delete('/:id', requireActor, async (req, res) => {
     if (!entity) return res.status(404).json({ error: 'Not found' });
 
     // Clean up relationship groups: query dynamically so we catch all groups regardless of back-reference state
-    const groups = await RelationshipGroup.find({ 'members.entityId': entity._id });
+    const groups = await RelationshipGroup.find({
+      members: { $elemMatch: { refId: entity._id, refModel: 'Entity' } },
+    });
     for (const group of groups) {
-      group.members = group.members.filter(m => String(m.entityId) !== String(entity._id));
-      if (group.members.length < 2) {
+      group.members = group.members.filter(
+        m => !(m.refModel === 'Entity' && String(m.refId) === String(entity._id))
+      );
+      const entityMembers = group.members.filter(m => m.refModel === 'Entity');
+      if (entityMembers.length < 2) {
         await Entity.updateMany(
-          { _id: { $in: group.members.map(m => m.entityId) } },
+          { _id: { $in: entityMembers.map(m => m.refId) } },
           { $pull: { relationships: group._id } }
         );
         await RelationshipGroup.findByIdAndDelete(group._id);

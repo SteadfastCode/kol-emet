@@ -5,18 +5,51 @@ import { requireActor } from '../middleware/auth.js';
 
 const router = Router();
 
-// Populate helper — returns group with member entry titles resolved
-function populateGroup(query) {
-  return query.populate({
-    path: 'members.entityId',
-    select: 'title',
-  });
+// ─── Population helper ────────────────────────────────────────────────────────
+
+/**
+ * Manually populate `ref` on each member of a lean group document.
+ *   Entity members:            ref = { _id, title }
+ *   RelationshipGroup members: ref = { _id, label }
+ */
+async function populateMembers(group) {
+  if (!group) return null;
+
+  const entityIds = group.members.filter(m => m.refModel === 'Entity').map(m => m.refId);
+  const groupIds  = group.members.filter(m => m.refModel === 'RelationshipGroup').map(m => m.refId);
+
+  const [entities, groups] = await Promise.all([
+    entityIds.length
+      ? Entity.find({ _id: { $in: entityIds } }).select('title').lean()
+      : Promise.resolve([]),
+    groupIds.length
+      ? RelationshipGroup.find({ _id: { $in: groupIds } }).select('label').lean()
+      : Promise.resolve([]),
+  ]);
+
+  const entityMap = new Map(entities.map(e => [String(e._id), e]));
+  const groupMap  = new Map(groups.map(g => [String(g._id), g]));
+
+  return {
+    ...group,
+    members: group.members.map(m => ({
+      ...m,
+      ref: m.refModel === 'Entity'
+        ? (entityMap.get(String(m.refId)) ?? { _id: m.refId, title: '(deleted)' })
+        : (groupMap.get(String(m.refId))  ?? { _id: m.refId, label: null }),
+    })),
+  };
+}
+
+async function fetchPopulated(id) {
+  const group = await RelationshipGroup.findById(id).lean();
+  return populateMembers(group);
 }
 
 // GET /relationship-groups/:id
 router.get('/:id', async (req, res) => {
   try {
-    const group = await populateGroup(RelationshipGroup.findById(req.params.id));
+    const group = await fetchPopulated(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
     res.json(group);
   } catch (err) {
@@ -24,7 +57,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /relationship-groups — create group with initial members
+// POST /relationship-groups — create group with initial entity members
 // Body: { label?, members: [{ entityId, label?, notes? }] }
 router.post('/', requireActor, async (req, res) => {
   try {
@@ -34,15 +67,21 @@ router.post('/', requireActor, async (req, res) => {
       return res.status(400).json({ error: 'A relationship group requires at least 2 members' });
     }
 
-    const group = await RelationshipGroup.create({ label, members });
+    const unifiedMembers = members.map(m => ({
+      refId:    m.entityId,
+      refModel: 'Entity',
+      label:    m.label ?? null,
+      notes:    m.notes ?? null,
+    }));
 
-    // Push groupId onto each member's entry
+    const group = await RelationshipGroup.create({ label, members: unifiedMembers });
+
     await Entity.updateMany(
       { _id: { $in: members.map(m => m.entityId) } },
       { $addToSet: { relationships: group._id } }
     );
 
-    const populated = await populateGroup(RelationshipGroup.findById(group._id));
+    const populated = await fetchPopulated(group._id);
     res.status(201).json(populated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -53,17 +92,18 @@ router.post('/', requireActor, async (req, res) => {
 router.patch('/:id', requireActor, async (req, res) => {
   try {
     const { label } = req.body;
-    const group = await populateGroup(
-      RelationshipGroup.findByIdAndUpdate(req.params.id, { label }, { new: true, runValidators: true })
-    );
-    if (!group) return res.status(404).json({ error: 'Not found' });
-    res.json(group);
+    const updated = await RelationshipGroup.findByIdAndUpdate(
+      req.params.id, { label }, { new: true, runValidators: true }
+    ).lean();
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    const populated = await populateMembers(updated);
+    res.json(populated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// POST /relationship-groups/:id/members — add one or more members to an existing group
+// POST /relationship-groups/:id/members — add one or more entity members
 // Body: { members: [{ entityId, label?, notes? }] }
 router.post('/:id/members', requireActor, async (req, res) => {
   try {
@@ -78,14 +118,16 @@ router.post('/:id/members', requireActor, async (req, res) => {
     const group = await RelationshipGroup.findById(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
-    const existingIds = new Set(group.members.map(m => String(m.entityId)));
-    const duplicates = members.filter(m => existingIds.has(String(m.entityId)));
+    const existingEntityIds = new Set(
+      group.members.filter(m => m.refModel === 'Entity').map(m => String(m.refId))
+    );
+    const duplicates = members.filter(m => existingEntityIds.has(String(m.entityId)));
     if (duplicates.length) {
       return res.status(409).json({ error: `Already a member: ${duplicates.map(m => m.entityId).join(', ')}` });
     }
 
     for (const m of members) {
-      group.members.push({ entityId: m.entityId, label: m.label ?? null, notes: m.notes ?? null });
+      group.members.push({ refId: m.entityId, refModel: 'Entity', label: m.label ?? null, notes: m.notes ?? null });
     }
     await group.save();
 
@@ -94,78 +136,86 @@ router.post('/:id/members', requireActor, async (req, res) => {
       { $addToSet: { relationships: group._id } }
     );
 
-    const populated = await populateGroup(RelationshipGroup.findById(group._id));
+    const populated = await fetchPopulated(group._id);
     res.status(201).json(populated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// PATCH /relationship-groups/:id/members/reorder — reorder members
+// PATCH /relationship-groups/:id/members/reorder — reorder all members
 // Must be defined BEFORE /:id/members/:entityId to prevent "reorder" matching as entityId.
-// Body: { orderedEntityIds: string[] } — full list of all member IDs in new order
+// Body: { orderedMembers: [{ refModel, refId }] } — full list in new order
 router.patch('/:id/members/reorder', requireActor, async (req, res) => {
   try {
-    const { orderedEntityIds } = req.body;
-    if (!Array.isArray(orderedEntityIds)) {
-      return res.status(400).json({ error: 'orderedEntityIds must be an array' });
+    const { orderedMembers } = req.body;
+    if (!Array.isArray(orderedMembers)) {
+      return res.status(400).json({ error: 'orderedMembers must be an array' });
     }
+
     const group = await RelationshipGroup.findById(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
-    const existingIds = new Set(group.members.map(m => String(m.entityId)));
     if (
-      orderedEntityIds.length !== group.members.length ||
-      !orderedEntityIds.every(id => existingIds.has(String(id)))
+      orderedMembers.length !== group.members.length ||
+      !orderedMembers.every(om =>
+        group.members.some(m => m.refModel === om.refModel && String(m.refId) === String(om.refId))
+      )
     ) {
-      return res.status(400).json({ error: 'orderedEntityIds must contain all existing member IDs exactly once' });
+      return res.status(400).json({ error: 'orderedMembers must contain all existing members exactly once' });
     }
 
-    const memberMap = new Map(group.members.map(m => [String(m.entityId), m]));
-    group.members = orderedEntityIds.map(id => memberMap.get(String(id)));
+    const memberMap = new Map(group.members.map(m => [`${m.refModel}:${String(m.refId)}`, m]));
+    group.members = orderedMembers.map(om => memberMap.get(`${om.refModel}:${String(om.refId)}`));
     await group.save();
 
-    const populated = await populateGroup(RelationshipGroup.findById(group._id));
+    const populated = await fetchPopulated(group._id);
     res.json(populated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// PATCH /relationship-groups/:id/members/:entityId — update a member's label or notes
+// PATCH /relationship-groups/:id/members/:entityId — update an entity member's label or notes
 router.patch('/:id/members/:entityId', requireActor, async (req, res) => {
   try {
     const { label, notes } = req.body;
     const group = await RelationshipGroup.findById(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
-    const member = group.members.find(m => String(m.entityId) === req.params.entityId);
+    const member = group.members.find(
+      m => m.refModel === 'Entity' && String(m.refId) === req.params.entityId
+    );
     if (!member) return res.status(404).json({ error: 'Member not found' });
 
     if (label !== undefined) member.label = label;
     if (notes !== undefined) member.notes = notes;
     await group.save();
 
-    const populated = await populateGroup(RelationshipGroup.findById(group._id));
+    const populated = await fetchPopulated(group._id);
     res.json(populated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// DELETE /relationship-groups/:id/members/:entityId — remove a member
+// DELETE /relationship-groups/:id/members/:entityId — remove an entity member
 router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
   try {
     const group = await RelationshipGroup.findById(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
-    group.members = group.members.filter(m => String(m.entityId) !== req.params.entityId);
+    group.members = group.members.filter(
+      m => !(m.refModel === 'Entity' && String(m.refId) === req.params.entityId)
+    );
     await Entity.findByIdAndUpdate(req.params.entityId, { $pull: { relationships: group._id } });
 
-    // If fewer than 2 members remain, the group is orphaned — delete it and clean up
-    if (group.members.length < 2) {
+    const entityMembers = group.members.filter(m => m.refModel === 'Entity');
+
+    // If fewer than 2 entity members remain, the group is orphaned — delete it and clean up
+    if (entityMembers.length < 2) {
       await Entity.updateMany(
-        { _id: { $in: group.members.map(m => m.entityId) } },
+        { _id: { $in: entityMembers.map(m => m.refId) } },
         { $pull: { relationships: group._id } }
       );
       await RelationshipGroup.findByIdAndDelete(group._id);
@@ -196,13 +246,15 @@ router.post('/:id/subgroups', requireActor, async (req, res) => {
       return res.status(400).json({ error: 'A group cannot be its own sub-group' });
     }
 
-    const alreadyLinked = parent.relationships.some(r => String(r.groupId) === String(groupId));
+    const alreadyLinked = parent.members.some(
+      m => m.refModel === 'RelationshipGroup' && String(m.refId) === String(groupId)
+    );
     if (alreadyLinked) return res.status(409).json({ error: 'Group is already a sub-group' });
 
-    parent.relationships.push({ groupId, label: label || null });
+    parent.members.push({ refId: groupId, refModel: 'RelationshipGroup', label: label || null, notes: null });
     await parent.save();
 
-    const populated = await populateGroup(RelationshipGroup.findById(parent._id));
+    const populated = await fetchPopulated(parent._id);
     res.status(201).json(populated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -210,32 +262,32 @@ router.post('/:id/subgroups', requireActor, async (req, res) => {
 });
 
 // DELETE /relationship-groups/:id/subgroups/:subGroupId — unlink a sub-group
-// Any members of the sub-group that are not already in the parent are re-added.
+// Any entity members of the sub-group not already in the parent are re-added.
 router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res) => {
   try {
     const parent = await RelationshipGroup.findById(req.params.id);
     if (!parent) return res.status(404).json({ error: 'Parent group not found' });
 
-    const linked = parent.relationships.some(r => String(r.groupId) === req.params.subGroupId);
+    const linked = parent.members.some(
+      m => m.refModel === 'RelationshipGroup' && String(m.refId) === req.params.subGroupId
+    );
     if (!linked) return res.status(404).json({ error: 'Sub-group link not found' });
 
     // Remove the sub-group link
-    parent.relationships = parent.relationships.filter(r => String(r.groupId) !== req.params.subGroupId);
+    parent.members = parent.members.filter(
+      m => !(m.refModel === 'RelationshipGroup' && String(m.refId) === req.params.subGroupId)
+    );
 
-    // Re-add sub-group members to the parent if they're not already there
+    // Re-add sub-group's entity members to the parent if not already there
     const subGroup = await RelationshipGroup.findById(req.params.subGroupId);
     if (subGroup) {
-      for (const subMember of subGroup.members) {
-        const alreadyInParent = parent.members.some(
-          m => String(m.entityId) === String(subMember.entityId)
-        );
-        if (!alreadyInParent) {
-          parent.members.push({
-            entityId: subMember.entityId,
-            label:    subMember.label,
-            notes:    subMember.notes,
-          });
-          await Entity.findByIdAndUpdate(subMember.entityId, { $addToSet: { relationships: parent._id } });
+      const existingEntityIds = new Set(
+        parent.members.filter(m => m.refModel === 'Entity').map(m => String(m.refId))
+      );
+      for (const m of subGroup.members.filter(m => m.refModel === 'Entity')) {
+        if (!existingEntityIds.has(String(m.refId))) {
+          parent.members.push({ refId: m.refId, refModel: 'Entity', label: m.label, notes: m.notes });
+          await Entity.findByIdAndUpdate(m.refId, { $addToSet: { relationships: parent._id } });
         }
       }
     }
@@ -247,14 +299,15 @@ router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res) => {
   }
 });
 
-// DELETE /relationship-groups/:id — delete entire group and clean up all member entries
+// DELETE /relationship-groups/:id — delete entire group and clean up all entity member entries
 router.delete('/:id', requireActor, async (req, res) => {
   try {
     const group = await RelationshipGroup.findByIdAndDelete(req.params.id);
     if (!group) return res.status(404).json({ error: 'Not found' });
 
+    const entityIds = group.members.filter(m => m.refModel === 'Entity').map(m => m.refId);
     await Entity.updateMany(
-      { _id: { $in: group.members.map(m => m.entityId) } },
+      { _id: { $in: entityIds } },
       { $pull: { relationships: group._id } }
     );
 

@@ -141,9 +141,9 @@ async function executeTool(name, args) {
   if (name === 'get_entity') {
     const entity = await Entity.findById(args.id).lean();
     if (!entity) return { error: `Entity not found: ${args.id}` };
-    const rawGroups = await RelationshipGroup.find({ 'members.entityId': args.id })
-      .populate({ path: 'members.entityId', select: 'title' })
-      .lean();
+    const rawGroups = await RelationshipGroup.find({
+      members: { $elemMatch: { refId: args.id, refModel: 'Entity' } },
+    }).lean();
     const relationships = await resolveGroupLabels(rawGroups, args.id);
     return { ...entity, relationships };
   }
