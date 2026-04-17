@@ -101,28 +101,8 @@ router.post('/:id/members', requireActor, async (req, res) => {
   }
 });
 
-// PATCH /relationship-groups/:id/members/:entityId — update a member's label or notes
-router.patch('/:id/members/:entityId', requireActor, async (req, res) => {
-  try {
-    const { label, notes } = req.body;
-    const group = await RelationshipGroup.findById(req.params.id);
-    if (!group) return res.status(404).json({ error: 'Not found' });
-
-    const member = group.members.find(m => String(m.entityId) === req.params.entityId);
-    if (!member) return res.status(404).json({ error: 'Member not found' });
-
-    if (label !== undefined) member.label = label;
-    if (notes !== undefined) member.notes = notes;
-    await group.save();
-
-    const populated = await populateGroup(RelationshipGroup.findById(group._id));
-    res.json(populated);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
 // PATCH /relationship-groups/:id/members/reorder — reorder members
+// Must be defined BEFORE /:id/members/:entityId to prevent "reorder" matching as entityId.
 // Body: { orderedEntityIds: string[] } — full list of all member IDs in new order
 router.patch('/:id/members/reorder', requireActor, async (req, res) => {
   try {
@@ -143,6 +123,27 @@ router.patch('/:id/members/reorder', requireActor, async (req, res) => {
 
     const memberMap = new Map(group.members.map(m => [String(m.entityId), m]));
     group.members = orderedEntityIds.map(id => memberMap.get(String(id)));
+    await group.save();
+
+    const populated = await populateGroup(RelationshipGroup.findById(group._id));
+    res.json(populated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// PATCH /relationship-groups/:id/members/:entityId — update a member's label or notes
+router.patch('/:id/members/:entityId', requireActor, async (req, res) => {
+  try {
+    const { label, notes } = req.body;
+    const group = await RelationshipGroup.findById(req.params.id);
+    if (!group) return res.status(404).json({ error: 'Not found' });
+
+    const member = group.members.find(m => String(m.entityId) === req.params.entityId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    if (label !== undefined) member.label = label;
+    if (notes !== undefined) member.notes = notes;
     await group.save();
 
     const populated = await populateGroup(RelationshipGroup.findById(group._id));
