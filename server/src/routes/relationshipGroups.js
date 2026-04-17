@@ -149,10 +149,10 @@ router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
 });
 
 // POST /relationship-groups/:id/subgroups — link an existing group as a sub-group
-// Body: { groupId }
+// Body: { groupId, label? }
 router.post('/:id/subgroups', requireActor, async (req, res) => {
   try {
-    const { groupId } = req.body;
+    const { groupId, label = null } = req.body;
     if (!groupId) return res.status(400).json({ error: 'groupId is required' });
 
     const parent = await RelationshipGroup.findById(req.params.id);
@@ -168,7 +168,7 @@ router.post('/:id/subgroups', requireActor, async (req, res) => {
     const alreadyLinked = parent.relationships.some(r => String(r.groupId) === String(groupId));
     if (alreadyLinked) return res.status(409).json({ error: 'Group is already a sub-group' });
 
-    parent.relationships.push({ groupId });
+    parent.relationships.push({ groupId, label: label || null });
     await parent.save();
 
     const populated = await populateGroup(RelationshipGroup.findById(parent._id));

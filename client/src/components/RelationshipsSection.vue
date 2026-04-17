@@ -6,7 +6,7 @@
     </div>
 
     <!-- Existing relationships -->
-    <template v-for="group in entity.relationships" :key="group._id">
+    <template v-for="group in topLevelGroups" :key="group._id">
 
       <!-- Group label row — always show when canEdit so actions are accessible -->
       <div v-if="group.label || canEdit" class="group-label-row">
@@ -61,13 +61,13 @@
           >{{ coMember.entityId.title }}</span>
           <div class="rel-row-actions">
             <button
-              v-if="canEdit"
+              v-if="canEdit && !coMember._fromSubGroup"
               class="icon-btn"
               title="Edit"
               @click="startEdit(group, coMember.entityId._id)"
             >✎</button>
             <button
-              v-if="canEdit"
+              v-if="canEdit && !coMember._fromSubGroup"
               class="icon-btn danger"
               title="Remove"
               @click="removeRelationship(group)"
@@ -76,14 +76,29 @@
         </div>
       </template>
 
-      <!-- Linked sub-groups -->
-      <div v-if="group.relationships?.length" class="subgroups-row">
+      <!-- Collapsed sub-group reference rows (labeled sub-groups) -->
+      <template v-for="ref in collapsedSubGroupRefs(group)" :key="ref.groupId">
+        <div class="rel-row subgroup-ref-row">
+          <span class="rel-label">{{ pluralize(ref.linkLabel) }}</span>
+          <span class="rel-target subgroup-ref-name">{{ ref.groupLabel || '(group)' }}</span>
+          <div class="rel-row-actions">
+            <button
+              v-if="canEdit"
+              class="icon-btn danger"
+              title="Unlink sub-group"
+              @click="unlinkSubGroup(group._id, ref.groupId)"
+            >✕</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- Unlabeled sub-group links (edit-only management row) -->
+      <div v-if="canEdit && group.relationships?.some(r => !r.label)" class="subgroups-row">
         <span class="subgroups-label">sub-groups:</span>
-        <template v-for="sub in group.relationships" :key="sub.groupId">
+        <template v-for="sub in group.relationships.filter(r => !r.label)" :key="sub.groupId">
           <span class="subgroup-chip">
             {{ subGroupTitle(sub.groupId, group) }}
             <button
-              v-if="canEdit"
               class="icon-btn chip-remove"
               title="Unlink sub-group"
               @click="unlinkSubGroup(group._id, sub.groupId)"
@@ -114,6 +129,10 @@
             ✓ {{ linkSubGroupTargetLabel }}
             <button class="icon-btn" @click="clearSubGroupTarget">✕</button>
           </div>
+        </div>
+        <div class="form-field">
+          <label class="field-label">Link label <span class="field-hint">(optional — if set, sub-group shows as a row; if omitted, members merge into parent)</span></label>
+          <input v-model="linkSubGroupLinkLabel" class="input input-sm" placeholder="e.g. Inhabitant (singular)" />
         </div>
         <div class="row-actions">
           <button class="btn-sm" @click="cancelLinkSubGroup">Cancel</button>
@@ -176,7 +195,7 @@
     </template>
 
     <!-- Empty state -->
-    <div v-if="!entity.relationships?.length && !addingNew" class="rel-empty">
+    <div v-if="!topLevelGroups.length && !addingNew" class="rel-empty">
       No relationships yet.
     </div>
 
@@ -240,7 +259,7 @@
 </template>
 
 <script setup>
-import { ref, inject } from 'vue';
+import { ref, computed, inject } from 'vue';
 import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, deleteGroup, addSubGroup, removeSubGroup } from '../api/relationshipGroups.js';
 
 const props = defineProps({ entity: Object, canEdit: Boolean });
@@ -249,10 +268,72 @@ const emit = defineEmits(['refresh']);
 const entities = inject('entities', ref([]));
 const followLink = inject('followLink', () => {});
 
+// ─── Pluralization ────────────────────────────────────────────────────────────
+
+function pluralize(word) {
+  if (!word) return word;
+  if (/(?:s|sh|ch|x|z)$/i.test(word)) return word + 'es';
+  if (/[^aeiou]y$/i.test(word)) return word.slice(0, -1) + 'ies';
+  return word + 's';
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Map: childGroupId (string) → { parentId, linkLabel }
+const subGroupLinkMap = computed(() => {
+  const map = new Map();
+  for (const group of (props.entity.relationships ?? [])) {
+    for (const link of (group.relationships ?? [])) {
+      map.set(String(link.groupId), { parentId: String(group._id), linkLabel: link.label });
+    }
+  }
+  return map;
+});
+
+// Show a group at top level if:
+//   - it is not referenced as a sub-group at all, OR
+//   - it IS a sub-group but the link has a label (viewer is in both; show both)
+const topLevelGroups = computed(() =>
+  (props.entity.relationships ?? []).filter(g => {
+    const linkInfo = subGroupLinkMap.value.get(String(g._id));
+    return !linkInfo || !!linkInfo.linkLabel;
+  })
+);
+
+// For a given parent group, return the sub-group links that have a label.
+// These sub-groups are "collapsed" — shown as a reference row, members excluded from direct display.
+function collapsedSubGroupRefs(group) {
+  return (group.relationships ?? [])
+    .filter(link => {
+      const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(link.groupId));
+      return sg && link.label;
+    })
+    .map(link => {
+      const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(link.groupId));
+      return { groupId: link.groupId, linkLabel: link.label, groupLabel: sg?.label || null };
+    });
+}
+
+// Set of member IDs that belong to collapsed sub-groups (should be hidden from direct display).
+function collapsedMemberIds(group) {
+  const ids = new Set();
+  for (const link of (group.relationships ?? [])) {
+    const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(link.groupId));
+    if (sg && link.label) {
+      for (const m of sg.members) {
+        ids.add(String(m.entityId?._id ?? m.entityId));
+      }
+    }
+  }
+  return ids;
+}
+
 function coMembersOf(group) {
-  return group.members.filter(m => String(m.entityId._id) !== String(props.entity._id));
+  const collapsed = collapsedMemberIds(group);
+  return group.members.filter(m => {
+    const mid = String(m.entityId._id ?? m.entityId);
+    return mid !== String(props.entity._id) && !collapsed.has(mid);
+  });
 }
 
 function rowKey(groupId, coMemberId) {
@@ -381,22 +462,25 @@ async function removeRelationship(group) {
 
 // ─── Link / unlink sub-group ─────────────────────────────────────────────────
 
-const linkSubGroupParentId  = ref(null);
-const linkSubGroupSearch    = ref('');
-const linkSubGroupResults   = ref([]);
-const linkSubGroupTargetId  = ref(null);
+const linkSubGroupParentId    = ref(null);
+const linkSubGroupSearch      = ref('');
+const linkSubGroupResults     = ref([]);
+const linkSubGroupTargetId    = ref(null);
 const linkSubGroupTargetLabel = ref('');
-const linkSubGroupSaving    = ref(false);
+const linkSubGroupLinkLabel   = ref('');
+const linkSubGroupSaving      = ref(false);
 
 function startLinkSubGroup(groupId) {
-  linkSubGroupParentId.value = groupId;
-  linkSubGroupSearch.value   = '';
-  linkSubGroupResults.value  = [];
-  linkSubGroupTargetId.value = null;
+  linkSubGroupParentId.value  = groupId;
+  linkSubGroupSearch.value    = '';
+  linkSubGroupResults.value   = [];
+  linkSubGroupTargetId.value  = null;
+  linkSubGroupLinkLabel.value = '';
 }
 
 function cancelLinkSubGroup() {
-  linkSubGroupParentId.value = null;
+  linkSubGroupParentId.value  = null;
+  linkSubGroupLinkLabel.value = '';
 }
 
 function clearSubGroupTarget() {
@@ -429,7 +513,7 @@ async function saveLinkSubGroup(parentGroupId) {
   if (!linkSubGroupTargetId.value) return;
   linkSubGroupSaving.value = true;
   try {
-    await addSubGroup(parentGroupId, linkSubGroupTargetId.value);
+    await addSubGroup(parentGroupId, linkSubGroupTargetId.value, linkSubGroupLinkLabel.value || null);
     cancelLinkSubGroup();
     emit('refresh');
   } finally {
@@ -714,7 +798,15 @@ async function saveNew() {
   margin-top: 2px;
 }
 
-/* Sub-group chips */
+/* Collapsed sub-group reference row */
+.subgroup-ref-row .rel-target.subgroup-ref-name {
+  font-style: italic;
+  color: #888;
+  cursor: default;
+}
+.subgroup-ref-row .rel-target.subgroup-ref-name:hover { text-decoration: none; }
+
+/* Unlabeled sub-group chips (edit-only management row) */
 .subgroups-row {
   display: flex;
   align-items: center;
@@ -750,4 +842,12 @@ async function saveNew() {
   color: #333;
 }
 .chip-remove:hover { color: #e07070; }
+
+.field-hint {
+  font-size: 9px;
+  color: #444;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
 </style>

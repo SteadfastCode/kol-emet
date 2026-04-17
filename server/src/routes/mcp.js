@@ -395,6 +395,10 @@ function createMcpServer() {
     'Link an existing relationship group as a sub-group of a broader group, enabling context-correct label display. ' +
     'When viewing a co-member, the label comes from the most specific (deepest) group that contains BOTH the viewer and that co-member. ' +
     'Sub-groups are more specific than their parent, so their labels take precedence. ' +
+    '\n\nOptional linkLabel: if provided, the sub-group is shown as a collapsed reference row in the parent ' +
+    '(e.g. linkLabel "Inhabitant" on an "Elias Family" sub-group shows "Inhabitant: Elias Family" in the parent view, ' +
+    'and individual family members are NOT shown as direct co-members of the parent). ' +
+    'If omitted, the sub-group is hidden from the top-level view and its members merge into the parent for display.' +
     '\n\nEXAMPLE — the Elias family tree (build all groups first, then link bottom-up):\n' +
     '  add_subgroup_to_relationship(siblingsGroupId, twinsGroupId)      // twins ⊂ siblings\n' +
     '  add_subgroup_to_relationship(parentageGroupId, siblingsGroupId)  // siblings ⊂ parentage\n' +
@@ -408,8 +412,13 @@ function createMcpServer() {
     {
       parentGroupId: z.string().describe('MongoDB ObjectId of the broader/parent group'),
       subGroupId:    z.string().describe('MongoDB ObjectId of the narrower group to nest inside the parent'),
+      linkLabel:     z.string().optional().describe(
+        'Optional label for this sub-group link (e.g. "Inhabitant"). ' +
+        'If set, the sub-group appears as a collapsed reference row in the parent view and its members are excluded from the parent\'s direct member list. ' +
+        'If omitted, the sub-group is hidden from top-level and its members merge into the parent display.'
+      ),
     },
-    async ({ parentGroupId, subGroupId }) => {
+    async ({ parentGroupId, subGroupId, linkLabel }) => {
       const parent = await RelationshipGroup.findById(parentGroupId);
       if (!parent) throw new Error(`Parent group not found: ${parentGroupId}`);
       const child = await RelationshipGroup.findById(subGroupId);
@@ -417,7 +426,7 @@ function createMcpServer() {
       if (String(parent._id) === String(child._id)) throw new Error('A group cannot be its own sub-group');
       const alreadyLinked = parent.relationships.some(r => String(r.groupId) === String(subGroupId));
       if (alreadyLinked) throw new Error('Group is already a sub-group of this parent');
-      parent.relationships.push({ groupId: subGroupId });
+      parent.relationships.push({ groupId: subGroupId, label: linkLabel ?? null });
       await parent.save();
       const populated = await RelationshipGroup.findById(parent._id)
         .populate({ path: 'members.entityId', select: 'title' });

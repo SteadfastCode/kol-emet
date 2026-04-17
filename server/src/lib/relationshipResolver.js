@@ -101,16 +101,41 @@ function bestLabel(group, viewerEntityId, coMemberEntityId) {
  * own label in the root group if no sub-group applies.
  */
 export async function resolveGroupLabels(groups, viewerEntityId) {
+  const viewerEid = eid(viewerEntityId);
+
   // Recursively populate sub-group trees for all root groups
   for (const group of groups) {
     await populateSubGroups(group);
   }
 
   return groups.map(group => {
+    // Resolve labels for direct members
     const members = group.members.map(m => {
       const resolvedLabel = bestLabel(group, viewerEntityId, m.entityId);
       return { ...m, resolvedLabel: resolvedLabel ?? m.label };
     });
+
+    // Inject members from labeled sub-groups where the viewer is NOT a member.
+    // When the viewer IS in the sub-group, the client collapses it into a reference
+    // row and shows those members via the sub-group's own top-level entry instead.
+    const seenIds = new Set(members.map(m => eid(m.entityId)));
+
+    for (const rel of (group.relationships ?? [])) {
+      if (!rel.label) continue; // unlabeled sub-groups use normal label resolution
+      const subGroup = (group._subGroups ?? []).find(sg => String(sg._id) === String(rel.groupId));
+      if (!subGroup) continue;
+
+      const viewerInSubGroup = subGroup.members.some(m => eid(m.entityId) === viewerEid);
+      if (viewerInSubGroup) continue; // viewer is in sub-group → collapsed on client
+
+      for (const m of subGroup.members) {
+        const mEid = eid(m.entityId);
+        if (mEid === viewerEid) continue;          // skip the viewer themselves
+        if (seenIds.has(mEid)) continue;           // skip if already a direct member
+        members.push({ ...m, resolvedLabel: rel.label, _fromSubGroup: true });
+        seenIds.add(mEid);
+      }
+    }
 
     // Strip internal _subGroups from the response
     const { _subGroups, ...rest } = group;
