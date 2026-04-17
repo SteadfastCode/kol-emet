@@ -70,7 +70,7 @@
               v-if="canEdit && !coMember._fromSubGroup"
               class="icon-btn danger"
               title="Remove"
-              @click="removeRelationship(group)"
+              @click="removeRelationship(group, coMember.entityId._id)"
             >✕</button>
           </div>
         </div>
@@ -454,9 +454,8 @@ async function saveEdit(group, coMemberId) {
 
 // ─── Remove ───────────────────────────────────────────────────────────────────
 
-async function removeRelationship(group) {
-  // If this entry is the only member besides one other, removing triggers group deletion
-  await removeMember(group._id, props.entity._id);
+async function removeRelationship(group, memberId) {
+  await removeMember(group._id, memberId);
   emit('refresh');
 }
 
