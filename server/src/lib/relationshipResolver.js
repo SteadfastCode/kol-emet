@@ -89,6 +89,56 @@ function bestLabel(group, viewerEntityId, coMemberEntityId) {
   return candidates[0].label;
 }
 
+// ─── Per-group processor ──────────────────────────────────────────────────────
+
+/**
+ * Process a single group (with _subGroups already populated) into a response-
+ * ready object: resolved member labels, enriched relationships (with groupLabel),
+ * and expandedSubGroups for labeled sub-groups where the viewer is not a member.
+ */
+function processGroup(group, viewerEntityId, viewerEid) {
+  // Resolve labels for direct members
+  const members = group.members.map(m => {
+    const resolvedLabel = bestLabel(group, viewerEntityId, m.entityId);
+    return { ...m, resolvedLabel: resolvedLabel ?? m.label };
+  });
+
+  // Enrich sub-group link entries with the sub-group's own label so the client
+  // doesn't need to look it up through props.entity.relationships (which only
+  // contains groups the viewer is directly in).
+  const relationships = (group.relationships ?? []).map(rel => {
+    const sg = (group._subGroups ?? []).find(s => String(s._id) === String(rel.groupId));
+    return { ...rel, groupLabel: sg?.label ?? null };
+  });
+
+  // For labeled sub-groups where the viewer is NOT a member, build an expanded
+  // tree entry (header + indented members). When the viewer IS a member, the
+  // client collapses it into a reference row instead.
+  const expandedSubGroups = [];
+  const directIds = new Set(members.map(m => eid(m.entityId)));
+
+  for (const rel of relationships) {
+    if (!rel.label) continue;
+    const sg = (group._subGroups ?? []).find(s => String(s._id) === String(rel.groupId));
+    if (!sg) continue;
+    if (sg.members.some(m => eid(m.entityId) === viewerEid)) continue; // viewer in sub-group → collapsed on client
+
+    const subMembers = sg.members
+      .filter(m => eid(m.entityId) !== viewerEid && !directIds.has(eid(m.entityId)))
+      .map(m => ({ ...m, resolvedLabel: rel.label }));
+
+    expandedSubGroups.push({
+      groupId:    sg._id,
+      linkLabel:  rel.label,
+      groupLabel: sg.label ?? null,
+      members:    subMembers,
+    });
+  }
+
+  const { _subGroups, ...rest } = group;
+  return { ...rest, relationships, members, expandedSubGroups };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -96,54 +146,40 @@ function bestLabel(group, viewerEntityId, coMemberEntityId) {
  * entity whose detail page is being rendered, return the same groups with a
  * `resolvedLabel` field added to each member.
  *
- * `resolvedLabel` is the co-member's label from the most specific sub-group
- * that contains both the viewer and that co-member. Falls back to the member's
- * own label in the root group if no sub-group applies.
+ * Also traverses upward: if any of the viewer's groups are labeled sub-groups of
+ * a parent group, that parent group is included in the result so the viewer can
+ * see co-members from the parent context (e.g. Eldan sees Earth via World RG).
  */
 export async function resolveGroupLabels(groups, viewerEntityId) {
   const viewerEid = eid(viewerEntityId);
 
-  // Recursively populate sub-group trees for all root groups
+  // Populate sub-group trees for all direct groups
   for (const group of groups) {
     await populateSubGroups(group);
   }
 
-  return groups.map(group => {
-    // Resolve labels for direct members
-    const members = group.members.map(m => {
-      const resolvedLabel = bestLabel(group, viewerEntityId, m.entityId);
-      return { ...m, resolvedLabel: resolvedLabel ?? m.label };
-    });
+  const result = groups.map(group => processGroup(group, viewerEntityId, viewerEid));
 
-    // For labeled sub-groups where the viewer is NOT a member, build an expanded
-    // sub-group tree entry so the client can render a header + indented members.
-    // When the viewer IS in the sub-group, the client shows a collapsed reference
-    // row instead (handled entirely client-side).
-    const expandedSubGroups = [];
-    const directIds = new Set(members.map(m => eid(m.entityId)));
+  // Find parent groups: any group that has one of the viewer's groups as a
+  // labeled sub-group link. Works for all existing data without a migration.
+  const viewerGroupIds = groups.map(g => g._id);
+  const processedIds   = new Set(groups.map(g => String(g._id)));
 
-    for (const rel of (group.relationships ?? [])) {
-      if (!rel.label) continue; // unlabeled sub-groups use normal label resolution
-      const subGroup = (group._subGroups ?? []).find(sg => String(sg._id) === String(rel.groupId));
-      if (!subGroup) continue;
+  const parentCandidates = await RelationshipGroup
+    .find({
+      relationships: {
+        $elemMatch: { groupId: { $in: viewerGroupIds }, label: { $ne: null } },
+      },
+    })
+    .populate({ path: 'members.entityId', select: 'title' })
+    .lean();
 
-      const viewerInSubGroup = subGroup.members.some(m => eid(m.entityId) === viewerEid);
-      if (viewerInSubGroup) continue; // viewer is in sub-group → collapsed reference row on client
+  for (const parent of parentCandidates) {
+    if (processedIds.has(String(parent._id))) continue; // already in viewer's direct groups
+    processedIds.add(String(parent._id));
+    await populateSubGroups(parent);
+    result.push(processGroup(parent, viewerEntityId, viewerEid));
+  }
 
-      const subMembers = subGroup.members
-        .filter(m => eid(m.entityId) !== viewerEid && !directIds.has(eid(m.entityId)))
-        .map(m => ({ ...m, resolvedLabel: rel.label }));
-
-      expandedSubGroups.push({
-        groupId:    subGroup._id,
-        linkLabel:  rel.label,
-        groupLabel: subGroup.label ?? null,
-        members:    subMembers,
-      });
-    }
-
-    // Strip internal _subGroups from the response
-    const { _subGroups, ...rest } = group;
-    return { ...rest, members, expandedSubGroups };
-  });
+  return result;
 }

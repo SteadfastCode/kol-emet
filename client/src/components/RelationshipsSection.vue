@@ -123,7 +123,7 @@
         <span class="subgroups-label">sub-groups:</span>
         <template v-for="sub in group.relationships.filter(r => !r.label)" :key="sub.groupId">
           <span class="subgroup-chip">
-            {{ subGroupTitle(sub.groupId, group) }}
+            {{ subGroupTitle(sub) }}
             <button
               class="icon-btn chip-remove"
               title="Unlink sub-group"
@@ -552,10 +552,9 @@ async function unlinkSubGroup(parentGroupId, subGroupId) {
   emit('refresh');
 }
 
-// Helper: given a sub-group ID, find its label from the entity's relationship groups
-function subGroupTitle(groupId, currentGroup) {
-  const g = (props.entity.relationships ?? []).find(r => String(r._id) === String(groupId));
-  return g?.label || '(unlabeled group)';
+// The resolver now enriches each relationship link with groupLabel, so we use it directly.
+function subGroupTitle(sub) {
+  return sub.groupLabel || '(unlabeled group)';
 }
 
 // ─── Add new ─────────────────────────────────────────────────────────────────
