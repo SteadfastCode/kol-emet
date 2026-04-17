@@ -41,6 +41,9 @@ export const removeMember = (groupId, entityId) =>
 export const deleteGroup = (groupId) =>
   req(`/relationship-groups/${groupId}`, { method: 'DELETE' });
 
+export const reorderMembers = (groupId, orderedEntityIds) =>
+  req(`/relationship-groups/${groupId}/members/reorder`, { method: 'PATCH', body: JSON.stringify({ orderedEntityIds }) });
+
 export const addSubGroup = (parentGroupId, subGroupId, label = null) =>
   req(`/relationship-groups/${parentGroupId}/subgroups`, { method: 'POST', body: JSON.stringify({ groupId: subGroupId, label }) });
 

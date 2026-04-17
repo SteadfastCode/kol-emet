@@ -53,7 +53,21 @@
         </div>
 
         <!-- View row -->
-        <div v-else class="rel-row">
+        <div
+          v-else
+          class="rel-row"
+          :class="{
+            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(coMember.entityId._id),
+            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(coMember.entityId._id) && drag.srcId !== String(coMember.entityId._id),
+          }"
+          :draggable="canEdit ? 'true' : 'false'"
+          @dragstart="canEdit && onDragStart($event, group._id, coMember.entityId._id)"
+          @dragover="onDragOver($event, group._id, coMember.entityId._id)"
+          @dragleave="onDragLeave"
+          @dragend="onDragEnd"
+          @drop="onDrop($event, group, coMember.entityId._id)"
+        >
+          <span v-if="canEdit" class="drag-handle">⠿</span>
           <span class="rel-label">{{ coMember.resolvedLabel || '—' }}</span>
           <span
             class="rel-target wiki-link"
@@ -286,7 +300,7 @@
 
 <script setup>
 import { ref, computed, inject } from 'vue';
-import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, deleteGroup, addSubGroup, removeSubGroup } from '../api/relationshipGroups.js';
+import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, reorderMembers, deleteGroup, addSubGroup, removeSubGroup } from '../api/relationshipGroups.js';
 
 const props = defineProps({ entity: Object, canEdit: Boolean });
 const emit = defineEmits(['refresh']);
@@ -485,6 +499,48 @@ async function removeRelationship(group, memberId) {
   emit('refresh');
 }
 
+// ─── Drag-to-reorder ─────────────────────────────────────────────────────────
+
+const drag = ref({ groupId: null, srcId: null, overId: null });
+
+function onDragStart(e, groupId, entityId) {
+  drag.value = { groupId: String(groupId), srcId: String(entityId), overId: null };
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragOver(e, groupId, entityId) {
+  if (drag.value.groupId !== String(groupId)) return;
+  e.preventDefault();
+  drag.value.overId = String(entityId);
+}
+
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) drag.value.overId = null;
+}
+
+function onDragEnd() {
+  drag.value = { groupId: null, srcId: null, overId: null };
+}
+
+async function onDrop(e, group, targetEntityId) {
+  e.preventDefault();
+  const { groupId, srcId } = drag.value;
+  onDragEnd();
+  const targetId = String(targetEntityId);
+  if (!srcId || String(groupId) !== String(group._id) || srcId === targetId) return;
+
+  const allIds = group.members.map(m => String(m.entityId._id));
+  const fromIdx = allIds.indexOf(srcId);
+  const toIdx   = allIds.indexOf(targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+
+  allIds.splice(fromIdx, 1);
+  allIds.splice(toIdx, 0, srcId);
+
+  await reorderMembers(group._id, allIds);
+  emit('refresh');
+}
+
 // ─── Link / unlink sub-group ─────────────────────────────────────────────────
 
 const linkSubGroupParentId    = ref(null);
@@ -679,6 +735,18 @@ async function saveNew() {
   padding: 5px 0;
   border-bottom: 1px solid #141414;
 }
+
+.drag-handle {
+  color: #2a2a2a;
+  cursor: grab;
+  font-size: 14px;
+  padding-right: 2px;
+  user-select: none;
+  flex-shrink: 0;
+}
+.rel-row:hover .drag-handle { color: #444; }
+.rel-row.drag-src  { opacity: 0.35; }
+.rel-row.drag-over { border-top: 2px solid #4f6a8a; margin-top: -1px; }
 
 .rel-label {
   font-size: 11px;

@@ -122,6 +122,36 @@ router.patch('/:id/members/:entityId', requireActor, async (req, res) => {
   }
 });
 
+// PATCH /relationship-groups/:id/members/reorder — reorder members
+// Body: { orderedEntityIds: string[] } — full list of all member IDs in new order
+router.patch('/:id/members/reorder', requireActor, async (req, res) => {
+  try {
+    const { orderedEntityIds } = req.body;
+    if (!Array.isArray(orderedEntityIds)) {
+      return res.status(400).json({ error: 'orderedEntityIds must be an array' });
+    }
+    const group = await RelationshipGroup.findById(req.params.id);
+    if (!group) return res.status(404).json({ error: 'Not found' });
+
+    const existingIds = new Set(group.members.map(m => String(m.entityId)));
+    if (
+      orderedEntityIds.length !== group.members.length ||
+      !orderedEntityIds.every(id => existingIds.has(String(id)))
+    ) {
+      return res.status(400).json({ error: 'orderedEntityIds must contain all existing member IDs exactly once' });
+    }
+
+    const memberMap = new Map(group.members.map(m => [String(m.entityId), m]));
+    group.members = orderedEntityIds.map(id => memberMap.get(String(id)));
+    await group.save();
+
+    const populated = await populateGroup(RelationshipGroup.findById(group._id));
+    res.json(populated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // DELETE /relationship-groups/:id/members/:entityId — remove a member
 router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
   try {
