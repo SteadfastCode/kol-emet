@@ -554,6 +554,7 @@ async function onDrop(e, group, targetRefId) {
   const allRefs = group.members.map(m => ({ refId: String(m.refId), refModel: m.refModel }));
   const fromIdx = allRefs.findIndex(m => m.refId === srcId);
   const toIdx   = allRefs.findIndex(m => m.refId === targetId);
+  console.log('[reorder] srcId', srcId, 'targetId', targetId, 'fromIdx', fromIdx, 'toIdx', toIdx, 'allRefs', allRefs);
   if (fromIdx === -1 || toIdx === -1) return;
 
   const [moved] = allRefs.splice(fromIdx, 1);
