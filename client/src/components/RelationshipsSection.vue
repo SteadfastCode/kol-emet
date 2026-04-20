@@ -118,7 +118,20 @@
 
       <!-- Collapsed sub-group reference rows (labeled sub-groups, viewer IS a member) -->
       <template v-for="ref in collapsedSubGroupRefs(group)" :key="ref.groupId">
-        <div class="rel-row subgroup-ref-row">
+        <div
+          class="rel-row subgroup-ref-row"
+          :class="{
+            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(ref.groupId),
+            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(ref.groupId) && drag.srcId !== String(ref.groupId),
+          }"
+          :draggable="canEdit ? 'true' : 'false'"
+          @dragstart="canEdit && onDragStart($event, group._id, ref.groupId)"
+          @dragover="onDragOver($event, group._id, ref.groupId)"
+          @dragleave="onDragLeave"
+          @dragend="onDragEnd"
+          @drop="onDrop($event, group, ref.groupId)"
+        >
+          <span v-if="canEdit" class="drag-handle">⠿</span>
           <span class="rel-label">{{ pluralize(ref.linkLabel) }}</span>
           <span class="rel-target subgroup-ref-name">{{ ref.groupLabel || '(group)' }}</span>
           <div class="rel-row-actions">
@@ -531,34 +544,22 @@ function onDragEnd() {
   drag.value = { groupId: null, srcId: null, overId: null };
 }
 
-async function onDrop(e, group, targetEntityId) {
+async function onDrop(e, group, targetRefId) {
   e.preventDefault();
   const { groupId, srcId } = drag.value;
   onDragEnd();
-  const targetId = String(targetEntityId);
+  const targetId = String(targetRefId);
   if (!srcId || String(groupId) !== String(group._id) || srcId === targetId) return;
 
-  // Reorder entity members while preserving relative positions of group-ref members
-  const entityIds = group.members
-    .filter(m => m.refModel === 'Entity')
-    .map(m => String(m.refId));
-  const fromIdx = entityIds.indexOf(srcId);
-  const toIdx   = entityIds.indexOf(targetId);
+  const allRefs = group.members.map(m => ({ refId: String(m.refId), refModel: m.refModel }));
+  const fromIdx = allRefs.findIndex(m => m.refId === srcId);
+  const toIdx   = allRefs.findIndex(m => m.refId === targetId);
   if (fromIdx === -1 || toIdx === -1) return;
 
-  entityIds.splice(fromIdx, 1);
-  entityIds.splice(toIdx, 0, srcId);
+  const [moved] = allRefs.splice(fromIdx, 1);
+  allRefs.splice(toIdx, 0, moved);
 
-  // Build full ordered members: replace entity slots with the reordered IDs
-  let entityIdx = 0;
-  const orderedMembers = group.members.map(m => {
-    if (m.refModel === 'Entity') {
-      return { refModel: 'Entity', refId: entityIds[entityIdx++] };
-    }
-    return { refModel: m.refModel, refId: String(m.refId) };
-  });
-
-  await reorderMembers(group._id, orderedMembers);
+  await reorderMembers(group._id, allRefs);
   emit('refresh');
 }
 
