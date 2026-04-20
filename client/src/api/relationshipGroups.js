@@ -13,11 +13,7 @@ async function req(path, options = {}) {
     headers,
   });
   if (res.status === 401) throw Object.assign(new Error('Unauthorized'), { status: 401 });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    console.error(`[api] ${options.method ?? 'GET'} ${path} → ${res.status}`, body);
-    throw new Error(`${res.status} ${res.statusText}`);
-  }
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.status === 204 ? null : res.json();
 }
 

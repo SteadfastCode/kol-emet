@@ -30,9 +30,11 @@
         </template>
       </div>
 
-      <template v-for="coMember in coMembersOf(group)" :key="String(coMember.refId)">
-        <!-- Edit row -->
-        <div v-if="editingKey === rowKey(group._id, coMember.refId)" class="rel-edit-row">
+      <!-- Unified member rows: entity members and collapsed sub-group refs in members array order -->
+      <template v-for="item in displayMembers(group)" :key="item.key">
+
+        <!-- Entity member: edit row -->
+        <div v-if="item.type === 'entity' && editingKey === rowKey(group._id, item.coMember.refId)" class="rel-edit-row">
           <input
             v-model="editDraft.label"
             class="input input-sm"
@@ -46,48 +48,77 @@
           />
           <div class="row-actions">
             <button class="btn-sm" @click="cancelEdit">Cancel</button>
-            <button class="btn-sm primary" :disabled="editSaving" @click="saveEdit(group, coMember.refId)">
+            <button class="btn-sm primary" :disabled="editSaving" @click="saveEdit(group, item.coMember.refId)">
               <span v-if="editSaving" class="spinner" /><span v-else>Save</span>
             </button>
           </div>
         </div>
 
-        <!-- View row -->
+        <!-- Entity member: view row -->
         <div
-          v-else
+          v-else-if="item.type === 'entity'"
           class="rel-row"
           :class="{
-            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(coMember.refId),
-            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(coMember.refId) && drag.srcId !== String(coMember.refId),
+            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(item.coMember.refId),
+            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(item.coMember.refId) && drag.srcId !== String(item.coMember.refId),
           }"
           :draggable="canEdit ? 'true' : 'false'"
-          @dragstart="canEdit && onDragStart($event, group._id, coMember.refId)"
-          @dragover="onDragOver($event, group._id, coMember.refId)"
+          @dragstart="canEdit && onDragStart($event, group._id, item.coMember.refId)"
+          @dragover="onDragOver($event, group._id, item.coMember.refId)"
           @dragleave="onDragLeave"
           @dragend="onDragEnd"
-          @drop="onDrop($event, group, coMember.refId)"
+          @drop="onDrop($event, group, item.coMember.refId)"
         >
           <span v-if="canEdit" class="drag-handle">⠿</span>
-          <span class="rel-label">{{ coMember.resolvedLabel || '—' }}</span>
+          <span class="rel-label">{{ item.coMember.resolvedLabel || '—' }}</span>
           <span
             class="rel-target wiki-link"
-            @click="followLink(coMember.ref._id, coMember.ref.title)"
-          >{{ coMember.ref.title }}</span>
+            @click="followLink(item.coMember.ref._id, item.coMember.ref.title)"
+          >{{ item.coMember.ref.title }}</span>
           <div class="rel-row-actions">
             <button
               v-if="canEdit"
               class="icon-btn"
               title="Edit"
-              @click="startEdit(group, coMember.refId)"
+              @click="startEdit(group, item.coMember.refId)"
             >✎</button>
             <button
               v-if="canEdit"
               class="icon-btn danger"
               title="Remove"
-              @click="removeRelationship(group, coMember.refId)"
+              @click="removeRelationship(group, item.coMember.refId)"
             >✕</button>
           </div>
         </div>
+
+        <!-- Collapsed sub-group reference row -->
+        <div
+          v-else-if="item.type === 'subgroup'"
+          class="rel-row subgroup-ref-row"
+          :class="{
+            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(item.groupId),
+            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(item.groupId) && drag.srcId !== String(item.groupId),
+          }"
+          :draggable="canEdit ? 'true' : 'false'"
+          @dragstart="canEdit && onDragStart($event, group._id, item.groupId)"
+          @dragover="onDragOver($event, group._id, item.groupId)"
+          @dragleave="onDragLeave"
+          @dragend="onDragEnd"
+          @drop="onDrop($event, group, item.groupId)"
+        >
+          <span v-if="canEdit" class="drag-handle">⠿</span>
+          <span class="rel-label">{{ pluralize(item.linkLabel) }}</span>
+          <span class="rel-target subgroup-ref-name">{{ item.groupLabel || '(group)' }}</span>
+          <div class="rel-row-actions">
+            <button
+              v-if="canEdit"
+              class="icon-btn danger"
+              title="Unlink sub-group"
+              @click="unlinkSubGroup(group._id, item.groupId)"
+            >✕</button>
+          </div>
+        </div>
+
       </template>
 
       <!-- Expanded sub-group trees (labeled sub-groups, viewer not a member) -->
@@ -116,34 +147,6 @@
         </div>
       </template>
 
-      <!-- Collapsed sub-group reference rows (labeled sub-groups, viewer IS a member) -->
-      <template v-for="ref in collapsedSubGroupRefs(group)" :key="ref.groupId">
-        <div
-          class="rel-row subgroup-ref-row"
-          :class="{
-            'drag-src':  canEdit && drag.groupId === String(group._id) && drag.srcId  === String(ref.groupId),
-            'drag-over': canEdit && drag.groupId === String(group._id) && drag.overId === String(ref.groupId) && drag.srcId !== String(ref.groupId),
-          }"
-          :draggable="canEdit ? 'true' : 'false'"
-          @dragstart="canEdit && onDragStart($event, group._id, ref.groupId)"
-          @dragover="onDragOver($event, group._id, ref.groupId)"
-          @dragleave="onDragLeave"
-          @dragend="onDragEnd"
-          @drop="onDrop($event, group, ref.groupId)"
-        >
-          <span v-if="canEdit" class="drag-handle">⠿</span>
-          <span class="rel-label">{{ pluralize(ref.linkLabel) }}</span>
-          <span class="rel-target subgroup-ref-name">{{ ref.groupLabel || '(group)' }}</span>
-          <div class="rel-row-actions">
-            <button
-              v-if="canEdit"
-              class="icon-btn danger"
-              title="Unlink sub-group"
-              @click="unlinkSubGroup(group._id, ref.groupId)"
-            >✕</button>
-          </div>
-        </div>
-      </template>
 
       <!-- Unlabeled sub-group links (edit-only management row) -->
       <div v-if="canEdit && groupRefs(group).some(r => !r.label)" class="subgroups-row">
@@ -395,6 +398,25 @@ function coMembersOf(group) {
   });
 }
 
+// Returns entity members and collapsed sub-group refs interleaved in members array order.
+function displayMembers(group) {
+  const collapsed = collapsedMemberIds(group);
+  const items = [];
+  for (const m of (group.members ?? [])) {
+    if (m.refModel === 'Entity') {
+      const mid = String(m.refId);
+      if (mid === String(props.entity._id) || collapsed.has(mid)) continue;
+      items.push({ type: 'entity', key: `e:${mid}`, coMember: m });
+    } else if (m.refModel === 'RelationshipGroup' && m.label) {
+      const isViewerInSubGroup = (props.entity.relationships ?? []).some(g => String(g._id) === String(m.refId));
+      if (!isViewerInSubGroup) continue; // expanded tree — rendered separately
+      const sg = (props.entity.relationships ?? []).find(g => String(g._id) === String(m.refId));
+      items.push({ type: 'subgroup', key: `g:${String(m.refId)}`, groupId: m.refId, linkLabel: m.label, groupLabel: sg?.label || null });
+    }
+  }
+  return items;
+}
+
 function rowKey(groupId, coMemberId) {
   return `${groupId}:${coMemberId}`;
 }
@@ -554,7 +576,6 @@ async function onDrop(e, group, targetRefId) {
   const allRefs = group.members.map(m => ({ refId: String(m.refId), refModel: m.refModel }));
   const fromIdx = allRefs.findIndex(m => m.refId === srcId);
   const toIdx   = allRefs.findIndex(m => m.refId === targetId);
-  console.log('[reorder] srcId', srcId, 'targetId', targetId, 'fromIdx', fromIdx, 'toIdx', toIdx, 'allRefs', allRefs);
   if (fromIdx === -1 || toIdx === -1) return;
 
   const [moved] = allRefs.splice(fromIdx, 1);
