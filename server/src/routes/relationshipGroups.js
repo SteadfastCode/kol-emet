@@ -46,6 +46,16 @@ async function fetchPopulated(id) {
   return populateMembers(group);
 }
 
+// GET /relationship-groups — all groups (lean, for graph construction)
+router.get('/', async (req, res) => {
+  try {
+    const groups = await RelationshipGroup.find({}).lean();
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /relationship-groups/:id
 router.get('/:id', async (req, res) => {
   try {

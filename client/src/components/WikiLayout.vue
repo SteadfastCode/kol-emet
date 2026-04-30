@@ -9,6 +9,7 @@
         :search-query="searchQuery"
         :selected-id="activePanelId"
         :loading="sidebarLoading"
+        :graph-open="graphOpen"
         @search="searchQuery = $event"
         @set-cat="setCat"
         @set-tag="setTag"
@@ -17,6 +18,7 @@
         @new-entry="openEditor"
         @logout="$emit('logout')"
         @chat="chatOpen = !chatOpen"
+        @graph="graphOpen = !graphOpen"
       />
     </div>
 
@@ -78,6 +80,15 @@
       </div>
     </Transition>
 
+    <!-- Graph overlay -->
+    <Transition name="graph-fade">
+      <GraphView
+        v-if="graphOpen"
+        @close="graphOpen = false"
+        @open-entry="onGraphOpenEntry"
+      />
+    </Transition>
+
     <ToastNotification />
 
     <!-- Chat panel -->
@@ -120,6 +131,18 @@
         </svg>
         <span>AI Chat</span>
       </button>
+      <button class="tab-btn" :class="{ active: graphOpen }" @click="graphOpen = !graphOpen">
+        <svg class="tab-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="4"  cy="10" r="2"/>
+          <circle cx="16" cy="4"  r="2"/>
+          <circle cx="16" cy="16" r="2"/>
+          <circle cx="10" cy="10" r="2"/>
+          <line x1="6"  y1="10" x2="8"  y2="10"/>
+          <line x1="12" y1="10" x2="14" y2="5"/>
+          <line x1="12" y1="10" x2="14" y2="15"/>
+        </svg>
+        <span>Graph</span>
+      </button>
       <button class="tab-btn" :class="{ active: mobileTab === 'settings' }" @click="setMobileTab('settings')">
         <svg class="tab-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <circle cx="10" cy="10" r="2.5"/>
@@ -138,6 +161,7 @@ import EntityDetail from './EntityDetail.vue';
 import EntityEditor from './EntityEditor.vue';
 import ToastNotification from './ToastNotification.vue';
 import ChatPanel from './ChatPanel.vue';
+import GraphView from './GraphView.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -161,6 +185,7 @@ const { addToast } = useToasts();
 const panels = ref([]);
 const activePanelId = ref(null);
 const chatOpen = ref(false);
+const graphOpen = ref(false);
 const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
 
 function setMobileTab(tab) {
@@ -172,6 +197,11 @@ function setMobileTab(tab) {
 function onChatClose() {
   chatOpen.value = false;
   if (mobileTab.value === 'chat') mobileTab.value = activePanelId.value ? 'detail' : 'list';
+}
+
+function onGraphOpenEntry(id, title) {
+  graphOpen.value = false;
+  openEntry(id, title);
 }
 
 const activePanel = computed(() =>
@@ -617,6 +647,12 @@ provide('openSnapshot', openSnapshot);
   .wiki-root.panel-open .list-view    { flex: 1 !important; }
   .wiki-root.panel-open .detail-panel { flex: 1 !important; }
 }
+
+/* Graph overlay fade */
+.graph-fade-enter-active,
+.graph-fade-leave-active { transition: opacity 0.2s ease; }
+.graph-fade-enter-from,
+.graph-fade-leave-to { opacity: 0; }
 
 /* Deleted entry snapshot badge */
 .deleted-badge {
