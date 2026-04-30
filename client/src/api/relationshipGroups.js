@@ -17,6 +17,9 @@ async function req(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+export const getAllGroups = () =>
+  req('/relationship-groups');
+
 export const createGroup = (data) =>
   req('/relationship-groups', { method: 'POST', body: JSON.stringify(data) });
 

@@ -27,6 +27,8 @@ body {
 .btn-sm.danger { color: #e07070; border-color: #5a2a2a; }
 .btn-sm.danger:hover { background: #2a1a1a; }
 .btn-sm:disabled { opacity: 0.4; cursor: default; }
+.btn-sm.active { background: #1e2a3a; color: #7ab4f5; border-color: #2a4a6a; }
+.btn-sm.btn-icon { padding: 5px 8px; display: inline-flex; align-items: center; justify-content: center; }
 
 /* Category pills */
 .pill {

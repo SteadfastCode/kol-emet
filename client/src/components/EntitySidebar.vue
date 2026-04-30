@@ -6,6 +6,22 @@
         <span class="site-title">Kol Emet</span>
         <div class="header-actions">
           <button class="btn-sm primary" @click="$emit('new-entry')">+ New</button>
+          <button
+            class="btn-sm btn-icon"
+            :class="{ active: graphOpen }"
+            title="Relationship Graph"
+            @click="$emit('graph')"
+          >
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+              <circle cx="4"  cy="10" r="2"/>
+              <circle cx="16" cy="4"  r="2"/>
+              <circle cx="16" cy="16" r="2"/>
+              <circle cx="10" cy="10" r="2"/>
+              <line x1="6"  y1="10" x2="8"  y2="10"/>
+              <line x1="12" y1="10" x2="14" y2="5"/>
+              <line x1="12" y1="10" x2="14" y2="15"/>
+            </svg>
+          </button>
           <button class="btn-sm" title="AI Chat" @click="$emit('chat')">AI</button>
           <button class="btn-sm" @click="$emit('logout')">Sign out</button>
         </div>
@@ -59,9 +75,10 @@ defineProps({
   searchQuery: String,
   selectedId: String,
   loading: Boolean,
+  graphOpen: Boolean,
 });
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat', 'graph']);
 </script>
 
 <style scoped>
