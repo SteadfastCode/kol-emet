@@ -244,10 +244,30 @@ onMounted(async () => {
     const entityIds = new Set(nodeData.value.map(n => n.id));
     const edgeMap = new Map();
 
+    // Build group → direct entity members map so sub-group references can be resolved
+    const groupEntityMap = new Map();
     for (const group of groups) {
-      const members = group.members
+      const entityMembers = group.members
         .filter(m => m.refModel === 'Entity' && entityIds.has(String(m.refId)))
         .map(m => String(m.refId));
+      groupEntityMap.set(String(group._id), entityMembers);
+    }
+
+    function resolveMembers(group) {
+      const resolved = [];
+      for (const m of group.members) {
+        if (m.refModel === 'Entity' && entityIds.has(String(m.refId))) {
+          resolved.push(String(m.refId));
+        } else if (m.refModel === 'RelationshipGroup') {
+          const subMembers = groupEntityMap.get(String(m.refId)) ?? [];
+          resolved.push(...subMembers);
+        }
+      }
+      return [...new Set(resolved)];
+    }
+
+    for (const group of groups) {
+      const members = resolveMembers(group);
 
       if (members.length < 2) continue;
 
