@@ -17,7 +17,6 @@ const entitySchema = new mongoose.Schema(
       enum: ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline', 'Open Questions'],
     },
     summary: { type: String, required: true },
-    body: { type: String, default: '' },   // kept for migration bridge; removed in Phase 3
     tags: { type: [String], default: [] },
     blocks: { type: [blockSchema], default: [] },
     relationships: [{ type: mongoose.Schema.Types.ObjectId, ref: 'RelationshipGroup' }],

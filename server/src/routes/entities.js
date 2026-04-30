@@ -77,9 +77,6 @@ router.post('/', requireActor, async (req, res) => {
       const err = validateBlocks(data.blocks);
       if (err) return res.status(400).json({ error: err });
       data.blocks = normalizeBlockOrder(data.blocks);
-    } else if (data.body) {
-      // Bridge: if client sends body but no blocks, auto-create a text block
-      data.blocks = [{ type: 'text', order: 0, data: { markdown: data.body } }];
     }
 
     const entity = await Entity.create(data);
