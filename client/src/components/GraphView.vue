@@ -179,19 +179,21 @@ function initGraph() {
   const link = linkGroup.selectAll('line')
     .data(links)
     .join('line')
-    .attr('stroke', '#2a2a2a')
-    .attr('stroke-width', 1.5)
-    .attr('stroke-opacity', 0.8);
+    .style('stroke', '#2a2a2a')
+    .style('stroke-width', 1.5)
+    .style('stroke-opacity', 0.8)
+    .style('transition', 'stroke-opacity 150ms ease, stroke 150ms ease, stroke-width 150ms ease');
 
   const linkLabel = linkGroup.selectAll('text')
     .data(links.filter(l => l.label))
     .join('text')
     .text(d => d.label)
     .attr('font-size', 9)
-    .attr('fill', '#555')
+    .style('fill', '#555')
     .attr('text-anchor', 'middle')
     .style('pointer-events', 'none')
-    .style('user-select', 'none');
+    .style('user-select', 'none')
+    .style('transition', 'opacity 150ms ease, fill 150ms ease');
 
   // Wider invisible lines so edges are easy to hover
   const linkHitArea = linkGroup.selectAll('.link-hit')
@@ -210,6 +212,7 @@ function initGraph() {
     .join('g')
     .attr('class', 'node')
     .style('cursor', 'pointer')
+    .style('transition', 'opacity 150ms ease')
     .call(
       d3.drag()
         .on('start', (event, d) => {
@@ -249,12 +252,12 @@ function initGraph() {
       const neighbors = getNeighbors(d.id);
       node.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : 0.12);
       link.style('stroke-opacity', l => isConnected(l, d.id) ? 1 : 0.05)
-          .attr('stroke', l => isConnected(l, d.id) ? '#666' : '#2a2a2a');
+          .style('stroke', l => isConnected(l, d.id) ? '#666' : '#2a2a2a');
       linkLabel.style('opacity', l => isConnected(l, d.id) ? 1 : 0);
     })
     .on('mouseout', function () {
       node.style('opacity', 1);
-      link.style('stroke-opacity', 0.8).attr('stroke', '#2a2a2a');
+      link.style('stroke-opacity', 0.8).style('stroke', '#2a2a2a');
       linkLabel.style('opacity', 1);
     })
     .on('click', function (event, d) {
@@ -274,15 +277,15 @@ function initGraph() {
     .on('mouseover', function (event, d) {
       const [srcId, tgtId] = linkEndpoints(d);
       link.style('stroke-opacity', l => l === d ? 1 : 0.05)
-          .attr('stroke', l => l === d ? '#888' : '#2a2a2a')
-          .attr('stroke-width', l => l === d ? 2.5 : 1.5);
+          .style('stroke', l => l === d ? '#888' : '#2a2a2a')
+          .style('stroke-width', l => l === d ? 2.5 : 1.5);
       linkLabel.style('opacity', l => l === d ? 1 : 0)
-               .attr('fill', l => l === d ? '#aaa' : '#555');
+               .style('fill', l => l === d ? '#aaa' : '#555');
       node.style('opacity', n => (n.id === srcId || n.id === tgtId) ? 1 : 0.12);
     })
     .on('mouseout', function () {
-      link.style('stroke-opacity', 0.8).attr('stroke', '#2a2a2a').attr('stroke-width', 1.5);
-      linkLabel.style('opacity', 1).attr('fill', '#555');
+      link.style('stroke-opacity', 0.8).style('stroke', '#2a2a2a').style('stroke-width', 1.5);
+      linkLabel.style('opacity', 1).style('fill', '#555');
       node.style('opacity', 1);
     });
 
