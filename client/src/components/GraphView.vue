@@ -171,6 +171,8 @@ function initGraph() {
     .force('link', d3.forceLink(links).id(d => d.id).distance(linkDist).strength(0.5))
     .force('charge', d3.forceManyBody().strength(repulsion))
     .force('center', d3.forceCenter(width / 2, svgH / 2))
+    .force('x', d3.forceX(width / 2).strength(0.06))
+    .force('y', d3.forceY(svgH / 2).strength(0.06))
     .force('collision', d3.forceCollide().radius(collide));
 
   // ── Links ────────────────────────────────────────────────────────────────
@@ -326,6 +328,8 @@ function initGraph() {
     d3.select(svgRef.value).attr('width', w).attr('height', sh);
     simulation
       .force('center', d3.forceCenter(w / 2, sh / 2))
+      .force('x', d3.forceX(w / 2).strength(0.06))
+      .force('y', d3.forceY(sh / 2).strength(0.06))
       .alpha(0.3).restart();
   });
   resizeObserver.observe(container);
