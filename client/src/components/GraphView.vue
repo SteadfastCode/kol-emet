@@ -110,10 +110,10 @@ function initGraph() {
 
   // ── Simulation ──────────────────────────────────────────────────────────
   simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(110).strength(0.6))
-    .force('charge', d3.forceManyBody().strength(-320))
+    .force('link', d3.forceLink(links).id(d => d.id).distance(180).strength(0.5))
+    .force('charge', d3.forceManyBody().strength(-700))
     .force('center', d3.forceCenter(width / 2, svgH / 2))
-    .force('collision', d3.forceCollide().radius(36));
+    .force('collision', d3.forceCollide().radius(60));
 
   // ── Links ────────────────────────────────────────────────────────────────
   const linkGroup = g.append('g').attr('class', 'links');
@@ -172,7 +172,7 @@ function initGraph() {
     .attr('font-size', 10)
     .attr('fill', '#ddd')
     .attr('text-anchor', 'middle')
-    .attr('dy', 34)
+    .attr('dy', 38)
     .style('pointer-events', 'none')
     .style('user-select', 'none');
 
