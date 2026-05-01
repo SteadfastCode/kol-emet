@@ -15,11 +15,37 @@
     </div>
 
     <svg ref="svgRef" class="graph-svg" />
+
+    <div v-if="!loading && !fetchError && linkData.length" class="graph-controls">
+      <button class="controls-toggle" :title="controlsOpen ? 'Close settings' : 'Force simulation settings'" @click="controlsOpen = !controlsOpen">
+        {{ controlsOpen ? '✕' : '⚙' }}
+      </button>
+      <transition name="controls-slide">
+        <div v-if="controlsOpen" class="controls-panel">
+          <div class="control-row">
+            <label>Repulsion</label>
+            <input type="range" :min="-1500" :max="-50" step="10" v-model.number="simParams.repulsion" />
+            <span class="control-val">{{ simParams.repulsion }}</span>
+          </div>
+          <div class="control-row">
+            <label>Link distance</label>
+            <input type="range" min="50" max="400" step="10" v-model.number="simParams.linkDist" />
+            <span class="control-val">{{ simParams.linkDist }}</span>
+          </div>
+          <div class="control-row">
+            <label>Collision radius</label>
+            <input type="range" min="10" max="120" step="5" v-model.number="simParams.collide" />
+            <span class="control-val">{{ simParams.collide }}</span>
+          </div>
+          <button class="controls-reset" @click="resetParams">Reset defaults</button>
+        </div>
+      </transition>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import * as d3 from 'd3';
 import { CAT_COLORS } from '../config/categories.js';
 import { getEntities } from '../api/entities.js';
@@ -33,6 +59,37 @@ const loading = ref(true);
 const fetchError = ref(null);
 const nodeData = ref([]);
 const linkData = ref([]);
+
+const STORAGE_KEY = 'kol-emet-graph-params';
+const DEFAULTS = { repulsion: -700, linkDist: 180, collide: 60 };
+
+function loadParams() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? { ...DEFAULTS, ...JSON.parse(stored) } : { ...DEFAULTS };
+  } catch {
+    return { ...DEFAULTS };
+  }
+}
+
+const controlsOpen = ref(false);
+const simParams = ref(loadParams());
+
+function applySimParams() {
+  if (!simulation) return;
+  const { repulsion, linkDist, collide } = simParams.value;
+  simulation.force('charge').strength(repulsion);
+  simulation.force('link').distance(linkDist);
+  simulation.force('collision').radius(collide);
+  simulation.alpha(0.4).restart();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(simParams.value));
+}
+
+function resetParams() {
+  simParams.value = { ...DEFAULTS };
+}
+
+watch(simParams, applySimParams, { deep: true });
 
 let simulation = null;
 let resizeObserver = null;
@@ -109,11 +166,12 @@ function initGraph() {
   }
 
   // ── Simulation ──────────────────────────────────────────────────────────
+  const { repulsion, linkDist, collide } = simParams.value;
   simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d => d.id).distance(180).strength(0.5))
-    .force('charge', d3.forceManyBody().strength(-700))
+    .force('link', d3.forceLink(links).id(d => d.id).distance(linkDist).strength(0.5))
+    .force('charge', d3.forceManyBody().strength(repulsion))
     .force('center', d3.forceCenter(width / 2, svgH / 2))
-    .force('collision', d3.forceCollide().radius(60));
+    .force('collision', d3.forceCollide().radius(collide));
 
   // ── Links ────────────────────────────────────────────────────────────────
   const linkGroup = g.append('g').attr('class', 'links');
@@ -374,5 +432,94 @@ onBeforeUnmount(() => {
   display: block;
   flex: 1;
   width: 100%;
+}
+
+/* ── Controls panel ─────────────────────────────────────────────────────── */
+.graph-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  z-index: 10;
+}
+
+.controls-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  color: #888;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+}
+.controls-toggle:hover { color: #ccc; background: #1f1f1f; border-color: #3a3a3a; }
+
+.controls-panel {
+  background: #111;
+  border: 1px solid #242424;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-row label {
+  font-size: 11px;
+  color: #777;
+  white-space: nowrap;
+}
+
+.control-row input[type="range"] {
+  width: 100%;
+  accent-color: #4a7fa5;
+  cursor: pointer;
+}
+
+.control-val {
+  font-size: 11px;
+  color: #555;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls-reset {
+  margin-top: 2px;
+  align-self: flex-end;
+  background: none;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  color: #555;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.controls-reset:hover { color: #aaa; border-color: #444; }
+
+.controls-slide-enter-active,
+.controls-slide-leave-active {
+  transition: opacity 0.15s, transform 0.15s;
+}
+.controls-slide-enter-from,
+.controls-slide-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 </style>
