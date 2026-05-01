@@ -193,6 +193,15 @@ function initGraph() {
     .style('pointer-events', 'none')
     .style('user-select', 'none');
 
+  // Wider invisible lines so edges are easy to hover
+  const linkHitArea = linkGroup.selectAll('.link-hit')
+    .data(links)
+    .join('line')
+    .attr('class', 'link-hit')
+    .attr('stroke', 'transparent')
+    .attr('stroke-width', 12)
+    .style('cursor', 'pointer');
+
   // ── Nodes ────────────────────────────────────────────────────────────────
   const nodeGroup = g.append('g').attr('class', 'nodes');
 
@@ -253,9 +262,39 @@ function initGraph() {
       emit('open-entry', d.id, d.title);
     });
 
+  // ── Edge hover ───────────────────────────────────────────────────────────
+  function linkEndpoints(l) {
+    return [
+      typeof l.source === 'object' ? l.source.id : l.source,
+      typeof l.target === 'object' ? l.target.id : l.target,
+    ];
+  }
+
+  linkHitArea
+    .on('mouseover', function (event, d) {
+      const [srcId, tgtId] = linkEndpoints(d);
+      link.style('stroke-opacity', l => l === d ? 1 : 0.05)
+          .attr('stroke', l => l === d ? '#888' : '#2a2a2a')
+          .attr('stroke-width', l => l === d ? 2.5 : 1.5);
+      linkLabel.style('opacity', l => l === d ? 1 : 0)
+               .attr('fill', l => l === d ? '#aaa' : '#555');
+      node.style('opacity', n => (n.id === srcId || n.id === tgtId) ? 1 : 0.12);
+    })
+    .on('mouseout', function () {
+      link.style('stroke-opacity', 0.8).attr('stroke', '#2a2a2a').attr('stroke-width', 1.5);
+      linkLabel.style('opacity', 1).attr('fill', '#555');
+      node.style('opacity', 1);
+    });
+
   // ── Tick ─────────────────────────────────────────────────────────────────
   simulation.on('tick', () => {
     link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    linkHitArea
       .attr('x1', d => d.source.x)
       .attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x)
