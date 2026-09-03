@@ -11,7 +11,46 @@
 
 ## Concept
 
-A privately hosted Vue 3 app serving as the living source of truth for the World Train series bible. Accessible from any device, persistent, and connected to Claude via MCP so the wiki can be read and updated directly from any project chat. Built for personal use first; architected with future productization in mind.
+A hosted app for building and maintaining a **structured knowledge graph** — entities plus typed,
+nestable relationships — that you create and keep current by *talking to an AI agent* (via MCP), not
+just by hand-editing. Daniel's World Train series bible is the first instance, but that is a
+deployment detail, not the product. Accessible from any device, persistent, multi-tenant.
+
+---
+
+## Product Direction
+
+> Captures the strategic pivot. Sequenced work lives in [docs/roadmap.md](docs/roadmap.md).
+
+**Positioning.** Kol Emet is an **AI-maintained knowledge graph for interconnected systems** — not a
+documentation/prose tool. The durable differentiator is not "chat with an AI to write docs" (table
+stakes); it is a **structured entity + relationship graph that an agent builds and maintains for you**
+through the MCP tools, with manual editing always available. Most prose docs don't need this; systems
+with many interconnected parts do.
+
+**Beachhead → expansion.** Lead with **worldbuilding** (already works; a forgiving, underserved
+proving ground for the graph+agent loop) and generalize the engine underneath it. The commercial
+expansion is **software/system architecture** (teams, seats, B2B budget). Worldbuilding-first
+*de-risks* architecture because the generalization work — user-defined entity types, templates,
+graph generation — is exactly what carries the engine across.
+
+**The hook (two stages).** (1) *Assistant* — the agent helps you build the graph one piece at a time
+(largely built today). (2) *Generator* — point it at unstructured input (a braindump, a doc, or for
+software: a **repo / OpenAPI spec / compose / k8s / DB schema**) and it proposes the whole graph. The
+generator is the real draw; the software vertical's inputs make it a far stronger, more defensible
+demo.
+
+**Never stale, always reviewed.** The graph is *derived* from its sources: when a source changes, the
+system detects drift and **proposes** an update — the model never goes out of date. Every generated or
+drift-driven change lands as a **reviewable diff a human accepts** (no silent bulk writes). Drift
+detection, version control, and this approval step are **one mechanism**: a proposed change is a
+*pull request against the graph*.
+
+**Git-native / repo-resident (dual-mode, DB-canonical first).** The graph gets a canonical
+serializable form; a Git connector round-trips it into the customer's repo so it is versioned by
+*their* Git, reviewed in *their* PRs, updated by *their* CI — "it lives in your repo and versions
+itself." Storage stays DB-canonical initially (keeps SaaS + worldbuilding simple); repo-canonical is
+an open question to revisit for pure-dev customers.
 
 ---
 
@@ -129,3 +168,9 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
 - **Change history with a 30-day TTL** — Entity writes append to a `ChangeLog` with a pre-change `snapshot` (enables rollback) and an `actorType` (`user` vs. `mcp`) so history can distinguish human edits from AI/background writes. TTL-expired after 30 days: this is recent undo/audit, not permanent provenance.
 - **MCP over HTTP + OAuth, not stdio** — The standalone stdio MCP process was replaced by a Streamable-HTTP endpoint (`/mcp`) inside the Express app, with an OAuth authorization-code + PKCE flow so the Claude.ai connector can authorize. Keeps MCP on the same deployed API and auth surface rather than a separately-run local process.
 - **AI chat via an OpenAI-compatible client** — In-app chat and MCP responses route through a provider registry (`aiProviders.js`) using the OpenAI client shape, with per-provider base URLs (currently xAI/Grok, OpenAI, Gemini). Keeps the layer provider-agnostic; a local Ollama provider drops in the same way.
+- **Reposition as a knowledge-graph platform, not a documentation tool** — The differentiator is the structured entity + relationship graph maintained conversationally by an agent, not AI prose assistance (which is now table stakes). "Documentation" undersells and mis-targets it; "AI-maintained knowledge graph for interconnected systems" is the product. See Product Direction.
+- **Worldbuilding as beachhead, architecture as expansion** — Lead with worldbuilding (already works, forgiving, underserved) to prove the graph+agent loop; expand into software/system architecture for the real market (teams/B2B). Rejected both "stay niche" (too small) and "general documentation tool" (undifferentiated, brutal incumbents). The generalization work is shared between the two, so beachhead-first is cheap.
+- **User-defined entity types over a hardcoded enum** — The `category` enum (Characters/Worlds/…) will become per-workspace user-defined types so the engine serves any domain. `RelationshipType` is already data-driven, so relationships generalize for free; templates (entity-type + relationship-type bundles) become the multi-vertical mechanism.
+- **Generator with a human-approval diff; no silent bulk writes** — Bulk graph generation and drift-driven updates always land as a reviewable proposal a human accepts. Framed as a *pull request against the graph*, this unifies generation, drift detection, and versioning into one mechanism.
+- **Never-stale via continuous sync** — The graph is derived from connected sources; source changes are detected and proposed as updates, so the model doesn't rot. Directly targets the failure mode (staleness) that kills documentation products.
+- **Git-native, dual-mode storage (DB-canonical first)** — The graph gets a canonical serializable form; a Git connector round-trips it into the customer's repo (versioned by their Git, reviewed in their PRs, updated by their CI). Storage stays DB-canonical initially to keep multi-tenant SaaS and non-technical (worldbuilding) users simple; repo-canonical is an *open question* for pure-dev customers. **Consequence:** the `ChangeLog` 30-day TTL must be lifted for versioned workspaces — history becomes the product, so it can't expire. (Supersedes the TTL rationale above for versioned workspaces.)

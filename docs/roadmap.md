@@ -43,9 +43,48 @@
 - Entity detail panel UI polish
 - Gallery block image hosting (currently placeholder)
 
-## Phase 6 — Productization (future)
+---
+
+> **Direction (from here on).** Kol Emet is repositioning from a worldbuilding wiki to an
+> **AI-maintained knowledge graph for interconnected systems** (see the Product Direction section of
+> [`../kol_emet_spec.md`](../kol_emet_spec.md)). Worldbuilding is the *beachhead* — it already works
+> and proves the graph+agent loop cheaply; **software/system architecture** is the commercial
+> expansion, and the generalization work below is what carries the engine from one to the other.
+
+## Phase 6 — Generalize the engine (next)
+- **User-defined entity types per workspace** — replace the hardcoded `category` enum (in the Entity
+  schema, MCP tools, and client config) with per-workspace types. A type = name + icon/color now; an
+  optional light field-schema later. This single change unblocks every vertical.
+- **Templates** — a workspace is seeded from a template = a bundle of entity types + relationship
+  types (+ starter structure). `RelationshipType` is already data-driven, so this is mostly config.
+  Ship two: **Worldbuilding** (today's defaults) and **Software Architecture** (Services, Data
+  Stores, APIs, Teams; relationships like *depends-on*, *owned-by*, *calls*).
+
+## Phase 7 — Assistant → Generator + continuous sync (the hook)
+- **Graph generation from unstructured input** — paste text / upload a doc → the agent proposes
+  entities + relationships → the user reviews and accepts. This is the existing assistant pointed at
+  bulk input. **Never silent bulk writes** — always a reviewable diff (see approval model below).
+- **Vertical ingestion** — for architecture: repo / OpenAPI / docker-compose / k8s / DB-schema →
+  proposed system graph. ("Point it at your repo and watch it map your services.")
+- **Continuous sync / drift detection** — the graph is derived from connected sources; when a source
+  changes, the system finds the delta and *proposes* an update. The promise: **the model never goes
+  stale.** This is the generator pointed at *changes* rather than a one-time import.
+
+## Versioning & Git-native (cross-cutting track, feeds Phases 7–8)
+The approval model, drift detection, and version control are **one mechanism**: a proposed change is
+a *pull request against the graph*. Build order:
+- Grow `ChangeLog` (snapshots + rollback, today) into whole-graph, diffable, **permanent** history —
+  the 30-day TTL must be lifted for versioned workspaces (can't expire the product).
+- Add a **"proposed / draft" change state** — the reviewable diff that every generated or drift
+  update lands in before a human merges it.
+- **Repo-resident graph (dual-mode, DB-canonical first):** give the graph a canonical serializable
+  form; a Git connector round-trips it into the customer's repo so it is versioned by *their* Git,
+  reviewed in *their* PRs, and updated by *their* CI. For software teams this is the positioning:
+  "it lives in your repo and versions itself." (Revisit repo-canonical for pure-dev customers later.)
+
+## Phase 8 — Commercialize (architecture unlock)
+- Enforce `workspaceId` in every query (stored today, not filtered — the multi-tenancy gate)
+- Workspace management, collaborator invites, billing
 - Separate product name and branding under Steadfast Code
-- Multi-tenant enforcement (`workspaceId` stored, not yet filtered in queries)
-- Billing / workspace management, collaborator invites
 - Public-facing marketing site
 - Local AI support via Ollama (MCP/chat layer already provider-agnostic)
