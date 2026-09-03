@@ -36,42 +36,60 @@ A privately hosted Vue 3 app serving as the living source of truth for the World
 
 ## Data Model
 
-Each entry has:
+> This section captured the original single-entry shape. The model has since evolved — long-form
+> content moved into an ordered `blocks` array (no more `body`), and relationships and open questions
+> became their own collections. **See [docs/data-model.md](docs/data-model.md) for the current
+> schemas.** Summary of the central `Entity` document:
+
 - `_id` — MongoDB ObjectId (primary key)
 - `title` — string
 - `category` — one of: Characters, Worlds, Organizations, Lore & Mechanics, Timeline, Open Questions
 - `summary` — one-line description
-- `body` — full notes (markdown-friendly)
 - `tags` — array of strings (queryable)
-- `open_question` — optional string for linked unresolved question
-- `createdAt` / `updatedAt` — timestamps (via Mongoose or manual)
+- `blocks` — ordered content blocks `{ _id, type, order, data }`; `type` ∈ text, timeline_event, attribute, quote, gallery
+- `relationships` — refs → `RelationshipGroup` (back-reference; groups are the source of truth)
+- `open_questions` — refs → `OpenQuestion`
+- `workspaceId` — multi-tenancy key (stored, not yet enforced in queries)
+- `createdAt` / `updatedAt` — timestamps
+
+Supporting collections: `RelationshipGroup`, `RelationshipType`, `OpenQuestion`, `ChangeLog`
+(30-day TTL audit trail), `Conversation` (saved AI chats), `User`, `Settings`.
 
 ---
 
 ## API Endpoints
 
+> The resource route is now `/entities` (not `/entries`), and the surface has grown to cover
+> relationships, change history, AI chat, live sync, auth, and MCP. **Full reference:
+> [docs/api.md](docs/api.md).** Core routes:
+
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | /entries | All entries. Optional query params: `category`, `tag`, `q` (search) |
-| GET | /entries/:id | Single entry |
-| POST | /entries | Create new entry |
-| PUT | /entries/:id | Update entry |
-| DELETE | /entries/:id | Delete entry |
-| GET | /tags | All unique tags across entries |
-| GET | /open-questions | All entries where open_question is non-empty |
+| GET | /entities | All entities. Optional query params: `category`, `tag`, `q` (search) |
+| GET | /entities/:id | Single entity, with relationships resolved live |
+| POST | /entities | Create new entity |
+| PUT | /entities/:id | Update entity |
+| DELETE | /entities/:id | Delete entity |
+| GET | /tags | All unique tags across entities |
+| GET | /open-questions | Open questions (supports `?status=open|resolved`) |
 
 ---
 
 ## MCP Tools (for Claude access)
 
+> Now served as a Streamable-HTTP MCP endpoint at `/mcp` with an OAuth flow (the standalone stdio
+> stub was removed). The toolset has grown to include relationship management. Full list in
+> [docs/architecture.md](docs/architecture.md#mcp-integration).
+
 | Tool | Description |
 |------|-------------|
-| `search_entries` | Search by keyword, tag, or category |
-| `get_entry` | Retrieve a single entry by id or title |
-| `create_entry` | Add a new entry |
-| `update_entry` | Edit an existing entry |
-| `add_open_question` | Attach or update an open question on an entry |
-| `list_open_questions` | Return all unresolved open questions |
+| `search_entities` | Search by keyword, tag, or category |
+| `get_entity` | Retrieve a single entity by id (with relationships) |
+| `create_entity` | Add a new entity |
+| `update_entity` | Edit an existing entity |
+| `add_open_question` | Attach or update an open question on an entity |
+| `list_open_questions` | Return open questions (filter by status) |
+| `add_relationship` … `remove_subgroup_from_relationship` | Relationship-group management (7 tools) |
 
 ---
 
@@ -84,7 +102,9 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
 ## Notes
 
 - Claude needs read AND write access via MCP to be useful as a collaborator
-- Authentication on the API should be simple bearer token — no need for anything complex since it's private
+- Authentication: session cookies (bcrypt, 12 rounds) + WebAuthn passkeys for browser clients, and a
+  bearer token for MCP/programmatic access. Registration is open. *(The original "simple bearer
+  token" plan was superseded once the target became a multi-tenant product — see Decision Log.)*
 - Vue frontend should match the same UX as the current HTML artifact: category pills, tag filtering, search, expandable entries, open question badges
 - Dark mode support preferred
 
@@ -103,3 +123,9 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
 *Running notes on key technical decisions and the reasoning behind them. Add entries as the build progresses.*
 
 - **MongoDB over SQLite** — Consistent with Daniel's existing Steadfast Code projects. Tags modeled as arrays rather than comma-separated strings, which is more natural in MongoDB and easier to query.
+- **Block-based content over a flat `body` string** — Entry bodies became an ordered `blocks` array (text, timeline_event, attribute, quote, gallery). Structured, individually reorderable content the frontend and MCP can manipulate per-block; the legacy `body` field was migrated out and dropped.
+- **Relationships as groups, not directed edges** — A relationship is a `RelationshipGroup` with a member list; a pairwise link is just a two-member group, and families/factions are many-member groups. Members use a unified array with a `refModel` discriminator (`Entity` | `RelationshipGroup`), so groups can nest and array position encodes order. Chosen over dual entity/subgroup arrays to keep ordering and traversal uniform. The group's `members` array — not the back-reference on `Entity` — is the source of truth.
+- **Session + passkey auth over "simple bearer token"** — The original private-tool plan called for a bare bearer token. Since the real target is a multi-tenant SaaS product, auth moved to session cookies (bcrypt) plus WebAuthn passkeys, with open registration; the bearer token remains only for MCP/programmatic access.
+- **Change history with a 30-day TTL** — Entity writes append to a `ChangeLog` with a pre-change `snapshot` (enables rollback) and an `actorType` (`user` vs. `mcp`) so history can distinguish human edits from AI/background writes. TTL-expired after 30 days: this is recent undo/audit, not permanent provenance.
+- **MCP over HTTP + OAuth, not stdio** — The standalone stdio MCP process was replaced by a Streamable-HTTP endpoint (`/mcp`) inside the Express app, with an OAuth authorization-code + PKCE flow so the Claude.ai connector can authorize. Keeps MCP on the same deployed API and auth surface rather than a separately-run local process.
+- **AI chat via an OpenAI-compatible client** — In-app chat and MCP responses route through a provider registry (`aiProviders.js`) using the OpenAI client shape, with per-provider base URLs (currently xAI/Grok, OpenAI, Gemini). Keeps the layer provider-agnostic; a local Ollama provider drops in the same way.

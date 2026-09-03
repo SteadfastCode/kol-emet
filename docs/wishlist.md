@@ -19,12 +19,10 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 
 ## Data & API
 - workspaceId enforcement in all queries (multi-tenancy — stored, not yet filtered)
-- Remove legacy `body` field from Entry schema (Phase 3 cleanup)
 - Bulk import endpoint
 - Full-text search index on blocks data
 
 ## MCP / AI
-- Point MCP API_BASE at production Railway URL
 - Claude-assisted entry drafting — suggest block content based on title + category
 - Cross-entry relationship suggestions ("this entry mentions Zhalek — link to Zhalek Xitren?")
 - Open question resolution flow — Claude flags when an open question may have been answered

@@ -34,7 +34,6 @@ router.get('/', async (req, res) => {
       filter.$or = [
         { title: re },
         { summary: re },
-        { body: re },
         { blocks: { $elemMatch: { 'data.markdown': re } } },
       ];
     }

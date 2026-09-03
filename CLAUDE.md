@@ -19,19 +19,19 @@ yarn seed         # seed MongoDB with the 18 initial entries
 # Frontend (client/)
 yarn dev          # Vite dev server (proxies API to localhost:3004)
 yarn build        # production build to client/dist/
-
-# MCP server (mcp/)
-yarn start        # stdio transport
 ```
 
-Copy `.env.example` to `.env` in both `server/` and `mcp/` before running.
+The MCP server is not a separate process — it is served as a Streamable-HTTP endpoint at `/mcp`
+inside the Express app (with OAuth for the Claude.ai connector). The root `.mcp.json` points Claude
+Code at `http://localhost:3004/mcp` for local dev. Copy `.env.example` to `.env` in `server/` before
+running.
 
 ## Stack
 
 - **Frontend:** Vue 3 + Vite
 - **Backend:** Node.js + Express
 - **Database:** MongoDB (tags stored as string arrays, not comma-separated strings)
-- **MCP server:** Lightweight REST API wrapper for Claude integration
+- **MCP server:** Streamable-HTTP endpoint at `/mcp` inside the Express app (OAuth for the Claude.ai connector); wraps the same data layer as the REST API
 - **Auth:** Session cookies with bcrypt password hashing. Users stored in MongoDB with email + passwordHash. Open registration — anyone can create an account.
 
 ## Architecture
@@ -55,42 +55,64 @@ The MCP server is a thin wrapper around the same REST API the frontend uses — 
 
 ## Data Model
 
+Full schemas in [docs/data-model.md](docs/data-model.md). The central document is `Entity`
+(collection `entities`) — content lives in an ordered `blocks` array; there is **no `body` field**,
+and open questions / relationships are their own collections, not inline fields.
+
 ```js
+// Entity (collection: entities)
 {
   _id: ObjectId,
   title: string,
   category: "Characters" | "Worlds" | "Organizations" | "Lore & Mechanics" | "Timeline" | "Open Questions",
-  summary: string,          // one-line description
-  body: string,             // full notes, markdown-friendly
-  tags: string[],           // queryable array
-  open_question?: string,   // optional unresolved question
+  summary: string,             // one-line description
+  tags: string[],              // queryable array
+  blocks: Block[],             // ordered { _id, type, order, data }; type ∈
+                               //   text | timeline_event | attribute | quote | gallery
+  relationships: ObjectId[],   // refs → RelationshipGroup (back-reference cache)
+  open_questions: ObjectId[],  // refs → OpenQuestion
+  workspaceId: ObjectId|null,  // multi-tenancy key (stored, not yet enforced)
   createdAt: Date,
   updatedAt: Date
 }
 ```
 
+Other collections: `RelationshipGroup` (unified member array with `refModel` discriminator, supports
+subgroup nesting), `RelationshipType`, `OpenQuestion`, `ChangeLog` (30-day TTL audit trail),
+`Conversation` (saved AI chats), `User`, `Settings` (singleton). See
+[docs/data-model.md](docs/data-model.md).
+
 ## API Endpoints
+
+Full reference in [docs/api.md](docs/api.md). The primary resource route is `/entities` (not the
+original `/entries`):
 
 | Method | Route | Notes |
 |--------|-------|-------|
-| GET | `/entries` | Supports `?category=`, `?tag=`, `?q=` query params |
-| GET | `/entries/:id` | Single entry |
-| POST | `/entries` | Create entry |
-| PUT | `/entries/:id` | Update entry |
-| DELETE | `/entries/:id` | Delete entry |
+| GET | `/entities` | Supports `?category=`, `?tag=`, `?q=`; populates open questions |
+| GET | `/entities/:id` | Single entity with live-resolved relationships |
+| POST/PUT/DELETE | `/entities[/:id]` | Create/update/delete (validates blocks, writes ChangeLog) |
 | GET | `/tags` | All unique tags |
-| GET | `/open-questions` | Entries where `open_question` is non-empty |
+| GET/POST/PUT/DELETE | `/open-questions[/:id]` | Open-question CRUD (`?status=`) |
+| — | `/relationship-groups`, `/relationship-types` | Relationship CRUD (see api.md) |
+| GET/POST | `/entities/:id/history`, `/entities/:id/rollback/:logId` | Change history + rollback |
+| GET/POST | `/chat`, `/conversations` | AI chat (SSE) + saved conversations |
+| GET | `/events` | SSE live-sync stream |
+| — | `/auth/*`, `/oauth`, `/mcp` | Auth (session + passkey), OAuth, MCP transport |
 
 ## MCP Tools
 
+Served as a Streamable-HTTP endpoint at `/mcp` with OAuth (not a stdio process). Tools:
+
 | Tool | Description |
 |------|-------------|
-| `search_entries` | Search by keyword, tag, or category |
-| `get_entry` | Retrieve single entry by id or title |
-| `create_entry` | Add new entry |
-| `update_entry` | Edit existing entry |
-| `add_open_question` | Attach/update open question on entry |
-| `list_open_questions` | Return all unresolved open questions |
+| `search_entities` | Search by keyword, tag, or category |
+| `get_entity` | Retrieve a single entity (with relationships) |
+| `create_entity` | Add a new entity (blocks-aware) |
+| `update_entity` | Edit an existing entity |
+| `add_open_question` | Attach/update an open question |
+| `list_open_questions` | List open questions (filter by status) |
+| `add_relationship`, `add_member_to_relationship`, `update_group_label`, `remove_relationship`, `update_relationship_label`, `add_subgroup_to_relationship`, `remove_subgroup_from_relationship` | Relationship-group management |
 
 ## Frontend UX Requirements
 
