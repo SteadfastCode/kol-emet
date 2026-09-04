@@ -21,8 +21,11 @@
     "openai": "^6.34.0",
     "zod": "^3.23.8"
   },
+  "_comment_qs_pin": "CVE-2026-82562 (array-limit bypass) is fixed in qs 6.16.0, but express 4 pins ~6.15.1. Forced rather than moving to express 5, which is a breaking major. Declared twice on purpose: yarn reads `resolutions`, npm reads `overrides`, and each silently ignores the other — so a deploy that switched package manager would quietly drop the pin. Revisit when express 4 widens its range; re-verify query-string parsing if changed.",
   "resolutions": {
-    "_comment_qs": "CVE-2026-82562 (array-limit bypass) is fixed in qs 6.16.0, but express 4 pins ~6.15.1. Forced here rather than moving to express 5, which is a breaking major. Revisit when express 4 widens the range; verify query-string parsing if this is changed.",
+    "qs": "6.16.0"
+  },
+  "overrides": {
     "qs": "6.16.0"
   }
 }
