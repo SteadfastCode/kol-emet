@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const changeLogSchema = new mongoose.Schema(
   {
+    workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', default: null, index: true },
     entityId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Entity', required: true, index: true },
     entityTitle: { type: String, required: true },
     changeType: { type: String, enum: ['created', 'updated', 'deleted'], required: true },

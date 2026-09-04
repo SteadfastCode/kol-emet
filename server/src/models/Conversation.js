@@ -10,6 +10,7 @@ const messageSchema = new mongoose.Schema(
 
 const conversationSchema = new mongoose.Schema(
   {
+    workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', default: null, index: true },
     userId:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     provider:  { type: String, required: true },
     model:     { type: String, required: true },

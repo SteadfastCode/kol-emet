@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const openQuestionSchema = new mongoose.Schema(
   {
+    workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', default: null, index: true },
     question: { type: String, required: true },
     status: { type: String, enum: ['open', 'resolved'], default: 'open' },
     entry_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Entity' }],

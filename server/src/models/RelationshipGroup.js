@@ -8,6 +8,7 @@ const memberSchema = new mongoose.Schema({
 }, { _id: false });
 
 const relationshipGroupSchema = new mongoose.Schema({
+  workspaceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workspace', default: null, index: true },
   label:    { type: String, default: null },
   members:  { type: [memberSchema], default: [] },
   entityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Entity', default: null }, // legacy field, unused

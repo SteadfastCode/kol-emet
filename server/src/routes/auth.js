@@ -7,6 +7,7 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 import User from '../models/User.js';
+import Workspace from '../models/Workspace.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -27,6 +28,21 @@ router.post('/register', async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ email, passwordHash });
+
+  // Every user needs a workspace immediately — resolveWorkspace fails closed
+  // without one, so a user created here but left workspace-less could not read
+  // or write anything.
+  try {
+    await Workspace.create({
+      name:    'My Workspace',
+      ownerId: user._id,
+      members: [{ userId: user._id, role: 'owner' }],
+    });
+  } catch (err) {
+    // Don't strand a user with an account but no workspace.
+    await User.deleteOne({ _id: user._id });
+    return res.status(500).json({ error: 'Could not create workspace' });
+  }
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
