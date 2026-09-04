@@ -42,6 +42,7 @@ export async function logCreate(entity, actor, excludeClientId = null) {
     blocksDeleted: [],
   };
   await ChangeLog.create({
+    workspaceId: entity.workspaceId ?? null,
     entityId:    entity._id,
     entityTitle: entity.title,
     changeType: 'created',
@@ -61,6 +62,7 @@ export async function logCreate(entity, actor, excludeClientId = null) {
 export async function logUpdate(before, after, actor, excludeClientId = null) {
   const changes = computeDiff(before, after);
   await ChangeLog.create({
+    workspaceId: after.workspaceId ?? before.workspaceId ?? null,
     entityId:    after._id,
     entityTitle: after.title,
     changeType: 'updated',
@@ -80,6 +82,7 @@ export async function logUpdate(before, after, actor, excludeClientId = null) {
 export async function logDelete(entity, actor, excludeClientId = null) {
   const deletedAt = new Date().toISOString();
   await ChangeLog.create({
+    workspaceId: entity.workspaceId ?? null,
     entityId:    entity._id,
     entityTitle: entity.title,
     changeType: 'deleted',

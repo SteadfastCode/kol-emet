@@ -31,7 +31,7 @@ function eid(refId) {
  *   Entity members:            ref = { _id, title }
  *   RelationshipGroup members: ref = { _id, label }
  */
-async function addMemberRefs(group) {
+async function addMemberRefs(group, workspaceId) {
   const entityIds = group.members
     .filter(m => m.refModel === 'Entity')
     .map(m => m.refId);
@@ -41,10 +41,10 @@ async function addMemberRefs(group) {
 
   const [entities, groups] = await Promise.all([
     entityIds.length
-      ? Entity.find({ _id: { $in: entityIds } }).select('title').lean()
+      ? Entity.find({ _id: { $in: entityIds }, workspaceId }).select('title').lean()
       : Promise.resolve([]),
     groupIds.length
-      ? RelationshipGroup.find({ _id: { $in: groupIds } }).select('label').lean()
+      ? RelationshipGroup.find({ _id: { $in: groupIds }, workspaceId }).select('label').lean()
       : Promise.resolve([]),
   ]);
 
@@ -66,17 +66,17 @@ async function addMemberRefs(group) {
  * Adds `_subGroups` array to the group in place.
  * Uses `visited` to guard against cycles.
  */
-async function populateSubGroups(group, visited = new Set()) {
+async function populateSubGroups(group, workspaceId, visited = new Set()) {
   const id = String(group._id);
   if (visited.has(id)) return;
   visited.add(id);
 
   group._subGroups = [];
   for (const m of (group.members ?? []).filter(m => m.refModel === 'RelationshipGroup')) {
-    const subGroup = await RelationshipGroup.findById(m.refId).lean();
+    const subGroup = await RelationshipGroup.findOne({ _id: m.refId, workspaceId }).lean();
     if (subGroup) {
-      await addMemberRefs(subGroup);
-      await populateSubGroups(subGroup, new Set(visited)); // copy so siblings don't block each other
+      await addMemberRefs(subGroup, workspaceId);
+      await populateSubGroups(subGroup, workspaceId, new Set(visited)); // copy so siblings don't block each other
       group._subGroups.push(subGroup);
     }
   }
@@ -187,13 +187,13 @@ function processGroup(group, viewerEntityId, viewerEid) {
  * of a parent group, that parent group is included so the viewer can see
  * co-members from the parent context.
  */
-export async function resolveGroupLabels(groups, viewerEntityId) {
+export async function resolveGroupLabels(groups, viewerEntityId, workspaceId) {
   const viewerEid = eid(viewerEntityId);
 
   // Populate member refs and sub-group trees for all direct groups
   for (const group of groups) {
-    await addMemberRefs(group);
-    await populateSubGroups(group);
+    await addMemberRefs(group, workspaceId);
+    await populateSubGroups(group, workspaceId);
   }
 
   const result = groups.map(group => processGroup(group, viewerEntityId, viewerEid));
@@ -205,6 +205,7 @@ export async function resolveGroupLabels(groups, viewerEntityId) {
 
   const parentCandidates = await RelationshipGroup
     .find({
+      workspaceId,
       members: {
         $elemMatch: {
           refId:    { $in: viewerGroupIds },
@@ -218,8 +219,8 @@ export async function resolveGroupLabels(groups, viewerEntityId) {
   for (const parent of parentCandidates) {
     if (processedIds.has(String(parent._id))) continue;
     processedIds.add(String(parent._id));
-    await addMemberRefs(parent);
-    await populateSubGroups(parent);
+    await addMemberRefs(parent, workspaceId);
+    await populateSubGroups(parent, workspaceId);
     result.push(processGroup(parent, viewerEntityId, viewerEid));
   }
 

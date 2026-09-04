@@ -7,7 +7,7 @@ const router = Router();
 // GET /open-questions — all questions, optional ?status=open|resolved
 router.get('/', async (req, res) => {
   try {
-    const filter = {};
+    const filter = { workspaceId: req.workspaceId };
     if (req.query.status) filter.status = req.query.status;
     const questions = await OpenQuestion.find(filter)
       .sort({ createdAt: -1 })
@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
 // GET /open-questions/:id
 router.get('/:id', async (req, res) => {
   try {
-    const q = await OpenQuestion.findById(req.params.id)
+    const q = await OpenQuestion.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
       .populate('entry_ids', 'title category');
     if (!q) return res.status(404).json({ error: 'Not found' });
     res.json(q);
@@ -34,12 +34,17 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { question, entry_ids = [] } = req.body;
-    const oq = await OpenQuestion.create({ question, entry_ids });
+    const oq = await OpenQuestion.create({
+      question,
+      entry_ids,
+      workspaceId: req.workspaceId,
+    });
 
-    // Back-link on each entry
+    // Back-link on each entry. Scoped so a foreign entry id in the request
+    // body cannot be made to reference this workspace's question.
     if (entry_ids.length) {
       await Entity.updateMany(
-        { _id: { $in: entry_ids } },
+        { _id: { $in: entry_ids }, workspaceId: req.workspaceId },
         { $addToSet: { open_questions: oq._id } }
       );
     }
@@ -54,13 +59,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { question, status, entry_ids } = req.body;
+    const scope = { _id: req.params.id, workspaceId: req.workspaceId };
     const update = {};
     if (question !== undefined) update.question = question;
     if (status !== undefined) update.status = status;
 
     if (entry_ids !== undefined) {
       // Sync back-links: remove from old entries, add to new
-      const existing = await OpenQuestion.findById(req.params.id);
+      const existing = await OpenQuestion.findOne(scope);
       if (!existing) return res.status(404).json({ error: 'Not found' });
 
       const oldIds = existing.entry_ids.map(id => id.toString());
@@ -70,13 +76,13 @@ router.put('/:id', async (req, res) => {
 
       if (removed.length) {
         await Entity.updateMany(
-          { _id: { $in: removed } },
+          { _id: { $in: removed }, workspaceId: req.workspaceId },
           { $pull: { open_questions: existing._id } }
         );
       }
       if (added.length) {
         await Entity.updateMany(
-          { _id: { $in: added } },
+          { _id: { $in: added }, workspaceId: req.workspaceId },
           { $addToSet: { open_questions: existing._id } }
         );
       }
@@ -84,7 +90,7 @@ router.put('/:id', async (req, res) => {
       update.entry_ids = entry_ids;
     }
 
-    const oq = await OpenQuestion.findByIdAndUpdate(req.params.id, update, { new: true })
+    const oq = await OpenQuestion.findOneAndUpdate(scope, update, { new: true })
       .populate('entry_ids', 'title category');
     if (!oq) return res.status(404).json({ error: 'Not found' });
     res.json(oq);
@@ -96,12 +102,15 @@ router.put('/:id', async (req, res) => {
 // DELETE /open-questions/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const oq = await OpenQuestion.findByIdAndDelete(req.params.id);
+    const oq = await OpenQuestion.findOneAndDelete({
+      _id: req.params.id,
+      workspaceId: req.workspaceId,
+    });
     if (!oq) return res.status(404).json({ error: 'Not found' });
 
     // Remove back-links from entries
     await Entity.updateMany(
-      { _id: { $in: oq.entry_ids } },
+      { _id: { $in: oq.entry_ids }, workspaceId: req.workspaceId },
       { $pull: { open_questions: oq._id } }
     );
 

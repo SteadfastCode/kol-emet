@@ -39,7 +39,9 @@ router.post('/', requireAuth, async (req, res) => {
   if (!provider || !model) return res.status(400).json({ error: 'provider and model are required' });
   if (!PROVIDERS[provider]) return res.status(400).json({ error: `Unknown provider: ${provider}` });
   try {
-    const conv = await Conversation.create({ userId, provider, model });
+    // Already isolated by userId; workspaceId is stamped for consistency and
+    // for shared workspaces later, not as the access-control boundary.
+    const conv = await Conversation.create({ userId, provider, model, workspaceId: req.workspaceId });
     res.status(201).json(conv);
   } catch (err) {
     res.status(500).json({ error: err.message });

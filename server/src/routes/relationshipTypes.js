@@ -32,7 +32,7 @@ function findSimilar(name, existing, threshold = 0.4) {
 // GET /relationship-types
 router.get('/', async (req, res) => {
   try {
-    const filter = { workspaceId: null };
+    const filter = { workspaceId: req.workspaceId };
     const types = await RelationshipType.find(filter).sort({ name: 1 });
 
     // If ?q= provided, fuzzy-filter the results
@@ -60,7 +60,7 @@ router.post('/', async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
 
     const trimmed = name.trim();
-    const existing = await RelationshipType.find({ workspaceId: null });
+    const existing = await RelationshipType.find({ workspaceId: req.workspaceId });
 
     // Exact match check
     const exact = existing.find(t => t.name.toLowerCase() === trimmed.toLowerCase());
@@ -68,7 +68,12 @@ router.post('/', async (req, res) => {
 
     // Near-duplicate warning (still creates, but warns)
     const similar = findSimilar(trimmed, existing);
-    const type = await RelationshipType.create({ name: trimmed, sourceCategory, targetCategory });
+    const type = await RelationshipType.create({
+      name: trimmed,
+      sourceCategory,
+      targetCategory,
+      workspaceId: req.workspaceId,
+    });
 
     const response = { ...type.toObject() };
     if (similar.length) response.warning = `Similar types exist: ${similar.join(', ')}`;
@@ -87,7 +92,11 @@ router.put('/:id', async (req, res) => {
     if (sourceCategory !== undefined) update.sourceCategory = sourceCategory;
     if (targetCategory !== undefined) update.targetCategory = targetCategory;
 
-    const type = await RelationshipType.findByIdAndUpdate(req.params.id, update, { new: true });
+    const type = await RelationshipType.findOneAndUpdate(
+      { _id: req.params.id, workspaceId: req.workspaceId },
+      update,
+      { new: true }
+    );
     if (!type) return res.status(404).json({ error: 'Not found' });
     res.json(type);
   } catch (err) {
@@ -98,7 +107,10 @@ router.put('/:id', async (req, res) => {
 // DELETE /relationship-types/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const type = await RelationshipType.findByIdAndDelete(req.params.id);
+    const type = await RelationshipType.findOneAndDelete({
+      _id: req.params.id,
+      workspaceId: req.workspaceId,
+    });
     if (!type) return res.status(404).json({ error: 'Not found' });
     res.status(204).send();
   } catch (err) {

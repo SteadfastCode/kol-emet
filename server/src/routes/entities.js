@@ -23,10 +23,20 @@ function normalizeBlockOrder(blocks) {
     .map((block, i) => ({ ...block, order: i }));
 }
 
+/**
+ * Strips any client-supplied tenancy key. Without this a caller could set
+ * workspaceId in the request body and write into someone else's workspace —
+ * the workspace is the server's to decide, never the client's.
+ */
+function stripTenancy(body) {
+  const { workspaceId, ...rest } = body;
+  return rest;
+}
+
 // GET /entities
 router.get('/', async (req, res) => {
   try {
-    const filter = {};
+    const filter = { workspaceId: req.workspaceId };
     if (req.query.category) filter.category = req.query.category;
     if (req.query.tag) filter.tags = req.query.tag;
     if (req.query.q) {
@@ -49,17 +59,19 @@ router.get('/', async (req, res) => {
 // GET /entities/:id
 router.get('/:id', async (req, res) => {
   try {
-    const entity = await Entity.findById(req.params.id)
+    const entity = await Entity.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
       .populate('open_questions', 'question status')
       .lean();
+    // 404 rather than 403 for a foreign id — don't confirm it exists elsewhere.
     if (!entity) return res.status(404).json({ error: 'Not found' });
 
     // Query groups dynamically — source of truth is the group's members array, not the back-reference on Entity
     const rawGroups = await RelationshipGroup.find({
+      workspaceId: req.workspaceId,
       members: { $elemMatch: { refId: req.params.id, refModel: 'Entity' } },
     }).lean();
 
-    const relationships = await resolveGroupLabels(rawGroups, req.params.id);
+    const relationships = await resolveGroupLabels(rawGroups, req.params.id, req.workspaceId);
 
     res.json({ ...entity, relationships });
   } catch (err) {
@@ -70,7 +82,7 @@ router.get('/:id', async (req, res) => {
 // POST /entities
 router.post('/', requireActor, async (req, res) => {
   try {
-    const data = { ...req.body };
+    const data = stripTenancy(req.body);
 
     if (data.blocks) {
       const err = validateBlocks(data.blocks);
@@ -78,7 +90,7 @@ router.post('/', requireActor, async (req, res) => {
       data.blocks = normalizeBlockOrder(data.blocks);
     }
 
-    const entity = await Entity.create(data);
+    const entity = await Entity.create({ ...data, workspaceId: req.workspaceId });
     const clientId = req.headers['x-sse-client-id'] ?? null;
     logCreate(entity.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logCreate failed:', err));
     res.status(201).json(entity);
@@ -90,7 +102,7 @@ router.post('/', requireActor, async (req, res) => {
 // PUT /entities/:id
 router.put('/:id', requireActor, async (req, res) => {
   try {
-    const data = { ...req.body };
+    const data = stripTenancy(req.body);
 
     if (data.blocks) {
       const err = validateBlocks(data.blocks);
@@ -98,10 +110,12 @@ router.put('/:id', requireActor, async (req, res) => {
       data.blocks = normalizeBlockOrder(data.blocks);
     }
 
-    const before = await Entity.findById(req.params.id).lean();
+    const scope = { _id: req.params.id, workspaceId: req.workspaceId };
+
+    const before = await Entity.findOne(scope).lean();
     if (!before) return res.status(404).json({ error: 'Not found' });
 
-    const after = await Entity.findByIdAndUpdate(req.params.id, data, {
+    const after = await Entity.findOneAndUpdate(scope, data, {
       new: true,
       runValidators: true,
     }).populate('open_questions', 'question status');
@@ -118,11 +132,15 @@ router.put('/:id', requireActor, async (req, res) => {
 // DELETE /entities/:id
 router.delete('/:id', requireActor, async (req, res) => {
   try {
-    const entity = await Entity.findByIdAndDelete(req.params.id);
+    const entity = await Entity.findOneAndDelete({
+      _id: req.params.id,
+      workspaceId: req.workspaceId,
+    });
     if (!entity) return res.status(404).json({ error: 'Not found' });
 
     // Clean up relationship groups: query dynamically so we catch all groups regardless of back-reference state
     const groups = await RelationshipGroup.find({
+      workspaceId: req.workspaceId,
       members: { $elemMatch: { refId: entity._id, refModel: 'Entity' } },
     });
     for (const group of groups) {

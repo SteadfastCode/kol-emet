@@ -23,6 +23,7 @@ import './models/OpenQuestion.js'; // ensure model is registered for population
 import './models/RelationshipType.js';
 import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
+import { resolveWorkspace } from './middleware/workspace.js';
 
 const app = express();
 const PORT = process.env.API_PORT ?? 3001;
@@ -55,14 +56,18 @@ app.use('/', oauthRouter);
 app.use('/auth', authRouter);
 app.use('/mcp', mcpRouter);
 app.use('/events', requireAuth, eventsRouter);
-app.use('/entities', requireAuth, entitiesRouter);
-app.use('/', requireAuth, changelogRouter);
-app.use('/relationship-groups', requireAuth, relationshipGroupsRouter);
-app.use('/tags', requireAuth, tagsRouter);
-app.use('/open-questions', requireAuth, openQuestionsRouter);
-app.use('/relationship-types', requireAuth, relationshipTypesRouter);
+// resolveWorkspace sits behind requireAuth on every route that touches tenant
+// content: it sets req.workspaceId, which those routes filter every query on.
+app.use('/entities', requireAuth, resolveWorkspace, entitiesRouter);
+app.use('/', requireAuth, resolveWorkspace, changelogRouter);
+app.use('/relationship-groups', requireAuth, resolveWorkspace, relationshipGroupsRouter);
+app.use('/tags', requireAuth, resolveWorkspace, tagsRouter);
+app.use('/open-questions', requireAuth, resolveWorkspace, openQuestionsRouter);
+app.use('/relationship-types', requireAuth, resolveWorkspace, relationshipTypesRouter);
+// Chat authenticates per-route rather than at mount, so it resolves the
+// workspace per-route too — see routes/chat.js.
 app.use('/chat', chatRouter);
-app.use('/conversations', requireAuth, conversationsRouter);
+app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
 
 mongoose
   .connect(process.env.MONGO_URI)

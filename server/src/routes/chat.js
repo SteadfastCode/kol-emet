@@ -21,6 +21,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { resolveWorkspace } from '../middleware/workspace.js';
 import { PROVIDERS, makeClient } from '../lib/aiProviders.js';
 import Conversation from '../models/Conversation.js';
 import UserMemory from '../models/UserMemory.js';
@@ -157,7 +158,7 @@ async function executeTool(name, args, ctx = {}) {
   }
 
   if (name === 'search_entities') {
-    const filter = {};
+    const filter = { workspaceId: ctx.workspaceId };
     if (args.category) filter.category = args.category;
     if (args.tag)      filter.tags = args.tag;
     if (args.q) {
@@ -176,12 +177,13 @@ async function executeTool(name, args, ctx = {}) {
   }
 
   if (name === 'get_entity') {
-    const entity = await Entity.findById(args.id).lean();
+    const entity = await Entity.findOne({ _id: args.id, workspaceId: ctx.workspaceId }).lean();
     if (!entity) return { error: `Entity not found: ${args.id}` };
     const rawGroups = await RelationshipGroup.find({
+      workspaceId: ctx.workspaceId,
       members: { $elemMatch: { refId: args.id, refModel: 'Entity' } },
     }).lean();
-    const relationships = await resolveGroupLabels(rawGroups, args.id);
+    const relationships = await resolveGroupLabels(rawGroups, args.id, ctx.workspaceId);
     return { ...entity, relationships };
   }
 
@@ -293,7 +295,7 @@ router.get('/providers', requireAuth, (req, res) => {
 
 // ─── POST /chat ───────────────────────────────────────────────────────────────
 
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
   const { provider = 'xai', model, messages = [], systemPrompt, conversationId } = req.body;
 
   const providerCfg = PROVIDERS[provider];
@@ -319,7 +321,7 @@ router.post('/', requireAuth, async (req, res) => {
     effectiveSystem = buildSystemPrompt(memories);
   }
 
-  const ctx = { userId, conversationId };
+  const ctx = { userId, conversationId, workspaceId: req.workspaceId };
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');

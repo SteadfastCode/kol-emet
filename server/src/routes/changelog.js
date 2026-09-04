@@ -9,7 +9,10 @@ const router = Router({ mergeParams: true });
 // GET /entities/:id/history — list change log for an entity, newest first
 router.get('/entities/:id/history', async (req, res) => {
   try {
-    const logs = await ChangeLog.find({ entityId: req.params.id })
+    const logs = await ChangeLog.find({
+      entityId: req.params.id,
+      workspaceId: req.workspaceId,
+    })
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
@@ -22,7 +25,10 @@ router.get('/entities/:id/history', async (req, res) => {
 // POST /entities/:id/rollback/:logId — restore entity from a snapshot
 router.post('/entities/:id/rollback/:logId', requireActor, async (req, res) => {
   try {
-    const log = await ChangeLog.findById(req.params.logId).lean();
+    const log = await ChangeLog.findOne({
+      _id: req.params.logId,
+      workspaceId: req.workspaceId,
+    }).lean();
     if (!log || String(log.entityId) !== req.params.id) {
       return res.status(404).json({ error: 'Change log entry not found' });
     }
@@ -30,11 +36,16 @@ router.post('/entities/:id/rollback/:logId', requireActor, async (req, res) => {
       return res.status(400).json({ error: 'No snapshot available for this log entry' });
     }
 
-    const before = await Entity.findById(req.params.id).lean();
+    const scope = { _id: req.params.id, workspaceId: req.workspaceId };
+
+    const before = await Entity.findOne(scope).lean();
     if (!before) return res.status(404).json({ error: 'Entity not found' });
 
-    const { _id, __v, createdAt, updatedAt, ...snapshotData } = log.snapshot;
-    const after = await Entity.findByIdAndUpdate(req.params.id, snapshotData, {
+    // workspaceId is stripped along with the immutable fields: snapshots taken
+    // before tenancy carry workspaceId null, and restoring that would orphan
+    // the entity out of every workspace.
+    const { _id, __v, createdAt, updatedAt, workspaceId, ...snapshotData } = log.snapshot;
+    const after = await Entity.findOneAndUpdate(scope, snapshotData, {
       new: true,
       runValidators: true,
     }).populate('open_questions', 'question status');
