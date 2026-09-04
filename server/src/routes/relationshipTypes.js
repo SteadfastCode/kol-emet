@@ -1,33 +1,8 @@
 import { Router } from 'express';
 import RelationshipType from '../models/RelationshipType.js';
+import { similarity, findSimilar } from '../lib/similarity.js';
 
 const router = Router();
-
-// Trigram similarity — used for near-duplicate detection
-function trigrams(str) {
-  const s = str.toLowerCase().trim();
-  const set = new Set();
-  for (let i = 0; i <= s.length - 3; i++) set.add(s.slice(i, i + 3));
-  return set;
-}
-
-function similarity(a, b) {
-  const ta = trigrams(a);
-  const tb = trigrams(b);
-  if (ta.size === 0 && tb.size === 0) return 1;
-  if (ta.size === 0 || tb.size === 0) return 0;
-  const intersection = [...ta].filter(t => tb.has(t)).length;
-  const union = new Set([...ta, ...tb]).size;
-  return intersection / union;
-}
-
-function findSimilar(name, existing, threshold = 0.4) {
-  return existing
-    .map(t => ({ type: t, score: similarity(name, t.name) }))
-    .filter(({ score, type }) => score >= threshold && type.name.toLowerCase() !== name.toLowerCase())
-    .sort((a, b) => b.score - a.score)
-    .map(({ type }) => type.name);
-}
 
 // GET /relationship-types
 router.get('/', async (req, res) => {

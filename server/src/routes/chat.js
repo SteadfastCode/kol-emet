@@ -28,6 +28,7 @@ import UserMemory from '../models/UserMemory.js';
 import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
+import { CATEGORIES } from '../config/categories.js';
 import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
 
 const router = Router();
@@ -93,7 +94,6 @@ async function streamViaResponsesApi(client, model, systemPrompt, messages, send
 
 // ─── Completions API path (function tools, local execution) ──────────────────
 
-const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline', 'Open Questions'];
 
 const WIKI_TOOLS = [
   {

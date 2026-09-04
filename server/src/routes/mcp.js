@@ -11,6 +11,7 @@ import OpenQuestion from '../models/OpenQuestion.js';
 import User from '../models/User.js';
 import { getMcpUser } from '../lib/mcpUserStore.js';
 import Workspace from '../models/Workspace.js';
+import { CATEGORIES } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
 
 const router = Router();
@@ -56,8 +57,6 @@ router.use((req, res, next) => {
 });
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
-
-const CATEGORIES = ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline', 'Open Questions'];
 
 const BlockInput = z.object({
   type: z.enum(BLOCK_TYPES),

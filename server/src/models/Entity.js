@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { CATEGORIES } from '../config/categories.js';
 
 const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
 
@@ -14,7 +15,7 @@ const entitySchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ['Characters', 'Worlds', 'Organizations', 'Lore & Mechanics', 'Timeline', 'Open Questions'],
+      enum: CATEGORIES,
     },
     summary: { type: String, required: true },
     tags: { type: [String], default: [] },
@@ -25,6 +26,11 @@ const entitySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Every scoped read filters on workspaceId, and the generator's dedup pass
+// looks entities up by (workspace, title). This schema declared no indexes at
+// all, unlike RelationshipGroup, OpenQuestion and ChangeLog.
+entitySchema.index({ workspaceId: 1, title: 1 });
 
 export { BLOCK_TYPES };
 export default mongoose.model('Entity', entitySchema, 'entities');

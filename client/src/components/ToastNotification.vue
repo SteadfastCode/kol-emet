@@ -8,7 +8,7 @@
           class="toast"
           @click="dismiss(toast.id)"
         >
-          <span class="actor" :class="{ ai: toast.actorType === 'mcp' }">{{ toast.actorLabel }}</span>
+          <span class="actor" :class="{ ai: ['mcp', 'generator'].includes(toast.actorType) }">{{ toast.actorLabel }}</span>
           {{ ' ' }}
           <span class="action">{{ toast.message }}</span>
           <template v-if="toast.entityTitle">
