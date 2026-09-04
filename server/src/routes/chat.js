@@ -23,22 +23,36 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { PROVIDERS, makeClient } from '../lib/aiProviders.js';
 import Conversation from '../models/Conversation.js';
+import UserMemory from '../models/UserMemory.js';
 import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
+import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
 
 const router = Router();
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-const WIKI_SYSTEM_PROMPT =
-  'You are an AI assistant integrated into Kol Emet, a world-building wiki. ' +
-  'You have access to wiki search tools — use them. ' +
-  'ALWAYS call search_entities before answering questions about wiki content. ' +
-  'Use get_entity when you need full details on a specific entity. ' +
-  'NEVER invent entity names, relationships, places, or lore. ' +
-  'If search returns nothing, say so — do not fill the gap with invented content. ' +
-  'Be concise. Cite entity names when referencing wiki content.';
+function buildSystemPrompt(memories = []) {
+  const base =
+    'You are an AI assistant integrated into Kol Emet, a world-building wiki. ' +
+    'You have access to wiki search tools — use them. ' +
+    'ALWAYS call search_entities before answering questions about wiki content. ' +
+    'Use get_entity when you need full details on a specific entity. ' +
+    'NEVER invent entity names, relationships, places, or lore. ' +
+    'If search returns nothing, say so — do not fill the gap with invented content. ' +
+    'Be concise. Cite entity names when referencing wiki content. ' +
+    'You also have a save_memory tool — use it when the user shares something important ' +
+    'or explicitly asks you to remember something.';
+
+  if (memories.length === 0) return base;
+
+  const memBlock =
+    '\n\nREMEMBERED CONTEXT (from past conversations):\n' +
+    memories.map(f => `- ${f}`).join('\n');
+
+  return base + memBlock;
+}
 
 // ─── Responses API path (MCP tools) ──────────────────────────────────────────
 
@@ -84,6 +98,23 @@ const WIKI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'save_memory',
+      description:
+        'Save an important fact to long-term memory for future conversations. ' +
+        'Use when the user shares something important about themselves, their preferences, ' +
+        'or when they explicitly ask you to remember something.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fact: { type: 'string', description: 'The fact to remember, as a clear self-contained statement' },
+        },
+        required: ['fact'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search_entities',
       description:
         'Search wiki entities by keyword, tag, or category. ' +
@@ -118,7 +149,13 @@ const WIKI_TOOLS = [
   },
 ];
 
-async function executeTool(name, args) {
+async function executeTool(name, args, ctx = {}) {
+  if (name === 'save_memory') {
+    if (!args.fact || !ctx.userId) return { error: 'Missing fact or user context' };
+    await UserMemory.create({ userId: ctx.userId, fact: args.fact, sourceId: ctx.conversationId });
+    return { saved: true };
+  }
+
   if (name === 'search_entities') {
     const filter = {};
     if (args.category) filter.category = args.category;
@@ -155,7 +192,7 @@ async function executeTool(name, args) {
  * Stream via Chat Completions API (function calling, local execution).
  * Returns the full assistant text (from whichever phase produced it).
  */
-async function streamViaCompletions(client, model, systemPrompt, messages, send) {
+async function streamViaCompletions(client, model, systemPrompt, messages, send, ctx = {}) {
   let currentMessages = [
     { role: 'system', content: systemPrompt },
     ...messages,
@@ -212,7 +249,7 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send)
     let result;
     try {
       const args = JSON.parse(tc.function.arguments);
-      result = await executeTool(tc.function.name, args);
+      result = await executeTool(tc.function.name, args, ctx);
     } catch (err) {
       result = { error: `Tool execution failed: ${err.message}` };
     }
@@ -265,8 +302,7 @@ router.post('/', requireAuth, async (req, res) => {
   const apiKey = process.env[providerCfg.envKey];
   if (!apiKey) return res.status(503).json({ error: `${providerCfg.name} API key is not configured` });
 
-  const effectiveModel  = model || providerCfg.defaultModel;
-  const effectiveSystem = systemPrompt || WIKI_SYSTEM_PROMPT;
+  const effectiveModel = model || providerCfg.defaultModel;
 
   // Validate conversation ownership if provided
   const userId = req.session?.userId;
@@ -275,6 +311,15 @@ router.post('/', requireAuth, async (req, res) => {
     conversation = await Conversation.findOne({ _id: conversationId, userId });
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
   }
+
+  // Load memories and build system prompt (skip if caller supplied a custom one)
+  let effectiveSystem = systemPrompt;
+  if (!effectiveSystem) {
+    const memories = userId ? await loadMemories(userId) : [];
+    effectiveSystem = buildSystemPrompt(memories);
+  }
+
+  const ctx = { userId, conversationId };
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -292,7 +337,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     const assistantText = useResponsesApi
       ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send)
-      : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send);
+      : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send, ctx);
 
     // Persist the new exchange to the conversation
     if (conversation && assistantText) {
@@ -303,6 +348,15 @@ router.post('/', requireAuth, async (req, res) => {
           { role: 'assistant', content: assistantText },
         );
         await conversation.save();
+
+        // Fire-and-forget: extract memorable facts from this exchange
+        extractAndSaveMemories(
+          userId,
+          conversation._id,
+          lastUserMsg.content,
+          assistantText,
+          provider,
+        );
       }
     }
 
