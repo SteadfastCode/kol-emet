@@ -14,6 +14,7 @@
         @set-cat="setCat"
         @set-tag="setTag"
         @clear-tag="clearTag"
+        @reset-filters="resetFilters"
         @select="openEntry"
         @new-entry="openEditor"
         @logout="$emit('logout')"
@@ -177,7 +178,7 @@ const {
   loadEntities, selectEntity, addEntity, editEntity, removeEntity,
 } = useEntities();
 
-const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag } = useFilters(entities);
+const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag, resetFilters } = useFilters(entities);
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
 

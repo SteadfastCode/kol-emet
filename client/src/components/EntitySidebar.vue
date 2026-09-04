@@ -59,16 +59,32 @@
         />
       </template>
     </VirtualList>
-    <div v-else class="list-empty">No entities found.</div>
+    <!-- A filtered-to-nothing view and a genuinely empty workspace need
+         different responses: one wants the filter cleared, the other wants a
+         way to start. -->
+    <div v-else-if="isFiltered" class="list-empty">
+      <p class="empty-title">No matches</p>
+      <p class="empty-body">Nothing here matches your current search or filters.</p>
+      <button class="btn-sm" @click="$emit('reset-filters')">Clear filters</button>
+    </div>
+    <div v-else class="list-empty">
+      <p class="empty-title">Your wiki is empty</p>
+      <p class="empty-body">
+        Entities are the nodes of your graph — characters, worlds, organizations.
+        Create one, then link them together to build the map.
+      </p>
+      <button class="btn-sm primary" @click="$emit('new-entry')">Create your first entity</button>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import VirtualList from './VirtualList.vue';
 import SidebarCard from './SidebarCard.vue';
 import { CATEGORIES } from '../config/categories.js';
 
-defineProps({
+const props = defineProps({
   entities: Array,
   activeCat: String,
   activeTag: String,
@@ -78,7 +94,15 @@ defineProps({
   graphOpen: Boolean,
 });
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat', 'graph']);
+// `entities` is already filtered, so an empty list alone can't distinguish
+// "no content" from "no matches" — the active filters are what separates them.
+const isFiltered = computed(() =>
+  Boolean(props.searchQuery?.trim()) ||
+  Boolean(props.activeTag) ||
+  (props.activeCat && props.activeCat !== 'All')
+);
+
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat', 'graph', 'reset-filters']);
 </script>
 
 <style scoped>
@@ -154,5 +178,19 @@ defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry',
   color: #444;
   font-size: 13px;
   text-align: center;
+}
+
+.empty-title {
+  margin: 0 0 6px;
+  color: #888;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.empty-body {
+  margin: 0 auto 14px;
+  max-width: 260px;
+  color: #555;
+  line-height: 1.5;
 }
 </style>

@@ -21,6 +21,7 @@ export function useFilters(entries) {
   function setCat(cat) { activeCat.value = cat; activeTag.value = null; }
   function setTag(tag) { activeTag.value = tag; activeCat.value = 'All'; }
   function clearTag() { activeTag.value = null; }
+  function resetFilters() { searchQuery.value = ''; activeCat.value = 'All'; activeTag.value = null; }
 
-  return { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag };
+  return { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag, resetFilters };
 }

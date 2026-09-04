@@ -9,6 +9,7 @@ import {
 import User from '../models/User.js';
 import Workspace from '../models/Workspace.js';
 import { requireAuth } from '../middleware/auth.js';
+import { seedWorkspace } from '../lib/workspaceSeeder.js';
 
 const router = Router();
 
@@ -32,8 +33,9 @@ router.post('/register', async (req, res) => {
   // Every user needs a workspace immediately — resolveWorkspace fails closed
   // without one, so a user created here but left workspace-less could not read
   // or write anything.
+  let workspace;
   try {
-    await Workspace.create({
+    workspace = await Workspace.create({
       name:    'My Workspace',
       ownerId: user._id,
       members: [{ userId: user._id, role: 'owner' }],
@@ -43,6 +45,12 @@ router.post('/register', async (req, res) => {
     await User.deleteOne({ _id: user._id });
     return res.status(500).json({ error: 'Could not create workspace' });
   }
+
+  // Seed starting content so the new workspace isn't an empty shell. Awaited
+  // so the first page load sees it, but never fatal — seedWorkspace reports
+  // failure rather than throwing, and an unseeded workspace still works.
+  const seed = await seedWorkspace(workspace._id, req.body?.template);
+  if (!seed.ok) console.error(`[auth] workspace ${workspace._id} seeded partially:`, seed.error);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
