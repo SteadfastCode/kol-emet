@@ -6,6 +6,10 @@
  *   OpenRouter  — primary SaaS path. One API key, all models, per-request cost data.
  *   Native      — power-user / self-hosted fallback. Individual provider keys.
  *                 xAI and OpenAI native providers also support the Responses API + MCP path.
+ *   Steadfast   — self-hosted models on the steadfast-ai box, behind an
+ *                 OpenAI-compatible gateway. Free at the point of use, but only
+ *                 reachable over the tailnet, so it is a local-dev / self-hosted
+ *                 deployment option rather than a production default.
  */
 
 import OpenAI from 'openai';
@@ -65,7 +69,25 @@ export const PROVIDERS = {
     defaultModel: 'gemini-2.0-flash',
     responsesApi: false,
   },
+
+  // ── Self-hosted: the steadfast-ai box ─────────────────────────────────────
+  steadfast: {
+    name: 'Steadfast AI (self-hosted)',
+    envKey: 'STEADFAST_AI_API_KEY',
+    // Tailnet address of the gateway; override per-environment.
+    baseURL: 'http://100.88.32.7:3011/v1',
+    baseUrlEnvKey: 'STEADFAST_AI_BASE_URL',
+    models: ['qwen2.5-coder:14b', 'gemma4:12b', 'llama3.2:3b', 'qwen2.5:3b', 'granite3.3:2b'],
+    defaultModel: 'qwen2.5-coder:14b',
+    responsesApi: false,
+  },
 };
+
+/** True when a provider has the credentials it needs to be used. */
+export function isConfigured(providerId) {
+  const p = PROVIDERS[providerId];
+  return Boolean(p && process.env[p.envKey]);
+}
 
 export function makeClient(providerId) {
   const p = PROVIDERS[providerId];
@@ -73,6 +95,8 @@ export function makeClient(providerId) {
   const apiKey = process.env[p.envKey];
   if (!apiKey) throw new Error(`${p.envKey} is not configured on the server`);
   const opts = { apiKey };
-  if (p.baseURL) opts.baseURL = p.baseURL;
+  // Resolved at call time, not module load, so dotenv ordering can't bite.
+  const baseURL = (p.baseUrlEnvKey && process.env[p.baseUrlEnvKey]) || p.baseURL;
+  if (baseURL) opts.baseURL = baseURL;
   return new OpenAI(opts);
 }
