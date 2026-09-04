@@ -55,7 +55,9 @@ app.use(session({
 app.use('/', oauthRouter);
 app.use('/auth', authRouter);
 app.use('/mcp', mcpRouter);
-app.use('/events', requireAuth, eventsRouter);
+// resolveWorkspace here too: the SSE stream pushes full entity documents, so
+// each connection must be tagged with a workspace to filter broadcasts by.
+app.use('/events', requireAuth, resolveWorkspace, eventsRouter);
 // resolveWorkspace sits behind requireAuth on every route that touches tenant
 // content: it sets req.workspaceId, which those routes filter every query on.
 app.use('/entities', requireAuth, resolveWorkspace, entitiesRouter);

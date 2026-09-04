@@ -15,7 +15,8 @@ router.get('/', requireAuth, (req, res) => {
   // Send the client its own ID so it can tag outgoing write requests
   res.write(`event: client:id\ndata: ${JSON.stringify({ clientId })}\n\n`);
 
-  addClient(clientId, res);
+  // req.workspaceId is set by resolveWorkspace, mounted ahead of this router.
+  addClient(clientId, res, req.workspaceId);
   req.on('close', () => removeClient(clientId));
 });
 

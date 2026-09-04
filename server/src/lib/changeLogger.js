@@ -56,7 +56,7 @@ export async function logCreate(entity, actor, excludeClientId = null) {
     entity,
     actor:   { label: actor.label, type: actor.type },
     changes,
-  }, excludeClientId);
+  }, { workspaceId: entity.workspaceId, excludeClientId });
 }
 
 export async function logUpdate(before, after, actor, excludeClientId = null) {
@@ -76,7 +76,7 @@ export async function logUpdate(before, after, actor, excludeClientId = null) {
     entity:   after,
     actor:    { label: actor.label, type: actor.type },
     changes,
-  }, excludeClientId);
+  }, { workspaceId: after.workspaceId ?? before.workspaceId, excludeClientId });
 }
 
 export async function logDelete(entity, actor, excludeClientId = null) {
@@ -98,5 +98,5 @@ export async function logDelete(entity, actor, excludeClientId = null) {
     actor:       { label: actor.label, type: actor.type },
     snapshot:    entity,
     deletedAt,
-  }, excludeClientId);
+  }, { workspaceId: entity.workspaceId, excludeClientId });
 }
