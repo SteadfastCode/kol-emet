@@ -6,6 +6,8 @@ import { resolveUserId } from '../middleware/workspace.js';
 import { getBudget, checkBudget, recordSpend, reserveGeneration, releaseGeneration } from '../lib/usageMeter.js';
 import { FREE_PROVIDERS } from '../config/pricing.js';
 import { isConfigured } from '../lib/aiProviders.js';
+import { validateItemPayload } from '../lib/proposalItemSchema.js';
+import Entity from '../models/Entity.js';
 
 const router = Router();
 
@@ -89,10 +91,10 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // A run explicitly routed to a self-hosted model costs nothing, so the
-  // allowance — which exists solely to bound real spend — must not gate it.
-  // This is also the shape of a useful fallback: when the trial runs out,
-  // generation can continue on the slower free model rather than stopping dead.
+  // Escape hatch for a provider that genuinely costs nothing. FREE_PROVIDERS is
+  // empty today — self-hosted moved to its own (cheap) rate once electricity
+  // was accounted for — so this is currently always false. Kept as the hook a
+  // sponsored or post-trial free tier would use.
   const isFree = FREE_PROVIDERS.has(provider) && isConfigured(provider);
 
   const budget = await checkBudget(req.workspaceId, MIN_RUN_MICROS);
@@ -208,6 +210,173 @@ router.post('/', async (req, res) => {
   } finally {
     await releaseGeneration(req.workspaceId);
     if (open) res.end();
+  }
+});
+
+// ─── Decision routes ─────────────────────────────────────────────────────────
+//
+// These record the HUMAN LABEL and write nothing to the graph. Applying is a
+// separate, explicit step. The split is deliberate: a person reviewing 30 items
+// and then abandoning the draft has still produced 30 labelled examples, and
+// those are the point of the corpus.
+
+// Written only by the applier. Accepting them from a request body would let a
+// client forge the record of what happened to a change.
+const SYSTEM_KEYS = ['applyState', 'resultId', 'changeLogId', 'applyError', 'appliedAt'];
+
+/**
+ * PATCH /proposals/:id/items/:itemId — accept, edit or reject one item.
+ *
+ * Guarded on applyState 'pending' in the query itself rather than checked
+ * first: a decision must not be able to change out from under an item that is
+ * already being applied.
+ */
+router.patch('/:id/items/:itemId', async (req, res) => {
+  try {
+    const { decision, payload, note } = req.body ?? {};
+
+    if (!['accepted', 'edited', 'rejected'].includes(decision)) {
+      return res.status(400).json({ error: "decision must be 'accepted', 'edited' or 'rejected'" });
+    }
+    const forged = SYSTEM_KEYS.filter(k => k in (req.body ?? {}));
+    if (forged.length) {
+      return res.status(400).json({ error: `These are set by the applier, not the client: ${forged.join(', ')}` });
+    }
+
+    const proposal = await Proposal.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
+    if (!proposal) return res.status(404).json({ error: 'Not found' });
+
+    const item = proposal.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.applyState !== 'pending') {
+      return res.status(409).json({
+        error: `This item was already applied (${item.applyState}) and cannot be re-decided.`,
+      });
+    }
+
+    let accepted = null;
+    if (decision === 'accepted') {
+      // Copied verbatim rather than left null so the exporter stays a
+      // single-pass map, and stays correct even if the normalizer changes.
+      accepted = JSON.parse(JSON.stringify(item.proposed));
+    } else if (decision === 'edited') {
+      if (!payload || typeof payload !== 'object') {
+        return res.status(400).json({ error: 'An edited item requires a payload' });
+      }
+      const check = validateItemPayload(item.kind, payload, req.workspaceId);
+      if (!check.ok) return res.status(400).json({ error: check.error });
+      accepted = check.value;
+    }
+
+    item.decision = decision;
+    item.decisionVia = 'individual';
+    item.decisionNote = typeof note === 'string' ? note : null;
+    item.decidedBy = await resolveUserId(req);
+    item.decidedAt = new Date();
+    item.accepted = accepted;   // null for a rejection — the row itself survives
+
+    proposal.recountItems();
+    await proposal.save();
+
+    res.json({ item: proposal.items.id(req.params.itemId), counts: proposal.counts });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /proposals/:id/items/:itemId/retarget — point a create at an existing
+ * entity instead, turning it into an update.
+ *
+ * This is the manual resolution of a `duplicate_candidate`: fuzzy matches are
+ * flagged and never merged automatically, so a person decides.
+ */
+router.post('/:id/items/:itemId/retarget', async (req, res) => {
+  try {
+    const { targetEntityId } = req.body ?? {};
+
+    const proposal = await Proposal.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
+    if (!proposal) return res.status(404).json({ error: 'Not found' });
+
+    const item = proposal.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.kind !== 'entity') return res.status(400).json({ error: 'Only entity items can be retargeted' });
+    if (item.applyState !== 'pending') {
+      return res.status(409).json({ error: `Already applied (${item.applyState}).` });
+    }
+
+    if (targetEntityId === null) {
+      item.op = 'create';
+      item.targetEntityId = null;
+      item.baseUpdatedAt = null;
+      item.matchedBy = 'none';
+    } else {
+      // Scoped: an id from another workspace must not become a merge target.
+      const target = await Entity.findOne({ _id: targetEntityId, workspaceId: req.workspaceId })
+        .select('_id updatedAt').lean();
+      if (!target) return res.status(404).json({ error: 'Target entity not found' });
+
+      item.op = 'update';
+      item.targetEntityId = target._id;
+      item.baseUpdatedAt = target.updatedAt;   // staleness baseline for the applier
+      item.matchedBy = 'manual';
+    }
+
+    // The duplicate flag has been resolved either way; the candidate reference
+    // stays for the record.
+    item.flags = item.flags.filter(f => f !== 'duplicate_candidate');
+    await proposal.save();
+
+    res.json({ item: proposal.items.id(req.params.itemId) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /proposals/:id/decide-clean — accept every unflagged pending item.
+ *
+ * Deliberately refuses flagged items and reports how many it skipped. A bulk
+ * action that swept up duplicates, coerced categories and dropped members would
+ * be a rubber stamp, which is exactly what the human-approval requirement
+ * exists to prevent.
+ */
+router.post('/:id/decide-clean', async (req, res) => {
+  try {
+    const proposal = await Proposal.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
+    if (!proposal) return res.status(404).json({ error: 'Not found' });
+
+    const decidedBy = await resolveUserId(req);
+    const now = new Date();
+    let accepted = 0, skippedFlagged = 0, skippedApplied = 0;
+
+    for (const item of proposal.items) {
+      if (item.decision !== 'pending') continue;
+      if (item.applyState !== 'pending') { skippedApplied++; continue; }
+      if (item.flags?.length) { skippedFlagged++; continue; }
+
+      item.decision = 'accepted';
+      item.decisionVia = 'bulk';
+      item.decidedBy = decidedBy;
+      item.decidedAt = now;
+      item.accepted = JSON.parse(JSON.stringify(item.proposed));
+      accepted++;
+    }
+
+    proposal.recountItems();
+    await proposal.save();
+
+    res.json({
+      accepted,
+      skippedFlagged,
+      skippedApplied,
+      counts: proposal.counts,
+      message: skippedFlagged
+        ? `Accepted ${accepted}. ${skippedFlagged} item(s) need a look — they were flagged.`
+        : `Accepted ${accepted}.`,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
