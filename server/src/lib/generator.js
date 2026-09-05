@@ -130,7 +130,20 @@ async function callWithRepair(client, model, system, user, diag) {
  * @param {object} opts { text, workspaceId, provider?, onStage? }
  * @returns proposal payload — never persisted here, never written to the graph
  */
-export async function generateProposal({ text, workspaceId, provider, roleStyle, onStage = () => {} }) {
+export async function generateProposal(opts) {
+  // Shared handle so a thrown error can still report what was spent. Tokens
+  // consumed before a failure were still paid for; dropping them on the floor
+  // would let a run that dies on its last call go entirely uncharged.
+  const spend = { provider: null, model: null, usage: null };
+  try {
+    return await runGeneration({ ...opts, __spend: spend });
+  } catch (err) {
+    err.spend = spend;
+    throw err;
+  }
+}
+
+async function runGeneration({ text, workspaceId, provider, roleStyle, onStage = () => {}, __spend }) {
   const started = Date.now();
   const source = String(text ?? '').trim();
   if (!source) throw new Error('No text supplied');
@@ -142,6 +155,7 @@ export async function generateProposal({ text, workspaceId, provider, roleStyle,
 
   const route = pickRoute(provider);
   if (!route) throw new Error('No AI provider is configured on the server');
+  if (__spend) { __spend.provider = route.provider; __spend.model = route.model; }
   log('light', `generating for workspace ${workspaceId} via ${route.provider}/${route.model} (${source.length} chars)`);
 
   const client = makeClient(route.provider);
@@ -163,6 +177,8 @@ export async function generateProposal({ text, workspaceId, provider, roleStyle,
     parsedVia: [], repairAttempted: false, dropReasons: [], passes: 0, rawOutput: null,
     usage: { promptTokens: 0, completionTokens: 0, calls: 0 },
   };
+  // Same object reference, so it stays current as calls accumulate.
+  if (__spend) __spend.usage = diag.usage;
   const chunks = chunkText(source);
   log('normal', `split into ${chunks.length} chunk(s)`);
 

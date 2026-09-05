@@ -3,23 +3,20 @@ import crypto from 'crypto';
 import Proposal from '../models/Proposal.js';
 import { generateProposal, MAX_CHARS } from '../lib/generator.js';
 import { resolveUserId } from '../middleware/workspace.js';
+import { getBudget, checkBudget, recordSpend, reserveGeneration, releaseGeneration } from '../lib/usageMeter.js';
+import { FREE_PROVIDERS } from '../config/pricing.js';
+import { isConfigured } from '../lib/aiProviders.js';
 
 const router = Router();
 
 /**
- * Runs per workspace per rolling 24h. Generation calls a paid provider on
- * behalf of anyone who can sign up, so the ceiling is on by default rather
- * than something to remember to add before launch. Discarded and failed runs
- * still count — they cost the same.
+ * Minimum budget required to START a run, in micro-dollars.
+ *
+ * A floor, not a prediction. Measured runs land between $0.011 and ~$0.15, so
+ * a workspace with a tenth of a cent left should not be allowed to begin one
+ * it certainly cannot pay for.
  */
-const DAILY_CAP = Number(process.env.GENERATOR_DAILY_CAP ?? 20);
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-async function checkQuota(workspaceId) {
-  const since = new Date(Date.now() - DAY_MS);
-  const used = await Proposal.countDocuments({ workspaceId, createdAt: { $gte: since } });
-  return { used, cap: DAILY_CAP, exceeded: used >= DAILY_CAP };
-}
+const MIN_RUN_MICROS = Number(process.env.GENERATOR_MIN_RUN_MICROS ?? 15_000); // $0.015
 
 // A generation that was interrupted — a server restart mid-run, say — would
 // otherwise leave a row spinning on 'generating' forever. Listing lazily ages
@@ -58,10 +55,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /proposals/quota — what the caller has left today.
+// GET /proposals/quota — remaining AI allowance for this workspace.
 router.get('/quota', async (req, res) => {
   try {
-    res.json(await checkQuota(req.workspaceId));
+    res.json(await getBudget(req.workspaceId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -92,12 +89,27 @@ router.post('/', async (req, res) => {
     });
   }
 
-  const quota = await checkQuota(req.workspaceId);
-  if (quota.exceeded) {
-    return res.status(429).json({
-      error: `Daily generation limit reached (${quota.cap} runs per day). Try again tomorrow.`,
-      ...quota,
+  // A run explicitly routed to a self-hosted model costs nothing, so the
+  // allowance — which exists solely to bound real spend — must not gate it.
+  // This is also the shape of a useful fallback: when the trial runs out,
+  // generation can continue on the slower free model rather than stopping dead.
+  const isFree = FREE_PROVIDERS.has(provider) && isConfigured(provider);
+
+  const budget = await checkBudget(req.workspaceId, MIN_RUN_MICROS);
+  if (!isFree && !budget.allowed) {
+    return res.status(402).json({
+      error: budget.exhausted
+        ? `Your AI allowance is used up (${budget.granted} total).`
+        : `Not enough AI allowance left to start a run (${budget.remaining} remaining).`,
+      ...budget,
     });
+  }
+
+  // One generation at a time per workspace. Cost is only known after a run
+  // finishes, so without this N simultaneous requests all pass the same budget
+  // check and spend N times the allowance.
+  if (!(await reserveGeneration(req.workspaceId))) {
+    return res.status(409).json({ error: 'A generation is already running for this workspace.' });
   }
 
   const userId = await resolveUserId(req);
@@ -116,6 +128,9 @@ router.post('/', async (req, res) => {
       },
     });
   } catch (err) {
+    // The lock is already held at this point; releasing it here stops a failed
+    // create from locking the workspace out until the 10-minute staleness sweep.
+    await releaseGeneration(req.workspaceId);
     return res.status(500).json({ error: `Could not start generation: ${err.message}` });
   }
 
@@ -154,11 +169,20 @@ router.post('/', async (req, res) => {
     proposal.recountItems();
     await proposal.save();
 
+    await recordSpend(req.workspaceId, {
+      provider: result.route.provider,
+      model: result.route.model,
+      promptTokens: result.diagnostics.usage?.promptTokens ?? 0,
+      completionTokens: result.diagnostics.usage?.completionTokens ?? 0,
+      reason: `proposal ${proposal._id}`,
+    });
+
     send({
       type: 'done',
       proposalId: String(proposal._id),
       counts: proposal.counts,
       route: proposal.route,
+      budget: await getBudget(req.workspaceId),
     });
   } catch (err) {
     console.error('[proposals] generation failed:', err.message);
@@ -167,8 +191,22 @@ router.post('/', async (req, res) => {
     // A failed save here would strand the row on 'generating'; the lazy sweep
     // in GET / is the backstop for exactly that.
     await proposal.save().catch(e => console.error('[proposals] could not record failure:', e.message));
+
+    // Charge for whatever completed before the failure. Those tokens were paid
+    // for regardless, and a run that dies on its last call is the expensive case.
+    if (err.spend?.usage?.calls > 0) {
+      await recordSpend(req.workspaceId, {
+        provider: err.spend.provider,
+        model: err.spend.model,
+        promptTokens: err.spend.usage.promptTokens,
+        completionTokens: err.spend.usage.completionTokens,
+        reason: `failed proposal ${proposal._id}`,
+      }).catch(e => console.error('[proposals] could not charge failed run:', e.message));
+    }
+
     send({ type: 'error', message: err.message, proposalId: String(proposal._id) });
   } finally {
+    await releaseGeneration(req.workspaceId);
     if (open) res.end();
   }
 });
