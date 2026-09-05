@@ -145,7 +145,9 @@ export async function generateProposal({ text, workspaceId, provider, onStage = 
     .limit(ROSTER_LIMIT)
     .lean();
   const totalExisting = await Entity.countDocuments({ workspaceId });
-  const relTypes = await RelationshipType.find({ workspaceId }).select('name').lean();
+  const relTypes = await RelationshipType.find({ workspaceId }).select('name scope').lean();
+  const groupLabels = relTypes.filter(t => t.scope === 'group').map(t => t.name);
+  const memberRoles = relTypes.filter(t => t.scope !== 'group').map(t => t.name);
 
   const diag = { parsedVia: [], repairAttempted: false, dropReasons: [], passes: 0, rawOutput: null };
   const chunks = chunkText(source);
@@ -176,7 +178,7 @@ export async function generateProposal({ text, workspaceId, provider, onStage = 
 
   if (names.length >= 2) {
     onStage({ stage: 'relationships' });
-    const system = relationshipPrompt({ names, relationshipTypes: relTypes.map(t => t.name) });
+    const system = relationshipPrompt({ names, groupLabels, memberRoles });
     const { value } = await callWithRepair(client, route.model, system, source.slice(0, MAX_CHARS), diag);
     diag.passes++;
     rawRelationships = value ?? [];
@@ -204,6 +206,8 @@ export async function generateProposal({ text, workspaceId, provider, onStage = 
       promptVersion: PROMPT_VERSION,
       categories,
       relationshipTypes: relTypes.map(t => t.name),
+      groupLabels,
+      memberRoles,
       rosterCount: existingEntities.length,
       rosterTruncated: totalExisting > existingEntities.length,
       systemPrompt: entityPrompt({ categories, existingTitles: [] }),

@@ -23,55 +23,82 @@ export const TEMPLATES = {
     name: 'Worldbuilding',
     description: 'Characters, worlds, organizations and the relationships between them.',
 
-    // These are per-MEMBER role labels, not relation kinds. The data model puts
-    // a label on each member of a group, so within one family group Eldan is
-    // "father" and Ethan is "son" — "Parent of" is not something any single
-    // member would ever be labelled.
+    // A relationship carries labels in TWO positions, and they are different
+    // vocabularies:
     //
-    // Deliberately specific and gendered where the domain is, matching the MCP
-    // tool descriptions ("brother"/"sister", not "sibling"). The ungendered
-    // fallbacks — parent, child, sibling, spouse — are left out on purpose:
-    // including them invites the model to reach for the vague option, which is
-    // exactly what those tool descriptions already work to prevent.
+    //   scope:'group'  — the label on the group itself: "Marriage", "Home World",
+    //                    "affiliation". Answers what KIND of relationship this is.
+    //   scope:'member' — the label on one member within that group: "Wife", "Son",
+    //                    "Planet", "Recruiter". Answers what that entity's PART in
+    //                    it is.
     //
-    // Today this list is consumed only by the generator, as vocabulary
-    // grounding. The client types member labels as free text and never calls
-    // /relationship-types.
+    // Both are needed. An earlier version of this list flattened them into one
+    // set, which left the registry unable to offer the right terms in the right
+    // place, and gave the generator no way to tell which position a term belongs in.
+    //
+    // Member roles are specific and gendered where the domain is, matching the
+    // MCP tool descriptions ("brother"/"sister", not "sibling"). The ungendered
+    // fallbacks — parent, child, sibling, spouse — are omitted on purpose:
+    // offering them invites the model to reach for the vague option, which those
+    // tool descriptions already work to prevent.
+    //
+    // Capitalisation follows the convention in real data: member roles display
+    // as stored, group labels are uppercased by CSS.
+    //
+    // Today this list is consumed only by the generator, as vocabulary grounding.
+    // The client types labels as free text and never calls /relationship-types.
     //
     // sourceCategory/targetCategory are hints for a future picker, not constraints.
     relationshipTypes: [
+      // ── group labels: what kind of relationship this is ──────────────────
+      { name: 'Marriage',     scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Family',       scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Siblings',     scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Affiliation',  scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Antagonism',   scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Alliance',     scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Home World',   scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Headquarters', scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Founders',     scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Mentorship',   scope: 'group', sourceCategory: null, targetCategory: null },
+
+      // ── member roles: this entity's part in the relationship ─────────────
       // Family
-      { name: 'father',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'mother',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'son',          sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'daughter',     sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'brother',      sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'sister',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'husband',      sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'wife',         sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'grandfather',  sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'grandmother',  sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'uncle',        sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'aunt',         sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'cousin',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'nephew',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'niece',        sourceCategory: 'Characters',    targetCategory: 'Characters' },
+      { name: 'Father',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Mother',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Son',          scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Daughter',     scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Brother',      scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Sister',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Twin brother', scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Twin sister',  scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Husband',      scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Wife',         scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Grandfather',  scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Grandmother',  scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Uncle',        scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Aunt',         scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Cousin',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Nephew',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Niece',        scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
       // Social
-      { name: 'ally',         sourceCategory: null,            targetCategory: null },
-      { name: 'enemy',        sourceCategory: null,            targetCategory: null },
-      { name: 'rival',        sourceCategory: null,            targetCategory: null },
-      { name: 'mentor',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'student',      sourceCategory: 'Characters',    targetCategory: 'Characters' },
-      { name: 'friend',       sourceCategory: 'Characters',    targetCategory: 'Characters' },
+      { name: 'Ally',         scope: 'member', sourceCategory: null, targetCategory: null },
+      { name: 'Enemy',        scope: 'member', sourceCategory: null, targetCategory: null },
+      { name: 'Rival',        scope: 'member', sourceCategory: null, targetCategory: null },
+      { name: 'Mentor',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Student',      scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
+      { name: 'Friend',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Characters' },
       // Organizational
-      { name: 'member',       sourceCategory: 'Characters',    targetCategory: 'Organizations' },
-      { name: 'leader',       sourceCategory: 'Characters',    targetCategory: 'Organizations' },
-      { name: 'founder',      sourceCategory: 'Characters',    targetCategory: 'Organizations' },
-      { name: 'agent',        sourceCategory: 'Characters',    targetCategory: 'Organizations' },
+      { name: 'Member',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Organizations' },
+      { name: 'Leader',       scope: 'member', sourceCategory: 'Characters', targetCategory: 'Organizations' },
+      { name: 'Founder',      scope: 'member', sourceCategory: 'Characters', targetCategory: 'Organizations' },
+      { name: 'Agent',        scope: 'member', sourceCategory: 'Characters', targetCategory: 'Organizations' },
+      { name: 'Recruiter',    scope: 'member', sourceCategory: 'Characters', targetCategory: 'Organizations' },
       // Place
-      { name: 'inhabitant',   sourceCategory: 'Characters',    targetCategory: 'Worlds' },
-      { name: 'home of',      sourceCategory: 'Worlds',        targetCategory: 'Characters' },
-      { name: 'ruler of',     sourceCategory: 'Characters',    targetCategory: 'Worlds' },
+      { name: 'Inhabitant',   scope: 'member', sourceCategory: 'Characters', targetCategory: 'Worlds' },
+      { name: 'Home world',   scope: 'member', sourceCategory: 'Worlds', targetCategory: 'Characters' },
+      { name: 'Planet',       scope: 'member', sourceCategory: 'Worlds', targetCategory: null },
+      { name: 'Ruler',        scope: 'member', sourceCategory: 'Characters', targetCategory: 'Worlds' },
     ],
 
     // Keyed so the relationship group below can refer to them before they have ids.

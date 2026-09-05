@@ -58,11 +58,20 @@ export function entityPrompt({ categories, existingTitles }) {
  * name resolution is the server's job. Role labels are asked for per member
  * because the graph stores a label per membership, not per edge.
  */
-export function relationshipPrompt({ names, relationshipTypes }) {
-  const vocab = relationshipTypes.length
-    ? `\n\nPreferred role labels already used in this wiki — reuse these when they fit:\n` +
-      relationshipTypes.map(t => `- ${t}`).join('\n')
+export function relationshipPrompt({ names, groupLabels = [], memberRoles = [] }) {
+  // Two separate vocabularies, offered against the two separate fields they
+  // belong to. Merging them makes the model use a group label as a member role.
+  const groupVocab = groupLabels.length
+    ? `\n\nGroup labels already used in this wiki — reuse one when it fits:\n` +
+      groupLabels.map(t => `- ${t}`).join('\n')
     : '';
+
+  const roleVocab = memberRoles.length
+    ? `\n\nMember roles already used in this wiki — reuse these when they fit:\n` +
+      memberRoles.map(t => `- ${t}`).join('\n')
+    : '';
+
+  const vocab = groupVocab + roleVocab;
 
   return (
     `You identify relationships between entities that an author has written about.\n\n` +
