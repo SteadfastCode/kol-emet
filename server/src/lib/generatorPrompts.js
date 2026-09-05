@@ -59,16 +59,34 @@ export function entityPrompt({ categories, existingTitles }) {
  * because the graph stores a label per membership, not per edge.
  */
 export function relationshipPrompt({ names, groupLabels = [], memberRoles = [] }) {
-  // Two separate vocabularies, offered against the two separate fields they
-  // belong to. Merging them makes the model use a group label as a member role.
+  // The two vocabularies are offered against the two fields they belong to —
+  // merged, the model uses a group label as a member role — and with OPPOSITE
+  // instructions, because they behave differently in practice:
+  //
+  //   member roles are a CLOSED set. "Sister", "Son", "Mother" are the complete
+  //   answer; improvising here just fragments the vocabulary.
+  //
+  //   group labels are a BASE to build on. A bare "Family" is ambiguous the
+  //   moment a wiki holds two families, so the proper-noun form ("Elias
+  //   Family") is the better answer and must be encouraged, not suppressed.
+  //   Real data carries both patterns: "Elias family" and "Elias siblings"
+  //   alongside plain "Marriage" and "headquarters".
   const groupVocab = groupLabels.length
-    ? `\n\nGroup labels already used in this wiki — reuse one when it fits:\n` +
-      groupLabels.map(t => `- ${t}`).join('\n')
+    ? `\n\nGROUP LABEL vocabulary — these are base kinds, not a closed list:\n` +
+      groupLabels.map(t => `- ${t}`).join('\n') +
+      `\nQualify a base kind with a proper noun whenever it makes the group ` +
+      `identifiable: prefer "Elias Family" over a bare "Family", "Vurdaal ` +
+      `Leadership" over a bare "Affiliation". Use the bare kind only when there ` +
+      `is genuinely nothing to qualify it with.`
     : '';
 
   const roleVocab = memberRoles.length
-    ? `\n\nMember roles already used in this wiki — reuse these when they fit:\n` +
-      memberRoles.map(t => `- ${t}`).join('\n')
+    ? `\n\nMEMBER ROLE vocabulary — prefer these, copied exactly as written:\n` +
+      memberRoles.map(t => `- ${t}`).join('\n') +
+      `\nDo not add a proper noun to a role, and do not improvise when one of these ` +
+      `is accurate. But ACCURACY WINS: if no listed role truthfully describes the ` +
+      `member's part, write the correct role instead. A creditor is a "Creditor", ` +
+      `never a "Mentor" because "Mentor" happened to be on the list.`
     : '';
 
   const vocab = groupVocab + roleVocab;
@@ -84,6 +102,12 @@ export function relationshipPrompt({ names, groupLabels = [], memberRoles = [] }
     `- "name" MUST be exactly one of the names in the list below. Never introduce a new name.\n` +
     `- "role" describes that member's part in this specific relationship, and must be ` +
     `specific to them: use "father"/"mother" not "parent", "brother"/"sister" not "sibling".\n` +
+    `- "label" names the relationship itself. Proper nouns are welcome and usually ` +
+    `better — the label is how a human will recognise this group in a list.\n` +
+    `- A relationship is a GROUP, not a pair. Put everyone who belongs to the same ` +
+    `relationship in ONE object with all of them as members. A family of five is a ` +
+    `single group with five members, each with their own role — never several ` +
+    `two-person groups sharing a label.\n` +
     `- A relationship needs at least 2 members. Skip anything you cannot ground in the text.\n` +
     `- Only assert relationships the text actually states or clearly implies.\n` +
     `- If there are none, return [].\n\n` +
