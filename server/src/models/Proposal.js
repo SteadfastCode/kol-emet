@@ -156,6 +156,13 @@ const proposalSchema = new mongoose.Schema({
     passes:          { type: Number, default: 0 },
     error:           { type: String, default: null },
     generationMs:    { type: Number, default: null },
+    // Token spend for this run, so cost per proposal is measurable rather than
+    // estimated — and so a cap can be set from data.
+    usage: {
+      promptTokens:     { type: Number, default: 0 },
+      completionTokens: { type: Number, default: 0 },
+      calls:            { type: Number, default: 0 },
+    },
   },
 
   applyingAt: { type: Date, default: null },

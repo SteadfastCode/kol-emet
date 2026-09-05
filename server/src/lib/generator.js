@@ -87,7 +87,7 @@ export function parseJsonArray(raw) {
   return { value: null, via: 'failed' };
 }
 
-async function callModel(client, model, system, user) {
+async function callModel(client, model, system, user, diag) {
   const res = await client.chat.completions.create({
     model,
     temperature: 0,
@@ -96,12 +96,19 @@ async function callModel(client, model, system, user) {
       { role: 'user', content: user },
     ],
   });
+  // Accumulated so cost per proposal is a stored fact rather than an estimate.
+  // Every provider in the registry is OpenAI-shaped and reports usage here.
+  if (diag && res.usage) {
+    diag.usage.promptTokens     += res.usage.prompt_tokens ?? 0;
+    diag.usage.completionTokens += res.usage.completion_tokens ?? 0;
+    diag.usage.calls            += 1;
+  }
   return res.choices?.[0]?.message?.content ?? '';
 }
 
 /** One repair turn: hand the model its own unparseable output back. */
 async function callWithRepair(client, model, system, user, diag) {
-  const raw = await callModel(client, model, system, user);
+  const raw = await callModel(client, model, system, user, diag);
   let { value, via } = parseJsonArray(raw);
   diag.parsedVia.push(via);
   if (value) return { value, raw };
@@ -111,7 +118,8 @@ async function callWithRepair(client, model, system, user, diag) {
   const repaired = await callModel(
     client, model,
     'You fix malformed JSON. Return ONLY a valid JSON array. No prose, no fences.',
-    `This was supposed to be a JSON array but could not be parsed. Return the corrected array:\n\n${raw}`
+    `This was supposed to be a JSON array but could not be parsed. Return the corrected array:\n\n${raw}`,
+    diag
   );
   const second = parseJsonArray(repaired);
   diag.parsedVia.push(`repair:${second.via}`);
@@ -151,7 +159,10 @@ export async function generateProposal({ text, workspaceId, provider, roleStyle,
   const groupLabels = relTypes.filter(t => t.scope === 'group').map(t => t.name);
   const memberRoles = relTypes.filter(t => t.scope !== 'group').map(t => t.name);
 
-  const diag = { parsedVia: [], repairAttempted: false, dropReasons: [], passes: 0, rawOutput: null };
+  const diag = {
+    parsedVia: [], repairAttempted: false, dropReasons: [], passes: 0, rawOutput: null,
+    usage: { promptTokens: 0, completionTokens: 0, calls: 0 },
+  };
   const chunks = chunkText(source);
   log('normal', `split into ${chunks.length} chunk(s)`);
 

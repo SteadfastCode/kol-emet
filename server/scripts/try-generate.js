@@ -56,6 +56,12 @@ console.log(`repaired   : ${result.diagnostics.repairAttempted}`);
 console.log(`passes     : ${result.diagnostics.passes}`);
 console.log(`proposed   : ${entities.length} entities, ${rels.length} relationships`);
 console.log(`dropped    : ${result.diagnostics.dropReasons.length}`);
+const u = result.diagnostics.usage ?? {};
+const inTok = u.promptTokens ?? 0, outTok = u.completionTokens ?? 0;
+console.log(`tokens     : ${inTok} in + ${outTok} out = ${inTok + outTok} across ${u.calls ?? 0} call(s)`);
+// Anthropic first-party Sonnet 4.6 rates; OpenRouter adds a margin on top.
+const cost = (inTok / 1e6) * 3 + (outTok / 1e6) * 15;
+console.log(`sonnet4.6  : $${cost.toFixed(4)} at $3/M in, $15/M out`);
 console.log('='.repeat(70));
 
 for (const it of entities) {
