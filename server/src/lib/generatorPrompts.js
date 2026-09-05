@@ -58,7 +58,23 @@ export function entityPrompt({ categories, existingTitles }) {
  * name resolution is the server's job. Role labels are asked for per member
  * because the graph stores a label per membership, not per edge.
  */
-export function relationshipPrompt({ names, groupLabels = [], memberRoles = [] }) {
+/**
+ * How much qualification a member role should carry.
+ *
+ *   descriptive — "older sister", "twin brother", "unwitting agent". Richer, and
+ *                 what real data already does: 38% of the labels in the first
+ *                 production workspace carry a qualifier.
+ *   canonical   — "Sister", "Brother", "Agent". Cleaner to group and filter on,
+ *                 at the cost of detail the author wrote down.
+ *
+ * A genuine preference rather than a right answer, so it is an option rather
+ * than a rule. Proper nouns stay out of roles under both styles: "Elias sister"
+ * is not a role, it is a group label wearing the wrong hat.
+ */
+export const ROLE_STYLES = ['descriptive', 'canonical'];
+export const DEFAULT_ROLE_STYLE = 'descriptive';
+
+export function relationshipPrompt({ names, groupLabels = [], memberRoles = [], roleStyle = DEFAULT_ROLE_STYLE }) {
   // The two vocabularies are offered against the two fields they belong to —
   // merged, the model uses a group label as a member role — and with OPPOSITE
   // instructions, because they behave differently in practice:
@@ -74,19 +90,30 @@ export function relationshipPrompt({ names, groupLabels = [], memberRoles = [] }
   const groupVocab = groupLabels.length
     ? `\n\nGROUP LABEL vocabulary — these are base kinds, not a closed list:\n` +
       groupLabels.map(t => `- ${t}`).join('\n') +
-      `\nQualify a base kind with a proper noun whenever it makes the group ` +
-      `identifiable: prefer "Elias Family" over a bare "Family", "Vurdaal ` +
-      `Leadership" over a bare "Affiliation". Use the bare kind only when there ` +
-      `is genuinely nothing to qualify it with.`
+      `\nAny of them can take a proper noun, including the ones that look complete ` +
+      `on their own: "Elias Family", "Elias Marriage", "Vurdaal Leadership". ` +
+      `Qualify whenever there is a name available to qualify with — a bare kind is ` +
+      `ambiguous as soon as the wiki holds two of them. Use the bare kind only when ` +
+      `there is genuinely nothing to attach.`
     : '';
 
+  const roleGuidance = roleStyle === 'canonical'
+    ? `\nKeep roles to their plainest form: "Sister", not "older sister"; "Agent", ` +
+      `not "unwitting agent". Strip qualifiers even when the text supports them.`
+    : `\nQualifiers are welcome where the text supports them — "Older sister", ` +
+      `"Twin brother", "Unwitting agent", "Future double agent" — since they carry ` +
+      `detail the author actually wrote. Add a qualifier only when the text states ` +
+      `it; never guess who is older. Capitalise the first word only: "Older sister", ` +
+      `not "older sister" and not "Older Sister".`;
+
   const roleVocab = memberRoles.length
-    ? `\n\nMEMBER ROLE vocabulary — prefer these, copied exactly as written:\n` +
+    ? `\n\nMEMBER ROLE vocabulary — prefer these as your base:\n` +
       memberRoles.map(t => `- ${t}`).join('\n') +
-      `\nDo not add a proper noun to a role, and do not improvise when one of these ` +
-      `is accurate. But ACCURACY WINS: if no listed role truthfully describes the ` +
-      `member's part, write the correct role instead. A creditor is a "Creditor", ` +
-      `never a "Mentor" because "Mentor" happened to be on the list.`
+      roleGuidance +
+      `\nNever put a proper noun in a role: "Elias sister" is a group label wearing ` +
+      `the wrong hat. And ACCURACY WINS over the list: if no listed role truthfully ` +
+      `describes the member's part, write the correct one. A creditor is a ` +
+      `"Creditor", never a "Mentor" because "Mentor" happened to be available.`
     : '';
 
   const vocab = groupVocab + roleVocab;

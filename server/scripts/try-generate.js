@@ -13,10 +13,10 @@ import { readFileSync } from 'fs';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const [, , workspaceId, file, provider] = process.argv;
+const [, , workspaceId, file, provider, roleStyle] = process.argv;
 
 if (!workspaceId || !file) {
-  console.error('Usage: node --env-file=.env scripts/try-generate.js <workspaceId> <file|-> [provider]');
+  console.error('Usage: node --env-file=.env scripts/try-generate.js <workspaceId> <file|-> [provider] [descriptive|canonical]');
   process.exit(1);
 }
 
@@ -35,6 +35,7 @@ try {
     text,
     workspaceId: new mongoose.Types.ObjectId(workspaceId),
     provider,
+    roleStyle,
     onStage: s => console.error(`  … ${JSON.stringify(s)}`),
   });
 } catch (err) {

@@ -12,7 +12,7 @@
  */
 
 import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
-import { entityPrompt, relationshipPrompt, PROMPT_VERSION } from './generatorPrompts.js';
+import { entityPrompt, relationshipPrompt, PROMPT_VERSION, ROLE_STYLES, DEFAULT_ROLE_STYLE } from './generatorPrompts.js';
 import { normalizeProposal } from './proposalNormalizer.js';
 import { getCategories } from '../config/categories.js';
 import Entity from '../models/Entity.js';
@@ -122,13 +122,15 @@ async function callWithRepair(client, model, system, user, diag) {
  * @param {object} opts { text, workspaceId, provider?, onStage? }
  * @returns proposal payload — never persisted here, never written to the graph
  */
-export async function generateProposal({ text, workspaceId, provider, onStage = () => {} }) {
+export async function generateProposal({ text, workspaceId, provider, roleStyle, onStage = () => {} }) {
   const started = Date.now();
   const source = String(text ?? '').trim();
   if (!source) throw new Error('No text supplied');
   if (source.length > MAX_CHARS) {
     throw new Error(`Input is ${source.length} characters; the limit is ${MAX_CHARS}.`);
   }
+
+  const style = ROLE_STYLES.includes(roleStyle) ? roleStyle : DEFAULT_ROLE_STYLE;
 
   const route = pickRoute(provider);
   if (!route) throw new Error('No AI provider is configured on the server');
@@ -178,7 +180,7 @@ export async function generateProposal({ text, workspaceId, provider, onStage = 
 
   if (names.length >= 2) {
     onStage({ stage: 'relationships' });
-    const system = relationshipPrompt({ names, groupLabels, memberRoles });
+    const system = relationshipPrompt({ names, groupLabels, memberRoles, roleStyle: style });
     const { value } = await callWithRepair(client, route.model, system, source.slice(0, MAX_CHARS), diag);
     diag.passes++;
     rawRelationships = value ?? [];
@@ -208,6 +210,7 @@ export async function generateProposal({ text, workspaceId, provider, onStage = 
       relationshipTypes: relTypes.map(t => t.name),
       groupLabels,
       memberRoles,
+      roleStyle: style,
       rosterCount: existingEntities.length,
       rosterTruncated: totalExisting > existingEntities.length,
       systemPrompt: entityPrompt({ categories, existingTitles: [] }),
