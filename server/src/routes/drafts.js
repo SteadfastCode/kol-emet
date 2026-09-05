@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import Proposal from '../models/Proposal.js';
-import { generateProposal, MAX_CHARS } from '../lib/generator.js';
+import Draft from '../models/Draft.js';
+import { generateDraft, MAX_CHARS } from '../lib/generator.js';
 import { resolveUserId } from '../middleware/workspace.js';
 import { getBudget, checkBudget, recordSpend, reserveGeneration, releaseGeneration } from '../lib/usageMeter.js';
 import { FREE_PROVIDERS } from '../config/pricing.js';
 import { isConfigured } from '../lib/aiProviders.js';
-import { validateItemPayload } from '../lib/proposalItemSchema.js';
+import { validateItemPayload } from '../lib/draftItemSchema.js';
 import Entity from '../models/Entity.js';
 
 const router = Router();
@@ -27,7 +27,7 @@ const STALE_GENERATING_MS = 10 * 60 * 1000;
 
 async function expireStuckGenerations(workspaceId) {
   const cutoff = new Date(Date.now() - STALE_GENERATING_MS);
-  await Proposal.updateMany(
+  await Draft.updateMany(
     { workspaceId, status: 'generating', createdAt: { $lt: cutoff } },
     {
       $set: {
@@ -38,12 +38,12 @@ async function expireStuckGenerations(workspaceId) {
   );
 }
 
-// GET /proposals — newest first. Items are omitted; the list view only needs
-// counts, and a proposal's items can be large.
+// GET /drafts — newest first. Items are omitted; the list view only needs
+// counts, and a draft's items can be large.
 router.get('/', async (req, res) => {
   try {
     await expireStuckGenerations(req.workspaceId);
-    const proposals = await Proposal.find({
+    const drafts = await Draft.find({
       workspaceId: req.workspaceId,
       status: { $ne: 'discarded' },
     })
@@ -51,13 +51,13 @@ router.get('/', async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
-    res.json(proposals);
+    res.json(drafts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /proposals/quota — remaining AI allowance for this workspace.
+// GET /drafts/quota — remaining AI allowance for this workspace.
 router.get('/quota', async (req, res) => {
   try {
     res.json(await getBudget(req.workspaceId));
@@ -67,9 +67,9 @@ router.get('/quota', async (req, res) => {
 });
 
 /**
- * POST /proposals — generate a proposal, streaming progress over SSE.
+ * POST /drafts — generate a draft, streaming progress over SSE.
  *
- * The Proposal row is persisted with status 'generating' BEFORE the first
+ * The Draft row is persisted with status 'generating' BEFORE the first
  * model call, so a run is never invisible: if the connection drops or the
  * process restarts, the row is already there to be found and (by the lazy
  * sweep in GET /) eventually marked failed.
@@ -116,9 +116,9 @@ router.post('/', async (req, res) => {
 
   const userId = await resolveUserId(req);
 
-  let proposal;
+  let draft;
   try {
-    proposal = await Proposal.create({
+    draft = await Draft.create({
       workspaceId: req.workspaceId,
       createdBy: userId,
       title: source.slice(0, 60).replace(/\s+/g, ' ').trim(),
@@ -145,10 +145,10 @@ router.post('/', async (req, res) => {
   req.on('close', () => { open = false; });
   const send = (obj) => { if (open) { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch { open = false; } } };
 
-  send({ type: 'created', proposalId: String(proposal._id) });
+  send({ type: 'created', draftId: String(draft._id) });
 
   try {
-    const result = await generateProposal({
+    const result = await generateDraft({
       text: source,
       workspaceId: req.workspaceId,
       provider,
@@ -156,43 +156,43 @@ router.post('/', async (req, res) => {
       onStage: (stage) => send({ type: 'stage', ...stage }),
     });
 
-    proposal.items = result.items;
-    proposal.route = result.route;
-    proposal.grounding = result.grounding;
-    proposal.diagnostics = {
+    draft.items = result.items;
+    draft.route = result.route;
+    draft.grounding = result.grounding;
+    draft.diagnostics = {
       ...result.diagnostics,
       dropReasons: result.diagnostics.dropReasons ?? [],
     };
-    proposal.counts = {
-      ...proposal.counts,
+    draft.counts = {
+      ...draft.counts,
       dropped: result.diagnostics.dropReasons?.length ?? 0,
     };
-    proposal.status = 'ready';
-    proposal.recountItems();
-    await proposal.save();
+    draft.status = 'ready';
+    draft.recountItems();
+    await draft.save();
 
     await recordSpend(req.workspaceId, {
       provider: result.route.provider,
       model: result.route.model,
       promptTokens: result.diagnostics.usage?.promptTokens ?? 0,
       completionTokens: result.diagnostics.usage?.completionTokens ?? 0,
-      reason: `proposal ${proposal._id}`,
+      reason: `draft ${draft._id}`,
     });
 
     send({
       type: 'done',
-      proposalId: String(proposal._id),
-      counts: proposal.counts,
-      route: proposal.route,
+      draftId: String(draft._id),
+      counts: draft.counts,
+      route: draft.route,
       budget: await getBudget(req.workspaceId),
     });
   } catch (err) {
-    console.error('[proposals] generation failed:', err.message);
-    proposal.status = 'failed';
-    proposal.diagnostics = { ...(proposal.diagnostics ?? {}), error: err.message };
+    console.error('[drafts] generation failed:', err.message);
+    draft.status = 'failed';
+    draft.diagnostics = { ...(draft.diagnostics ?? {}), error: err.message };
     // A failed save here would strand the row on 'generating'; the lazy sweep
     // in GET / is the backstop for exactly that.
-    await proposal.save().catch(e => console.error('[proposals] could not record failure:', e.message));
+    await draft.save().catch(e => console.error('[drafts] could not record failure:', e.message));
 
     // Charge for whatever completed before the failure. Those tokens were paid
     // for regardless, and a run that dies on its last call is the expensive case.
@@ -202,11 +202,11 @@ router.post('/', async (req, res) => {
         model: err.spend.model,
         promptTokens: err.spend.usage.promptTokens,
         completionTokens: err.spend.usage.completionTokens,
-        reason: `failed proposal ${proposal._id}`,
-      }).catch(e => console.error('[proposals] could not charge failed run:', e.message));
+        reason: `failed draft ${draft._id}`,
+      }).catch(e => console.error('[drafts] could not charge failed run:', e.message));
     }
 
-    send({ type: 'error', message: err.message, proposalId: String(proposal._id) });
+    send({ type: 'error', message: err.message, draftId: String(draft._id) });
   } finally {
     await releaseGeneration(req.workspaceId);
     if (open) res.end();
@@ -225,7 +225,7 @@ router.post('/', async (req, res) => {
 const SYSTEM_KEYS = ['applyState', 'resultId', 'changeLogId', 'applyError', 'appliedAt'];
 
 /**
- * PATCH /proposals/:id/items/:itemId — accept, edit or reject one item.
+ * PATCH /drafts/:id/items/:itemId — accept, edit or reject one item.
  *
  * Guarded on applyState 'pending' in the query itself rather than checked
  * first: a decision must not be able to change out from under an item that is
@@ -243,10 +243,10 @@ router.patch('/:id/items/:itemId', async (req, res) => {
       return res.status(400).json({ error: `These are set by the applier, not the client: ${forged.join(', ')}` });
     }
 
-    const proposal = await Proposal.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
-    if (!proposal) return res.status(404).json({ error: 'Not found' });
+    const draft = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
+    if (!draft) return res.status(404).json({ error: 'Not found' });
 
-    const item = proposal.items.id(req.params.itemId);
+    const item = draft.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.applyState !== 'pending') {
       return res.status(409).json({
@@ -275,17 +275,17 @@ router.patch('/:id/items/:itemId', async (req, res) => {
     item.decidedAt = new Date();
     item.accepted = accepted;   // null for a rejection — the row itself survives
 
-    proposal.recountItems();
-    await proposal.save();
+    draft.recountItems();
+    await draft.save();
 
-    res.json({ item: proposal.items.id(req.params.itemId), counts: proposal.counts });
+    res.json({ item: draft.items.id(req.params.itemId), counts: draft.counts });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 /**
- * POST /proposals/:id/items/:itemId/retarget — point a create at an existing
+ * POST /drafts/:id/items/:itemId/retarget — point a create at an existing
  * entity instead, turning it into an update.
  *
  * This is the manual resolution of a `duplicate_candidate`: fuzzy matches are
@@ -295,10 +295,10 @@ router.post('/:id/items/:itemId/retarget', async (req, res) => {
   try {
     const { targetEntityId } = req.body ?? {};
 
-    const proposal = await Proposal.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
-    if (!proposal) return res.status(404).json({ error: 'Not found' });
+    const draft = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
+    if (!draft) return res.status(404).json({ error: 'Not found' });
 
-    const item = proposal.items.id(req.params.itemId);
+    const item = draft.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: 'Item not found' });
     if (item.kind !== 'entity') return res.status(400).json({ error: 'Only entity items can be retargeted' });
     if (item.applyState !== 'pending') {
@@ -325,16 +325,16 @@ router.post('/:id/items/:itemId/retarget', async (req, res) => {
     // The duplicate flag has been resolved either way; the candidate reference
     // stays for the record.
     item.flags = item.flags.filter(f => f !== 'duplicate_candidate');
-    await proposal.save();
+    await draft.save();
 
-    res.json({ item: proposal.items.id(req.params.itemId) });
+    res.json({ item: draft.items.id(req.params.itemId) });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
 /**
- * POST /proposals/:id/decide-clean — accept every unflagged pending item.
+ * POST /drafts/:id/decide-clean — accept every unflagged pending item.
  *
  * Deliberately refuses flagged items and reports how many it skipped. A bulk
  * action that swept up duplicates, coerced categories and dropped members would
@@ -343,14 +343,14 @@ router.post('/:id/items/:itemId/retarget', async (req, res) => {
  */
 router.post('/:id/decide-clean', async (req, res) => {
   try {
-    const proposal = await Proposal.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
-    if (!proposal) return res.status(404).json({ error: 'Not found' });
+    const draft = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
+    if (!draft) return res.status(404).json({ error: 'Not found' });
 
     const decidedBy = await resolveUserId(req);
     const now = new Date();
     let accepted = 0, skippedFlagged = 0, skippedApplied = 0;
 
-    for (const item of proposal.items) {
+    for (const item of draft.items) {
       if (item.decision !== 'pending') continue;
       if (item.applyState !== 'pending') { skippedApplied++; continue; }
       if (item.flags?.length) { skippedFlagged++; continue; }
@@ -363,14 +363,14 @@ router.post('/:id/decide-clean', async (req, res) => {
       accepted++;
     }
 
-    proposal.recountItems();
-    await proposal.save();
+    draft.recountItems();
+    await draft.save();
 
     res.json({
       accepted,
       skippedFlagged,
       skippedApplied,
-      counts: proposal.counts,
+      counts: draft.counts,
       message: skippedFlagged
         ? `Accepted ${accepted}. ${skippedFlagged} item(s) need a look — they were flagged.`
         : `Accepted ${accepted}.`,
@@ -380,33 +380,33 @@ router.post('/:id/decide-clean', async (req, res) => {
   }
 });
 
-// GET /proposals/:id — the full proposal including items and source text.
+// GET /drafts/:id — the full draft including items and source text.
 router.get('/:id', async (req, res) => {
   try {
-    const proposal = await Proposal.findOne({
+    const draft = await Draft.findOne({
       _id: req.params.id,
       workspaceId: req.workspaceId,
     }).lean();
     // 404 rather than 403 for a foreign id, matching the entities routes: the
     // API should not confirm that an id exists in someone else's workspace.
-    if (!proposal) return res.status(404).json({ error: 'Not found' });
-    res.json(proposal);
+    if (!draft) return res.status(404).json({ error: 'Not found' });
+    res.json(draft);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /proposals/:id — soft. The row is the training corpus; discarding is
-// a UI concern, and a discarded proposal that was reviewed still carries a
+// DELETE /drafts/:id — soft. The row is the training corpus; discarding is
+// a UI concern, and a discarded draft that was reviewed still carries a
 // complete set of human labels.
 router.delete('/:id', async (req, res) => {
   try {
-    const proposal = await Proposal.findOneAndUpdate(
+    const draft = await Draft.findOneAndUpdate(
       { _id: req.params.id, workspaceId: req.workspaceId },
       { $set: { status: 'discarded' } },
       { new: true }
     ).select('_id status').lean();
-    if (!proposal) return res.status(404).json({ error: 'Not found' });
+    if (!draft) return res.status(404).json({ error: 'Not found' });
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });

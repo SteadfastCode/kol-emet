@@ -14,7 +14,7 @@ const { ObjectId } = mongoose.Schema.Types;
  *   - No TTL anywhere. ChangeLog expires after 30 days because it is undo;
  *     this is the corpus and must be permanent. DELETE is a soft
  *     status:'discarded'; hard deletion belongs to account deletion alone.
- *   - `accepted` is written at DECISION time, not apply time, so a proposal
+ *   - `accepted` is written at DECISION time, not apply time, so a draft
  *     that is reviewed in full and then abandoned — the most common outcome —
  *     still yields a complete set of labels.
  *   - A rejection never removes the item. The negative example is the most
@@ -22,7 +22,7 @@ const { ObjectId } = mongoose.Schema.Types;
  */
 
 // A member of a proposed relationship. Exactly one of localKey (a sibling item
-// in THIS proposal) or refId (an entity that already exists) is set. `name` is
+// in THIS draft) or refId (an entity that already exists) is set. `name` is
 // what the model actually emitted and survives resolution failure, so a dropped
 // member stays explainable instead of silently vanishing.
 const proposedMemberSchema = new mongoose.Schema({
@@ -94,7 +94,7 @@ const itemSchema = new mongoose.Schema({
   appliedAt:   { type: Date, default: null },
 }, { _id: true });
 
-const proposalSchema = new mongoose.Schema({
+const draftSchema = new mongoose.Schema({
   // required, unlike Entity.workspaceId which is `default: null` to accommodate
   // pre-tenancy rows. A new collection has none, so it fails closed from row one.
   workspaceId: { type: ObjectId, ref: 'Workspace', required: true, index: true },
@@ -156,7 +156,7 @@ const proposalSchema = new mongoose.Schema({
     passes:          { type: Number, default: 0 },
     error:           { type: String, default: null },
     generationMs:    { type: Number, default: null },
-    // Token spend for this run, so cost per proposal is measurable rather than
+    // Token spend for this run, so cost per draft is measurable rather than
     // estimated — and so a cap can be set from data.
     usage: {
       promptTokens:     { type: Number, default: 0 },
@@ -169,11 +169,11 @@ const proposalSchema = new mongoose.Schema({
   appliedAt:  { type: Date, default: null },
 }, { timestamps: true });
 
-proposalSchema.index({ workspaceId: 1, createdAt: -1 });
-proposalSchema.index({ workspaceId: 1, status: 1 });
+draftSchema.index({ workspaceId: 1, createdAt: -1 });
+draftSchema.index({ workspaceId: 1, status: 1 });
 
 /** Recomputes `counts` from items. Call after any decision or apply. */
-proposalSchema.methods.recountItems = function recountItems() {
+draftSchema.methods.recountItems = function recountItems() {
   const c = { proposed: this.items.length, accepted: 0, edited: 0, rejected: 0, pending: 0, applied: 0, failed: 0 };
   for (const it of this.items) {
     if (it.decision === 'accepted') c.accepted++;
@@ -187,4 +187,4 @@ proposalSchema.methods.recountItems = function recountItems() {
   return this.counts;
 };
 
-export default mongoose.model('Proposal', proposalSchema);
+export default mongoose.model('Draft', draftSchema);

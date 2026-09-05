@@ -6,7 +6,7 @@ import MongoStore from 'connect-mongo';
 import mongoose from 'mongoose';
 
 import entitiesRouter from './routes/entities.js';
-import proposalsRouter from './routes/proposals.js';
+import draftsRouter from './routes/drafts.js';
 import tagsRouter from './routes/tags.js';
 import openQuestionsRouter from './routes/openQuestions.js';
 import relationshipTypesRouter from './routes/relationshipTypes.js';
@@ -71,7 +71,7 @@ app.use('/relationship-types', requireAuth, resolveWorkspace, relationshipTypesR
 // workspace per-route too — see routes/chat.js.
 app.use('/chat', chatRouter);
 app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
-app.use('/proposals', requireAuth, resolveWorkspace, proposalsRouter);
+app.use('/drafts', requireAuth, resolveWorkspace, draftsRouter);
 
 mongoose
   .connect(process.env.MONGO_URI)

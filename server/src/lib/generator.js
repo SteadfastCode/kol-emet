@@ -13,7 +13,7 @@
 
 import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
 import { entityPrompt, relationshipPrompt, PROMPT_VERSION, ROLE_STYLES, DEFAULT_ROLE_STYLE } from './generatorPrompts.js';
-import { normalizeProposal } from './proposalNormalizer.js';
+import { normalizeDraft } from './draftNormalizer.js';
 import { getCategories } from '../config/categories.js';
 import Entity from '../models/Entity.js';
 import RelationshipType from '../models/RelationshipType.js';
@@ -96,7 +96,7 @@ async function callModel(client, model, system, user, diag) {
       { role: 'user', content: user },
     ],
   });
-  // Accumulated so cost per proposal is a stored fact rather than an estimate.
+  // Accumulated so cost per draft is a stored fact rather than an estimate.
   // Every provider in the registry is OpenAI-shaped and reports usage here.
   if (diag && res.usage) {
     diag.usage.promptTokens     += res.usage.prompt_tokens ?? 0;
@@ -128,9 +128,9 @@ async function callWithRepair(client, model, system, user, diag) {
 
 /**
  * @param {object} opts { text, workspaceId, provider?, onStage? }
- * @returns proposal payload — never persisted here, never written to the graph
+ * @returns draft payload — never persisted here, never written to the graph
  */
-export async function generateProposal(opts) {
+export async function generateDraft(opts) {
   // Shared handle so a thrown error can still report what was spent. Tokens
   // consumed before a failure were still paid for; dropping them on the floor
   // would let a run that dies on its last call go entirely uncharged.
@@ -218,7 +218,7 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
 
   // ── normalize ──────────────────────────────────────────────────────────────
   onStage({ stage: 'normalizing' });
-  const { items, dropReasons } = normalizeProposal(rawEntities, rawRelationships, {
+  const { items, dropReasons } = normalizeDraft(rawEntities, rawRelationships, {
     categories, sourceText: source, existingEntities,
   });
   diag.dropReasons = dropReasons;

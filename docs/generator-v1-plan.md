@@ -13,7 +13,7 @@ shippable-first 8.2, data-model-first 7.7, review-ux-first and pipeline-generali
 
 ## The spine
 
-One new collection (`Proposal`, items embedded), one generation lib, one applier, one route file,
+One new collection (`Draft`, items embedded), one generation lib, one applier, one route file,
 one full-screen Vue overlay. Generation uses plain-JSON prompting through the parse ladder already
 proven in `server/src/lib/memoryExtractor.js` — **never forced `tool_choice`**. Review decisions are
 recorded by `PATCH` and are strictly separate from a single explicit Apply. Apply reuses
@@ -44,8 +44,8 @@ registry entries — which is what the model-agnostic constraint actually demand
 
 ## Data model
 
-One new model, `server/src/models/Proposal.js`, with items embedded. **No TTL anywhere on it** —
-`ChangeLog` expires after 30 days because it is undo; `Proposal` *is* the training corpus and must be
+One new model, `server/src/models/Draft.js`, with items embedded. **No TTL anywhere on it** —
+`ChangeLog` expires after 30 days because it is undo; `Draft` *is* the training corpus and must be
 permanent. `DELETE` is a soft `status: 'discarded'`; hard deletion belongs only to an
 account-deletion path.
 
@@ -69,13 +69,13 @@ which rejects those keys if they appear in a `PATCH` body. An apply failure ther
 overwrite the record that a human said yes.
 
 **Rejection never deletes the row.** The negative example is the most valuable and the easiest to
-lose. A user who reviews 20 items and then abandons the proposal has still produced 20 labelled
+lose. A user who reviews 20 items and then abandons the draft has still produced 20 labelled
 examples, and they must survive — this is why `accepted` is written at decision time rather than at
 apply time.
 
 Proposed relationship members are stored in the `RelationshipGroup` **model** shape
 (`{refId, refModel, label, notes}`), not the route's `{entityId}` shape, because `refModel` is the
-discriminator that supports nesting when subgroup proposals land later. Members carry the `name` the
+discriminator that supports nesting when subgroup drafts land later. Members carry the `name` the
 model actually emitted, so a member that fails to resolve is still explainable rather than silently
 vanishing.
 
@@ -106,12 +106,14 @@ These need a product decision, not an engineering one:
    want a per-workspace or per-day run cap before public signups, or is that a billing-milestone
    problem?
 2. **Retention policy.** The corpus stores the full braindump verbatim, forever, including for
-   discarded proposals. Deliberate — it *is* the training asset — but a public product needs a
-   stated position: does account deletion hard-delete proposals, and does signup need to say
+   discarded drafts. Deliberate — it *is* the training asset — but a public product needs a
+   stated position: does account deletion hard-delete drafts, and does signup need to say
    reviewed generations may be used to improve the product?
-3. **Product-facing name.** The code says `Proposal` and the Decision Log says "pull request against
-   the graph" — right for the software-architecture expansion, probably wrong for worldbuilders.
-   "Draft"? "Suggestions"? UI copy only; the collection and route stay `proposals` regardless.
+3. ~~**Product-facing name.**~~ **Settled 2026-09-05: "Draft".** The code originally said
+   `Proposal` while the UI was to say "Draft"; Daniel chose to make them match rather than let the
+   two drift, so the model, routes and collection were all renamed to `drafts`. The Decision Log's
+   "pull request against the graph" framing stays as the *concept*, since it is the right one for
+   the software-architecture expansion — it is just not the user-facing word.
 4. **Input ceiling.** 25,000 characters is ~4,000 words — a long chapter of notes, not a series
    bible. Uncapped input needs a job queue. Is 25k right for the demo you want, or should the queue
    be the next milestone rather than more producers?
@@ -124,9 +126,9 @@ These need a product decision, not an engineering one:
 | # | Step | Leaves app working |
 |---|------|--------------------|
 | 1 | Tenancy + plumbing prerequisites (SSE fix, Entity index, shared categories config, ChangeLog `generator` actor + origin, similarity extraction) | yes |
-| 2 | `Proposal` model + read-only routes (GET/GET:id/soft DELETE) | yes |
+| 2 | `Draft` model + read-only routes (GET/GET:id/soft DELETE) | yes |
 | 3 | Generation pipeline, CLI-testable before any route exists | yes |
-| 4 | `POST /proposals` as SSE | yes |
+| 4 | `POST /drafts` as SSE | yes |
 | 5 | Decision routes — human label, zero graph writes | yes |
 | 6 | The applier + `POST /apply` | yes |
 | 7 | Client API + input screen | yes |
@@ -134,7 +136,7 @@ These need a product decision, not an engineering one:
 | 9 | Export proof + docs + Decision Log entries | yes |
 
 Step 3 is CLI-testable deliberately: `scripts/try-generate.js <workspaceId> <file>` runs the whole
-pipeline and prints the would-be Proposal without touching a route or saving anything, so prompt
+pipeline and prints the would-be Draft without touching a route or saving anything, so prompt
 quality can be tuned against both a frontier model and `steadfast/qwen2.5-coder:14b` before any
 persistence exists.
 

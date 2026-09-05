@@ -1,5 +1,5 @@
 /**
- * Turns raw model output into validated proposal items.
+ * Turns raw model output into validated draft items.
  *
  * Everything here is defensive on purpose: this is the boundary between an
  * unpredictable model and a collection that is meant to be a clean training
@@ -148,7 +148,7 @@ function locateEvidence(quote, index, chunkIndex = 0) {
  * @param {object}   ctx  { categories, sourceText, existingEntities }
  *                        existingEntities: [{_id, title, updatedAt}]
  */
-export function normalizeProposal(rawEntities, rawRelationships, ctx) {
+export function normalizeDraft(rawEntities, rawRelationships, ctx) {
   const { categories, sourceText, existingEntities = [] } = ctx;
   const items = [];
   const dropReasons = [];

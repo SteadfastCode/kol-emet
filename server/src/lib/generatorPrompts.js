@@ -1,7 +1,7 @@
 /**
  * Prompts for the braindump generator.
  *
- * Bumping PROMPT_VERSION is meaningful: it is recorded on every proposal, so
+ * Bumping PROMPT_VERSION is meaningful: it is recorded on every draft, so
  * "did accept-rate improve when the prompt changed" is answerable later from
  * the corpus alone.
  *

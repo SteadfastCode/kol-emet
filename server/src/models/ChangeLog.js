@@ -8,11 +8,11 @@ const changeLogSchema = new mongoose.Schema(
     changeType: { type: String, enum: ['created', 'updated', 'deleted'], required: true },
     actorId:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     actorType:  { type: String, enum: ['user', 'mcp', 'generator'], required: true },
-    // Set when a write came from an accepted proposal, so a generated change is
-    // traceable back to the proposal and item a human approved.
+    // Set when a write came from an accepted draft, so a generated change is
+    // traceable back to the draft and item a human approved.
     origin: {
-      kind:       { type: String, enum: ['proposal'], default: null },
-      proposalId: { type: mongoose.Schema.Types.ObjectId, ref: 'Proposal', default: null },
+      kind:       { type: String, enum: ['draft'], default: null },
+      draftId: { type: mongoose.Schema.Types.ObjectId, ref: 'Draft', default: null },
       itemId:     { type: mongoose.Schema.Types.ObjectId, default: null },
       producer:   { type: String, default: null },
     },

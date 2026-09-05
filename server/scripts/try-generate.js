@@ -1,7 +1,7 @@
 /**
  * Run the generation pipeline and print what it WOULD propose.
  *
- * Writes nothing — no Proposal row, no entities. Exists so prompt quality can
+ * Writes nothing — no Draft row, no entities. Exists so prompt quality can
  * be compared across providers before any of it is wired to a route.
  *
  * Run: node --env-file=.env scripts/try-generate.js <workspaceId> <file> [provider]
@@ -26,12 +26,12 @@ const text = file === '-'
 
 await mongoose.connect(process.env.MONGO_URI);
 
-const { generateProposal } = await import('../src/lib/generator.js');
+const { generateDraft } = await import('../src/lib/generator.js');
 
 const t0 = Date.now();
 let result;
 try {
-  result = await generateProposal({
+  result = await generateDraft({
     text,
     workspaceId: new mongoose.Types.ObjectId(workspaceId),
     provider,

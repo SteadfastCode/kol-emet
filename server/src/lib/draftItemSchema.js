@@ -1,5 +1,5 @@
 /**
- * Validation for human-edited proposal payloads.
+ * Validation for human-edited draft payloads.
  *
  * An edited item is the highest-value training signal in the corpus — it is a
  * preference pair, proposed vs. what a person actually wanted — so it has to be
