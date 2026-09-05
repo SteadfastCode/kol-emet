@@ -30,8 +30,21 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { CATEGORIES } from '../config/categories.js';
 import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
+import { checkBudget, recordSpend } from '../lib/usageMeter.js';
 
 const router = Router();
+
+/**
+ * Accumulates token usage across the several model calls one chat turn can make
+ * (tool phase, then final answer). Charged once at the end of the turn rather
+ * than per call, so one exchange is one ledger entry.
+ */
+function tally(ctx, usage) {
+  if (!ctx?.usage || !usage) return;
+  ctx.usage.promptTokens     += usage.prompt_tokens ?? 0;
+  ctx.usage.completionTokens += usage.completion_tokens ?? 0;
+  ctx.usage.calls            += 1;
+}
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -71,9 +84,11 @@ function mcpToolDef() {
 /**
  * Stream via Responses API (MCP tools). Returns the full assistant text.
  */
-async function streamViaResponsesApi(client, model, systemPrompt, messages, send) {
+async function streamViaResponsesApi(client, model, systemPrompt, messages, send, ctx = {}) {
   const input = messages.filter((m) => m.role !== 'system');
 
+  // No stream_options here: that is a Chat Completions parameter. The Responses
+  // API reports usage on its response.completed event without being asked.
   const stream = await client.responses.create({
     model,
     instructions: systemPrompt,
@@ -84,6 +99,13 @@ async function streamViaResponsesApi(client, model, systemPrompt, messages, send
 
   let assistantText = '';
   for await (const event of stream) {
+    if (event.type === 'response.completed' && event.response?.usage) {
+      // Responses API reports usage in its own shape.
+      tally(ctx, {
+        prompt_tokens: event.response.usage.input_tokens,
+        completion_tokens: event.response.usage.output_tokens,
+      });
+    }
     if (event.type === 'response.output_text.delta') {
       assistantText += event.delta;
       send({ type: 'delta', content: event.delta });
@@ -207,12 +229,14 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send,
     tools:       WIKI_TOOLS,
     tool_choice: 'auto',
     stream:      true,
+    stream_options: { include_usage: true },
   });
 
   let assistantContent = '';
   const pendingToolCalls = {};
 
   for await (const chunk of firstStream) {
+    if (chunk.usage) tally(ctx, chunk.usage);
     const choice = chunk.choices?.[0];
     const delta  = choice?.delta;
 
@@ -266,10 +290,12 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send,
     model,
     messages: currentMessages,
     stream:   true,
+    stream_options: { include_usage: true },
   });
 
   let finalContent = '';
   for await (const chunk of finalStream) {
+    if (chunk.usage) tally(ctx, chunk.usage);
     const delta = chunk.choices?.[0]?.delta;
     if (delta?.content) {
       finalContent += delta.content;
@@ -321,7 +347,22 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
     effectiveSystem = buildSystemPrompt(memories);
   }
 
-  const ctx = { userId, conversationId, workspaceId: req.workspaceId };
+  const ctx = {
+    userId, conversationId, workspaceId: req.workspaceId,
+    usage: { promptTokens: 0, completionTokens: 0, calls: 0 },
+  };
+
+  // Chat draws on the same allowance as generation. Checked before the stream
+  // opens so an exhausted allowance is an ordinary 402 rather than an SSE frame.
+  // No concurrency lock here, unlike generation: a chat turn costs a fraction
+  // of a cent, so parallel turns can overshoot only trivially.
+  const budget = await checkBudget(req.workspaceId);
+  if (!budget.allowed) {
+    return res.status(402).json({
+      error: `Your AI allowance is used up (${budget.granted} total). Chat and generation both draw on it.`,
+      ...budget,
+    });
+  }
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -338,7 +379,7 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
       providerCfg.responsesApi === true && !!process.env.MCP_SERVER_URL;
 
     const assistantText = useResponsesApi
-      ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send)
+      ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send, ctx)
       : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send, ctx);
 
     // Persist the new exchange to the conversation
@@ -351,13 +392,15 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
         );
         await conversation.save();
 
-        // Fire-and-forget: extract memorable facts from this exchange
+        // Fire-and-forget: extract memorable facts from this exchange.
+        // Charges the allowance itself — it picks its own cheap route.
         extractAndSaveMemories(
           userId,
           conversation._id,
           lastUserMsg.content,
           assistantText,
           provider,
+          req.workspaceId,
         );
       }
     }
@@ -367,6 +410,18 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
   } catch (err) {
     send({ type: 'error', message: err.message });
     res.end();
+  } finally {
+    // Charged in `finally` so a turn that streamed some tokens and then failed
+    // is still billed — the provider was paid for what it produced either way.
+    if (ctx.usage.calls > 0) {
+      await recordSpend(req.workspaceId, {
+        provider,
+        model: effectiveModel,
+        promptTokens: ctx.usage.promptTokens,
+        completionTokens: ctx.usage.completionTokens,
+        reason: `chat${conversationId ? ` ${conversationId}` : ''}`,
+      }).catch(e => console.error('[chat] could not record spend:', e.message));
+    }
   }
 });
 

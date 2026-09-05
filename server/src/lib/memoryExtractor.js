@@ -8,6 +8,7 @@
 import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
 import { getCheapestExtractionModel } from './cheapModelFinder.js';
 import UserMemory from '../models/UserMemory.js';
+import { recordSpend } from './usageMeter.js';
 
 // ─── Tiered debug logging ─────────────────────────────────────────────────────
 // Extraction runs unattended after every exchange, so it needs to be
@@ -65,7 +66,7 @@ function pickExtractionRoute(provider) {
   };
 }
 
-export async function extractAndSaveMemories(userId, conversationId, lastUserMsg, lastAssistantMsg, provider) {
+export async function extractAndSaveMemories(userId, conversationId, lastUserMsg, lastAssistantMsg, provider, workspaceId) {
   try {
     const route = pickExtractionRoute(provider);
     const extractionProvider = route.provider;
@@ -91,6 +92,19 @@ export async function extractAndSaveMemories(userId, conversationId, lastUserMsg
       ],
     });
     log('normal', `model responded in ${Date.now() - startedAt}ms`);
+
+    // Charged against the same allowance as chat and generation. Extraction
+    // picks its own (cheap) route, so it is billed at that route's rate rather
+    // than the chat provider's — usually self-hosted, and near-free.
+    if (workspaceId && response.usage) {
+      await recordSpend(workspaceId, {
+        provider: extractionProvider,
+        model,
+        promptTokens: response.usage.prompt_tokens ?? 0,
+        completionTokens: response.usage.completion_tokens ?? 0,
+        reason: 'memory extraction',
+      }).catch(e => console.error('[memoryExtractor] could not record spend:', e.message));
+    }
 
     const raw = response.choices?.[0]?.message?.content?.trim() ?? '[]';
     log('verbose', `raw output: ${raw}`);

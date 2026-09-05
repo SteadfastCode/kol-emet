@@ -39,7 +39,7 @@ const workspaceSchema = new mongoose.Schema(
      * and never draw it down.
      */
     aiBudget: {
-      grantedMicros: { type: Number, default: Number(process.env.AI_TRIAL_GRANT_MICROS ?? 5_000_000) },
+      grantedMicros: { type: Number, default: Number(process.env.AI_TRIAL_GRANT_MICROS ?? 3_500_000) },
       spentMicros:   { type: Number, default: 0 },
       // Concurrency lock for generation. Cost is unknown until a run finishes,
       // so simultaneous runs would each pass the same budget check; this caps
