@@ -36,6 +36,25 @@ const rawRelationshipSchema = z.object({
 });
 
 /**
+ * Sentence-case a member role: "older sister" and "OLDER SISTER" both become
+ * "Older sister", while "Twin brother" and "Employer (deceived)" are already
+ * correct and pass through untouched.
+ *
+ * Done here rather than in the prompt because casing is deterministic and
+ * models are not — asking for it spends prompt budget and still varies by
+ * provider. Group labels are deliberately NOT normalised: they carry proper
+ * nouns ("Elias Marriage"), which this would destroy, and the UI already
+ * uppercases them in CSS.
+ */
+function sentenceCaseRole(label) {
+  const s = String(label ?? '').trim();
+  if (!s) return s;
+  const body = s === s.toUpperCase() ? s.toLowerCase() : s.slice(1);
+  const rest = s === s.toUpperCase() ? body.slice(1) : body;
+  return s[0].toUpperCase() + rest;
+}
+
+/**
  * Models routinely emit a near-miss category ("Character", "world",
  * "Organisation"). Coerce where the intent is unambiguous, but record the flag
  * AND keep the uncoerced value in `proposed` — a coercion must not record a
@@ -257,10 +276,10 @@ export function normalizeProposal(rawEntities, rawRelationships, ctx) {
       const existing = existingByKey.get(key);
 
       if (local) {
-        members.push({ localKey: local, refId: null, refModel: 'Entity', name: m.name, label: m.role || null, notes: null });
+        members.push({ localKey: local, refId: null, refModel: 'Entity', name: m.name, label: sentenceCaseRole(m.role) || null, notes: null });
         if (!dependsOn.includes(local)) dependsOn.push(local);
       } else if (existing) {
-        members.push({ localKey: null, refId: existing._id, refModel: 'Entity', name: m.name, label: m.role || null, notes: null });
+        members.push({ localKey: null, refId: existing._id, refModel: 'Entity', name: m.name, label: sentenceCaseRole(m.role) || null, notes: null });
       } else {
         flags.push('member_dropped');
         dropReasons.push(`relationship member "${m.name}" matched no entity`);

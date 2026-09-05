@@ -103,8 +103,7 @@ export function relationshipPrompt({ names, groupLabels = [], memberRoles = [], 
     : `\nQualifiers are welcome where the text supports them — "Older sister", ` +
       `"Twin brother", "Unwitting agent", "Future double agent" — since they carry ` +
       `detail the author actually wrote. Add a qualifier only when the text states ` +
-      `it; never guess who is older. Capitalise the first word only: "Older sister", ` +
-      `not "older sister" and not "Older Sister".`;
+      `it; never guess who is older. Do not worry about capitalisation.`;
 
   const roleVocab = memberRoles.length
     ? `\n\nMEMBER ROLE vocabulary — prefer these as your base:\n` +
