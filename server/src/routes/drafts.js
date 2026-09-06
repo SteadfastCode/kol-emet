@@ -7,6 +7,9 @@ import { getBudget, checkBudget, recordSpend, reserveGeneration, releaseGenerati
 import { FREE_PROVIDERS } from '../config/pricing.js';
 import { isConfigured } from '../lib/aiProviders.js';
 import { validateItemPayload } from '../lib/draftItemSchema.js';
+import { applyDraft } from '../lib/draftApplier.js';
+import { requireActor } from '../middleware/auth.js';
+import { broadcast } from '../lib/broadcaster.js';
 import Entity from '../models/Entity.js';
 
 const router = Router();
@@ -377,6 +380,69 @@ router.post('/:id/decide-clean', async (req, res) => {
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /drafts/:id/apply — write the accepted items into the graph.
+ *
+ * The only endpoint in this feature that touches entities. Locked via
+ * applyingAt with a conditional update, so check-and-claim is atomic and two
+ * simultaneous applies cannot both run and double-write.
+ */
+router.post('/:id/apply', requireActor, async (req, res) => {
+  const STALE_APPLY_MS = 5 * 60 * 1000;
+  const cutoff = new Date(Date.now() - STALE_APPLY_MS);
+
+  let claimed;
+  try {
+    claimed = await Draft.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        workspaceId: req.workspaceId,
+        status: { $in: ['ready', 'partially_applied', 'applied'] },
+        $or: [
+          { applyingAt: null },
+          { applyingAt: { $exists: false } },
+          { applyingAt: { $lt: cutoff } },   // crashed mid-apply
+        ],
+      },
+      { $set: { applyingAt: new Date() } },
+      { new: true }
+    );
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (!claimed) {
+    // Either it does not exist here, or an apply is already in flight.
+    const exists = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
+      .select('_id applyingAt status').lean();
+    if (!exists) return res.status(404).json({ error: 'Not found' });
+    if (exists.applyingAt) return res.status(409).json({ error: 'This draft is already being applied.' });
+    return res.status(409).json({ error: `A draft with status '${exists.status}' cannot be applied.` });
+  }
+
+  try {
+    const actor = req.actor;   // set by requireActor; handles both session and MCP callers
+
+    const summary = await applyDraft(claimed, { workspaceId: req.workspaceId, actor });
+
+    // One event for the whole apply rather than a burst of per-entity ones, so
+    // a 30-item apply does not flood every open tab.
+    broadcast('draft:applied', {
+      draftId: String(claimed._id),
+      ...summary,
+      actor: { label: actor.label, type: actor.type },
+    }, { workspaceId: req.workspaceId, excludeClientId: req.headers['x-sse-client-id'] ?? null });
+
+    res.json({ ...summary, status: claimed.status, counts: claimed.counts });
+  } catch (err) {
+    console.error('[drafts] apply failed:', err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    await Draft.updateOne({ _id: req.params.id }, { $set: { applyingAt: null } })
+      .catch(e => console.error('[drafts] could not clear apply lock:', e.message));
   }
 });
 

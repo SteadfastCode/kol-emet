@@ -34,15 +34,16 @@ export function computeDiff(before, after) {
   return { fieldsChanged, blocksAdded, blocksUpdated, blocksDeleted };
 }
 
-export async function logCreate(entity, actor, excludeClientId = null) {
+export async function logCreate(entity, actor, excludeClientId = null, opts = {}) {
   const changes = {
     fieldsChanged: [],
     blocksAdded: (entity.blocks ?? []).map(b => ({ type: b.type, order: b.order })),
     blocksUpdated: [],
     blocksDeleted: [],
   };
-  await ChangeLog.create({
+  const logEntry = await ChangeLog.create({
     workspaceId: entity.workspaceId ?? null,
+    origin:      opts.origin ?? undefined,
     entityId:    entity._id,
     entityTitle: entity.title,
     changeType: 'created',
@@ -52,17 +53,23 @@ export async function logCreate(entity, actor, excludeClientId = null) {
     changes,
     snapshot:   null,
   });
-  broadcast('entity:created', {
-    entity,
-    actor:   { label: actor.label, type: actor.type },
-    changes,
-  }, { workspaceId: entity.workspaceId, excludeClientId });
+  // An apply emits ONE draft:applied event at the end instead of a burst of
+  // per-entity events, so a 30-item apply does not flood every open tab.
+  if (opts.broadcast !== false) {
+    broadcast('entity:created', {
+      entity,
+      actor:   { label: actor.label, type: actor.type },
+      changes,
+    }, { workspaceId: entity.workspaceId, excludeClientId });
+  }
+  return logEntry;
 }
 
-export async function logUpdate(before, after, actor, excludeClientId = null) {
+export async function logUpdate(before, after, actor, excludeClientId = null, opts = {}) {
   const changes = computeDiff(before, after);
-  await ChangeLog.create({
+  const logEntry = await ChangeLog.create({
     workspaceId: after.workspaceId ?? before.workspaceId ?? null,
+    origin:      opts.origin ?? undefined,
     entityId:    after._id,
     entityTitle: after.title,
     changeType: 'updated',
@@ -72,11 +79,14 @@ export async function logUpdate(before, after, actor, excludeClientId = null) {
     changes,
     snapshot:   before,
   });
-  broadcast('entity:updated', {
-    entity:   after,
-    actor:    { label: actor.label, type: actor.type },
-    changes,
-  }, { workspaceId: after.workspaceId ?? before.workspaceId, excludeClientId });
+  if (opts.broadcast !== false) {
+    broadcast('entity:updated', {
+      entity:   after,
+      actor:    { label: actor.label, type: actor.type },
+      changes,
+    }, { workspaceId: after.workspaceId ?? before.workspaceId, excludeClientId });
+  }
+  return logEntry;
 }
 
 export async function logDelete(entity, actor, excludeClientId = null) {
