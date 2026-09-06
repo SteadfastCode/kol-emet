@@ -22,6 +22,7 @@
               <line x1="12" y1="10" x2="14" y2="15"/>
             </svg>
           </button>
+          <button class="btn-sm" title="Generate a draft from notes" @click="$emit('generate')">Draft</button>
           <button class="btn-sm" title="AI Chat" @click="$emit('chat')">AI</button>
           <button class="btn-sm" @click="$emit('logout')">Sign out</button>
         </div>
@@ -73,7 +74,10 @@
         Entities are the nodes of your graph — characters, worlds, organizations.
         Create one, then link them together to build the map.
       </p>
-      <button class="btn-sm primary" @click="$emit('new-entry')">Create your first entity</button>
+      <div class="empty-actions">
+        <button class="btn-sm primary" @click="$emit('new-entry')">Create your first entity</button>
+        <button class="btn-sm" @click="$emit('generate')">Or paste in some notes</button>
+      </div>
     </div>
   </div>
 </template>
@@ -102,7 +106,7 @@ const isFiltered = computed(() =>
   (props.activeCat && props.activeCat !== 'All')
 );
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat', 'graph', 'reset-filters']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat', 'graph', 'reset-filters', 'generate']);
 </script>
 
 <style scoped>
@@ -186,6 +190,8 @@ defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry',
   font-size: 14px;
   font-weight: 600;
 }
+
+.empty-actions { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 
 .empty-body {
   margin: 0 auto 14px;

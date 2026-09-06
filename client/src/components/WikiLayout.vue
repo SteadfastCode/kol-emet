@@ -20,6 +20,7 @@
         @logout="$emit('logout')"
         @chat="chatOpen = !chatOpen"
         @graph="graphOpen = !graphOpen"
+        @generate="generatorOpen = true"
       />
     </div>
 
@@ -93,6 +94,12 @@
     <ToastNotification />
 
     <!-- Chat panel -->
+    <GeneratorOverlay
+      v-if="generatorOpen"
+      @close="generatorOpen = false"
+      @generated="onDraftGenerated"
+    />
+
     <ChatPanel :open="chatOpen" @close="onChatClose" />
 
     <!-- Settings panel (mobile only) -->
@@ -163,6 +170,7 @@ import EntityEditor from './EntityEditor.vue';
 import ToastNotification from './ToastNotification.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
+import GeneratorOverlay from './generator/GeneratorOverlay.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -182,11 +190,23 @@ const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag, r
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
 
+// A generated draft has not touched the graph, so this deliberately does not
+// refresh the entity list — nothing there has changed yet.
+function onDraftGenerated({ counts }) {
+  const n = counts?.proposed ?? 0;
+  addToast({
+    message: `Draft ready — ${n} item${n === 1 ? '' : 's'} to review`,
+    actorType: 'generator',
+    actorLabel: 'Generator',
+  });
+}
+
 // Panel state: array of { id, title, mode: 'entry' | 'editor' | 'snapshot', snapshotEntry?, deletedAt? }
 const panels = ref([]);
 const activePanelId = ref(null);
 const chatOpen = ref(false);
 const graphOpen = ref(false);
+const generatorOpen = ref(false);
 const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
 
 function setMobileTab(tab) {
