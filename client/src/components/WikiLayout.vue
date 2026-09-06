@@ -98,6 +98,7 @@
       v-if="generatorOpen"
       @close="generatorOpen = false"
       @generated="onDraftGenerated"
+      @applied="onDraftApplied"
     />
 
     <ChatPanel :open="chatOpen" @close="onChatClose" />
@@ -189,6 +190,18 @@ const {
 const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag, resetFilters } = useFilters(entities);
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
+
+// Applying is the only point at which a draft reaches the graph, so this is
+// where the entity list has to be refetched.
+async function onDraftApplied(res) {
+  await loadEntities();
+  const n = res?.applied ?? 0;
+  addToast({
+    message: `${n} item${n === 1 ? '' : 's'} added from your draft`,
+    actorType: 'generator',
+    actorLabel: 'Generator',
+  });
+}
 
 // A generated draft has not touched the graph, so this deliberately does not
 // refresh the entity list — nothing there has changed yet.

@@ -141,6 +141,17 @@ const BLOCK_DEFAULTS = {
 
 const emit = defineEmits(['saved', 'cancel']);
 
+/**
+ * `initial` hydrates the editor from an existing payload — used by the draft
+ * review screen, where editing a proposed entity should open the real editor
+ * rather than a stripped-down form. Reusing this component is what makes an
+ * edited draft item come back in exactly the shape `proposed` uses, which is
+ * what the server revalidates against.
+ */
+const props = defineProps({
+  initial: { type: Object, default: null },
+});
+
 const form = reactive({ title: '', category: '', summary: '' });
 const tagsInput = ref('');
 const blocks = ref([]);
@@ -149,6 +160,21 @@ const isSaving = ref(false);
 let keyCounter = 0;
 
 function makeKey() { return ++keyCounter; }
+
+// Hydrate before anything else runs, so applyDefaultBlocks does not overwrite
+// imported blocks with category defaults.
+if (props.initial) {
+  form.title    = props.initial.title ?? '';
+  form.category = props.initial.normalizedCategory ?? props.initial.category ?? '';
+  form.summary  = props.initial.summary ?? '';
+  tagsInput.value = (props.initial.tags ?? []).join(', ');
+  blocks.value = (props.initial.blocks ?? []).map(b => ({
+    type: b.type,
+    order: b.order,
+    data: { ...b.data },
+    _key: makeKey(),
+  }));
+}
 
 function applyDefaultBlocks() {
   if (blocks.value.length === 0 && form.category) {

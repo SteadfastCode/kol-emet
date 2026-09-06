@@ -27,19 +27,27 @@
         </p>
       </div>
 
-      <!-- landed -->
-      <div v-else-if="stage === 'ready'" class="landed">
+      <!-- review -->
+      <DraftReview
+        v-else-if="stage === 'review'"
+        :draft-id="draftId"
+        @applied="onApplied"
+      />
+
+      <!-- applied -->
+      <div v-else-if="stage === 'applied'" class="landed">
         <p class="landed-count">
-          {{ counts.proposed }} item{{ counts.proposed === 1 ? '' : 's' }} proposed
+          {{ result.applied }} item{{ result.applied === 1 ? '' : 's' }} added to your wiki
         </p>
-        <p v-if="counts.dropped" class="landed-drop">
-          {{ counts.dropped }} couldn't be used and were left out.
+        <p v-if="result.blocked" class="landed-drop">
+          {{ result.blocked }} couldn't be added — {{ result.blocked === 1 ? 'it depends' : 'they depend' }}
+          on something you skipped.
         </p>
-        <p class="landed-note">Nothing has been saved to your wiki yet.</p>
-        <!-- Review lands in the next step; until then the draft is listed and
-             re-openable, so a generation is never lost. -->
+        <p v-if="result.failed" class="landed-drop">
+          {{ result.failed }} failed. Reopen the draft to see why.
+        </p>
         <div class="actions">
-          <button class="btn-sm" @click="reset">Generate another</button>
+          <button class="btn-sm" @click="reset">New draft</button>
           <button class="btn-sm primary" @click="tryClose">Done</button>
         </div>
       </div>
@@ -58,17 +66,19 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import BraindumpInput from './BraindumpInput.vue';
+import DraftReview from './DraftReview.vue';
 import { streamDraft, getAllowance } from '../../api/drafts.js';
 
-const emit = defineEmits(['close', 'generated']);
+const emit = defineEmits(['close', 'generated', 'applied']);
 
 const maxChars  = 25000;
-const stage     = ref('input');      // input | generating | ready | failed
+const stage     = ref('input');      // input | generating | review | applied | failed
 const error     = ref('');
 const stageLabel = ref('');
 const counts    = ref({ proposed: 0, dropped: 0 });
 const allowance = ref(null);
 const draftId   = ref(null);
+const result    = ref({ applied: 0, failed: 0, blocked: 0, skipped: 0 });
 
 onMounted(async () => {
   // Surfaced before the first keystroke so an exhausted allowance is visible
@@ -79,6 +89,8 @@ onMounted(async () => {
 const titleFor = s => ({
   input: 'New draft',
   generating: 'Reading your notes',
+  review: 'Review draft',
+  applied: 'Added to your wiki',
   ready: 'Draft ready',
   failed: 'Generation failed',
 }[s] ?? 'Draft');
@@ -106,7 +118,7 @@ async function start(text) {
       else if (ev.type === 'done') {
         counts.value = ev.counts ?? { proposed: 0, dropped: 0 };
         if (ev.budget) allowance.value = ev.budget;
-        stage.value = 'ready';
+        stage.value = 'review';
         emit('generated', { draftId: draftId.value, counts: counts.value });
       } else if (ev.type === 'error') {
         error.value = ev.message;
@@ -127,10 +139,20 @@ async function start(text) {
   }
 }
 
+function onApplied(res) {
+  result.value = res;
+  stage.value = 'applied';
+  // Only now has anything reached the graph, so this is where the entity list
+  // needs refreshing — generation alone never changes it.
+  emit('applied', res);
+}
+
 function reset() {
   stage.value = 'input';
   error.value = '';
+  draftId.value = null;
   counts.value = { proposed: 0, dropped: 0 };
+  result.value = { applied: 0, failed: 0, blocked: 0, skipped: 0 };
 }
 
 function tryClose() {
