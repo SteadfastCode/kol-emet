@@ -61,9 +61,10 @@
   Stores, APIs, Teams; relationships like *depends-on*, *owned-by*, *calls*).
 
 ## Phase 7 — Assistant → Generator + continuous sync (the hook)
-- **Graph generation from unstructured input** — paste text / upload a doc → the agent proposes
-  entities + relationships → the user reviews and accepts. This is the existing assistant pointed at
-  bulk input. **Never silent bulk writes** — always a reviewable diff (see approval model below).
+- ✅ **Graph generation from unstructured input** — paste text / upload a `.txt`/`.md`/`.docx` →
+  the agent proposes entities + relationships → the user reviews and accepts. **Never silent bulk
+  writes** — always a reviewable diff (see approval model below). **Shipped 2026-09-06 as Generator
+  v1**; design and remaining stretch items in [generator-v1-plan.md](generator-v1-plan.md).
 - **Vertical ingestion** — for architecture: repo / OpenAPI / docker-compose / k8s / DB-schema →
   proposed system graph. ("Point it at your repo and watch it map your services.")
 - **Continuous sync / drift detection** — the graph is derived from connected sources; when a source
@@ -75,8 +76,9 @@ The approval model, drift detection, and version control are **one mechanism**: 
 a *pull request against the graph*. Build order:
 - Grow `ChangeLog` (snapshots + rollback, today) into whole-graph, diffable, **permanent** history —
   the 30-day TTL must be lifted for versioned workspaces (can't expire the product).
-- Add a **"proposed / draft" change state** — the reviewable diff that every generated or drift
-  update lands in before a human merges it.
+- ✅ Add a **"proposed / draft" change state** — the reviewable diff that every generated or drift
+  update lands in before a human merges it. Built as the `Draft` collection; `source.producer` is
+  the seam where drift and repo ingestion become new producers rather than new collections.
 - **Repo-resident graph (dual-mode, DB-canonical first):** give the graph a canonical serializable
   form; a Git connector round-trips it into the customer's repo so it is versioned by *their* Git,
   reviewed in *their* PRs, and updated by *their* CI. For software teams this is the positioning:

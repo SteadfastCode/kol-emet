@@ -37,6 +37,7 @@ Mount points and their guards:
 | `/` (changelog) | `requireAuth` | History + rollback under `/entities/:id/...` |
 | `/chat` | `requireAuth` | AI chat (SSE streaming) |
 | `/conversations` | `requireAuth` | Saved AI conversations |
+| `/drafts` | `requireAuth` | Generated drafts; `POST /:id/apply` uses `requireActor` |
 
 ---
 
@@ -133,6 +134,76 @@ provider is only offered if its API key env var is set.
 | PATCH | `/conversations/:id` | Rename (sets `autoTitle: false`) or update |
 | DELETE | `/conversations/:id` | Delete |
 | POST | `/conversations/:id/title` | Auto-generate a title from the conversation |
+
+## Drafts
+
+A **draft** is a generated set of proposed changes awaiting human review — a pull request against
+the graph. Nothing here writes to `entities` or `relationshipgroups` except `POST /:id/apply`.
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/drafts` | List, newest first, max 50. Omits `items`, `source.text`, `diagnostics.rawOutput` and `grounding.systemPrompt` — the list view only needs counts. Excludes `discarded`. Lazily ages out runs stuck on `generating` for >10 min. |
+| GET | `/drafts/quota` | Remaining AI allowance for the workspace: `{ granted, spent, remaining, exhausted }` in micro-dollars plus display strings. |
+| POST | `/drafts` | Generate, streaming progress over **SSE**. Body: `{ text, provider?, roleStyle? }`. |
+| GET | `/drafts/:id` | Full draft including `items` and the source text. |
+| PATCH | `/drafts/:id/items/:itemId` | Record one decision. Body: `{ decision: 'accepted' \| 'edited' \| 'rejected', payload?, note? }`. `payload` is required for `edited` and is validated against the same schema `POST /entities` accepts. |
+| POST | `/drafts/:id/items/:itemId/retarget` | Resolve a duplicate: `{ targetEntityId }` turns a create into an update against that entity; `null` reverts it to a create. Entity items only. |
+| POST | `/drafts/:id/decide-clean` | Accept every **unflagged** pending item. Returns `{ accepted, skippedFlagged, skippedApplied, message }`. |
+| POST | `/drafts/:id/apply` | Write the accepted items into the graph (`requireActor`). The only route here that touches entities. |
+| GET | `/drafts/:id/export` | This draft as one JSONL training record, pseudonymised. `?raw=1` includes the unparsed model output. |
+| DELETE | `/drafts/:id` | **Soft** — sets `status: 'discarded'`. The row is training data and is never removed here. |
+
+### `POST /drafts` (SSE)
+
+The `Draft` row is persisted with `status: 'generating'` **before** the first model call, so a run is
+never invisible. Generation deliberately continues after a client disconnect — the provider has
+already been paid for those tokens.
+
+Event frames on the stream:
+
+| `type` | Payload |
+|--------|---------|
+| `created` | `{ draftId }` — emitted immediately, before any model call |
+| `stage` | `{ stage: 'entities' \| 'relationships' \| 'normalizing', chunk?, of? }` |
+| `done` | `{ draftId, counts, route, budget }` |
+| `error` | `{ message, draftId }` |
+
+Pre-stream failures are ordinary JSON errors, not SSE frames:
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Empty text, or longer than `GENERATOR_MAX_CHARS` (25,000) |
+| 402 | Not enough AI allowance to start a run (`GENERATOR_MIN_RUN_MICROS`, default $0.015) |
+| 409 | A generation is already running for this workspace — one at a time, since cost is only known after a run finishes |
+
+### Decisions vs. apply
+
+Recording a decision and applying it are separate on purpose. A person who reviews 30 items and then
+abandons the draft has still produced 30 labelled examples, and those are the point of the corpus.
+
+Two field groups on each item are written by different parties and never by the other:
+
+- The **human label** — `decision`, `decisionVia`, `decisionNote`, `decidedBy`, `decidedAt`,
+  `accepted` — written only by `PATCH`.
+- The **system outcome** — `applyState`, `resultId`, `changeLogId`, `applyError`, `appliedAt` —
+  written only by the applier. `PATCH` rejects these keys in a request body with a 400, so a client
+  cannot forge the record of what happened to a change.
+
+An item whose `applyState` is no longer `pending` cannot be re-decided (409). `POST /:id/apply` takes
+an atomic lock via `applyingAt`, so two simultaneous applies cannot both run; a lock older than five
+minutes is treated as a crashed apply and reclaimed.
+
+### `GET /drafts/:id/export`
+
+Returns `application/x-ndjson` — one line, schema `kol-emet/draft-export@1`. Every ObjectId is
+replaced: references to things created by a sibling item in the same draft become `local:<localKey>`,
+and everything else becomes a keyed HMAC pseudonym (`ws_…`, `usr_…`, `ent_…`, `chg_…`). Pseudonyms
+are deterministic, so a corpus stays joinable without ever holding a real id.
+
+Requires `EXPORT_HMAC_SECRET`; returns **503** if it is unset rather than exporting with a default
+key. If any raw ObjectId survives mapping the export fails with a 500 naming the field — a partial
+record is worse than a failure. The bulk equivalent is
+[`server/scripts/export-drafts-jsonl.js`](../server/scripts/export-drafts-jsonl.js).
 
 ## Events (SSE)
 

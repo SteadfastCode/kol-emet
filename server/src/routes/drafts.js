@@ -8,6 +8,7 @@ import { FREE_PROVIDERS } from '../config/pricing.js';
 import { isConfigured } from '../lib/aiProviders.js';
 import { validateItemPayload } from '../lib/draftItemSchema.js';
 import { applyDraft } from '../lib/draftApplier.js';
+import { makePseudonymizer, toJsonl } from '../lib/draftExporter.js';
 import { requireActor } from '../middleware/auth.js';
 import { broadcast } from '../lib/broadcaster.js';
 import Entity from '../models/Entity.js';
@@ -443,6 +444,45 @@ router.post('/:id/apply', requireActor, async (req, res) => {
   } finally {
     await Draft.updateOne({ _id: req.params.id }, { $set: { applyingAt: null } })
       .catch(e => console.error('[drafts] could not clear apply lock:', e.message));
+  }
+});
+
+/**
+ * GET /drafts/:id/export — this draft as one JSONL training record.
+ *
+ * Pseudonymised on the way out even though the caller owns the data, because
+ * the point of the endpoint is producing something safe to move *out* of the
+ * app — into a corpus, a fine-tune job, a bug report. An export that carried
+ * real ids would be unsafe to hand anywhere, which would defeat it.
+ *
+ * Runs no query beyond fetching the draft: if this ever needs a join, the
+ * Draft schema is missing something and that is the bug to fix.
+ */
+router.get('/:id/export', async (req, res) => {
+  try {
+    let pseudonym;
+    try {
+      pseudonym = makePseudonymizer(process.env.EXPORT_HMAC_SECRET);
+    } catch (err) {
+      return res.status(503).json({ error: err.message });
+    }
+
+    const draft = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId }).lean();
+    if (!draft) return res.status(404).json({ error: 'Not found' });
+
+    const line = toJsonl(draft, {
+      pseudonym,
+      includeRawOutput: req.query.raw === '1',
+    });
+
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Content-Disposition', `attachment; filename="draft-${req.params.id}.jsonl"`);
+    res.send(line + '\n');
+  } catch (err) {
+    // A tripwire hit lands here. 500 is right: the record could not be produced
+    // safely, and returning a partial one would be worse than failing.
+    console.error('[drafts] export failed:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

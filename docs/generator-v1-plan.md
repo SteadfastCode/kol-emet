@@ -98,28 +98,38 @@ so bulk acceptance can never rubber-stamp the uncertain ones.
 
 ## Open questions for Daniel
 
-These need a product decision, not an engineering one:
-
-1. **Default generation route and spend.** The plan defaults to `openrouter` /
-   `anthropic/claude-sonnet-4.6` because this is the user-facing demo and steadfast latency on a
-   1080 Ti would look hung. On a free beta with open registration that is real per-run cost — do you
-   want a per-workspace or per-day run cap before public signups, or is that a billing-milestone
-   problem?
-2. **Retention policy.** The corpus stores the full braindump verbatim, forever, including for
-   discarded drafts. Deliberate — it *is* the training asset — but a public product needs a
-   stated position: does account deletion hard-delete drafts, and does signup need to say
-   reviewed generations may be used to improve the product?
+1. ~~**Default generation route and spend.**~~ **Settled 2026-09-05.** A **total** allowance per
+   workspace in micro-dollars, not a per-day or per-run cap: measured runs vary ~6x, so a run cap
+   prices nothing. Default grant $3.50, no time limit. Generation is a capped trial; the non-AI
+   product is free forever. Self-hosted is priced (cheaply) rather than free — it burns electricity.
+   MCP is excluded, since Claude.ai runs that inference on the user's own subscription.
+   **Still open:** with self-hosted priced, an exhausted allowance blocks it too, so the "generation
+   gets slower rather than stopping" fallback needs its own decision. Deferred by Daniel.
+2. ~~**Retention policy.**~~ **Settled 2026-09-05.** Account deletion **hard-deletes** drafts;
+   signup **discloses** that reviewed generations may be used to improve the product, with **no
+   opt-out on the free tier**. Neither is built yet — see Remaining work.
 3. ~~**Product-facing name.**~~ **Settled 2026-09-05: "Draft".** The code originally said
    `Proposal` while the UI was to say "Draft"; Daniel chose to make them match rather than let the
    two drift, so the model, routes and collection were all renamed to `drafts`. The Decision Log's
    "pull request against the graph" framing stays as the *concept*, since it is the right one for
    the software-architecture expansion — it is just not the user-facing word.
-4. **Input ceiling.** 25,000 characters is ~4,000 words — a long chapter of notes, not a series
-   bible. Uncapped input needs a job queue. Is 25k right for the demo you want, or should the queue
-   be the next milestone rather than more producers?
+4. ~~**Input ceiling.**~~ **Settled 2026-09-05: 25,000 characters** ("25k fine for now"). The job
+   queue that uncapped input would need is a later milestone, not a v1 blocker.
 5. **Source-coverage pane.** The judge on product strength rated "here is the text I did *not* use"
-   the single strongest trust signal in any design, and the data ships in v1 either way. Making it
-   guaranteed rather than a stretch costs roughly the open-question item kind (about half a day).
+   the single strongest trust signal in any design, and the data ships in v1 either way. Agreed in
+   scope; **not built** — see Remaining work.
+
+## Remaining work
+
+v1 is complete: braindump or imported file → generated draft → per-item review → apply → entities in
+the graph, with the full decision record exportable as training data. What was agreed but is not yet
+built:
+
+- **Source-coverage pane** (item 5 above). The evidence offsets it needs are already stored.
+- **Open-question item kind in generation.** The applier handles `open_question` items; the
+  generator does not emit them yet.
+- **Account-deletion hard delete** and the **signup disclosure copy** (item 2 above).
+- **Post-trial self-hosted fallback** (item 1 above).
 
 ## Build sequence
 
@@ -134,6 +144,8 @@ These need a product decision, not an engineering one:
 | 7 | Client API + input screen | yes |
 | 8 | Review UI | yes |
 | 9 | Export proof + docs + Decision Log entries | yes |
+
+**All nine steps are built and verified as of 2026-09-06.**
 
 Step 3 is CLI-testable deliberately: `scripts/try-generate.js <workspaceId> <file>` runs the whole
 pipeline and prints the would-be Draft without touching a route or saving anything, so prompt

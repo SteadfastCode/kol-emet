@@ -96,6 +96,7 @@ original `/entries`):
 | GET/POST/PUT/DELETE | `/open-questions[/:id]` | Open-question CRUD (`?status=`) |
 | — | `/relationship-groups`, `/relationship-types` | Relationship CRUD (see api.md) |
 | GET/POST | `/entities/:id/history`, `/entities/:id/rollback/:logId` | Change history + rollback |
+| — | `/drafts` | Generated changes awaiting review (SSE generation, per-item decisions, apply, JSONL export) |
 | GET/POST | `/chat`, `/conversations` | AI chat (SSE) + saved conversations |
 | GET | `/events` | SSE live-sync stream |
 | — | `/auth/*`, `/oauth`, `/mcp` | Auth (session + passkey), OAuth, MCP transport |

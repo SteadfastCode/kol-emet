@@ -33,10 +33,11 @@ const workspaceSchema = new mongoose.Schema(
      * exposure is identical either way.
      *
      * Covers generation, in-app chat and memory extraction — everything that
-     * calls a paid provider. It deliberately does NOT cover MCP: Claude.ai
-     * runs that inference on the user's own subscription, so it costs us
-     * nothing and stays free forever. Self-hosted models are priced at zero
-     * and never draw it down.
+     * calls a provider we pay for, self-hosted included: the steadfast-ai box
+     * is far cheaper than a cloud model but still burns electricity, so it has
+     * a derived rate rather than a zero one. It deliberately does NOT cover
+     * MCP: Claude.ai runs that inference on the user's own subscription, so it
+     * costs us nothing and stays free forever.
      */
     aiBudget: {
       grantedMicros: { type: Number, default: Number(process.env.AI_TRIAL_GRANT_MICROS ?? 3_500_000) },

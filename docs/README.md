@@ -9,6 +9,8 @@ code disagree, the code is right; fix the doc.
 | [data-model.md](data-model.md) | All MongoDB collections and their Mongoose schemas |
 | [api.md](api.md) | Full REST endpoint reference, guards, and auth model |
 | [roadmap.md](roadmap.md) | Phased build history and what's next |
+| [build-plan.md](build-plan.md) | Current build sequence |
+| [generator-v1-plan.md](generator-v1-plan.md) | Design and build sequence for the braindump → draft → apply generator |
 | [wishlist.md](wishlist.md) | Uncommitted backlog of ideas |
 
 See also:

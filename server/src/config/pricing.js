@@ -4,9 +4,10 @@
  * Integers throughout: budgets are compared and decremented on every AI call,
  * and floating-point cents drift.
  *
- * Self-hosted models cost nothing and are priced at zero — usage on the
- * steadfast-ai box never touches a user's budget, which is the point of having
- * it. Anything not listed falls back to a DELIBERATELY CONSERVATIVE rate:
+ * Self-hosted models are cheap but NOT free — the steadfast-ai box burns
+ * electricity, so it has its own derived rate (see SELF_HOSTED_PRICE) and does
+ * draw down an allowance. Anything not listed falls back to a
+ * DELIBERATELY CONSERVATIVE rate:
  * over-charging a budget is recoverable, silently under-metering an unknown
  * model is not.
  */
