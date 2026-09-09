@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-004) Tenancy isolation integration test across two registered users** (needs KOL-003)
+- [x] **(KOL-004) Tenancy isolation integration test across two registered users** (needs KOL-003)
   `server/tests/http/tenancy.test.js` with `createApp` + memory DB + two supertest agents: register A and B through the real
   `POST /auth/register` (real `seedWorkspace`); A creates an entity; B `GET /entities/:id` → 404 (not 403, per
   `server/src/routes/entities.js`), B's `GET /entities` never lists it, B's `PUT`/`DELETE` → 404; a `POST /entities` from B carrying
