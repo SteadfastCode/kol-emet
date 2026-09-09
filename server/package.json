@@ -6,6 +6,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "seed": "node scripts/seed.js",
+    "test": "node --test \"tests/**/*.test.js\"",
     "migrate:blocks": "node scripts/migrate-blocks.js"
   },
   "dependencies": {
