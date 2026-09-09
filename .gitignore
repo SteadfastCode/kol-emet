@@ -5,3 +5,9 @@ dist/
 .DS_Store
 scripts/world_train_wiki.html
 client/.env
+
+# Local Claude Code settings (machine-specific permissions)
+.claude/settings.local.json
+
+# Task worktrees — full repo checkouts; never commit these
+.claude/worktrees/
