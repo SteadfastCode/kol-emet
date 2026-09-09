@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "items": {
+    "KOL-001": {
+      "order": 1,
+      "title": "Add the server test runner and the first unit test (trigram similarity)",
+      "status": "claimed",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-001",
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": "2026-09-09T03:18:45.330Z",
+      "runId": "2026-09-09T03:18:39.708Z",
+      "lastFail": null
+    },
+    "KOL-002": {
+      "order": 2,
+      "title": "Extract an app factory and add the first HTTP tests (OAuth PKCE)",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-001"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-003": {
+      "order": 3,
+      "title": "Add an in-memory MongoDB harness and the first model tests",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-002"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-004": {
+      "order": 4,
+      "title": "Tenancy isolation integration test across two registered users",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-003"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-005": {
+      "order": 5,
+      "title": "Auth route tests: registration, login, logout, session",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-003"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-006": {
+      "order": 6,
+      "title": "MCP endpoint tests: auth gate, tool list, workspace scoping",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-004"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-007": {
+      "order": 7,
+      "title": "Fail closed on /mcp when MCP_BEARER_TOKEN is unset in production",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-006"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-008": {
+      "order": 8,
+      "title": "Unit tests for the SSE broadcaster and the pricing table",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-001"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-009": {
+      "order": 9,
+      "title": "Unit tests for draft validation and the export tripwire",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-001"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-010": {
+      "order": 10,
+      "title": "Add Vitest to the client and test the login form's credential-manager attributes",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-011": {
+      "order": 11,
+      "title": "Sync docs and comments that still say tenancy is \"stored, not enforced\"",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-012": {
+      "order": 12,
+      "title": "GitHub Actions CI running both test suites and the client build",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-003",
+        "KOL-010"
+      ],
+      "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-013": {
+      "order": 13,
+      "title": "Refresh dependencies against the 50 open Dependabot advisories",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-004",
+        "KOL-010",
+        "KOL-012"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-014": {
+      "order": 14,
+      "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-015": {
+      "order": 15,
+      "title": "Account-deletion cascade as a tested library function",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-004"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-016": {
+      "order": 16,
+      "title": "Emit `open_question` items from the generator",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-009"
+      ],
+      "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-017": {
+      "order": 17,
+      "title": "Source-coverage pane in the draft review UI",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-018": {
+      "order": 18,
+      "title": "Post-trial self-hosted fallback",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-019": {
+      "order": 19,
+      "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-020": {
+      "order": 20,
+      "title": "Phase 6 step 1: `EntityType` registry model + `/entity-types` routes",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-004"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    }
+  },
+  "openCluster": null
+}
