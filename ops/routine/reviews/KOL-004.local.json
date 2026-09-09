@@ -1,0 +1,63 @@
+{
+  "item": "KOL-004",
+  "repo": "kol-emet",
+  "mergeSha": "2b85c432adbb4029dca1b4336ca83ed271b489ef",
+  "completedAtUtc": "2026-09-09T03:55:14.750Z",
+  "completeRunId": "2026-09-09T03:18:39.708Z",
+  "reviewRunId": "2026-09-09T23:21:49.099Z",
+  "reviewedAtUtc": "2026-09-09T23:24:34.409Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v1",
+  "diffBytes": 21554,
+  "chunks": [
+    {
+      "files": [
+        "server/tests/http/tenancy.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 1,
+        "oversized": true
+      },
+      "bytes": 21554,
+      "promptTokens": 5969,
+      "completionTokens": 334,
+      "latencyMs": 34127,
+      "findings": 3,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/tenancy.test.js",
+      "line": 305,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `workspaceId` is correctly set on created entities.",
+      "scenario": "If the `workspaceId` is not correctly set, it could lead to data leakage between tenants."
+    },
+    {
+      "file": "server/tests/http/tenancy.test.js",
+      "line": 320,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `workspaceId` is correctly set on created relationship groups.",
+      "scenario": "If the `workspaceId` is not correctly set, it could lead to data leakage between tenants."
+    },
+    {
+      "file": "server/tests/http/tenancy.test.js",
+      "line": 340,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `workspaceId` is correctly set on created open questions.",
+      "scenario": "If the `workspaceId` is not correctly set, it could lead to data leakage between tenants."
+    }
+  ],
+  "summary": "Three high-severity issues found in the tenancy isolation integration test. The tests do not verify that the `workspaceId` is correctly set on created entities, relationship groups, and open questions, which could lead to data leakage between tenants.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 5969,
+    "completionTokens": 334
+  },
+  "latencyMs": 34128
+}

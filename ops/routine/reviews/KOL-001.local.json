@@ -1,0 +1,44 @@
+{
+  "item": "KOL-001",
+  "repo": "kol-emet",
+  "mergeSha": "c4d607ecbcce412390dedf03fae7d778381c543d",
+  "completedAtUtc": "2026-09-09T03:23:45.553Z",
+  "completeRunId": "2026-09-09T03:18:39.708Z",
+  "reviewRunId": "2026-09-09T23:21:49.099Z",
+  "reviewedAtUtc": "2026-09-09T23:21:59.964Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v1",
+  "diffBytes": 5599,
+  "chunks": [
+    {
+      "files": [
+        "server/package.json",
+        "server/tests/unit/similarity.test.js"
+      ],
+      "part": null,
+      "bytes": 5599,
+      "promptTokens": 1917,
+      "completionTokens": 113,
+      "latencyMs": 9000,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/unit/similarity.test.js",
+      "line": 104,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test for 'normalizeTitle' does not handle leading whitespace correctly.",
+      "scenario": "When normalizing titles, if there is a leading space before the article, it should still be stripped."
+    }
+  ],
+  "summary": "One real defect found in the change.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 1917,
+    "completionTokens": 113
+  },
+  "latencyMs": 9000
+}

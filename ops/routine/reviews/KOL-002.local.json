@@ -1,0 +1,92 @@
+{
+  "item": "KOL-002",
+  "repo": "kol-emet",
+  "mergeSha": "db59a43df52cf1d8332d97688e4d0366f1f12154",
+  "completedAtUtc": "2026-09-09T03:33:53.544Z",
+  "completeRunId": "2026-09-09T03:18:39.708Z",
+  "reviewRunId": "2026-09-09T23:21:49.099Z",
+  "reviewedAtUtc": "2026-09-09T23:22:57.411Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v1",
+  "diffBytes": 33062,
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/package.json",
+        "server/src/app.js",
+        "server/src/index.js",
+        "server/src/lib/broadcaster.js",
+        "server/tests/http/oauth.test.js"
+      ],
+      "part": null,
+      "bytes": 18962,
+      "promptTokens": 5180,
+      "completionTokens": 149,
+      "latencyMs": 19890,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/yarn.lock"
+      ],
+      "part": null,
+      "bytes": 14100,
+      "promptTokens": 4098,
+      "completionTokens": 580,
+      "latencyMs": 37528,
+      "findings": 4,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/app.js",
+      "line": 97,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The default session store is not correctly configured to use the provided `sessionStore` option.",
+      "scenario": "When a custom `sessionStore` is passed to `createApp`, it should be used instead of the default MongoStore. However, the current implementation always creates a new MongoStore if no `sessionStore` is provided, which can lead to unexpected behavior in tests or when using a different session store."
+    },
+    {
+      "file": "yarn.lock",
+      "line": 605,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The 'form-data' package version 4.0.6 has been added to the dependencies.",
+      "scenario": "A new dependency, 'form-data', is introduced with version 4.0.6. This package is used for creating readable 'multipart/form-data' streams as easy as using a writable stream. It's commonly used in HTTP requests where form data needs to be sent."
+    },
+    {
+      "file": "yarn.lock",
+      "line": 625,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The 'formidable' package version 3.5.4 has been added to the dependencies.",
+      "scenario": "A new dependency, 'formidable', is introduced with version 3.5.4. This package is used for parsing form data, especially in Node.js environments. It's useful for handling file uploads and other form submissions."
+    },
+    {
+      "file": "yarn.lock",
+      "line": 654,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The 'superagent' package version 10.3.0 has been added to the dependencies.",
+      "scenario": "A new dependency, 'superagent', is introduced with version 10.3.0. This package is a small progressive client-side HTTP request library. It's used for making AJAX requests in web applications and can be extended with plugins."
+    },
+    {
+      "file": "yarn.lock",
+      "line": 672,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The 'supertest' package version 7.2.2 has been added to the dependencies.",
+      "scenario": "A new dependency, 'supertest', is introduced with version 7.2.2. This package is used for testing HTTP servers by making requests and examining responses. It's often used in conjunction with frameworks like Express.js."
+    }
+  ],
+  "summary": "One high-severity defect found. · Four new dependencies have been added to the project: 'form-data' (v4.0.6), 'formidable' (v3.5.4), 'superagent' (v10.3.0), and 'supertest' (v7.2.2). These packages are used for handling form data, parsing forms, making HTTP requests, and testing HTTP servers respectively.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 9278,
+    "completionTokens": 729
+  },
+  "latencyMs": 57418
+}
