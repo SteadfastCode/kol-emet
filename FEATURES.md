@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-003) Add an in-memory MongoDB harness and the first model tests** (needs KOL-002)
+- [x] **(KOL-003) Add an in-memory MongoDB harness and the first model tests** (needs KOL-002)
   Add `mongodb-memory-server` devDependency and `server/tests/helpers/db.js` exporting `connect()`/`clear()`/`disconnect()` (one
   `MongoMemoryServer` per test file, collections dropped between tests). If the mongod binary download fails in the routine's
   sandbox, record this item as Blocked — never substitute a live URI. `server/tests/models/entity.test.js`: `Entity` rejects an
