@@ -4,7 +4,7 @@
     "KOL-001": {
       "order": 1,
       "title": "Add the server test runner and the first unit test (trigram similarity)",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-001",
