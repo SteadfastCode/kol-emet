@@ -4,7 +4,7 @@
     "KOL-004": {
       "order": 1,
       "title": "Tenancy isolation integration test across two registered users",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-004",
