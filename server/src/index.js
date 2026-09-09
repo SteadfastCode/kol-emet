@@ -1,77 +1,18 @@
+/**
+ * Bootstrap: load the environment, build the app, connect to MongoDB, listen.
+ *
+ * The app itself — middleware, session config and every route mount — lives in
+ * `app.js` so that tests can construct it without a database. Keep this file to
+ * process concerns only.
+ */
+
 import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
-import session from 'express-session';
-import MongoStore from 'connect-mongo';
 import mongoose from 'mongoose';
 
-import entitiesRouter from './routes/entities.js';
-import draftsRouter from './routes/drafts.js';
-import tagsRouter from './routes/tags.js';
-import openQuestionsRouter from './routes/openQuestions.js';
-import relationshipTypesRouter from './routes/relationshipTypes.js';
-import authRouter from './routes/auth.js';
-import mcpRouter from './routes/mcp.js';
-import oauthRouter from './routes/oauth.js';
-import eventsRouter from './routes/events.js';
-import changelogRouter from './routes/changelog.js';
-import relationshipGroupsRouter from './routes/relationshipGroups.js';
-import chatRouter from './routes/chat.js';
-import conversationsRouter from './routes/conversations.js';
-import './models/User.js';
-import './models/Conversation.js';
-import './models/OpenQuestion.js'; // ensure model is registered for population
-import './models/RelationshipType.js';
-import './models/RelationshipGroup.js';
-import { requireAuth } from './middleware/auth.js';
-import { resolveWorkspace } from './middleware/workspace.js';
+import { createApp } from './app.js';
 
-const app = express();
 const PORT = process.env.API_PORT ?? 3001;
-const isProd = process.env.NODE_ENV === 'production';
-
-app.set('trust proxy', 1); // trust Railway's reverse proxy so secure cookies work
-
-app.use(cors({
-  origin: process.env.CLIENT_ORIGIN,
-  credentials: true,
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
-  cookie: {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? 'none' : 'lax',
-    domain: isProd ? '.kol-emet.danielecker.dev' : undefined,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  },
-}));
-
-app.use('/', oauthRouter);
-app.use('/auth', authRouter);
-app.use('/mcp', mcpRouter);
-// resolveWorkspace here too: the SSE stream pushes full entity documents, so
-// each connection must be tagged with a workspace to filter broadcasts by.
-app.use('/events', requireAuth, resolveWorkspace, eventsRouter);
-// resolveWorkspace sits behind requireAuth on every route that touches tenant
-// content: it sets req.workspaceId, which those routes filter every query on.
-app.use('/entities', requireAuth, resolveWorkspace, entitiesRouter);
-app.use('/', requireAuth, resolveWorkspace, changelogRouter);
-app.use('/relationship-groups', requireAuth, resolveWorkspace, relationshipGroupsRouter);
-app.use('/tags', requireAuth, resolveWorkspace, tagsRouter);
-app.use('/open-questions', requireAuth, resolveWorkspace, openQuestionsRouter);
-app.use('/relationship-types', requireAuth, resolveWorkspace, relationshipTypesRouter);
-// Chat authenticates per-route rather than at mount, so it resolves the
-// workspace per-route too — see routes/chat.js.
-app.use('/chat', chatRouter);
-app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
-app.use('/drafts', requireAuth, resolveWorkspace, draftsRouter);
+const app = createApp();
 
 mongoose
   .connect(process.env.MONGO_URI)

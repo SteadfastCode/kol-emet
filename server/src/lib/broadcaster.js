@@ -6,12 +6,16 @@
 // a nicety.
 const clients = new Map();
 
-// Keep SSE connections alive through proxies
+// Keep SSE connections alive through proxies.
+//
+// unref'd so it is not on its own a reason for the process to stay alive: the
+// listening server holds the loop open in the deployed app, while a test that
+// merely imports this module must still be able to exit.
 setInterval(() => {
   for (const [clientId, { res }] of clients) {
     try { res.write('data: ping\n\n'); } catch { clients.delete(clientId); }
   }
-}, 30_000);
+}, 30_000).unref();
 
 export function addClient(clientId, res, workspaceId) {
   clients.set(clientId, { res, workspaceId: String(workspaceId) });
