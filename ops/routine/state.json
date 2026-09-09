@@ -4,7 +4,7 @@
     "KOL-003": {
       "order": 1,
       "title": "Add an in-memory MongoDB harness and the first model tests",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-003",
