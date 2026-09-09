@@ -4,7 +4,7 @@
     "KOL-002": {
       "order": 1,
       "title": "Extract an app factory and add the first HTTP tests (OAuth PKCE)",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-002",
