@@ -93,10 +93,18 @@ writes with `x-sse-client-id` so the broadcaster can echo changes to every *othe
 bouncing them back to the originator.
 
 ## AI chat
-`/chat` streams completions over SSE from whichever provider's key is configured
-(`aiProviders.js`: xAI/Grok, OpenAI, Gemini — all via an OpenAI-compatible client). The layer is
-provider-agnostic by design; a local Ollama provider is a known future addition. Conversations persist
-per user (`Conversation`).
+`/chat` streams completions over SSE from whichever provider's key is configured, all through one
+OpenAI-compatible client ([`aiProviders.js`](../server/src/lib/aiProviders.js)):
+
+- **OpenRouter** — the primary SaaS path: one key, every model, per-request cost data.
+- **Native** — Claude (Anthropic), xAI (Grok), OpenAI and Google Gemini, each on its own key, for
+  power users and self-hosted deployments.
+- **`steadfast`** — self-hosted Ollama models on the steadfast-ai box, behind an OpenAI-compatible
+  gateway. Reachable only over the tailnet, so it is a local-dev / self-hosted option rather than a
+  production default; `STEADFAST_AI_BASE_URL` overrides the gateway address.
+
+The layer is provider-agnostic by design — any OpenAI-compatible endpoint is one more registry
+entry. Conversations persist per user (`Conversation`).
 
 ## Data migrations
 One-off scripts in [`server/scripts/`](../server/scripts): `seed.js` (18 initial World Train

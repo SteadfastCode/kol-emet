@@ -18,7 +18,7 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 - Entry revision history
 
 ## Data & API
-- workspaceId enforcement in all queries (multi-tenancy — stored, not yet filtered)
+- ✅ workspaceId enforcement in all queries (multi-tenancy) — shipped 2026-09-03; see roadmap Phase 8
 - Bulk import endpoint
 - Full-text search index on blocks data
 

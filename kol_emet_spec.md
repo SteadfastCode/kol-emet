@@ -88,7 +88,7 @@ an open question to revisit for pure-dev customers.
 - `blocks` — ordered content blocks `{ _id, type, order, data }`; `type` ∈ text, timeline_event, attribute, quote, gallery
 - `relationships` — refs → `RelationshipGroup` (back-reference; groups are the source of truth)
 - `open_questions` — refs → `OpenQuestion`
-- `workspaceId` — multi-tenancy key (stored, not yet enforced in queries)
+- `workspaceId` — multi-tenancy key; enforced per request (`resolveWorkspace`)
 - `createdAt` / `updatedAt` — timestamps
 
 Supporting collections: `RelationshipGroup`, `RelationshipType`, `OpenQuestion`, `ChangeLog`
