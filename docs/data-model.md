@@ -195,7 +195,8 @@ This collection is also the **fine-tune corpus** (Decision Log, 2026-09-03), whi
 choices that would otherwise look odd:
 
 - **No TTL anywhere.** `ChangeLog` expires after 30 days because it is undo; this is the corpus and
-  must be permanent. `DELETE` is a soft `status: 'discarded'`.
+  must be permanent. `DELETE` is a soft `status: 'discarded'`; the only hard delete is account
+  deletion (see Workspace).
 - **`accepted` is written at decision time, not apply time**, so a draft reviewed in full and then
   abandoned — the common outcome — still yields a complete set of labels.
 - **A rejection never removes the item.** The negative example is the most valuable and the easiest
@@ -363,6 +364,13 @@ pass once the populate is scoped (`match: { workspaceId }`) or foreign ids are r
 
 Members are modelled from the start rather than a bare `ownerId`, so shared workspaces don't require
 reshaping the schema later. Registration creates a personal workspace with the new user as sole owner.
+
+**Account deletion** is a hard delete, drafts included
+([`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js); no route yet). It removes the user,
+every workspace they *solely* own (they are `ownerId` and no other member holds `owner`), every
+document in those workspaces across every model carrying `workspaceId`, and their `UserMemory` and
+`Conversation` rows. It refuses, deleting nothing, while the user belongs to any workspace they
+don't solely own, whether as editor, viewer or co-owner.
 
 ```js
 {
