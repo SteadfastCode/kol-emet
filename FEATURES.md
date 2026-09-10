@@ -8,12 +8,6 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [x] **(KOL-010) Add Vitest to the client and test the login form's credential-manager attributes**
-  Add `vitest`, `@vue/test-utils`, `jsdom` devDependencies and `"test": "vitest run"` to `client/package.json`; a
-  `test: { environment: 'jsdom' }` block in `client/vite.config.js`. First test `client/src/views/LoginView.test.js`: the email
-  input has `autocomplete="email"`; the password input has `current-password` in login mode and `new-password` in register mode;
-  the form has `autocomplete="on"` — the CLAUDE.md password-manager rule made executable. Verify: `cd client && yarn test` green
-  and `yarn build` still succeeds. Out of scope: passkey flows, any visual change.
 - [ ] **(KOL-011) Sync docs and comments that still say tenancy is "stored, not enforced"**
   Enforcement shipped (mounts in `server/src/index.js`, `resolveWorkspace`). Fix `CLAUDE.md:74`, `docs/data-model.md:38`,
   `docs/roadmap.md:88` (Phase 8 bullet → done), `docs/wishlist.md:21`, the "Not yet mounted" paragraph in
@@ -72,6 +66,12 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-010) Add Vitest to the client and test the login form's credential-manager attributes** (routine 2026-09-10, 909e68e)
+  Add `vitest`, `@vue/test-utils`, `jsdom` devDependencies and `"test": "vitest run"` to `client/package.json`; a
+  `test: { environment: 'jsdom' }` block in `client/vite.config.js`. First test `client/src/views/LoginView.test.js`: the email
+  input has `autocomplete="email"`; the password input has `current-password` in login mode and `new-password` in register mode;
+  the form has `autocomplete="on"` — the CLAUDE.md password-manager rule made executable. Verify: `cd client && yarn test` green
+  and `yarn build` still succeeds. Out of scope: passkey flows, any visual change.
 - [x] **(KOL-009) Unit tests for draft validation and the export tripwire** (needs KOL-001) (routine 2026-09-10, 5c2efe5)
   `server/tests/unit/draftItemSchema.test.js`: `validateItemPayload` accepts a minimal entity / relationship / open_question; rejects
   unknown keys (`.strict()`), a relationship with < 2 members, and a member carrying both `localKey` and `refId`; unknown kind →

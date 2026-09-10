@@ -4,7 +4,7 @@
     "KOL-010": {
       "order": 1,
       "title": "Add Vitest to the client and test the login form's credential-manager attributes",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-010",
