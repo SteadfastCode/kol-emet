@@ -4,7 +4,7 @@
     "KOL-009": {
       "order": 1,
       "title": "Unit tests for draft validation and the export tripwire",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-009",
