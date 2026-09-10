@@ -56,7 +56,7 @@
     "KOL-015": {
       "order": 4,
       "title": "Account-deletion cascade as a tested library function",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-015",
