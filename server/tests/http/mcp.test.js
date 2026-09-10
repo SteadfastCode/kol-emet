@@ -20,11 +20,24 @@
  * What each group defends:
  *
  *   The auth gate is the only thing standing between the public internet and
- *   every tool below it. `MCP_BEARER_TOKEN` is read once at module load in
- *   `src/routes/mcp.js`, and an unset token means "dev mode: no token required"
- *   — an open endpoint. The gate is therefore tested with the token configured,
- *   which is the deployed shape, and both the missing-header and wrong-token
- *   cases must be refused before any session is created.
+ *   every tool below it. `MCP_BEARER_TOKEN` and `NODE_ENV` are read once at
+ *   module load in `src/routes/mcp.js` and fix the gate's behaviour for the
+ *   life of the process: token configured → bearer required; token unset
+ *   outside production → "dev mode", open; token unset *in* production → the
+ *   endpoint is disabled and every request answers 503. The first is the
+ *   deployed shape and is tested against the shared app below, where both the
+ *   missing-header and wrong-token cases must be refused before any session is
+ *   created. The other two are properties of a differently-started process, so
+ *   they get their own group, which re-imports the router under each
+ *   environment — see `mountFreshMcp` for how and why that works.
+ *
+ *   The 503 is the fail-closed half of that, and it is a distinct answer from
+ *   the 401 on purpose: an unset token in a deployed process is a
+ *   misconfiguration, not a caller who forgot their credential, and reading it
+ *   as "no auth needed" would publish every tool below to the internet
+ *   unauthenticated. So the group asserts both directions — a misconfigured
+ *   production process refuses everything, and a configured one still answers
+ *   401 rather than 503.
  *
  *   The tool list is a contract with the Claude.ai connector and with
  *   `docs/architecture.md`. A tool that is registered but undocumented, or
@@ -48,7 +61,11 @@
  * accidentally-empty response fails rather than passes.
  *
  * Falsification checks for this suite: delete the `if (auth !== ...)` block in
- * `src/routes/mcp.js` and the auth group fails; drop a `server.tool(...)` call
+ * `src/routes/mcp.js` and the auth group fails; put back the old
+ * `if (!MCP_TOKEN) return next()` in place of the `DISABLED` branch and the
+ * production fail-closed cases fail; drop the `IS_PROD` half of `DISABLED` and
+ * the dev-mode case fails; move the startup line inside the middleware and the
+ * "logged once, at load" assertions fail; drop a `server.tool(...)` call
  * and the tool-list test fails; remove `workspaceId` from the `Entity.find`
  * filter in `search_entities`, or from the `Entity.findOne` filter in
  * `get_entity`, and the scoping group fails; make `mcpWorkspaceId()` return
@@ -77,16 +94,22 @@
  *             naming the call that caused it and the workspace it points at
  *   normal  — light, plus every client connection and tool call with its status
  *   verbose — normal, plus the full text payload each tool returned
+ *
+ * The router has its own tiers (MCP_LOG_LEVEL, same four names). This file
+ * pins it to 'off' so its per-request lines stay out of the run, except during
+ * a re-import in `mountFreshMcp`, where the startup line is the subject.
  */
 
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
+import express from 'express';
 import session from 'express-session';
 import request from 'supertest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
 
 import * as db from '../helpers/db.js';
 import User from '../../src/models/User.js';
@@ -115,6 +138,10 @@ delete process.env.BEARER_TOKEN;
 // Registration seeds a workspace per account and seedWorkspace logs at 'light'
 // by default. Overridable when a seeding problem is what is being chased.
 process.env.SEED_LOG_LEVEL ??= 'off';
+// Same for the MCP router's own gate logging, which is per-request from
+// 'normal' up. mountFreshMcp() below forces 'light' for the duration of a
+// re-import, because the startup line is a thing this file asserts on.
+process.env.MCP_LOG_LEVEL ??= 'off';
 
 const { createApp } = await import('../../src/app.js');
 
@@ -323,6 +350,231 @@ describe('POST /mcp auth gate', () => {
     } finally {
       await client.close();
     }
+  });
+});
+
+// ─── The gate under other startup configurations ─────────────────────────────
+
+/**
+ * `src/routes/mcp.js` decides its auth behaviour once, at module load, from
+ * MCP_BEARER_TOKEN and NODE_ENV. This file loaded it with a token configured —
+ * the deployed shape — so the other two configurations can only be reached by
+ * evaluating the module again under a different environment.
+ *
+ * The `?fresh=` query is what makes that possible: Node's ESM loader keys its
+ * cache on the full specifier, so a new query string yields a genuinely new
+ * instance of *this* module while everything it imports (the models, the SDK)
+ * stays cached and shared — no second Mongoose model registration, no second
+ * mongod.
+ *
+ * Returns the router mounted on a bare app, plus every line the module printed
+ * while it was evaluating, which is the only place "logged once at startup" is
+ * observable.
+ */
+/**
+ * Runs `fn` with MCP_LOG_LEVEL forced to 'light' and console.log captured,
+ * returning every line the router printed while it ran. The startup decision
+ * and the per-request refusals are both 'light' lines, so this is how either is
+ * observed — and the difference between them is what "logged once at startup"
+ * means.
+ */
+async function captureRouterLog(fn) {
+  const savedLevel = process.env.MCP_LOG_LEVEL;
+  process.env.MCP_LOG_LEVEL = 'light';
+  const lines = [];
+  const realLog = console.log;
+  console.log = (...args) => { lines.push(args.join(' ')); };
+  try {
+    return { lines, value: await fn() };
+  } finally {
+    // Restored before any assertion runs, so a failure still prints.
+    console.log = realLog;
+    if (savedLevel === undefined) delete process.env.MCP_LOG_LEVEL;
+    else process.env.MCP_LOG_LEVEL = savedLevel;
+  }
+}
+
+let freshCount = 0;
+async function mountFreshMcp({ nodeEnv, token }) {
+  const saved = { NODE_ENV: process.env.NODE_ENV, MCP_BEARER_TOKEN: process.env.MCP_BEARER_TOKEN };
+  process.env.NODE_ENV = nodeEnv;
+  if (token === undefined) delete process.env.MCP_BEARER_TOKEN;
+  else process.env.MCP_BEARER_TOKEN = token;
+
+  let startupLog;
+  let mod;
+  try {
+    ({ lines: startupLog, value: mod } = await captureRouterLog(
+      () => import(`../../src/routes/mcp.js?fresh=${++freshCount}`)
+    ));
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+
+  const app = express();
+  app.use(express.json()); // as src/app.js does — the router reads req.body
+  app.use('/mcp', mod.default);
+
+  log('light', `mounted a fresh /mcp (source: re-import with NODE_ENV=${nodeEnv}, MCP_BEARER_TOKEN ${token === undefined ? 'unset' : 'set'}); it logged ${startupLog.length} line(s) at load`);
+  for (const line of startupLog) log('normal', `startup line: ${line}`);
+  return { app, startupLog };
+}
+
+/**
+ * POSTs the `initialize` frame the SDK client sends first, with the two Accept
+ * types the transport requires. Anything that answers before the handshake —
+ * the auth gate — answers this.
+ */
+function postInitialize(app) {
+  return request(app)
+    .post('/mcp')
+    .set('Accept', 'application/json, text/event-stream')
+    .set('Content-Type', 'application/json')
+    .send({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: LATEST_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: 'kol-emet-tests', version: '0.0.0' },
+      },
+    });
+}
+
+/** The one startup line the router logs, isolated from anything else it said. */
+function decisionLine(startupLog) {
+  const lines = startupLog.filter(line => line.includes('gate is'));
+  assert.equal(
+    lines.length, 1,
+    `the router must log its auth decision exactly once, at load; got ${lines.length} line(s): ${JSON.stringify(startupLog)}`
+  );
+  return lines[0];
+}
+
+describe('the auth gate under other startup configurations', () => {
+  describe('MCP_BEARER_TOKEN unset in production', () => {
+    let app;
+    let startupLog;
+
+    before(async () => {
+      ({ app, startupLog } = await mountFreshMcp({ nodeEnv: 'production', token: undefined }));
+    });
+
+    test('an initialize POST is refused with 503 and mints no session', async () => {
+      const res = await postInitialize(app);
+
+      assert.equal(res.status, 503, `a deployed process with no token must not serve /mcp, got ${res.status}: ${JSON.stringify(res.body)}`);
+      assert.deepEqual(res.body, { error: 'MCP not configured' });
+      // The refusal has to land before the transport does anything, or a
+      // misconfigured process still accumulates sessions from the internet.
+      assert.equal(res.headers['mcp-session-id'], undefined, 'a disabled endpoint must not mint a session id');
+    });
+
+    test('the gate refuses methods the router would otherwise answer itself', async () => {
+      // GET is a 405 and a DELETE for an unknown session is a 204 once the
+      // gate lets them past, so 503 on both proves the gate runs first rather
+      // than the request happening to miss a handler.
+      const get = await request(app).get('/mcp');
+      assert.equal(get.status, 503, `GET /mcp should be refused, got ${get.status}`);
+      assert.deepEqual(get.body, { error: 'MCP not configured' });
+
+      const del = await request(app).delete('/mcp').set('mcp-session-id', 'no-such-session');
+      assert.equal(del.status, 503, `DELETE /mcp should be refused, got ${del.status}`);
+    });
+
+    test('the decision is not re-logged per request', async () => {
+      // The other half of "once, at startup": a line printed on every request
+      // would satisfy the assertion below (it reads only what load time
+      // printed) while burying the reason in per-request noise on a deployed
+      // box that is refusing everything.
+      const { lines } = await captureRouterLog(async () => {
+        await postInitialize(app);
+        await request(app).get('/mcp');
+      });
+
+      const repeats = lines.filter(line => line.includes('gate is'));
+      assert.deepEqual(repeats, [], `the startup decision must not repeat per request: ${JSON.stringify(repeats)}`);
+      // What a request should log at the default tier instead: one line each,
+      // saying which request was refused and why.
+      const refusals = lines.filter(line => line.includes('refused'));
+      assert.equal(refusals.length, 2, `expected one refusal line per request, got: ${JSON.stringify(lines)}`);
+      for (const line of refusals) assert.match(line, /503/, `a refusal line must carry the status: ${line}`);
+    });
+
+    test('the reason is logged once, at load, naming the variable to set', () => {
+      const line = decisionLine(startupLog);
+
+      assert.match(line, /DISABLED/, `the startup line must say the endpoint is off: ${line}`);
+      // Whoever reads this line at 3am needs the fix in it, not just the symptom.
+      assert.match(line, /MCP_BEARER_TOKEN/, `the startup line must name the variable: ${line}`);
+      assert.match(line, /production/, `the startup line must say why it is refusing here and not in dev: ${line}`);
+    });
+  });
+
+  describe('MCP_BEARER_TOKEN unset outside production', () => {
+    let app;
+    let startupLog;
+
+    before(async () => {
+      ({ app, startupLog } = await mountFreshMcp({ nodeEnv: 'development', token: undefined }));
+    });
+
+    test('dev mode is unchanged: an unauthenticated initialize is served', async () => {
+      const res = await postInitialize(app);
+
+      assert.equal(res.status, 200, `dev mode must keep serving a tokenless local client, got ${res.status}: ${JSON.stringify(res.body)}`);
+      // Not just a 200: the handshake actually completed and named this server.
+      assert.equal(res.body?.result?.serverInfo?.name, 'kol-emet', `expected an initialize result, got: ${JSON.stringify(res.body)}`);
+
+      const sessionId = res.headers['mcp-session-id'];
+      assert.ok(sessionId, 'a served initialize must return a session id');
+      // The fresh module holds the transport in its own session map; close it
+      // rather than leaving it open for the rest of the run.
+      await request(app).delete('/mcp').set('mcp-session-id', sessionId).expect(204);
+    });
+
+    test('the open gate is logged once, at load', () => {
+      const line = decisionLine(startupLog);
+
+      assert.match(line, /OPEN/, `the startup line must say the endpoint is unauthenticated: ${line}`);
+      assert.doesNotMatch(line, /DISABLED/, `dev mode must not claim to be disabled: ${line}`);
+    });
+  });
+
+  describe('MCP_BEARER_TOKEN set in production', () => {
+    let app;
+    let startupLog;
+
+    before(async () => {
+      ({ app, startupLog } = await mountFreshMcp({ nodeEnv: 'production', token: MCP_TOKEN }));
+    });
+
+    test('an unauthenticated request is 401, not 503', async () => {
+      // The 503 means "this deployment is misconfigured" and nothing else. A
+      // configured deployment must keep answering the ordinary refusal, or the
+      // status stops carrying that information.
+      const res = await postInitialize(app);
+
+      assert.equal(res.status, 401, `a configured endpoint must refuse with 401, got ${res.status}: ${JSON.stringify(res.body)}`);
+      assert.deepEqual(res.body, { error: 'Unauthorized' });
+    });
+
+    test('the configured token still initializes in production', async () => {
+      const res = await postInitialize(app).set('Authorization', `Bearer ${MCP_TOKEN}`);
+
+      assert.equal(res.status, 200, `the configured token must be accepted, got ${res.status}: ${JSON.stringify(res.body)}`);
+      const sessionId = res.headers['mcp-session-id'];
+      assert.ok(sessionId, 'an authorized initialize must return a session id');
+      await request(app).delete('/mcp').set('mcp-session-id', sessionId).set('Authorization', `Bearer ${MCP_TOKEN}`).expect(204);
+    });
+
+    test('the enforced gate is logged once, at load', () => {
+      assert.match(decisionLine(startupLog), /ENFORCED/);
+    });
   });
 });
 

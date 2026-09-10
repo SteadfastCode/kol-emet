@@ -51,6 +51,13 @@ The MCP server is **not** a standalone stdio process — it is a Streamable-HTTP
 can authorize. Writes are attributed to `Settings.mcpUserId` and recorded in the changelog with
 `actorType: 'mcp'`.
 
+The endpoint has its own bearer gate (`MCP_BEARER_TOKEN`), read once at process start:
+configured → the token is required; unset outside production → open, so a local Claude Code session
+needs no secret; unset **in** production → the endpoint is disabled and every request answers
+`503 {"error": "MCP not configured"}`, with the reason logged once at startup. An unset token in a
+deployed process is a misconfiguration, not an invitation — treating it as "no auth needed" would
+publish every tool above to the internet unauthenticated.
+
 The root [`.mcp.json`](../.mcp.json) points Claude Code at the local dev endpoint
 (`http://localhost:3004/mcp`) via the HTTP transport. (The old standalone stdio package and its
 config were removed.)
