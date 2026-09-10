@@ -4,7 +4,7 @@
     "KOL-005": {
       "order": 1,
       "title": "Auth route tests: registration, login, logout, session",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-005",
