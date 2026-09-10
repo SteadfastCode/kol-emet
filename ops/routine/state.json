@@ -4,7 +4,7 @@
     "KOL-007": {
       "order": 1,
       "title": "Fail closed on /mcp when MCP_BEARER_TOKEN is unset in production",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-007",
