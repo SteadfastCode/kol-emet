@@ -43,14 +43,62 @@ async function mcpWorkspaceId() {
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
+// off | light | normal | verbose — the gate's behaviour depends on process
+// configuration that only exists on the deployed box, so the default tier
+// records the decision it reached and every refusal, and says where each came
+// from. Resolved per call, not at module load, so it can't depend on import
+// order.
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+function log(level, msg) {
+  const active = LEVELS[process.env.MCP_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[mcp:${level}] ${msg}`);
+}
+
+// Both read once, at module load: the gate's answer is a property of how the
+// process was started, not of the request, so it is decided and logged exactly
+// once here rather than re-derived per request.
 const MCP_TOKEN = process.env.MCP_BEARER_TOKEN;
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+/**
+ * With no token configured there is nothing to compare against, and the two
+ * defensible answers differ by environment:
+ *
+ *   development — stay open, so a local Claude Code session can talk to the
+ *                 endpoint without a secret. This is the long-standing
+ *                 "dev mode" and is unchanged.
+ *   production  — refuse. `/mcp` is the second front door into tenant content
+ *                 and the only one not behind `requireAuth`; reading an unset
+ *                 token as "no auth needed" publishes every tool below to the
+ *                 internet unauthenticated. An unset token in a deployed
+ *                 process is a misconfiguration, and 503 says exactly that:
+ *                 the endpoint exists and is not configured to serve.
+ */
+const DISABLED = !MCP_TOKEN && IS_PROD;
+
+if (DISABLED) {
+  log('light', 'gate is DISABLED: MCP_BEARER_TOKEN unset while NODE_ENV=production (source: process.env at module load) — every /mcp request answers 503 until the token is set and the process restarts');
+} else if (!MCP_TOKEN) {
+  log('light', `gate is OPEN: MCP_BEARER_TOKEN unset while NODE_ENV=${process.env.NODE_ENV ?? 'unset'} (source: process.env at module load) — dev mode, /mcp serves unauthenticated requests`);
+} else {
+  log('light', 'gate is ENFORCED: bearer token required (source: MCP_BEARER_TOKEN at module load)');
+}
 
 router.use((req, res, next) => {
-  console.log(`[mcp] ${req.method} ${req.path} — session: ${req.headers['mcp-session-id'] ?? 'none'} — auth: ${req.headers['authorization'] ? 'present' : 'missing'}`);
+  log('normal', `${req.method} ${req.path} — session: ${req.headers['mcp-session-id'] ?? 'none'} — auth: ${req.headers['authorization'] ? 'present' : 'missing'}`);
+
+  if (DISABLED) {
+    log('light', `refused ${req.method} ${req.path} with 503 (source: MCP_BEARER_TOKEN unset in production)`);
+    return res.status(503).json({ error: 'MCP not configured' });
+  }
   if (!MCP_TOKEN) return next(); // dev mode: no token required
+
   const auth = req.headers['authorization'];
   if (auth !== `Bearer ${MCP_TOKEN}`) {
-    console.log('[mcp] auth failed — got:', auth);
+    log('light', `refused ${req.method} ${req.path} with 401 (source: Authorization header ${auth ? 'did not match MCP_BEARER_TOKEN' : 'absent'})`);
+    // The rejected header is a credential someone typed; verbose only, so it
+    // never lands in a deployed log by default.
+    log('verbose', `rejected Authorization header: ${auth ?? '(none)'}`);
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
