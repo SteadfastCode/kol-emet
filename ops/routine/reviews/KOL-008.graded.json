@@ -1,0 +1,56 @@
+{
+  "item": "KOL-008",
+  "repo": "kol-emet",
+  "mergeSha": "822f840a3b953a5c14a28677d2f58858047dbca4",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-10T19:07:20.820Z",
+  "gradedAtUtc": "2026-09-10T19:08:55.513Z",
+  "independent": [
+    {
+      "file": "server/tests/unit/pricing.test.js",
+      "line": 243,
+      "severity": "low",
+      "summary": "'self-hosted draws down an allowance' uses a hard-coded `cost < 2_000` bound against the SELF_HOSTED_PRICE that was computed when the module was imported, so it reads whatever STEADFAST_WATTS/STEADFAST_KWH_RATE are set in the environment. At baseline the fixture costs about 776 micros, so any retariff above roughly 2.6x the baseline (e.g. STEADFAST_KWH_RATE=0.45) fails the suite. That contradicts the file header's promise that selection tests 'compare against the exported constant... so retariffing the box does not break them'."
+    },
+    {
+      "file": "server/tests/unit/pricing.test.js",
+      "line": 97,
+      "severity": "low",
+      "summary": "'the self-hosted rate is above zero but well below the cheapest cloud model' only compares `SELF_HOSTED_PRICE.in` against the cheapest listed input rate. It never checks `.out`, so a derivation that pushed the self-hosted output rate above every cloud output rate would still pass, even though the test name and message claim self-hosted is cheaper than any cloud model."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "'delivers only to clients in the matching workspace' already connects two clients in one workspace and an outsider in another, then asserts the outsider gets zero write attempts; the exclusion and no-target groups cover cross-workspace delivery as well. Line 362 is just the end of the file."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The 'doubling the tariff' and 'halving the draw' tests re-import the module with changed env vars and pin exact derived values (0.07/1.572 and 0.0175/0.393), so wrong derivation logic in pricing.js would fail them."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "Both local findings are generic 'test doesn't verify X' claims that the diff plainly contradicts, and the model missed the two real (minor) weaknesses in the pricing tests.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2
+  },
+  "costUsd": 0.6383695,
+  "numTurns": 12,
+  "durationMs": 93902,
+  "sessionId": "7f04c8a2-8d0e-4ef5-a6a7-b221d7e9996f"
+}

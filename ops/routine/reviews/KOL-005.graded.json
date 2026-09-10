@@ -1,0 +1,35 @@
+{
+  "item": "KOL-005",
+  "repo": "kol-emet",
+  "mergeSha": "071fd0b1e5b0f3c01d8b85aa947ced1c82f91c87",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-10T19:07:20.820Z",
+  "gradedAtUtc": "2026-09-10T19:13:11.706Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The test does check server-side destruction: 'destroys the session server-side, not just the browser cookie' saves the login cookie, logs out, sends that cookie again to GET /auth/me with a fresh client, and asserts 401 {authenticated:false>; with MemoryStore that passes only if req.session.destroy() removed the session, and a bare clearCookie would get a 200."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model's only finding says a check is missing when the diff contains exactly that check (the cookie-replay test sits right next to the line it cited), so the review is a false positive with no real defects found; I found none either, reading only, because running the suite needed approval I didn't have.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.6254575,
+  "numTurns": 10,
+  "durationMs": 104763,
+  "sessionId": "c60c73fd-11d7-4109-92d6-5f20161d7257"
+}

@@ -1,0 +1,45 @@
+{
+  "item": "KOL-007",
+  "repo": "kol-emet",
+  "mergeSha": "5cd2160e1ce33356350d6936f2e0ad2bcfd3f721",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-10T19:07:20.820Z",
+  "gradedAtUtc": "2026-09-10T19:10:15.311Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "MCP_LOG_LEVEL is set by the operator, not by an attacker; an unrecognised value falls back to 'light' through the `??`, and the value only picks which console.log lines print, so it cannot lead to code execution."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The diff logs the gate's decision once at module load (the DISABLED/OPEN/ENFORCED branch at mcp.js:79-85), and the new tests check that the line appears once at load and is not repeated per request."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The claim is untrue: the diff changes server/src/routes/mcp.js substantially, adding IS_PROD, DISABLED, the 503 branch and the startup log."
+    }
+  ],
+  "missed": [],
+  "summary": "All three local findings are false positives: one is a made-up threat about an env var, one says the startup log is missing when the diff adds it, and one says mcp.js is unchanged when the diff clearly changes it. The change itself looks correct against the item, so there was nothing real to catch.",
+  "counts": {
+    "findings": 3,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.5475345,
+  "numTurns": 6,
+  "durationMs": 79772,
+  "sessionId": "41adf0d3-7608-4a6c-af80-6dd0f7732adc"
+}

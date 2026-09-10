@@ -1,0 +1,54 @@
+{
+  "item": "KOL-004",
+  "repo": "kol-emet",
+  "mergeSha": "2b85c432adbb4029dca1b4336ca83ed271b489ef",
+  "localPromptVersion": "v1",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-10T19:07:20.820Z",
+  "gradedAtUtc": "2026-09-10T19:15:17.548Z",
+  "independent": [
+    {
+      "file": "server/tests/http/tenancy.test.js",
+      "line": 323,
+      "severity": "low",
+      "summary": "The item asks for the same checks on /relationship-groups and /open-questions, but the forged-body test (a POST from B carrying A's workspaceId must land in B's workspace) only runs for /entities. Neither POST /relationship-groups nor POST /open-questions is ever sent a forged workspaceId, so if either route started trusting a client-supplied workspaceId, no test in this file would catch it."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "before() already asserts `String(entity.workspaceId) === alice.workspaceId` for the created entity, and the forged-workspaceId test checks it again for bob; line 305 is an unrelated list assertion."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "before() asserts `String(group.body.workspaceId) === alice.workspaceId` right after POST /relationship-groups, so the claimed gap does not exist; line 320 is a label check."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "before() asserts `String(question.body.workspaceId) === alice.workspaceId`, and the entry_ids test asserts bob's question lands in bob's workspace, so this is already verified; line 340 is blank."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review made the same unfounded claim three times, once per resource, missing that before() already checks each document's workspaceId, and it did not catch the one real gap: the forged-workspaceId check is missing for relationship groups and open questions.",
+  "counts": {
+    "findings": 3,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.757992,
+  "numTurns": 12,
+  "durationMs": 125818,
+  "sessionId": "986f3da0-f1ee-449d-9f76-41d714f5e82d"
+}
