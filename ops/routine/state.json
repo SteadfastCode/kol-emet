@@ -4,7 +4,7 @@
     "KOL-008": {
       "order": 1,
       "title": "Unit tests for the SSE broadcaster and the pricing table",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-008",
