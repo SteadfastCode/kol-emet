@@ -1,23 +1,8 @@
 {
   "version": 1,
   "items": {
-    "KOL-011": {
-      "order": 1,
-      "title": "Sync docs and comments that still say tenancy is \"stored, not enforced\"",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-011",
-      "dependsOn": [],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "claimedAtUtc": "2026-09-10T09:41:31.319Z",
-      "runId": "2026-09-10T09:09:15.543Z",
-      "lastFail": null
-    },
     "KOL-012": {
-      "order": 2,
+      "order": 1,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -35,7 +20,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 3,
+      "order": 2,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -54,7 +39,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 4,
+      "order": 3,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -69,24 +54,24 @@
       "lastFail": null
     },
     "KOL-015": {
-      "order": 5,
+      "order": 4,
       "title": "Account-deletion cascade as a tested library function",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-015",
       "dependsOn": [
         "KOL-004"
       ],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-10T09:51:25.756Z",
+      "runId": "2026-09-10T09:09:15.543Z",
       "lastFail": null
     },
     "KOL-016": {
-      "order": 6,
+      "order": 5,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -103,7 +88,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 7,
+      "order": 6,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -118,7 +103,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -133,7 +118,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -148,7 +133,7 @@
       "lastFail": null
     },
     "KOL-020": {
-      "order": 10,
+      "order": 9,
       "title": "Phase 6 step 1: `EntityType` registry model + `/entity-types` routes",
       "status": "pending",
       "attempts": 0,
@@ -162,6 +147,21 @@
       "coldReview": false,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-011": {
+      "order": null,
+      "title": "Sync docs and comments that still say tenancy is \"stored, not enforced\"",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-011",
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": "2026-09-10T09:41:31.319Z",
+      "runId": "2026-09-10T09:09:15.543Z",
       "lastFail": null
     },
     "KOL-010": {
