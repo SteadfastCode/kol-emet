@@ -41,4 +41,8 @@ export default defineConfig({
       },
     },
   },
+  // Read by Vitest, ignored by `vite build`. Component tests need a DOM.
+  test: {
+    environment: 'jsdom',
+  },
 });
