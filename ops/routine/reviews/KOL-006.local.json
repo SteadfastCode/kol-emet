@@ -1,0 +1,48 @@
+{
+  "item": "KOL-006",
+  "repo": "kol-emet",
+  "mergeSha": "b06b8fff53de6d0f839561b44742befd9cafa45c",
+  "completedAtUtc": "2026-09-10T02:31:48.150Z",
+  "completeRunId": "2026-09-10T02:09:15.524Z",
+  "reviewRunId": "2026-09-10T07:01:18.611Z",
+  "reviewedAtUtc": "2026-09-10T07:02:09.992Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 21946,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/tests/http/mcp.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 1,
+        "oversized": true
+      },
+      "bytes": 21946,
+      "promptTokens": 6047,
+      "completionTokens": 155,
+      "latencyMs": 24065,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/mcp.test.js",
+      "line": 395,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the MCP endpoint correctly handles requests with an invalid token.",
+      "scenario": "If a client sends a request with an invalid token, the test should check if the response status is 401 and the error message indicates unauthorized access. However, the current implementation only checks for the presence of an Authorization header and does not validate the token itself."
+    }
+  ],
+  "summary": "The test does not verify that the MCP endpoint correctly handles requests with an invalid token.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 6047,
+    "completionTokens": 155
+  },
+  "latencyMs": 24065
+}

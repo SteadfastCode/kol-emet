@@ -1,0 +1,87 @@
+{
+  "item": "KOL-007",
+  "repo": "kol-emet",
+  "mergeSha": "5cd2160e1ce33356350d6936f2e0ad2bcfd3f721",
+  "completedAtUtc": "2026-09-10T02:49:37.788Z",
+  "completeRunId": "2026-09-10T02:09:15.524Z",
+  "reviewRunId": "2026-09-10T07:01:18.611Z",
+  "reviewedAtUtc": "2026-09-10T07:02:54.323Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 34014,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/architecture.md",
+        "kol_emet_spec.md",
+        "server/.env.example",
+        "server/src/routes/mcp.js"
+      ],
+      "part": null,
+      "bytes": 10437,
+      "promptTokens": 3147,
+      "completionTokens": 118,
+      "latencyMs": 13323,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/mcp.test.js"
+      ],
+      "part": null,
+      "bytes": 15021,
+      "promptTokens": 4366,
+      "completionTokens": 136,
+      "latencyMs": 17078,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/requireAuth.test.js"
+      ],
+      "part": null,
+      "bytes": 8556,
+      "promptTokens": 2714,
+      "completionTokens": 169,
+      "latencyMs": 13895,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/mcp.js",
+      "line": 62,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The log level is not validated, allowing for arbitrary log levels to be set.",
+      "scenario": "An attacker can set the MCP_LOG_LEVEL environment variable to an unexpected value, leading to excessive logging or potential code execution if the logging library is vulnerable."
+    },
+    {
+      "file": "server/src/routes/mcp.js",
+      "line": 123,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The middleware does not log the startup decision once at load.",
+      "scenario": "In production, when MCP_BEARER_TOKEN is unset, the endpoint should log 'MCP not configured' exactly once at startup. However, if the logging logic is incorrect or missing, it could lead to confusion about the configuration status."
+    },
+    {
+      "file": "server/src/routes/mcp.js",
+      "line": 1,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The change description promises to fail closed on /mcp when MCP_BEARER_TOKEN is unset in production, but the diff does not show any changes to this file.",
+      "scenario": "In a production environment, if MCP_BEARER_TOKEN is unset, the route /mcp should return 503 with an error message 'MCP not configured' and log once at startup. However, since no changes are made to server/src/routes/mcp.js, this behavior is not implemented."
+    }
+  ],
+  "summary": "One high-severity defect found. · One potential defect found in the change. · One real defect found in the change.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 10227,
+    "completionTokens": 423
+  },
+  "latencyMs": 44296
+}

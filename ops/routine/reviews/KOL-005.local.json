@@ -1,0 +1,48 @@
+{
+  "item": "KOL-005",
+  "repo": "kol-emet",
+  "mergeSha": "071fd0b1e5b0f3c01d8b85aa947ced1c82f91c87",
+  "completedAtUtc": "2026-09-10T02:23:11.975Z",
+  "completeRunId": "2026-09-10T02:09:15.524Z",
+  "reviewRunId": "2026-09-10T07:01:18.611Z",
+  "reviewedAtUtc": "2026-09-10T07:01:45.896Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 23243,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/tests/http/auth.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 1,
+        "oversized": true
+      },
+      "bytes": 23243,
+      "promptTokens": 6268,
+      "completionTokens": 111,
+      "latencyMs": 25922,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/auth.test.js",
+      "line": 395,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the session is destroyed server-side after logout.",
+      "scenario": "An attacker could capture the session cookie before logout and use it to access the application after logout."
+    }
+  ],
+  "summary": "One high-severity defect found in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 6268,
+    "completionTokens": 111
+  },
+  "latencyMs": 25924
+}

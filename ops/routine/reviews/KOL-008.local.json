@@ -1,0 +1,64 @@
+{
+  "item": "KOL-008",
+  "repo": "kol-emet",
+  "mergeSha": "822f840a3b953a5c14a28677d2f58858047dbca4",
+  "completedAtUtc": "2026-09-10T02:59:16.453Z",
+  "completeRunId": "2026-09-10T02:09:15.524Z",
+  "reviewRunId": "2026-09-10T07:01:18.611Z",
+  "reviewedAtUtc": "2026-09-10T07:03:32.803Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 31145,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/tests/unit/broadcaster.test.js"
+      ],
+      "part": null,
+      "bytes": 16608,
+      "promptTokens": 5009,
+      "completionTokens": 125,
+      "latencyMs": 19854,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/pricing.test.js"
+      ],
+      "part": null,
+      "bytes": 14537,
+      "promptTokens": 4656,
+      "completionTokens": 113,
+      "latencyMs": 18581,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/unit/broadcaster.test.js",
+      "line": 362,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The test does not verify that the broadcaster correctly handles clients with different workspace IDs.",
+      "scenario": "If a client is connected to one workspace and then another client from a different workspace is added, the broadcaster should only deliver messages to clients in their respective workspaces."
+    },
+    {
+      "file": "server/tests/unit/pricing.test.js",
+      "line": 287,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test for SELF_HOSTED_PRICE derivation does not verify the correctness of the calculation.",
+      "scenario": "If the calculation logic in pricing.js is incorrect, the tests will pass even if the derived price is wrong."
+    }
+  ],
+  "summary": "1 high severity defect found. · One high-severity defect found.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 9665,
+    "completionTokens": 238
+  },
+  "latencyMs": 38435
+}
