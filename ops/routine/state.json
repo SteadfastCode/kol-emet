@@ -1,8 +1,23 @@
 {
   "version": 1,
   "items": {
-    "KOL-012": {
+    "KOL-021": {
       "order": 1,
+      "title": "Account deletion: the route, the confirmation, and the signup disclosure",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-012": {
+      "order": 2,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -20,7 +35,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 2,
+      "order": 3,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -39,7 +54,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 3,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -51,23 +66,6 @@
       "coldReview": false,
       "claimedAtUtc": null,
       "runId": null,
-      "lastFail": null
-    },
-    "KOL-015": {
-      "order": 4,
-      "title": "Account-deletion cascade as a tested library function",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-015",
-      "dependsOn": [
-        "KOL-004"
-      ],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "claimedAtUtc": "2026-09-10T09:51:25.756Z",
-      "runId": "2026-09-10T09:09:15.543Z",
       "lastFail": null
     },
     "KOL-016": {
@@ -147,6 +145,23 @@
       "coldReview": false,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-015": {
+      "order": null,
+      "title": "Account-deletion cascade as a tested library function",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-015",
+      "dependsOn": [
+        "KOL-004"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": "2026-09-10T09:51:25.756Z",
+      "runId": "2026-09-10T09:09:15.543Z",
       "lastFail": null
     },
     "KOL-011": {

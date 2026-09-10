@@ -8,6 +8,17 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
+- [ ] **(KOL-021) Account deletion: the route, the confirmation, and the signup disclosure**
+  KOL-015 landed the tested cascade (`server/src/lib/accountDeleter.js`) with no caller. Build:
+  `DELETE /auth/account` behind `requireActor`, requiring the current password in the body (or a
+  fresh passkey assertion) and refusing with 409 when the user is a non-owner member of another
+  workspace (the cascade already reports this); on success run the cascade, destroy the caller's
+  session (`req.session.destroy`) and clear the cookie, return 204. Client: a "Delete account"
+  action at the bottom of settings with a confirmation that requires typing the account email,
+  then a signed-out landing. Signup: one line under the form — "You can delete your account and
+  all of its data at any time from Settings." Verify: an HTTP test deleting a registered user shows
+  every collection empty for that tenant and untouched for a second tenant, the old session cookie
+  answers 401 afterwards, and a non-owner member elsewhere gets 409 with nothing deleted.
 - [ ] **(KOL-012) GitHub Actions CI running both test suites and the client build** (needs KOL-003, KOL-010) [needs-human]
   Create `.github/workflows/ci.yml`: on push + pull_request, ubuntu-latest, Node 22 via `actions/setup-node` with yarn caching; job
   `server` = `yarn install --frozen-lockfile && yarn test` in `server/`; job `client` = the same plus `yarn build` in `client/`.
