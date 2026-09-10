@@ -1,8 +1,8 @@
 # Kol Emet — API Reference
 
 Express REST API. Route definitions live in [`server/src/routes/`](../server/src/routes) and are
-mounted in [`server/src/index.js`](../server/src/index.js). This reference reflects the routes as
-mounted there.
+mounted in `createApp()` in [`server/src/app.js`](../server/src/app.js). This reference reflects the
+routes as mounted there.
 
 ## Authentication
 
@@ -21,23 +21,32 @@ Two guards:
   label }`) for attribution on writes. A bearer write with no `Settings.mcpUserId` configured is
   rejected with a "re-authorize" error.
 
+Tenant scoping is a third middleware, `resolveWorkspace`
+([`middleware/workspace.js`](../server/src/middleware/workspace.js)). It runs after `requireAuth` on
+every route that touches tenant content, resolves the acting user (the session user, or
+`Settings.mcpUserId` for a bearer token), and sets `req.workspaceId` from their workspace membership;
+those routes filter their queries on it. No user → 401; no workspace → 403. It fails closed rather
+than falling through to unscoped data, and must stay behind `requireAuth` so an anonymous request is
+a 401 before any workspace lookup. One known gap — two unscoped `populate()` calls — is described
+under [Workspace](data-model.md#workspace).
+
 Mount points and their guards:
 
 | Prefix | Guard | Notes |
 |--------|-------|-------|
 | `/auth` | mixed | Login/registration; individual routes guard themselves |
-| `/mcp` | self | MCP HTTP transport; auth handled inside the handler |
+| `/mcp` | self | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
 | `/` (oauth) | none | OAuth discovery/authorize/token for the MCP connector |
-| `/events` | `requireAuth` | Server-Sent Events stream |
-| `/entities` | `requireAuth` | Writes additionally use `requireActor` |
-| `/relationship-groups` | `requireAuth` | Writes use `requireActor` |
-| `/relationship-types` | `requireAuth` | |
-| `/tags` | `requireAuth` | |
-| `/open-questions` | `requireAuth` | |
-| `/` (changelog) | `requireAuth` | History + rollback under `/entities/:id/...` |
-| `/chat` | `requireAuth` | AI chat (SSE streaming) |
-| `/conversations` | `requireAuth` | Saved AI conversations |
-| `/drafts` | `requireAuth` | Generated drafts; `POST /:id/apply` uses `requireActor` |
+| `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace |
+| `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
+| `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
+| `/relationship-types` | `requireAuth` + `resolveWorkspace` | |
+| `/tags` | `requireAuth` + `resolveWorkspace` | |
+| `/open-questions` | `requireAuth` + `resolveWorkspace` | |
+| `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...` |
+| `/chat` | per-route | AI chat (SSE streaming). `GET /providers`: `requireAuth`; `POST /`: `requireAuth` + `resolveWorkspace` |
+| `/conversations` | `requireAuth` + `resolveWorkspace` | Saved AI conversations |
+| `/drafts` | `requireAuth` + `resolveWorkspace` | Generated drafts; `POST /:id/apply` uses `requireActor` |
 
 ---
 
@@ -121,8 +130,10 @@ re-densified server-side.
 | POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Persists to the conversation when `conversationId` is supplied. |
 
 Providers are defined in [`lib/aiProviders.js`](../server/src/lib/aiProviders.js) and reached through
-an OpenAI-compatible client. Currently registered: **xAI (Grok)**, **OpenAI**, **Google Gemini**. A
-provider is only offered if its API key env var is set.
+an OpenAI-compatible client. Currently registered: **OpenRouter** (primary), the native **Claude
+(Anthropic)**, **xAI (Grok)**, **OpenAI** and **Google Gemini**, and **`steadfast`** (self-hosted,
+tailnet-only) — see [architecture.md](architecture.md#ai-chat). A provider is only offered if its
+API key env var is set.
 
 ## Conversations
 

@@ -85,7 +85,11 @@ a *pull request against the graph*. Build order:
   "it lives in your repo and versions itself." (Revisit repo-canonical for pure-dev customers later.)
 
 ## Phase 8 — Commercialize (architecture unlock)
-- Enforce `workspaceId` in every query (stored today, not filtered — the multi-tenancy gate)
+- ✅ **Enforce `workspaceId` in every query** — the multi-tenancy gate. **Shipped 2026-09-03**:
+  `resolveWorkspace` scopes every tenant-content route, the MCP tools scope themselves, and
+  `server/tests/http/tenancy.test.js` pins isolation between two registered users. One known gap:
+  two unscoped `populate()` calls (`open_questions`, `entry_ids`) — see
+  [data-model.md](data-model.md#workspace).
 - Workspace management, collaborator invites, billing
 - Separate product name and branding under Steadfast Code
 - Public-facing marketing site

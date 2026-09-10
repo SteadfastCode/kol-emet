@@ -23,7 +23,7 @@ const relationshipTypeSchema = new mongoose.Schema({
   workspaceId: { type: mongoose.Schema.Types.ObjectId, default: null },
 }, { timestamps: true });
 
-// Compound index: name unique per workspace (null workspaceId = global for now)
+// Compound index: names are meant to be unique per workspace (not enforced here).
 relationshipTypeSchema.index({ name: 1, workspaceId: 1 });
 
 export default mongoose.model('RelationshipType', relationshipTypeSchema);

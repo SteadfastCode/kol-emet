@@ -23,8 +23,9 @@ export async function resolveUserId(req) {
  * rather than a silent fall-through to unscoped data — failing closed is the
  * whole point of this middleware.
  *
- * Not yet mounted on the read/write routes; enforcement lands per-route once
- * existing data has been migrated into workspaces.
+ * Mounted after requireAuth on every route that touches tenant content — see
+ * app.js (chat mounts it per-route). /mcp never passes through here: its tools
+ * scope themselves via mcpWorkspaceId() in routes/mcp.js.
  */
 export async function resolveWorkspace(req, res, next) {
   try {

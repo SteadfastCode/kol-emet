@@ -35,7 +35,7 @@ content now lives in an ordered `blocks` array, and there is **no `body` field**
   blocks:     [Block],         // ordered content blocks (default [])
   relationships: [ObjectId],   // refs → RelationshipGroup (back-reference; see note)
   open_questions: [ObjectId],  // refs → OpenQuestion
-  workspaceId: ObjectId | null,// multi-tenancy key; stored, not yet enforced in queries
+  workspaceId: ObjectId | null,// multi-tenancy key; enforced per request (see Workspace)
   createdAt:  Date,
   updatedAt:  Date,
 }
@@ -115,8 +115,9 @@ scoped to source/target categories.
 }
 ```
 
-Indexed on `{ name, workspaceId }` — names are intended to be unique per workspace (`null` = global
-for now).
+Indexed on `{ name, workspaceId }` — names are intended to be unique per workspace. Each workspace
+has its own vocabulary: reads filter on the caller's workspace, so a `null` row is visible to no one
+rather than global.
 
 ---
 
@@ -348,7 +349,17 @@ Saved AI chat sessions (the in-app ChatPanel). One document per conversation, sc
 The tenancy boundary. Every piece of graph content belongs to exactly one, and a request may only
 touch content in a workspace the caller is a member of — enforced by
 [`middleware/workspace.js`](../server/src/middleware/workspace.js), which **fails closed** with a 403
-rather than falling through to unscoped data.
+rather than falling through to unscoped data. Rows written before tenancy carry `workspaceId: null`,
+which no scoped query matches;
+[`scripts/migrate-workspaces.js`](../server/scripts/migrate-workspaces.js) adopts them into a named
+workspace.
+
+**Known gap:** `populate()` is unscoped for `Entity.open_questions` (entity routes, changelog
+rollback, the MCP entity tools) and `OpenQuestion.entry_ids` (open-question routes,
+`list_open_questions`). A caller who writes another workspace's id into either array can read back
+that row's question text or entity title.
+[`tests/http/tenancy.test.js`](../server/tests/http/tenancy.test.js) pins both as `todo` tests that
+pass once the populate is scoped (`match: { workspaceId }`) or foreign ids are rejected on write.
 
 Members are modelled from the start rather than a bare `ownerId`, so shared workspaces don't require
 reshaping the schema later. Registration creates a personal workspace with the new user as sole owner.

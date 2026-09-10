@@ -71,7 +71,7 @@ and open questions / relationships are their own collections, not inline fields.
                                //   text | timeline_event | attribute | quote | gallery
   relationships: ObjectId[],   // refs → RelationshipGroup (back-reference cache)
   open_questions: ObjectId[],  // refs → OpenQuestion
-  workspaceId: ObjectId|null,  // multi-tenancy key (stored, not yet enforced)
+  workspaceId: ObjectId|null,  // multi-tenancy key; enforced per request (resolveWorkspace)
   createdAt: Date,
   updatedAt: Date
 }
