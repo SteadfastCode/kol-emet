@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
@@ -17,8 +18,12 @@
     "vue": "^3.4.27",
     "vuedraggable": "^4.1.0"
   },
+  "_comment_test_pins": "jsdom ^26 and @vue/test-utils ~2.4 are held back on purpose: jsdom 27+ needs Node ^20.19 || ^22.12, and test-utils 2.5 pulls js-beautify 2 -> nopt -> abbrev 5, which needs ^22.22.2 (the tilde is what keeps it on 2.4). Yarn 1 aborts the whole install, devDependencies included, when any package's engines reject the running Node, and the Netlify build's Node version is set in its dashboard, not in this repo, so a newer line could break the client deploy without a test ever running. vitest stays on 3.x because adding 4.x here died inside yarn 1 itself (Invariant Violation: could not find a copy of vite to link); its engines are not the obstacle. Revisit once the Node version is pinned in the repo.",
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
-    "vite": "^6.4.3"
+    "@vue/test-utils": "~2.4.6",
+    "jsdom": "^26.1.0",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.7"
   }
 }
