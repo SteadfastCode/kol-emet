@@ -4,7 +4,7 @@
     "KOL-006": {
       "order": 1,
       "title": "MCP endpoint tests: auth gate, tool list, workspace scoping",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-006",
