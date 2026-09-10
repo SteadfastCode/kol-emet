@@ -4,7 +4,7 @@
     "KOL-011": {
       "order": 1,
       "title": "Sync docs and comments that still say tenancy is \"stored, not enforced\"",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-011",
