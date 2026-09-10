@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-010) Add Vitest to the client and test the login form's credential-manager attributes**
+- [x] **(KOL-010) Add Vitest to the client and test the login form's credential-manager attributes**
   Add `vitest`, `@vue/test-utils`, `jsdom` devDependencies and `"test": "vitest run"` to `client/package.json`; a
   `test: { environment: 'jsdom' }` block in `client/vite.config.js`. First test `client/src/views/LoginView.test.js`: the email
   input has `autocomplete="email"`; the password input has `current-password` in login mode and `new-password` in register mode;
