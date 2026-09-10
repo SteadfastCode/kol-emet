@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-006) MCP endpoint tests: auth gate, tool list, workspace scoping** (needs KOL-004)
+- [x] **(KOL-006) MCP endpoint tests: auth gate, tool list, workspace scoping** (needs KOL-004)
   `server/tests/http/mcp.test.js`: listen on port 0 with `createApp` and drive `/mcp` using the SDK's `Client` +
   `StreamableHTTPClientTransport` (`@modelcontextprotocol/sdk` is already a dependency). With `MCP_BEARER_TOKEN` set: missing/wrong
   token → 401; correct token → `tools/list` returns the 13 names in `docs/architecture.md`; after `setMcpUser(A)`

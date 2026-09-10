@@ -1,42 +1,25 @@
 {
   "version": 1,
   "items": {
-    "KOL-005": {
+    "KOL-006": {
       "order": 1,
-      "title": "Auth route tests: registration, login, logout, session",
-      "status": "done",
+      "title": "MCP endpoint tests: auth gate, tool list, workspace scoping",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-005",
-      "dependsOn": [
-        "KOL-003"
-      ],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "claimedAtUtc": "2026-09-10T02:09:24.998Z",
-      "runId": "2026-09-10T02:09:15.524Z",
-      "lastFail": null
-    },
-    "KOL-006": {
-      "order": 2,
-      "title": "MCP endpoint tests: auth gate, tool list, workspace scoping",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-006",
       "dependsOn": [
         "KOL-004"
       ],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-10T02:23:32.319Z",
+      "runId": "2026-09-10T02:09:15.524Z",
       "lastFail": null
     },
     "KOL-007": {
-      "order": 3,
+      "order": 2,
       "title": "Fail closed on /mcp when MCP_BEARER_TOKEN is unset in production",
       "status": "pending",
       "attempts": 0,
@@ -53,7 +36,7 @@
       "lastFail": null
     },
     "KOL-008": {
-      "order": 4,
+      "order": 3,
       "title": "Unit tests for the SSE broadcaster and the pricing table",
       "status": "pending",
       "attempts": 0,
@@ -70,7 +53,7 @@
       "lastFail": null
     },
     "KOL-009": {
-      "order": 5,
+      "order": 4,
       "title": "Unit tests for draft validation and the export tripwire",
       "status": "pending",
       "attempts": 0,
@@ -87,7 +70,7 @@
       "lastFail": null
     },
     "KOL-010": {
-      "order": 6,
+      "order": 5,
       "title": "Add Vitest to the client and test the login form's credential-manager attributes",
       "status": "pending",
       "attempts": 0,
@@ -102,7 +85,7 @@
       "lastFail": null
     },
     "KOL-011": {
-      "order": 7,
+      "order": 6,
       "title": "Sync docs and comments that still say tenancy is \"stored, not enforced\"",
       "status": "pending",
       "attempts": 0,
@@ -117,7 +100,7 @@
       "lastFail": null
     },
     "KOL-012": {
-      "order": 8,
+      "order": 7,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -135,7 +118,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 9,
+      "order": 8,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -154,7 +137,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 10,
+      "order": 9,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -169,7 +152,7 @@
       "lastFail": null
     },
     "KOL-015": {
-      "order": 11,
+      "order": 10,
       "title": "Account-deletion cascade as a tested library function",
       "status": "pending",
       "attempts": 0,
@@ -186,7 +169,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 12,
+      "order": 11,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -203,7 +186,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 13,
+      "order": 12,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -218,7 +201,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 14,
+      "order": 13,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -233,7 +216,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 15,
+      "order": 14,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -248,7 +231,7 @@
       "lastFail": null
     },
     "KOL-020": {
-      "order": 16,
+      "order": 15,
       "title": "Phase 6 step 1: `EntityType` registry model + `/entity-types` routes",
       "status": "pending",
       "attempts": 0,
@@ -262,6 +245,23 @@
       "coldReview": false,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-005": {
+      "order": null,
+      "title": "Auth route tests: registration, login, logout, session",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-005",
+      "dependsOn": [
+        "KOL-003"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": "2026-09-10T02:09:24.998Z",
+      "runId": "2026-09-10T02:09:15.524Z",
       "lastFail": null
     },
     "KOL-004": {
