@@ -1,0 +1,110 @@
+{
+  "item": "KOL-020",
+  "repo": "kol-emet",
+  "mergeSha": "9233813234d556475e1fadba8dbcd73e73c3d347",
+  "completedAtUtc": "2026-09-11T00:40:15.004Z",
+  "completeRunId": "2026-09-11T00:09:41.283Z",
+  "reviewRunId": "2026-09-11T07:01:18.549Z",
+  "reviewedAtUtc": "2026-09-11T07:06:03.378Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 47496,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/scripts/seed-entity-types.js",
+        "server/src/app.js",
+        "server/src/config/categories.js",
+        "server/src/config/templates.js",
+        "server/src/lib/accountDeleter.js"
+      ],
+      "part": null,
+      "bytes": 18605,
+      "promptTokens": 5159,
+      "completionTokens": 112,
+      "latencyMs": 20596,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/workspaceSeeder.js",
+        "server/src/models/EntityType.js",
+        "server/src/routes/entityTypes.js"
+      ],
+      "part": null,
+      "bytes": 12082,
+      "promptTokens": 3693,
+      "completionTokens": 371,
+      "latencyMs": 28169,
+      "findings": 3,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js",
+        "server/tests/lib/accountDeleter.test.js"
+      ],
+      "part": null,
+      "bytes": 16809,
+      "promptTokens": 4874,
+      "completionTokens": 133,
+      "latencyMs": 20180,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 100,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Potential race condition in entity type creation.",
+      "scenario": "If two concurrent requests attempt to create an entity type with the same name, both could pass the uniqueness check and be inserted into the database, leading to a conflict."
+    },
+    {
+      "file": "server/src/lib/workspaceSeeder.js",
+      "line": 28,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The `seedEntityTypes` function does not handle the case where an entity type already exists with a different casing.",
+      "scenario": "If an entity type 'Characters' already exists in a workspace and the seeder tries to add 'characters', it will attempt to insert a duplicate due to case-insensitive comparison."
+    },
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 120,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `PUT /entity-types/:id` route does not validate the `color` object structure when it is partially provided.",
+      "scenario": "If a user sends a partial color update like `{ color: { bg: 'red' } }`, the code will only update the `bg` field and leave `text` as undefined, which may not be the intended behavior."
+    },
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 145,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `PUT /entity-types/:id` route does not handle the case where an entity type is being renamed to a name that already exists with different casing.",
+      "scenario": "If an entity type 'Characters' is being renamed to 'characters', the code will attempt to insert a duplicate due to case-insensitive comparison."
+    },
+    {
+      "file": "server/tests/http/entityTypes.test.js",
+      "line": 273,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not validate that the seeded entity types have the correct colors as specified in the CATEGORIES configuration.",
+      "scenario": "When running the seeding tests, it is possible that the seeded entity types do not have the expected colors, leading to inconsistencies between the application's configuration and the actual data in the database."
+    }
+  ],
+  "summary": "Found 1 real defect. · Found 3 real defects in the provided diff. · 1 high-severity finding identified.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 13726,
+    "completionTokens": 616
+  },
+  "latencyMs": 68945
+}

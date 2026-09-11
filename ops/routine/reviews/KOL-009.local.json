@@ -1,0 +1,68 @@
+{
+  "item": "KOL-009",
+  "repo": "kol-emet",
+  "mergeSha": "5c2efe5943051f599a196473b7f783566e956409",
+  "completedAtUtc": "2026-09-10T09:26:32.345Z",
+  "completeRunId": "2026-09-10T09:09:15.543Z",
+  "reviewRunId": "2026-09-11T07:01:18.549Z",
+  "reviewedAtUtc": "2026-09-11T07:02:02.981Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 33214,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/tests/unit/draftExporter.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 1,
+        "oversized": true
+      },
+      "bytes": 22756,
+      "promptTokens": 6813,
+      "completionTokens": 147,
+      "latencyMs": 29612,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/draftItemSchema.test.js"
+      ],
+      "part": null,
+      "bytes": 10458,
+      "promptTokens": 3216,
+      "completionTokens": 123,
+      "latencyMs": 13344,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/unit/draftExporter.test.js",
+      "line": 486,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `toJsonl` function does not handle the case where an item has a nested object with an ObjectId, which could lead to a leaked id.",
+      "scenario": "If an item in the draft has a nested object that contains an ObjectId, the current implementation of `toJsonl` may not properly map this ObjectId to a pseudonym, leading to a potential leak of sensitive information."
+    },
+    {
+      "file": "server/tests/unit/draftItemSchema.test.js",
+      "line": 185,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The test for unknown keys does not cover the case where an unknown key is nested within a known object.",
+      "scenario": "A payload with a nested object containing an unknown key will pass the validation, even though it should be rejected."
+    }
+  ],
+  "summary": "1 high severity defect found. · One real defect found in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 10029,
+    "completionTokens": 270
+  },
+  "latencyMs": 42958
+}

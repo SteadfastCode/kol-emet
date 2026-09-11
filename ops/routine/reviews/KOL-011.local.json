@@ -1,0 +1,52 @@
+{
+  "item": "KOL-011",
+  "repo": "kol-emet",
+  "mergeSha": "008c194a60163826ba384d8580ad2e6ef8199e07",
+  "completedAtUtc": "2026-09-10T09:50:47.401Z",
+  "completeRunId": "2026-09-10T09:09:15.543Z",
+  "reviewRunId": "2026-09-11T07:01:18.549Z",
+  "reviewedAtUtc": "2026-09-11T07:02:28.269Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 12670,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "CLAUDE.md",
+        "docs/api.md",
+        "docs/architecture.md",
+        "docs/data-model.md",
+        "docs/roadmap.md",
+        "docs/wishlist.md",
+        "kol_emet_spec.md",
+        "server/src/middleware/workspace.js",
+        "server/src/models/RelationshipType.js"
+      ],
+      "part": null,
+      "bytes": 12670,
+      "promptTokens": 3893,
+      "completionTokens": 137,
+      "latencyMs": 15883,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/models/RelationshipType.js",
+      "line": 26,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Compound index on `name` and `workspaceId` is not enforced, allowing duplicate names across workspaces.",
+      "scenario": "Two users create a RelationshipType with the same name in different workspaces. The database will allow this due to the lack of enforcement on the compound index."
+    }
+  ],
+  "summary": "One high-severity issue found: Compound index not enforced for unique names per workspace.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 3893,
+    "completionTokens": 137
+  },
+  "latencyMs": 15883
+}

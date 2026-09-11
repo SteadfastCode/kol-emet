@@ -1,0 +1,48 @@
+{
+  "item": "KOL-010",
+  "repo": "kol-emet",
+  "mergeSha": "909e68e8eedf479b575d4fb5bb6cc07c84c9ceb6",
+  "completedAtUtc": "2026-09-10T09:41:06.114Z",
+  "completeRunId": "2026-09-10T09:09:15.543Z",
+  "reviewRunId": "2026-09-11T07:01:18.549Z",
+  "reviewedAtUtc": "2026-09-11T07:02:12.350Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 4443,
+  "excluded": [
+    "client/yarn.lock"
+  ],
+  "chunks": [
+    {
+      "files": [
+        "client/package.json",
+        "client/src/views/LoginView.test.js",
+        "client/vite.config.js"
+      ],
+      "part": null,
+      "bytes": 4443,
+      "promptTokens": 1730,
+      "completionTokens": 123,
+      "latencyMs": 9340,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/package.json",
+      "line": 18,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The comment about jsdom and @vue/test-utils versions is outdated and may not reflect the current constraints.",
+      "scenario": "If the Node.js version used for development or deployment changes, the pinned versions might no longer be necessary, leading to potential issues with package installation."
+    }
+  ],
+  "summary": "One finding related to outdated comments in package.json.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 1730,
+    "completionTokens": 123
+  },
+  "latencyMs": 9340
+}

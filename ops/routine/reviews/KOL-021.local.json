@@ -1,0 +1,108 @@
+{
+  "item": "KOL-021",
+  "repo": "kol-emet",
+  "mergeSha": "d5909a362c0e145957fe63903b8419c2b21e6639",
+  "completedAtUtc": "2026-09-11T00:28:17.353Z",
+  "completeRunId": "2026-09-11T00:09:41.283Z",
+  "reviewRunId": "2026-09-11T07:01:18.549Z",
+  "reviewedAtUtc": "2026-09-11T07:04:54.390Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 56250,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/App.vue",
+        "client/src/api/auth.js",
+        "client/src/components/AccountDeletion.test.js",
+        "client/src/components/AccountDeletion.vue",
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 19311,
+      "promptTokens": 5832,
+      "completionTokens": 131,
+      "latencyMs": 23096,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/views/LoginView.test.js",
+        "client/src/views/LoginView.vue",
+        "docs/api.md",
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/lib/accountDeleter.js"
+      ],
+      "part": null,
+      "bytes": 11829,
+      "promptTokens": 3659,
+      "completionTokens": 131,
+      "latencyMs": 15420,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 8638,
+      "promptTokens": 2760,
+      "completionTokens": 109,
+      "latencyMs": 11597,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/accountDeletion.test.js"
+      ],
+      "part": null,
+      "bytes": 16472,
+      "promptTokens": 4788,
+      "completionTokens": 1024,
+      "latencyMs": 64787,
+      "findings": 0,
+      "error": "output truncated at 1024 tokens"
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/AccountDeletion.vue",
+      "line": 145,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The error message for a 409 status code is hardcoded and does not include the workspace names.",
+      "scenario": "When a user tries to delete their account but is a non-owner member of another workspace, the client displays a generic error message instead of listing the workspaces that blocked the deletion."
+    },
+    {
+      "file": "client/src/views/LoginView.vue",
+      "line": 56,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `notice` prop is not defined in the script section, causing a potential runtime error.",
+      "scenario": "When the LoginView component is rendered with a `notice` prop, Vue will throw an error because `defineProps` is used incorrectly and does not define the `notice` prop."
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 165,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The route does not validate the email confirmation against the user's actual email.",
+      "scenario": "An attacker can delete another user's account by providing a valid password or passkey and typing any email address."
+    }
+  ],
+  "summary": "1 defect found. · One real defect found in the change. · One high-severity defect found.",
+  "errors": [
+    "output truncated at 1024 tokens"
+  ],
+  "usage": {
+    "promptTokens": 17039,
+    "completionTokens": 1395
+  },
+  "latencyMs": 114900
+}
