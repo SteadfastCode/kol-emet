@@ -33,6 +33,35 @@ export async function registerPasskey() {
   });
 }
 
+/**
+ * Like req(), but a refusal keeps the server's message and, on a 409, the
+ * workspaces that blocked it — account deletion shows both to the user.
+ */
+async function accountReq(path, options) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const body = res.status === 204 ? null : await res.json().catch(() => null);
+  if (!res.ok) {
+    throw Object.assign(new Error(body?.error ?? `${res.status}`), {
+      status: res.status,
+      memberships: body?.memberships ?? [],
+    });
+  }
+  return body;
+}
+
+export const deleteAccount = ({ email, password }) =>
+  accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, password }) });
+
+export async function deleteAccountWithPasskey(email) {
+  const options = await accountReq('/auth/account/passkey-challenge', { method: 'POST' });
+  const passkey = await startAuthentication({ optionsJSON: options });
+  return accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, passkey }) });
+}
+
 export async function loginWithPasskey(email) {
   const options = await req('/auth/webauthn/login/begin', {
     method: 'POST',

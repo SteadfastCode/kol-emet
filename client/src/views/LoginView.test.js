@@ -56,3 +56,31 @@ describe('LoginView credential-manager attributes', () => {
     expect(autocomplete(wrapper, 'form input[type="password"]')).toBe('current-password');
   });
 });
+
+describe('LoginView signup disclosure', () => {
+  const DISCLOSURE = 'You can delete your account and all of its data at any time from Settings.';
+
+  it('create-account mode carries it, directly under the form', async () => {
+    const wrapper = mount(LoginView);
+    await switchTo(wrapper, 'Create account');
+
+    expect(wrapper.get('form + .login-disclosure').text()).toBe(DISCLOSURE);
+  });
+
+  it('sign-in mode does not', () => {
+    expect(mount(LoginView).find('.login-disclosure').exists()).toBe(false);
+  });
+});
+
+describe('LoginView notice', () => {
+  it('shows the notice it is given: the signed-out landing after an account is deleted', () => {
+    const notice = 'Your account and all of its data have been deleted.';
+    const wrapper = mount(LoginView, { props: { notice } });
+
+    expect(wrapper.get('[role="status"]').text()).toBe(notice);
+  });
+
+  it('shows none by default', () => {
+    expect(mount(LoginView).find('[role="status"]').exists()).toBe(false);
+  });
+});

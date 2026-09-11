@@ -24,6 +24,7 @@
           </button>
           <button class="btn-sm" title="Generate a draft from notes" @click="$emit('generate')">Draft</button>
           <button class="btn-sm" title="AI Chat" @click="$emit('chat')">AI</button>
+          <button class="btn-sm" @click="$emit('settings')">Settings</button>
           <button class="btn-sm" @click="$emit('logout')">Sign out</button>
         </div>
       </div>
@@ -106,7 +107,7 @@ const isFiltered = computed(() =>
   (props.activeCat && props.activeCat !== 'All')
 );
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'chat', 'graph', 'reset-filters', 'generate']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate']);
 </script>
 
 <style scoped>

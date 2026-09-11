@@ -119,6 +119,8 @@ re-densified server-side.
 | POST | `/auth/login` | Password login → session |
 | POST | `/auth/logout` | End session (`requireAuth`) |
 | GET | `/auth/me` | Current session user |
+| DELETE | `/auth/account` | Hard-delete the signed-in account: the user, every workspace they solely own and everything in it ([`accountDeleter.js`](../server/src/lib/accountDeleter.js)). `requireActor`, session only; a bearer token is 403. Body `{ email, password }` or `{ email, passkey }`: the account's email as a typed confirmation, plus a fresh credential. 204 and the session is destroyed; 400 missing or mismatched email; 403 wrong password or failed passkey; 409 `{ error, memberships }` while the user belongs to a workspace they don't solely own, deleting nothing |
+| POST | `/auth/account/passkey-challenge` | WebAuthn challenge for confirming `DELETE /auth/account` with a passkey (`requireActor`, session only). One use, and kept apart from the sign-in challenge |
 | POST | `/auth/webauthn/register/begin` · `/complete` | Add a passkey (`requireAuth`) |
 | POST | `/auth/webauthn/login/begin` · `/complete` | Passwordless login via passkey |
 

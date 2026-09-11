@@ -4,8 +4,8 @@
  * Daniel decided 2026-09-05 that deleting an account hard-deletes, drafts
  * included. `Draft` is otherwise permanent — it is the training corpus, and
  * DELETE /drafts/:id is a soft discard — so this is the only code path that
- * removes one. There is no route yet: DELETE /auth/account, its confirmation
- * UI and the signup disclosure copy are a separate follow-up.
+ * removes one. Its one caller is DELETE /auth/account (routes/auth.js), which
+ * re-checks the password or a passkey, and the typed email, before calling it.
  *
  * What goes:
  *   - every Workspace the user SOLELY owns — they are its ownerId and no other
