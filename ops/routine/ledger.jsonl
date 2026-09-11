@@ -36,3 +36,4 @@
 {"event":"review-grade","item":"KOL-004","grader":"claude-opus-5","grades":{"findings":3,"confirmed":0,"falsePositive":3,"duplicate":0,"unverifiable":0,"missed":1,"independent":1},"localPromptVersion":"v1","localModel":"qwen2.5-coder:14b","mergeSha":"2b85c432adbb4029dca1b4336ca83ed271b489ef","runId":"2026-09-10T19:07:20.820Z","costUsd":0.757992,"atUtc":"2026-09-10T19:15:17.799Z"}
 {"event":"ack","items":["KOL-001","KOL-002","KOL-003","KOL-004","KOL-005","KOL-006","KOL-007","KOL-008","KOL-009","KOL-010","KOL-011","KOL-015"],"by":"daniel","atUtc":"2026-09-10T21:15:51.086Z"}
 {"event":"claim","runId":"2026-09-11T00:09:41.283Z","item":"KOL-021","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-09-11T00:10:07.932Z"}
+{"event":"complete","runId":"2026-09-11T00:09:41.283Z","item":"KOL-021","mergeSha":"d5909a362c0e145957fe63903b8419c2b21e6639","durationMin":18,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-09-11T00:28:17.353Z"}
