@@ -10,6 +10,7 @@ MongoDB collections:
 | `Entity` | `entities` | Wiki entries (characters, worlds, etc.), built from ordered content blocks |
 | `RelationshipGroup` | `relationshipgroups` | Links between entities; unified member array supports nesting |
 | `RelationshipType` | `relationshiptypes` | Vocabulary of relationship labels, optionally category-scoped |
+| `EntityType` | `entitytypes` | Per-workspace registry of entity types (name, icon, colours, order) |
 | `OpenQuestion` | `openquestions` | Unresolved questions, each linked to one or more entities |
 | `ChangeLog` | `changelogs` | Audit trail of entity writes (TTL 30 days) |
 | `Draft` | `drafts` | Generated changes awaiting human review; also the fine-tune corpus (**no TTL**) |
@@ -118,6 +119,36 @@ scoped to source/target categories.
 Indexed on `{ name, workspaceId }` — names are intended to be unique per workspace. Each workspace
 has its own vocabulary: reads filter on the caller's workspace, so a `null` row is visible to no one
 rather than global.
+
+---
+
+## EntityType
+
+The per-workspace registry of entity types — Phase 6 step 1 of making categories user-defined
+([build plan](build-plan.md), Part A). Mirrors `RelationshipType`: the registry is what a picker
+offers, while `Entity.category` holds a type's **name** as a plain string.
+
+```js
+{
+  _id:         ObjectId,
+  name:        String,          // required, trimmed; unique per workspace, case-insensitively
+  icon:        String | null,   // emoji or icon key; null = the client's default
+  color:       { bg: String | null, text: String | null },  // pill background / text
+  order:       Number,          // display order, ascending (default 0)
+  workspaceId: ObjectId | null,
+  createdAt:   Date,
+  updatedAt:   Date,
+}
+```
+
+- Unique index on `{ workspaceId, name }` with a case-insensitive collation: entities reference a
+  type by name, so two same-named types in one workspace would make those entities ambiguous.
+- Registration seeds the template's types — for worldbuilding, the six current categories with the
+  client's pill colours. `server/scripts/seed-entity-types.js` backfills workspaces created before
+  the registry (dry-run by default, `--apply` to write; adds only missing names).
+- **Not yet authoritative.** `Entity.category` still validates against the enum above and nothing
+  reads the registry. Until the enum goes, a type that some entity in the workspace uses cannot be
+  renamed or deleted (the API answers 409), so the registry and the data cannot drift apart.
 
 ---
 

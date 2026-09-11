@@ -41,6 +41,7 @@ Mount points and their guards:
 | `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
 | `/relationship-types` | `requireAuth` + `resolveWorkspace` | |
+| `/entity-types` | `requireAuth` + `resolveWorkspace` | Registry only; nothing reads it yet |
 | `/tags` | `requireAuth` + `resolveWorkspace` | |
 | `/open-questions` | `requireAuth` + `resolveWorkspace` | |
 | `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...` |
@@ -87,6 +88,21 @@ re-densified server-side.
 | POST | `/relationship-types` | Create a type |
 | PUT | `/relationship-types/:id` | Update a type |
 | DELETE | `/relationship-types/:id` | Delete a type |
+
+## Entity types
+
+The per-workspace registry of entity types (Phase 6 step 1). `Entity.category` still validates
+against the hardcoded enum and nothing reads this registry yet; the client and the MCP/chat category
+lists move onto it in later Phase 6 steps. See [EntityType](data-model.md#entitytype).
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/entity-types` | List the workspace's types, sorted by `order` then `name`. `?q=` fuzzy-filters by name. |
+| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. 409 on an existing name (case-insensitive); a near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
+| PUT | `/entity-types/:id` | Update any of `name`, `icon`, `color` (either half), `order`. 409 if the new name exists, or if entities in the workspace still use the type being renamed. |
+| DELETE | `/entity-types/:id` | Delete. 409 while entities in the workspace still use the type. |
+
+A foreign or malformed id is 404.
 
 ## Tags
 

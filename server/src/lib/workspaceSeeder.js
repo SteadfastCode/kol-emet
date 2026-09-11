@@ -8,6 +8,7 @@
  * since the user can create their own content regardless.
  */
 
+import EntityType from '../models/EntityType.js';
 import RelationshipType from '../models/RelationshipType.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
@@ -23,14 +24,40 @@ function log(level, msg) {
 }
 
 /**
+ * Inserts the template's entity types the workspace does not already have
+ * (exact name, case-insensitive) and returns the names it added — or, with
+ * `apply: false`, the names it would add. Separate from seedWorkspace because
+ * scripts/seed-entity-types.js runs it over workspaces that predate the
+ * registry, where a re-run must never duplicate a type.
+ *
+ * @returns {Promise<string[]>}
+ */
+export async function seedEntityTypes(workspaceId, templateKey = DEFAULT_TEMPLATE, { apply = true } = {}) {
+  const wanted = getTemplate(templateKey).entityTypes ?? [];
+  const have = new Set(
+    (await EntityType.find({ workspaceId }).select('name').lean()).map(t => t.name.toLowerCase())
+  );
+  const missing = wanted.filter(t => !have.has(t.name.toLowerCase()));
+
+  if (apply && missing.length) await EntityType.insertMany(missing.map(t => ({ ...t, workspaceId })));
+  log('normal', `${apply ? 'added' : 'would add'} ${missing.length} entity type(s) to workspace ${workspaceId} (source: template "${templateKey}"): ${missing.map(t => t.name).join(', ') || '(none)'}`);
+  return missing.map(t => t.name);
+}
+
+/**
  * @returns {Promise<{ok: boolean, counts: object, error?: string}>}
  */
 export async function seedWorkspace(workspaceId, templateKey = DEFAULT_TEMPLATE) {
   const template = getTemplate(templateKey);
-  const counts = { relationshipTypes: 0, entities: 0, relationshipGroups: 0, openQuestions: 0 };
+  const counts = { entityTypes: 0, relationshipTypes: 0, entities: 0, relationshipGroups: 0, openQuestions: 0 };
 
   try {
     log('light', `seeding workspace ${workspaceId} from template "${templateKey}"`);
+
+    // ── Entity types ─────────────────────────────────────────────────────────
+    // The registry behind the category pills. Nothing reads it yet, but a
+    // workspace created now must already have it when the client moves over.
+    counts.entityTypes = (await seedEntityTypes(workspaceId, templateKey)).length;
 
     // ── Relationship types ───────────────────────────────────────────────────
     // These matter most: without them the relationship picker is empty and the

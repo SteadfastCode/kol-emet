@@ -7,7 +7,10 @@
  *
  * getCategories() takes a workspaceId and ignores it today. That is the Phase 6
  * seam: when categories become user-defined per workspace, this becomes a
- * registry lookup and every caller already passes the right argument.
+ * registry lookup and every caller already passes the right argument. The
+ * registry exists (models/EntityType.js, seeded per workspace from this list)
+ * but is not authoritative yet — the Entity enum still is, so this stays a
+ * constant until that enum goes.
  */
 
 export const CATEGORIES = [
