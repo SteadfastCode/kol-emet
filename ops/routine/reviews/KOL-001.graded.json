@@ -1,0 +1,44 @@
+{
+  "item": "KOL-001",
+  "repo": "kol-emet",
+  "mergeSha": "c4d607ecbcce412390dedf03fae7d778381c543d",
+  "localPromptVersion": "v1",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-11T04:09:24.559Z",
+  "gradedAtUtc": "2026-09-11T04:15:24.131Z",
+  "independent": [
+    {
+      "file": "server/tests/unit/similarity.test.js",
+      "line": 78,
+      "severity": "low",
+      "summary": "The test uses `assert.notEqual` to pin a real dedup bug as expected behaviour: `normalizeTitle('  The Iron Gate')` keeps the article. The bug is reachable in production because draftNormalizer's zod schema (`title: z.string().min(1).max(200)`, draftNormalizer.js:21) never trims the title before `normalizeTitle(v.title)` runs at line 180. A whitespace-padded generated title therefore misses the exact-key match. It also misses the fuzzy fallback: 'the iron gate' against 'iron gate' scores 7/11 ≈ 0.64, below DUPLICATE_THRESHOLD 0.72. The result is a duplicate entity instead of an update, and whoever fixes the bug will find this test fails, so it discourages the fix. It should be a `test.todo`/skip, or the fix should ship with the test."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "Line 104 is a blank line inside the findSimilar block, and the normalizeTitle test is accurate: it deliberately documents the leading-whitespace quirk in its own comment. The finding restates that comment and blames the test, without noting that the test locks the bug in or that the draftNormalizer path reaches it."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review made one mislocated finding that restates the quirk the diff already documents, and it missed the concrete issues: the test pins a reachable production dedup bug as correct, and nothing covers draftNormalizer's untrimmed titles.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.41410149999999996,
+  "numTurns": 9,
+  "durationMs": 70849,
+  "sessionId": "ace41019-ca29-4366-a923-2683370022a9"
+}

@@ -1,0 +1,64 @@
+{
+  "item": "KOL-002",
+  "repo": "kol-emet",
+  "mergeSha": "db59a43df52cf1d8332d97688e4d0366f1f12154",
+  "localPromptVersion": "v1",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-11T04:09:24.559Z",
+  "gradedAtUtc": "2026-09-11T04:14:13.257Z",
+  "independent": [
+    {
+      "file": "server/tests/http/oauth.test.js",
+      "line": 126,
+      "severity": "low",
+      "summary": "The 'bearer token that is not the configured one' test never configures the token that requireAuth checks. It sets MCP_BEARER_TOKEN, but requireAuth compares against process.env.BEARER_TOKEN, which this file never sets. So the test only shows that an arbitrary token is refused when no REST bearer token is configured; it never exercises a mismatch against a configured one, which is what its name claims."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`store: sessionStore ?? MongoStore.create(...)` uses the caller's store whenever one is passed, and `??` short-circuits so MongoStore is never built. The test passes a MemoryStore and that is what the app uses."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "form-data 4.0.6 is a transitive dependency of supertest/superagent, which the item explicitly asked to add. The finding only describes the package and names no defect."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "formidable 3.5.4 is a transitive dependency of superagent, pulled in by the requested supertest devDependency. The finding describes the package but states no defect."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "superagent 10.3.0 is supertest's own dependency and an expected lockfile entry. Nothing wrong is claimed."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "Adding supertest ^7.2.2 as a devDependency is exactly what the item requires, so its lockfile entry is correct, not a defect."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found no real defects: it misread the `??` session-store fallback as broken and spent four findings narrating the lockfile entries the item itself asked for.",
+  "counts": {
+    "findings": 5,
+    "confirmed": 0,
+    "falsePositive": 5,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.6263360000000001,
+  "numTurns": 10,
+  "durationMs": 91919,
+  "sessionId": "117d8fdc-4225-43a6-a35b-6e7030699dd3"
+}

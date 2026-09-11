@@ -1,0 +1,35 @@
+{
+  "item": "KOL-006",
+  "repo": "kol-emet",
+  "mergeSha": "b06b8fff53de6d0f839561b44742befd9cafa45c",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-11T04:09:24.559Z",
+  "gradedAtUtc": "2026-09-11T04:10:12.480Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The test 'a client with the wrong bearer token cannot initialize' sends 'not-the-token' and asserts err.code === 401; with no authProvider, SDK 1.29 throws StreamableHTTPError(response.status) on a 401; and the gate in src/routes/mcp.js compares the whole header against `Bearer ${MCP_TOKEN}`, not just whether it is present. Line 395 is in the get_entity scoping tests, not the auth group."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review raised one high-severity claim that the code contradicts, since invalid-token handling is tested explicitly, and it offered nothing else; the suite itself matches the item's spec (401 gate, 13-tool set equality, per-workspace scoping, and a fail-closed check with no MCP user configured).",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.549581,
+  "numTurns": 5,
+  "durationMs": 46853,
+  "sessionId": "48c38655-863e-4749-9de6-2c9d672d2aeb"
+}
