@@ -54,6 +54,7 @@ import Settings from '../models/Settings.js';
 import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import RelationshipType from '../models/RelationshipType.js';
+import EntityType from '../models/EntityType.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import Draft from '../models/Draft.js';
 import Conversation from '../models/Conversation.js';
@@ -64,6 +65,7 @@ export const WORKSPACE_SCOPED_MODELS = [
   Entity,
   RelationshipGroup,
   RelationshipType,
+  EntityType,
   OpenQuestion,
   Draft,
   Conversation,

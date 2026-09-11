@@ -2,26 +2,51 @@
  * Workspace templates — the bundle of starting content a new workspace is
  * seeded with, so a new user never lands on a blank wall.
  *
- * A template is a set of relationship types plus a few illustrative starter
- * entities and one relationship group linking them. Starter content is
- * deliberately small and obviously example-shaped: it demonstrates blocks and
- * the relationship graph, and is easy to delete once the user has their own.
+ * A template is a set of entity types and relationship types plus a few
+ * illustrative starter entities and one relationship group linking them.
+ * Starter content is deliberately small and obviously example-shaped: it
+ * demonstrates blocks and the relationship graph, and is easy to delete once
+ * the user has their own.
  *
- * Entity *categories* are not part of a template yet — they are still a
- * hardcoded enum on the Entity model. Once Phase 6 makes them user-defined,
- * each template gains an `entityTypes` array and a second template
- * (software architecture: Service, Data Store, API, Team, External
+ * Entity types seed the EntityType registry (Phase 6 step 1), but the Entity
+ * model still validates `category` against the hardcoded enum, so a template's
+ * types must be exactly that enum for now. Once step 2 drops it, a second
+ * template (software architecture: Service, Data Store, API, Team, External
  * Dependency) becomes possible. Until then, shipping a non-worldbuilding
  * template would mean handing users categories that do not fit their domain,
  * so only the worldbuilding one is real.
  */
 
+import { CATEGORIES } from './categories.js';
+
 export const DEFAULT_TEMPLATE = 'worldbuilding';
+
+// The client's pill colours for today's six categories (CAT_COLORS in
+// client/src/config/categories.js), carried into the registry so existing
+// data looks the same once the client reads its colours from there.
+const WORLDBUILDING_COLORS = {
+  'Characters':       { bg: '#B5D4F4', text: '#0C447C' },
+  'Worlds':           { bg: '#9FE1CB', text: '#085041' },
+  'Organizations':    { bg: '#F5C4B3', text: '#712B13' },
+  'Lore & Mechanics': { bg: '#CECBF6', text: '#3C3489' },
+  'Timeline':         { bg: '#FAC775', text: '#633806' },
+  'Open Questions':   { bg: '#F4C4C4', text: '#7C0C0C' },
+};
 
 export const TEMPLATES = {
   worldbuilding: {
     name: 'Worldbuilding',
     description: 'Characters, worlds, organizations and the relationships between them.',
+
+    // Derived from CATEGORIES rather than listed a second time, so the registry
+    // and the Entity enum cannot disagree while the enum stands. No icons: the
+    // client has none to carry over.
+    entityTypes: CATEGORIES.map((name, order) => ({
+      name,
+      order,
+      icon: null,
+      color: WORLDBUILDING_COLORS[name],
+    })),
 
     // A relationship carries labels in TWO positions, and they are different
     // vocabularies:

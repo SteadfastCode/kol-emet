@@ -34,6 +34,7 @@ import Settings from '../../src/models/Settings.js';
 import Entity from '../../src/models/Entity.js';
 import RelationshipGroup from '../../src/models/RelationshipGroup.js';
 import RelationshipType from '../../src/models/RelationshipType.js';
+import EntityType from '../../src/models/EntityType.js';
 import OpenQuestion from '../../src/models/OpenQuestion.js';
 import Draft from '../../src/models/Draft.js';
 import Conversation from '../../src/models/Conversation.js';
@@ -58,6 +59,7 @@ async function seedTenant(label) {
   const entity = await Entity.create({ title: `${label} entity`, category: 'Worlds', summary: 'fixture', workspaceId });
   await RelationshipGroup.create({ workspaceId, members: [{ refId: entity._id, refModel: 'Entity' }] });
   await RelationshipType.create({ name: `${label} ally`, workspaceId });
+  await EntityType.create({ name: `${label} vehicles`, workspaceId });
   await OpenQuestion.create({ question: `Who is ${label}?`, entry_ids: [entity._id], workspaceId });
   await Draft.create({ workspaceId, createdBy: user._id, title: `${label} draft` });
   await Conversation.create({ workspaceId, userId: user._id, provider: 'test', model: 'test' });
@@ -229,7 +231,7 @@ test('a failure part-way leaves the account in place, and a re-run finishes the 
   const before = await snapshot();
 
   // ChangeLog is last in the scoped list, so the first run fails with the other
-  // six models already emptied — the worst partial state the ordering allows.
+  // seven models already emptied — the worst partial state the ordering allows.
   const failing = t.mock.method(ChangeLog, 'deleteMany');
   failing.mock.mockImplementationOnce(async () => { throw new Error('simulated outage'); });
 

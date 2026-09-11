@@ -20,6 +20,7 @@ import draftsRouter from './routes/drafts.js';
 import tagsRouter from './routes/tags.js';
 import openQuestionsRouter from './routes/openQuestions.js';
 import relationshipTypesRouter from './routes/relationshipTypes.js';
+import entityTypesRouter from './routes/entityTypes.js';
 import authRouter from './routes/auth.js';
 import mcpRouter from './routes/mcp.js';
 import oauthRouter from './routes/oauth.js';
@@ -32,6 +33,7 @@ import './models/User.js';
 import './models/Conversation.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
 import './models/RelationshipType.js';
+import './models/EntityType.js';
 import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
 import { resolveWorkspace } from './middleware/workspace.js';
@@ -85,6 +87,7 @@ export function createApp({ sessionStore } = {}) {
   app.use('/tags', requireAuth, resolveWorkspace, tagsRouter);
   app.use('/open-questions', requireAuth, resolveWorkspace, openQuestionsRouter);
   app.use('/relationship-types', requireAuth, resolveWorkspace, relationshipTypesRouter);
+  app.use('/entity-types', requireAuth, resolveWorkspace, entityTypesRouter);
   // Chat authenticates per-route rather than at mount, so it resolves the
   // workspace per-route too — see routes/chat.js.
   app.use('/chat', chatRouter);
