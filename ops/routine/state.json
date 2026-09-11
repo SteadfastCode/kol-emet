@@ -118,7 +118,7 @@
     "KOL-020": {
       "order": 8,
       "title": "Phase 6 step 1: `EntityType` registry model + `/entity-types` routes",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-020",

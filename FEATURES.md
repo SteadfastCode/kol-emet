@@ -44,16 +44,16 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-020) Phase 6 step 1: `EntityType` registry model + `/entity-types` routes** (needs KOL-004)
-  Mirror `RelationshipType` (`server/src/models/RelationshipType.js`, `server/src/routes/relationshipTypes.js`) per
-  `docs/build-plan.md` Part A; seed the six current categories per workspace; keep the `Entity.category` enum for now
-  (`getCategories` in `server/src/config/categories.js` is the seam). Tests: CRUD scoped per workspace, mirroring KOL-004.
-  Off the worldbuilding-launch critical path — Daniel should confirm timing before it enters the queue.
 
 ## Blocked Items
 
 ## Completed Items
 
+- [x] **(KOL-020) Phase 6 step 1: `EntityType` registry model + `/entity-types` routes** (needs KOL-004) (routine 2026-09-10, 9233813)
+  Mirror `RelationshipType` (`server/src/models/RelationshipType.js`, `server/src/routes/relationshipTypes.js`) per
+  `docs/build-plan.md` Part A; seed the six current categories per workspace; keep the `Entity.category` enum for now
+  (`getCategories` in `server/src/config/categories.js` is the seam). Tests: CRUD scoped per workspace, mirroring KOL-004.
+  Off the worldbuilding-launch critical path — Daniel should confirm timing before it enters the queue.
 - [x] **(KOL-021) Account deletion: the route, the confirmation, and the signup disclosure** (routine 2026-09-10, d5909a3)
   KOL-015 landed the tested cascade (`server/src/lib/accountDeleter.js`) with no caller. Build:
   `DELETE /auth/account` behind `requireActor`, requiring the current password in the body (or a
