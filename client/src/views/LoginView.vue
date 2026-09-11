@@ -2,6 +2,7 @@
   <div class="login-wrap">
     <div class="login-box">
       <h1>Kol Emet</h1>
+      <p v-if="notice" class="login-notice" role="status">{{ notice }}</p>
 
       <!-- Passkey prompt after registration -->
       <template v-if="step === 'passkey-prompt'">
@@ -55,6 +56,10 @@
           </button>
         </form>
 
+        <p v-if="mode === 'register'" class="login-disclosure">
+          You can delete your account and all of its data at any time from Settings.
+        </p>
+
         <template v-if="mode === 'login'">
           <div class="divider"><span>or</span></div>
           <button class="btn-sm full passkey-btn" @click="doPasskeyLogin" :disabled="loading">
@@ -72,6 +77,9 @@
 <script setup>
 import { ref } from 'vue';
 import { login, register, loginWithPasskey, registerPasskey } from '../api/auth.js';
+
+// Shown above the form; App passes one after an account is deleted.
+defineProps({ notice: { type: String, default: '' } });
 
 const emit = defineEmits(['login-success']);
 
@@ -255,5 +263,23 @@ input:disabled { opacity: 0.5; }
   font-size: 12px;
   color: #e07070;
   margin: 0;
+}
+
+.login-notice {
+  font-size: 13px;
+  color: #9fd4a8;
+  background: #0f1d14;
+  border: 1px solid #1f3a28;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.login-disclosure {
+  font-size: 12px;
+  color: #777;
+  margin: 10px 0 0;
+  line-height: 1.5;
 }
 </style>

@@ -366,7 +366,8 @@ Members are modelled from the start rather than a bare `ownerId`, so shared work
 reshaping the schema later. Registration creates a personal workspace with the new user as sole owner.
 
 **Account deletion** is a hard delete, drafts included
-([`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js); no route yet). It removes the user,
+([`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js), behind
+[`DELETE /auth/account`](api.md#auth)). It removes the user,
 every workspace they *solely* own (they are `ownerId` and no other member holds `owner`), every
 document in those workspaces across every model carrying `workspaceId`, and their `UserMemory` and
 `Conversation` rows. It refuses, deleting nothing, while the user belongs to any workspace they

@@ -1,5 +1,5 @@
 <template>
-  <div :class="['wiki-root', { 'panel-open': !!activePanelId, 'chat-open': chatOpen }, `tab-${mobileTab}`]">
+  <div :class="['wiki-root', { 'panel-open': !!activePanelId, 'chat-open': chatOpen, 'settings-open': settingsOpen }, `tab-${mobileTab}`]">
     <!-- Full-width list -->
     <div class="list-view">
       <EntitySidebar
@@ -18,6 +18,7 @@
         @select="openEntry"
         @new-entry="openEditor"
         @logout="$emit('logout')"
+        @settings="openSettings"
         @chat="chatOpen = !chatOpen"
         @graph="graphOpen = !graphOpen"
         @generate="generatorOpen = true"
@@ -103,11 +104,19 @@
 
     <ChatPanel :open="chatOpen" @close="onChatClose" />
 
-    <!-- Settings panel (mobile only) -->
+    <!-- Settings: a tab on mobile portrait; elsewhere an overlay opened from the sidebar -->
     <div class="mobile-settings-panel">
-      <div class="settings-group">
-        <div class="settings-group-title">Account</div>
-        <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
+      <div class="settings-inner">
+        <button class="settings-close" title="Close" @click="closeSettings">✕</button>
+        <div class="settings-group">
+          <div class="settings-group-title">Account</div>
+          <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
+        </div>
+        <!-- Last on purpose: the irreversible action sits at the bottom of settings. -->
+        <div class="settings-group">
+          <div class="settings-group-title">Delete account</div>
+          <AccountDeletion @deleted="$emit('account-deleted')" />
+        </div>
       </div>
     </div>
 
@@ -172,6 +181,7 @@ import ToastNotification from './ToastNotification.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
 import GeneratorOverlay from './generator/GeneratorOverlay.vue';
+import AccountDeletion from './AccountDeletion.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -180,7 +190,7 @@ import { useToasts } from '../composables/useToasts.js';
 
 const EDITOR_ID = '__new_entity__';
 
-const emit = defineEmits(['logout']);
+const emit = defineEmits(['logout', 'account-deleted']);
 
 const {
   entities, selectedEntity, sidebarLoading, detailLoading,
@@ -222,10 +232,26 @@ const graphOpen = ref(false);
 const generatorOpen = ref(false);
 const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
 
+// The settings overlay. On mobile portrait, settings is the 'settings' tab
+// instead, and this class has no effect there (see the styles).
+const settingsOpen = ref(false);
+
 function setMobileTab(tab) {
   if (tab === 'detail' && !activePanelId.value) return;
   mobileTab.value = tab;
   chatOpen.value = (tab === 'chat');
+}
+
+// From the sidebar's Settings button: the overlay on wide screens, the tab on
+// mobile portrait.
+function openSettings() {
+  settingsOpen.value = true;
+  mobileTab.value = 'settings';
+}
+
+function closeSettings() {
+  settingsOpen.value = false;
+  if (mobileTab.value === 'settings') mobileTab.value = activePanelId.value ? 'detail' : 'list';
 }
 
 function onChatClose() {
@@ -605,6 +631,45 @@ provide('openSnapshot', openSnapshot);
 .settings-row:hover { background: #1a1a1a; }
 .settings-row.danger { color: #e07070; }
 .settings-row.danger:hover { background: #1a0a0a; }
+
+.settings-close { display: none; }
+
+/* Everywhere but mobile portrait, the panel opens over the wiki from the sidebar's Settings button. */
+@media not all and (orientation: portrait) and (max-width: 768px) {
+  .wiki-root.settings-open .mobile-settings-panel {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    position: fixed;
+    inset: 0;
+    z-index: 600; /* above the chat panel (500) */
+    padding: 10vh 16px 16px;
+    background: rgba(0, 0, 0, 0.7);
+  }
+  .wiki-root.settings-open .settings-inner {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 36px 20px 4px;
+    background: #0a0a0a;
+    border: 1px solid #1e1e1e;
+    border-radius: 12px;
+  }
+  .wiki-root.settings-open .settings-close {
+    display: block;
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .wiki-root.settings-open .settings-close:hover { color: #ccc; }
+}
 
 /* ─── Mobile bottom tab bar ───────────────────────────────────────── */
 .mobile-tab-bar {
