@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-021) Account deletion: the route, the confirmation, and the signup disclosure**
+- [x] **(KOL-021) Account deletion: the route, the confirmation, and the signup disclosure**
   KOL-015 landed the tested cascade (`server/src/lib/accountDeleter.js`) with no caller. Build:
   `DELETE /auth/account` behind `requireActor`, requiring the current password in the body (or a
   fresh passkey assertion) and refusing with 409 when the user is a non-owner member of another

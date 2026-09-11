@@ -4,16 +4,16 @@
     "KOL-021": {
       "order": 1,
       "title": "Account deletion: the route, the confirmation, and the signup disclosure",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-021",
       "dependsOn": [],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-11T00:10:07.932Z",
+      "runId": "2026-09-11T00:09:41.283Z",
       "lastFail": null
     },
     "KOL-012": {
