@@ -17,15 +17,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-023) The second sweep only shrinks the concurrent-write window; it does not close it.**
-  Found by the grader of KOL-015 (medium, server/src/lib/accountDeleter.js:146). The second sweep
-  only shrinks the concurrent-write window; it does not close it. Any write that lands after it is
-  orphaned for good, because a re-run finds no workspaces left to sweep. The clearest case is chat
-  memory extraction, which runs in the background: it makes a slow LLM call and then does
-  UserMemory.insertMany({ userId }) (memoryExtractor.js:132). UserMemory is deleted once, after
-  the sweep, and never re-checked, so if a chat exchange finishes just before deletion, facts
-  about the user can be written after it. That leaves personal data belonging to a hard-deleted
-  account.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
@@ -58,6 +49,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-023) The second sweep only shrinks the concurrent-write window; it does not close it.** (routine 2026-09-12, 9e9216a)
+  Found by the grader of KOL-015 (medium, server/src/lib/accountDeleter.js:146). The second sweep
+  only shrinks the concurrent-write window; it does not close it. Any write that lands after it is
+  orphaned for good, because a re-run finds no workspaces left to sweep. The clearest case is chat
+  memory extraction, which runs in the background: it makes a slow LLM call and then does
+  UserMemory.insertMany({ userId }) (memoryExtractor.js:132). UserMemory is deleted once, after
+  the sweep, and never re-checked, so if a chat exchange finishes just before deletion, facts
+  about the user can be written after it. That leaves personal data belonging to a hard-deleted
+  account.
 - [x] **(KOL-022) The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…** (routine 2026-09-12, 0641a0f; recorded after the run exited early)
   Found by the grader of KOL-020 (medium, server/src/routes/entityTypes.js:156). The 'in use'
   guard doesn't deliver the promise in the docs and decision log that the registry and data cannot

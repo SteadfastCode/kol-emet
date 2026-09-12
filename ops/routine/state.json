@@ -22,7 +22,7 @@
     "KOL-023": {
       "order": 2,
       "title": "The second sweep only shrinks the concurrent-write window; it does not close it.",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-023",
