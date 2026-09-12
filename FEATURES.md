@@ -8,6 +8,38 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
+- [ ] **(KOL-024) Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized**
+  `@simplewebauthn/server` 13 returns `registrationInfo.credential.id` as a base64url string, and
+  `POST /auth/webauthn/register/complete` stores `Buffer.from(credential.id).toString('base64url')`,
+  which encodes that string a second time. Every lookup compares against the browser's raw id —
+  `login/complete` (`passkeys.credentialID === req.body.id`), `login/begin`'s `allowCredentials`, and
+  the account-deletion confirmation (`/auth/account/passkey-challenge`, `DELETE /auth/account`) — so
+  a registered passkey is answered 401 "Passkey not recognized" on any device. Build: store
+  `credential.id` as-is; one helper that matches a stored value against a browser id in both the
+  correct and the legacy double-encoded form, used by all three paths; on a successful sign-in
+  against a legacy value, rewrite it to the correct form (a lazy migration — no production script);
+  send corrected ids in `allowCredentials`; pass `credential.id` to `verifyAuthenticationResponse` as
+  the base64url string its type expects, not a Buffer. Also store `createdAt`, `deviceType` and
+  `backedUp` from `registrationInfo`, which KOL-025 lists. Verify: unit tests for the helper and the
+  lazy rewrite (a legacy value matches once and is rewritten; a correct one matches untouched), and
+  the register → login lookup covered with the library's verify functions stubbed or the lookup
+  extracted into a tested function; `yarn test` green. PR `needs-human:` sign in with a passkey on a
+  real device after the deploy.
+- [ ] **(KOL-025) Passkeys on phones: add, list and remove passkeys from Settings** (needs KOL-024)
+  The only way to add a passkey today is the one-time prompt right after signup (`LoginView.vue`,
+  `step === 'passkey-prompt'`; `registerPasskey()` has no other caller). A passkey lives on the
+  device or password manager that made it, so an account created on a desktop can never get one
+  on a phone — cross-device QR sign-in needs the desktop at hand. Build: a "Passkeys" group in
+  Settings → Account (`WikiLayout.vue` `.mobile-settings-panel`, a tab on mobile portrait) listing
+  the user's passkeys — a label from `deviceType`/`backedUp` ("Synced passkey" / "This device only"),
+  added date, last used — with "Add a passkey on this device" and remove. Server:
+  `GET /auth/webauthn/passkeys` (`requireAuth`; never returns `publicKey`) and
+  `DELETE /auth/webauthn/passkeys/:credentialID` (`requireAuth`, own passkeys only; refuse removing
+  the last sign-in method on an account with no password); record `lastUsedAt` on sign-in. Keep
+  passwordless "Sign in with passkey" without an email (discoverable credentials, already
+  supported). Verify: HTTP tests for list and remove (ownership; `publicKey` never in a response),
+  a client test that the Settings group renders and calls the routes. PR `needs-human:` on an
+  Android phone and an iPhone, add a passkey from Settings and sign in with it.
 - [ ] **(KOL-012) GitHub Actions CI running both test suites and the client build** (needs KOL-003, KOL-010) [needs-human]
   Create `.github/workflows/ci.yml`: on push + pull_request, ubuntu-latest, Node 22 via `actions/setup-node` with yarn caching; job
   `server` = `yarn install --frozen-lockfile && yarn test` in `server/`; job `client` = the same plus `yarn build` in `client/`.

@@ -1,8 +1,40 @@
 {
   "version": 1,
   "items": {
-    "KOL-012": {
+    "KOL-024": {
       "order": 1,
+      "title": "Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-025": {
+      "order": 2,
+      "title": "Passkeys on phones: add, list and remove passkeys from Settings",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [
+        "KOL-024"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-012": {
+      "order": 3,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -19,23 +51,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-023": {
-      "order": 2,
-      "title": "The second sweep only shrinks the concurrent-write window; it does not close it.",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-023",
-      "dependsOn": [],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "claimedAtUtc": "2026-09-12T18:09:42.185Z",
-      "runId": "2026-09-12T18:09:15.544Z",
-      "lastFail": null
-    },
     "KOL-013": {
-      "order": 3,
+      "order": 4,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -54,7 +71,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 4,
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -69,7 +86,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 5,
+      "order": 6,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -86,7 +103,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 6,
+      "order": 7,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -101,7 +118,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 7,
+      "order": 8,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -116,7 +133,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 8,
+      "order": 9,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -128,6 +145,21 @@
       "coldReview": false,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-023": {
+      "order": null,
+      "title": "The second sweep only shrinks the concurrent-write window; it does not close it.",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-023",
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": "2026-09-12T18:09:42.185Z",
+      "runId": "2026-09-12T18:09:15.544Z",
       "lastFail": null
     },
     "KOL-022": {
