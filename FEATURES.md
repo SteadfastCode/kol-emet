@@ -17,7 +17,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-023) The second sweep only shrinks the concurrent-write window; it does not close it.**
+- [x] **(KOL-023) The second sweep only shrinks the concurrent-write window; it does not close it.**
   Found by the grader of KOL-015 (medium, server/src/lib/accountDeleter.js:146). The second sweep
   only shrinks the concurrent-write window; it does not close it. Any write that lands after it is
   orphaned for good, because a re-run finds no workspaces left to sweep. The clearest case is chat

@@ -19,38 +19,23 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-022": {
+    "KOL-023": {
       "order": 2,
-      "title": "The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…",
-      "status": "done",
+      "title": "The second sweep only shrinks the concurrent-write window; it does not close it.",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-023",
       "dependsOn": [],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
-      "claimedAtUtc": "2026-09-12T05:18:09.846Z",
-      "runId": null,
-      "lastFail": null
-    },
-    "KOL-023": {
-      "order": 3,
-      "title": "The second sweep only shrinks the concurrent-write window; it does not close it.",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-12T18:09:42.185Z",
+      "runId": "2026-09-12T18:09:15.544Z",
       "lastFail": null
     },
     "KOL-013": {
-      "order": 4,
+      "order": 3,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -69,7 +54,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 5,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -84,7 +69,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 6,
+      "order": 5,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -101,7 +86,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 7,
+      "order": 6,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -116,7 +101,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -131,7 +116,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -142,6 +127,21 @@
       "distribute": null,
       "coldReview": false,
       "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-022": {
+      "order": null,
+      "title": "The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": "2026-09-12T05:18:09.846Z",
       "runId": null,
       "lastFail": null
     },

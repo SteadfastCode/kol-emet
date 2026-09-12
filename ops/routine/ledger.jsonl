@@ -59,3 +59,4 @@
 {"event":"blocked","runId":"2026-09-12T05:09:15.618Z","item":"KOL-022","detail":"run ended without complete or block (after 13 min)","final":false,"lastFail":"abandoned","atUtc":"2026-09-12T05:30:56.213Z"}
 {"event":"complete","runId":"2026-09-12T05:09:15.618Z","item":"KOL-022","mergeSha":"0641a0fcb814f8d98ad55d690d0d49d42fa0a8ee","durationMin":13,"costUsd":4.062724,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-09-12T05:50:51.871Z"}
 {"event":"local-review","item":"KOL-022","model":"qwen2.5-coder:14b","findings":2,"promptVersion":"v2","mergeSha":"0641a0fcb814f8d98ad55d690d0d49d42fa0a8ee","runId":"2026-09-12T07:02:17.889Z","promptTokens":15656,"completionTokens":1923,"latencyMs":136472,"chunkErrors":1,"atUtc":"2026-09-12T07:04:35.776Z"}
+{"event":"claim","runId":"2026-09-12T18:09:15.544Z","item":"KOL-023","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-09-12T18:09:42.185Z"}
