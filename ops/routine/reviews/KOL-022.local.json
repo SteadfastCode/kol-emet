@@ -1,0 +1,99 @@
+{
+  "item": "KOL-022",
+  "repo": "kol-emet",
+  "mergeSha": "0641a0fcb814f8d98ad55d690d0d49d42fa0a8ee",
+  "completedAtUtc": "2026-09-12T05:50:51.871Z",
+  "completeRunId": "2026-09-12T05:09:15.618Z",
+  "reviewRunId": "2026-09-12T07:02:17.889Z",
+  "reviewedAtUtc": "2026-09-12T07:04:35.518Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 53267,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/config/categories.js",
+        "server/src/lib/entityTypeRegistry.js",
+        "server/src/lib/workspaceSeeder.js"
+      ],
+      "part": null,
+      "bytes": 19971,
+      "promptTokens": 5521,
+      "completionTokens": 133,
+      "latencyMs": 28439,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/Entity.js",
+        "server/src/models/EntityType.js",
+        "server/src/models/RelationshipType.js",
+        "server/src/routes/entityTypes.js",
+        "server/src/routes/relationshipTypes.js"
+      ],
+      "part": null,
+      "bytes": 11136,
+      "promptTokens": 3400,
+      "completionTokens": 1024,
+      "latencyMs": 55348,
+      "findings": 0,
+      "error": "output truncated at 1024 tokens"
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": null,
+      "bytes": 18372,
+      "promptTokens": 5358,
+      "completionTokens": 307,
+      "latencyMs": 29334,
+      "findings": 3,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/models/entity.test.js"
+      ],
+      "part": null,
+      "bytes": 3788,
+      "promptTokens": 1377,
+      "completionTokens": 459,
+      "latencyMs": 23349,
+      "findings": 3,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/entityTypeRegistry.js",
+      "line": 75,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `isRegisteredCategory` function does not check for relationship types that use the category.",
+      "scenario": "A user deletes or renames an entity type that is still used by a relationship type. The `isRegisteredCategory` function should also check if any relationship types are using the category before allowing the deletion or rename."
+    },
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 156,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The 'in use' guard does not prevent the creation of entities with categories that do not exist in the registry.",
+      "scenario": "A user deletes or renames an unused default type, then creates an entity with that category, which succeeds without a corresponding registry entry."
+    }
+  ],
+  "summary": "1 high severity defect found. · Three real defects found in the codebase related to the 'in use' guard functionality. · The 'in use' guard does not deliver the promise in the docs and decision log that the registry and data cannot drift apart. It only fires when a type is renamed or deleted, and /entities still checks category only against the hardcoded enum. So you can delete or rename an unused default type (the test itself deletes alice's Timeline with a 204), then create an entity with that category, and it succeeds with no registry entry behind it. The reverse also happens: created or renamed types that aren't enum values can't be used by any entity. The check also ignores RelationshipType.sourceCategory/targetCategory, which store category names too.",
+  "errors": [
+    "output truncated at 1024 tokens"
+  ],
+  "usage": {
+    "promptTokens": 15656,
+    "completionTokens": 1923
+  },
+  "latencyMs": 136472
+}
