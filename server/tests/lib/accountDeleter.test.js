@@ -27,6 +27,7 @@ import mongoose from 'mongoose';
 
 import * as db from '../helpers/db.js';
 import { deleteAccount, WORKSPACE_SCOPED_MODELS } from '../../src/lib/accountDeleter.js';
+import { OwnerGoneError } from '../../src/lib/ownerGuard.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import UserMemory from '../../src/models/UserMemory.js';
@@ -241,4 +242,52 @@ test('a failure part-way leaves the account in place, and a re-run finishes the 
 
   assert.equal((await deleteAccount(a.user._id)).ok, true);
   assert.deepEqual(await snapshot(), without(before, a));
+});
+
+describe('user-keyed writes that race the deletion', () => {
+  // The inserts memoryExtractor.js and chat.js's save_memory tool make, and the
+  // one POST /conversations makes.
+  const lateWrites = (userId) => [
+    () => UserMemory.insertMany([{ userId, fact: 'rode the last night train' }]),
+    () => UserMemory.create({ userId, fact: 'asked to be remembered' }),
+    () => Conversation.create({ workspaceId: null, userId, provider: 'test', model: 'test' }),
+  ];
+
+  test('an insert that lands after the account is gone deletes itself', async () => {
+    const a = await seedTenant('a');
+    const b = await seedTenant('b');
+    assert.equal((await deleteAccount(a.user._id)).ok, true);
+    const deletedState = await snapshot();
+
+    for (const write of lateWrites(a.user._id)) {
+      await assert.rejects(write(), OwnerGoneError);
+    }
+    assert.deepEqual(await snapshot(), deletedState, 'nothing of A was left behind');
+
+    // A live owner's inserts stand.
+    for (const write of lateWrites(b.user._id)) await write();
+    assert.equal(await UserMemory.countDocuments({ userId: b.user._id }), 3);
+    assert.equal(await Conversation.countDocuments({ userId: b.user._id }), 3);
+  });
+
+  test('an insert that passes its check just before the user goes is caught by the final sweep', async (t) => {
+    const a = await seedTenant('a');
+    await seedTenant('b');
+    const before = await snapshot();
+
+    // The inserts land after the user's rows were first deleted but while the
+    // User still exists, so the guard's own check passes. That is the window
+    // the final sweep has to cover.
+    const deleteUser = User.deleteOne.bind(User);
+    t.mock.method(User, 'deleteOne', async (...args) => {
+      for (const write of lateWrites(a.user._id)) await write();
+      return deleteUser(...args);
+    });
+
+    const result = await deleteAccount(a.user._id);
+
+    assert.equal(result.deleted.UserMemory, 3, 'the seeded memory and both late ones');
+    assert.equal(result.deleted.Conversation, 3, 'both seeded chats and the late one');
+    assert.deepEqual(await snapshot(), without(before, a));
+  });
 });

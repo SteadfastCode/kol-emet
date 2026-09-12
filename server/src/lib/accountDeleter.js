@@ -29,9 +29,17 @@
  * standalone server, and an Atlas-only code path would ship untested. Order
  * carries the guarantee instead — content, then workspaces, then the user — so
  * a failure part-way leaves the user and their workspaces in place and a re-run
- * finishes the job. Content is swept a second time once the workspaces are
- * gone, which catches a write from a request that resolved the workspace while
- * the first pass was running.
+ * finishes the job.
+ *
+ * Writes that race the deletion: each owner is deleted before its data gets a
+ * final sweep. Content is swept once the workspaces are gone, and UserMemory and
+ * Conversation once the User is gone. For those two user-keyed models that
+ * closes the window, because they look up their owner after every insert
+ * (lib/ownerGuard.js). An insert before the final sweep gets swept, and one
+ * after it finds no user and deletes itself. Workspace-scoped models have no
+ * such check yet, so for them the second sweep only narrows the window. A
+ * request that resolved the workspace before it was deleted can still insert
+ * after the sweep, and that row is left behind.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * ACCOUNT_DELETE_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -40,7 +48,7 @@
  * account, and a hard delete that left the address in them would not be one.
  *   off     — nothing
  *   light   — per call: who asked (the caller's `source`), the outcome and the
- *             totals, plus anything the second sweep had to catch
+ *             totals, plus anything either final sweep had to catch
  *   normal  — light, plus per-model counts for each pass
  *   verbose — normal, plus the workspace ids and every blocking membership
  */
@@ -151,6 +159,17 @@ export async function deleteAccount(userId, { source = 'unspecified caller' } = 
     await Settings.updateOne({ _id: 'global', mcpUserId: id }, { $set: { mcpUserId: null } })
   ).modifiedCount > 0;
   deleted.User = (await User.deleteOne({ _id: id })).deletedCount;
+
+  // Must come after the User delete. This read, together with ownerGuard's
+  // lookup after each insert, is what closes the window for user-keyed rows.
+  let late = 0;
+  for (const model of [UserMemory, Conversation]) {
+    const { deletedCount } = await model.deleteMany({ userId: id });
+    deleted[model.modelName] += deletedCount;
+    late += deletedCount;
+    log('normal', `user sweep: ${model.modelName} -${deletedCount}`);
+  }
+  if (late) log('light', `deleteAccount(${id}): user sweep removed ${late} document(s) written after the first delete of the user's rows (source: ${source})`);
 
   const total = Object.values(deleted).reduce((sum, n) => sum + n, 0);
   log('light', `deleteAccount(${id}) done: ${total} document(s) across ${workspaceIds.length} workspace(s)${mcpUserCleared ? ', MCP connector user cleared' : ''} (source: ${source})`);

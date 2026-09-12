@@ -418,7 +418,10 @@ reshaping the schema later. Registration creates a personal workspace with the n
 every workspace they *solely* own (they are `ownerId` and no other member holds `owner`), every
 document in those workspaces across every model carrying `workspaceId`, and their `UserMemory` and
 `Conversation` rows. It refuses, deleting nothing, while the user belongs to any workspace they
-don't solely own, whether as editor, viewer or co-owner.
+don't solely own, whether as editor, viewer or co-owner. A `UserMemory` or `Conversation` inserted
+after its user is gone deletes itself ([`lib/ownerGuard.js`](../server/src/lib/ownerGuard.js)), so
+background memory extraction cannot leave personal data behind. Workspace-scoped content has no
+such guard yet: an insert that lands after the workspace's final sweep is left behind.
 
 ```js
 {
