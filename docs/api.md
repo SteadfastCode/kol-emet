@@ -41,7 +41,7 @@ Mount points and their guards:
 | `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
 | `/relationship-types` | `requireAuth` + `resolveWorkspace` | |
-| `/entity-types` | `requireAuth` + `resolveWorkspace` | Registry only; nothing reads it yet |
+| `/entity-types` | `requireAuth` + `resolveWorkspace` | Gates the category names entities and relationship types can hold |
 | `/tags` | `requireAuth` + `resolveWorkspace` | |
 | `/open-questions` | `requireAuth` + `resolveWorkspace` | |
 | `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...` |
@@ -57,7 +57,7 @@ Mount points and their guards:
 |--------|-------|-------------|
 | GET | `/entities` | List. Query params: `category`, `tag`, `q` (case-insensitive regex over title/summary/blocks). Populates `open_questions`. |
 | GET | `/entities/:id` | Single entity, with `relationships` resolved live from `RelationshipGroup` (not the back-reference). |
-| POST | `/entities` | Create. Validates block types; normalizes block `order`. Logs to ChangeLog. |
+| POST | `/entities` | Create. Validates block types; normalizes block `order`. 400 if `category` is not a type in the workspace's [registry](#entity-types). Logs to ChangeLog. |
 | PUT | `/entities/:id` | Replace/update. Same validation + ChangeLog. |
 | DELETE | `/entities/:id` | Delete and prune the entity from all relationship groups. Logs to ChangeLog. |
 
@@ -85,22 +85,24 @@ re-densified server-side.
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/relationship-types` | List the label vocabulary |
-| POST | `/relationship-types` | Create a type |
-| PUT | `/relationship-types/:id` | Update a type |
+| POST | `/relationship-types` | Create a type. 400 if a non-null `sourceCategory`/`targetCategory` is not an entity type in the workspace. |
+| PUT | `/relationship-types/:id` | Update a type (same check) |
 | DELETE | `/relationship-types/:id` | Delete a type |
 
 ## Entity types
 
 The per-workspace registry of entity types (Phase 6 step 1). `Entity.category` still validates
-against the hardcoded enum and nothing reads this registry yet; the client and the MCP/chat category
-lists move onto it in later Phase 6 steps. See [EntityType](data-model.md#entitytype).
+against the hardcoded enum, and it must also name a type in this registry. So must a relationship
+type's `sourceCategory`/`targetCategory`. While the enum stands, a type's `name` must be one of
+the six built-in categories. The client and the MCP/chat category lists move onto the registry in
+later Phase 6 steps. See [EntityType](data-model.md#entitytype).
 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/entity-types` | List the workspace's types, sorted by `order` then `name`. `?q=` fuzzy-filters by name. |
-| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. 409 on an existing name (case-insensitive); a near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
-| PUT | `/entity-types/:id` | Update any of `name`, `icon`, `color` (either half), `order`. 409 if the new name exists, or if entities in the workspace still use the type being renamed. |
-| DELETE | `/entity-types/:id` | Delete. 409 while entities in the workspace still use the type. |
+| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. `name` is matched case-insensitively to a built-in category and stored in its spelling; any other name is 400 `{ error, categories }`. 409 on an existing name (case-insensitive). A near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
+| PUT | `/entity-types/:id` | Update any of `name` (same rule), `icon`, `color` (either half), `order`. 409 if the new name exists. A rename is also 409 `{ error, inUse, entities, relationshipTypes }` while any entity or relationship type in the workspace names the type. |
+| DELETE | `/entity-types/:id` | Delete. 409 with the same counts while anything names the type, and 409 for the workspace's last type. |
 
 A foreign or malformed id is 404.
 

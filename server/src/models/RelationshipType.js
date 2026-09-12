@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { categoryValidator } from '../lib/entityTypeRegistry.js';
 
 const relationshipTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -18,8 +19,10 @@ const relationshipTypeSchema = new mongoose.Schema({
    */
   scope: { type: String, enum: ['group', 'member'], default: 'member', index: true },
 
-  sourceCategory: { type: String, default: null },
-  targetCategory: { type: String, default: null },
+  // Entity type names, like Entity.category, so held to the same registry
+  // check; null means any type.
+  sourceCategory: { type: String, default: null, validate: categoryValidator('RelationshipType') },
+  targetCategory: { type: String, default: null, validate: categoryValidator('RelationshipType') },
   workspaceId: { type: mongoose.Schema.Types.ObjectId, default: null },
 }, { timestamps: true });
 

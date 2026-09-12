@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { CATEGORIES } from '../config/categories.js';
+import { categoryValidator } from '../lib/entityTypeRegistry.js';
 
 const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
 
@@ -12,10 +13,13 @@ const blockSchema = new mongoose.Schema({
 const entitySchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
+    // Both checks apply: the enum, and the writer's workspace must have a type
+    // of this name (lib/entityTypeRegistry.js), so a deleted type stays unusable.
     category: {
       type: String,
       required: true,
       enum: CATEGORIES,
+      validate: categoryValidator('Entity'),
     },
     summary: { type: String, required: true },
     tags: { type: [String], default: [] },
