@@ -11,8 +11,9 @@ import mongoose from 'mongoose';
  *
  * Seeded per workspace from the template's `entityTypes` (config/templates.js)
  * at registration; scripts/seed-entity-types.js backfills workspaces that
- * predate the registry. Nothing reads it yet: the client's pills and picker and
- * the MCP/chat category lists move onto it in later Phase 6 steps.
+ * predate the registry. Entity and RelationshipType writes check their
+ * category names against it (lib/entityTypeRegistry.js). The client's pills and
+ * picker and the MCP/chat category lists move onto it in later Phase 6 steps.
  */
 const entityTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },

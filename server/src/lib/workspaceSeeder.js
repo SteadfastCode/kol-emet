@@ -55,8 +55,8 @@ export async function seedWorkspace(workspaceId, templateKey = DEFAULT_TEMPLATE)
     log('light', `seeding workspace ${workspaceId} from template "${templateKey}"`);
 
     // ── Entity types ─────────────────────────────────────────────────────────
-    // The registry behind the category pills. Nothing reads it yet, but a
-    // workspace created now must already have it when the client moves over.
+    // The registry behind the category pills. First, because the relationship
+    // types and starter entities below are checked against it on insert.
     counts.entityTypes = (await seedEntityTypes(workspaceId, templateKey)).length;
 
     // ── Relationship types ───────────────────────────────────────────────────

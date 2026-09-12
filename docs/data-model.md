@@ -43,7 +43,8 @@ content now lives in an ordered `blocks` array, and there is **no `body` field**
 ```
 
 **`category`** enum: `Characters`, `Worlds`, `Organizations`, `Lore & Mechanics`, `Timeline`,
-`Open Questions`.
+`Open Questions`. The value must also name a type in the entity's workspace
+[registry](#entitytype), checked on every create and validated update.
 
 ### Block
 
@@ -116,6 +117,9 @@ scoped to source/target categories.
 }
 ```
 
+`sourceCategory`/`targetCategory` are entity type names. When set, they must name a type in the
+workspace's [registry](#entitytype), and they count as uses of that type.
+
 Indexed on `{ name, workspaceId }` — names are intended to be unique per workspace. Each workspace
 has its own vocabulary: reads filter on the caller's workspace, so a `null` row is visible to no one
 rather than global.
@@ -146,9 +150,21 @@ offers, while `Entity.category` holds a type's **name** as a plain string.
 - Registration seeds the template's types — for worldbuilding, the six current categories with the
   client's pill colours. `server/scripts/seed-entity-types.js` backfills workspaces created before
   the registry (dry-run by default, `--apply` to write; adds only missing names).
-- **Not yet authoritative.** `Entity.category` still validates against the enum above and nothing
-  reads the registry. Until the enum goes, a type that some entity in the workspace uses cannot be
-  renamed or deleted (the API answers 409), so the registry and the data cannot drift apart.
+- **A gate alongside the enum** ([`entityTypeRegistry.js`](../server/src/lib/entityTypeRegistry.js)).
+  Until the enum goes, these rules keep the registry and the data from drifting apart:
+  - `Entity.category`, `RelationshipType.sourceCategory` and `RelationshipType.targetCategory` must
+    name a type in the writer's workspace, on create and on validated update. This covers every
+    write path, including MCP, draft apply and rollback.
+  - A type's name must be one of the enum's categories. It is matched case-insensitively and
+    stored in the enum's spelling, so every registered type can be used.
+  - A type that an entity or relationship type in the workspace names cannot be renamed or
+    deleted (409).
+  - A workspace's last type cannot be deleted (409).
+  - A workspace with **no** types predates the registry, or its seeding failed. It is checked
+    against the enum alone until `seed-entity-types.js` backfills it. Refusing to delete the last
+    type is what stops a user from switching the gate off this way.
+  - The client and the MCP/chat category lists still offer the six built-in names, so they can
+    offer a type the workspace has deleted. Writing it is refused.
 
 ---
 

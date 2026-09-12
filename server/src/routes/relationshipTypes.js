@@ -67,10 +67,12 @@ router.put('/:id', async (req, res) => {
     if (sourceCategory !== undefined) update.sourceCategory = sourceCategory;
     if (targetCategory !== undefined) update.targetCategory = targetCategory;
 
+    // runValidators so a category the workspace has no type for is refused
+    // here as it is on create.
     const type = await RelationshipType.findOneAndUpdate(
       { _id: req.params.id, workspaceId: req.workspaceId },
       update,
-      { new: true }
+      { new: true, runValidators: true }
     );
     if (!type) return res.status(404).json({ error: 'Not found' });
     res.json(type);
