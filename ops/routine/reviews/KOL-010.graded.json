@@ -1,0 +1,35 @@
+{
+  "item": "KOL-010",
+  "repo": "kol-emet",
+  "mergeSha": "909e68e8eedf479b575d4fb5bb6cc07c84c9ceb6",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-12T05:09:23.795Z",
+  "gradedAtUtc": "2026-09-12T05:16:24.608Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The `_comment_test_pins` note is new in this diff and accurately explains why the jsdom ^26, @vue/test-utils ~2.4.6 and vitest ^3 pins were chosen (yarn.lock resolves exactly those ranges), so it is not outdated; a pin that later becomes unnecessary is a future maintenance question, not an install failure or a defect."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review raised one speculative, non-defect remark about a documentation comment and found nothing substantive, which matches the diff: the tests correctly cover the form's autocomplete=\"on\", the email input's autocomplete=\"email\", and the password input's current-password/new-password switching in LoginView.vue, the mock covers every auth.js import, and the lockfile and config changes are consistent.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.201893,
+  "numTurns": 3,
+  "durationMs": 19866,
+  "sessionId": "cbcb8318-0247-4add-8faa-94ce07c8537a"
+}

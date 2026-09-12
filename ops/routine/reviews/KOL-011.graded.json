@@ -1,0 +1,35 @@
+{
+  "item": "KOL-011",
+  "repo": "kol-emet",
+  "mergeSha": "008c194a60163826ba384d8580ad2e6ef8199e07",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-12T05:09:23.795Z",
+  "gradedAtUtc": "2026-09-12T05:16:04.718Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The diff only rewrites a comment, and the new one says outright that uniqueness is not enforced at the index; duplicate names in different workspaces are the intended per-workspace design, and `routes/relationshipTypes.js` already rejects exact-name duplicates within a workspace in application code."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review missed nothing real, because the change is accurate: the verify grep prints nothing and every doc claim matches `app.js`, `chat.js`, `aiProviders.js`, `mcp.js` and the tenancy tests. Its one finding was a high-confidence false positive that misread a comment-only change, and treated intended cross-workspace name reuse as a bug.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.297037,
+  "numTurns": 4,
+  "durationMs": 27415,
+  "sessionId": "f2d782d3-135a-4e93-989c-f95f06e3b8e4"
+}

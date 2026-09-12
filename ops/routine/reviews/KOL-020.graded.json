@@ -1,0 +1,71 @@
+{
+  "item": "KOL-020",
+  "repo": "kol-emet",
+  "mergeSha": "9233813234d556475e1fadba8dbcd73e73c3d347",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-12T05:09:23.795Z",
+  "gradedAtUtc": "2026-09-12T05:11:10.289Z",
+  "independent": [
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 156,
+      "severity": "medium",
+      "summary": "The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and data cannot drift apart. It only fires when a type is renamed or deleted, and /entities still checks category only against the hardcoded enum. So you can delete or rename an unused default type (the test itself deletes alice's Timeline with a 204), then create an entity with that category, and it succeeds with no registry entry behind it. The reverse also happens: created or renamed types that aren't enum values can't be used by any entity. The check also ignores RelationshipType.sourceCategory/targetCategory, which store category names too."
+    },
+    {
+      "file": "server/src/lib/workspaceSeeder.js",
+      "line": 60,
+      "severity": "low",
+      "summary": "seedEntityTypes now runs first inside seedWorkspace's single try block. If it throws, the relationship types (which the code comment says 'matter most') are skipped along with the starter content. Before this change, relationship types were seeded first, so this adds a new way for registration to leave a workspace with an empty relationship picker."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The case-insensitive unique index on {workspaceId, name} rejects the second concurrent insert, and the catch block turns E11000 into a 409, so no duplicate can be stored."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The seeder compares names in lower case, so an existing 'characters' makes it skip 'Characters' instead of inserting it, which the 'seedEntityTypes adds only what is missing' test pins."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "Keeping the other half on a partial colour update is intentional, commented and tested (line 167), and the half not sent keeps its stored value rather than becoming undefined."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "A case-only rename of the same type skips the clash check because it excludes the type's own id, and renaming onto another type's name in any casing is caught by sameName (409) and backed by the collated index."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "The seeding test does assert the Characters colours against the configured pair (line 133), and not checking all six is a coverage preference, not a test that claims something it doesn't check."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "All five local findings are false positives that describe problems the code already handles, and it missed the real gap between the documented 'no drift' promise and what the code does.",
+  "counts": {
+    "findings": 5,
+    "confirmed": 0,
+    "falsePositive": 5,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2
+  },
+  "costUsd": 0.8853530000000001,
+  "numTurns": 13,
+  "durationMs": 105881,
+  "sessionId": "37c2f7b7-3bcb-4314-b4d8-15c2786e9f21"
+}

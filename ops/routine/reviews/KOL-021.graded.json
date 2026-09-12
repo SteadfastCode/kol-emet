@@ -1,0 +1,54 @@
+{
+  "item": "KOL-021",
+  "repo": "kol-emet",
+  "mergeSha": "d5909a362c0e145957fe63903b8419c2b21e6639",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-12T05:09:23.795Z",
+  "gradedAtUtc": "2026-09-12T05:13:12.305Z",
+  "independent": [
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 240,
+      "severity": "low",
+      "summary": "On mobile portrait, the sidebar's Settings button sets `settingsOpen = true` along with `mobileTab = 'settings'`. When the user then leaves settings through the tab bar, `setMobileTab` changes only `mobileTab` and never clears `settingsOpen`, and there is no ✕ to press on mobile portrait. The flag stays set, so rotating the device to landscape, or anything else that stops the portrait query matching, brings up the full-screen settings/delete-account overlay the user had already closed."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The 409 text is a fixed preamble, but `memberships.value = err.memberships` feeds a `<ul class=\"delete-memberships\">` that lists each blocking workspace as `name (role)`, and the component test checks for \"Bob's world (editor)\"."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The diff adds `defineProps({ notice: { type: String, default: '' } })` to LoginView's script setup, so the prop is declared and the notice test mounts with it."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The route compares `email.trim().toLowerCase() !== user.email` against the session user's own record and answers 400 on a mismatch (tested as \"someone else's email\"), and the user is always the one resolved from the caller's session, so no request can reach another account."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All three local findings are false positives, each disproved by code in the diff (the rendered memberships list, the added defineProps and the server-side email check), and the review missed the one real, low-severity settings-overlay state bug.",
+  "counts": {
+    "findings": 3,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.7779275000000001,
+  "numTurns": 5,
+  "durationMs": 121982,
+  "sessionId": "0b7074fd-8a90-4109-b6de-4b4997608eb4"
+}

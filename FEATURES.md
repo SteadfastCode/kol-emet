@@ -17,6 +17,24 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-022) The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…**
+  Found by the grader of KOL-020 (medium, server/src/routes/entityTypes.js:156). The 'in use'
+  guard doesn't deliver the promise in the docs and decision log that the registry and data cannot
+  drift apart. It only fires when a type is renamed or deleted, and /entities still checks
+  category only against the hardcoded enum. So you can delete or rename an unused default type
+  (the test itself deletes alice's Timeline with a 204), then create an entity with that category,
+  and it succeeds with no registry entry behind it. The reverse also happens: created or renamed
+  types that aren't enum values can't be used by any entity. The check also ignores
+  RelationshipType.sourceCategory/targetCategory, which store category names too.
+- [ ] **(KOL-023) The second sweep only shrinks the concurrent-write window; it does not close it.**
+  Found by the grader of KOL-015 (medium, server/src/lib/accountDeleter.js:146). The second sweep
+  only shrinks the concurrent-write window; it does not close it. Any write that lands after it is
+  orphaned for good, because a re-run finds no workspaces left to sweep. The clearest case is chat
+  memory extraction, which runs in the background: it makes a slow LLM call and then does
+  UserMemory.insertMany({ userId }) (memoryExtractor.js:132). UserMemory is deleted once, after
+  the sweep, and never re-checked, so if a chat exchange finishes just before deletion, facts
+  about the user can be written after it. That leaves personal data belonging to a hard-deleted
+  account.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`

@@ -19,8 +19,38 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-013": {
+    "KOL-022": {
       "order": 2,
+      "title": "The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-023": {
+      "order": 3,
+      "title": "The second sweep only shrinks the concurrent-write window; it does not close it.",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-013": {
+      "order": 4,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -39,7 +69,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 3,
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -54,7 +84,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 4,
+      "order": 6,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -71,7 +101,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 5,
+      "order": 7,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -86,7 +116,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 6,
+      "order": 8,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -101,7 +131,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 7,
+      "order": 9,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -116,7 +146,7 @@
       "lastFail": null
     },
     "KOL-020": {
-      "order": 8,
+      "order": null,
       "title": "Phase 6 step 1: `EntityType` registry model + `/entity-types` routes",
       "status": "done",
       "attempts": 1,

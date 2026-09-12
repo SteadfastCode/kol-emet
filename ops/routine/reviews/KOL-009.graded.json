@@ -1,0 +1,40 @@
+{
+  "item": "KOL-009",
+  "repo": "kol-emet",
+  "mergeSha": "5c2efe5943051f599a196473b7f783566e956409",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-12T05:09:23.795Z",
+  "gradedAtUtc": "2026-09-12T05:18:05.580Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`assertScrubbed` recurses into every nested object and array and throws on any ObjectId object or 24-hex string at any depth, so a nested ObjectId would make `toJsonl` throw rather than leak (the test pushing `kind: 'drift'` shows a nested unmapped id in a payload tripping it), and line 486 is just the file's closing line."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The item only promises top-level `.strict()` rejection on the three kind schemas, and the tests check exactly that; members and blocks do silently strip unknown keys, but that behaviour lives in the existing validator, which this test-only change doesn't touch and never claims to cover, so it isn't a defect in these tests."
+    }
+  ],
+  "missed": [],
+  "summary": "I found no defects in these two test files; I couldn't run `yarn test` because the command wasn't approved, so they were checked by reading against the source only, and both local findings are generic, speculative gaps rather than failures that happen in this code.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.7156285,
+  "numTurns": 11,
+  "durationMs": 100948,
+  "sessionId": "9dda4be5-bdb0-44ca-9f7b-38301714c2ac"
+}
