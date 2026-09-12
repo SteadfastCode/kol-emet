@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import User from './User.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const messageSchema = new mongoose.Schema(
   {
@@ -20,5 +22,9 @@ const conversationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Account deletion removes conversations by userId. One created after that
+// deletes itself (lib/ownerGuard.js).
+conversationSchema.plugin(ownerGuard, { path: 'userId', owner: User });
 
 export default mongoose.model('Conversation', conversationSchema);

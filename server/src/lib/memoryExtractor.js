@@ -9,6 +9,7 @@ import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
 import { getCheapestExtractionModel } from './cheapModelFinder.js';
 import UserMemory from '../models/UserMemory.js';
 import { recordSpend } from './usageMeter.js';
+import { OwnerGoneError } from './ownerGuard.js';
 
 // ─── Tiered debug logging ─────────────────────────────────────────────────────
 // Extraction runs unattended after every exchange, so it needs to be
@@ -134,6 +135,12 @@ export async function extractAndSaveMemories(userId, conversationId, lastUserMsg
       log('normal', `facts: ${docs.map(d => d.fact).join(' | ')}`);
     }
   } catch (err) {
+    // Expected, not a failure: the account was deleted while the model call ran,
+    // and the insert removed itself.
+    if (err instanceof OwnerGoneError) {
+      log('light', `facts discarded: user ${userId} was deleted during extraction (source: owner guard on UserMemory)`);
+      return;
+    }
     console.error('[memoryExtractor] failed:', err.message);
   }
 }
