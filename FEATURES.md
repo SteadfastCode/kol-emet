@@ -17,7 +17,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-022) The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…**
+- [x] **(KOL-022) The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…**
   Found by the grader of KOL-020 (medium, server/src/routes/entityTypes.js:156). The 'in use'
   guard doesn't deliver the promise in the docs and decision log that the registry and data cannot
   drift apart. It only fires when a type is renamed or deleted, and /entities still checks
