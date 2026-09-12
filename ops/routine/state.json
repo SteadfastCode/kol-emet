@@ -22,17 +22,17 @@
     "KOL-022": {
       "order": 2,
       "title": "The 'in use' guard doesn't deliver the promise in the docs and decision log that the registry and…",
-      "status": "claimed",
+      "status": "pending",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-022",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
       "claimedAtUtc": "2026-09-12T05:18:09.846Z",
-      "runId": "2026-09-12T05:09:15.618Z",
-      "lastFail": null
+      "runId": null,
+      "lastFail": "abandoned"
     },
     "KOL-023": {
       "order": 3,
