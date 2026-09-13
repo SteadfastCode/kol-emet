@@ -4,7 +4,7 @@
     "KOL-024": {
       "order": 1,
       "title": "Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-024",

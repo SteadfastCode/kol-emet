@@ -8,23 +8,6 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [x] **(KOL-024) Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized**
-  `@simplewebauthn/server` 13 returns `registrationInfo.credential.id` as a base64url string, and
-  `POST /auth/webauthn/register/complete` stores `Buffer.from(credential.id).toString('base64url')`,
-  which encodes that string a second time. Every lookup compares against the browser's raw id —
-  `login/complete` (`passkeys.credentialID === req.body.id`), `login/begin`'s `allowCredentials`, and
-  the account-deletion confirmation (`/auth/account/passkey-challenge`, `DELETE /auth/account`) — so
-  a registered passkey is answered 401 "Passkey not recognized" on any device. Build: store
-  `credential.id` as-is; one helper that matches a stored value against a browser id in both the
-  correct and the legacy double-encoded form, used by all three paths; on a successful sign-in
-  against a legacy value, rewrite it to the correct form (a lazy migration — no production script);
-  send corrected ids in `allowCredentials`; pass `credential.id` to `verifyAuthenticationResponse` as
-  the base64url string its type expects, not a Buffer. Also store `createdAt`, `deviceType` and
-  `backedUp` from `registrationInfo`, which KOL-025 lists. Verify: unit tests for the helper and the
-  lazy rewrite (a legacy value matches once and is rewritten; a correct one matches untouched), and
-  the register → login lookup covered with the library's verify functions stubbed or the lookup
-  extracted into a tested function; `yarn test` green. PR `needs-human:` sign in with a passkey on a
-  real device after the deploy.
 - [ ] **(KOL-025) Passkeys on phones: add, list and remove passkeys from Settings** (needs KOL-024)
   The only way to add a passkey today is the one-time prompt right after signup (`LoginView.vue`,
   `step === 'passkey-prompt'`; `registerPasskey()` has no other caller). A passkey lives on the
@@ -81,6 +64,23 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-024) Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized** (routine 2026-09-13, 6bfc564)
+  `@simplewebauthn/server` 13 returns `registrationInfo.credential.id` as a base64url string, and
+  `POST /auth/webauthn/register/complete` stores `Buffer.from(credential.id).toString('base64url')`,
+  which encodes that string a second time. Every lookup compares against the browser's raw id —
+  `login/complete` (`passkeys.credentialID === req.body.id`), `login/begin`'s `allowCredentials`, and
+  the account-deletion confirmation (`/auth/account/passkey-challenge`, `DELETE /auth/account`) — so
+  a registered passkey is answered 401 "Passkey not recognized" on any device. Build: store
+  `credential.id` as-is; one helper that matches a stored value against a browser id in both the
+  correct and the legacy double-encoded form, used by all three paths; on a successful sign-in
+  against a legacy value, rewrite it to the correct form (a lazy migration — no production script);
+  send corrected ids in `allowCredentials`; pass `credential.id` to `verifyAuthenticationResponse` as
+  the base64url string its type expects, not a Buffer. Also store `createdAt`, `deviceType` and
+  `backedUp` from `registrationInfo`, which KOL-025 lists. Verify: unit tests for the helper and the
+  lazy rewrite (a legacy value matches once and is rewritten; a correct one matches untouched), and
+  the register → login lookup covered with the library's verify functions stubbed or the lookup
+  extracted into a tested function; `yarn test` green. PR `needs-human:` sign in with a passkey on a
+  real device after the deploy.
 - [x] **(KOL-023) The second sweep only shrinks the concurrent-write window; it does not close it.** (routine 2026-09-12, 9e9216a)
   Found by the grader of KOL-015 (medium, server/src/lib/accountDeleter.js:146). The second sweep
   only shrinks the concurrent-write window; it does not close it. Any write that lands after it is
