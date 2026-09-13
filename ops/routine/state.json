@@ -4,7 +4,7 @@
     "KOL-025": {
       "order": 1,
       "title": "Passkeys on phones: add, list and remove passkeys from Settings",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-025",
