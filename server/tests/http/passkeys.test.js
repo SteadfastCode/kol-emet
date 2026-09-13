@@ -25,6 +25,12 @@
  *   - Account deletion's passkey confirmation recognizes a legacy id too, and
  *     a real assertion deletes the account. This is the success path
  *     accountDeletion.test.js could not reach.
+ *   - Settings (KOL-025). GET /auth/webauthn/passkeys lists the caller's own
+ *     passkeys with what labels them, and no response carries a public key.
+ *     DELETE removes only the caller's own, in either stored form, and refuses
+ *     the last way into an account with no password. Both need a browser
+ *     session, not the bearer token. A sign-in records lastUsedAt and fills in
+ *     a legacy passkey's sync status.
  *
  * Falsification checks: re-encode `credential.id` in passkeyFromRegistration
  * (lib/passkeyIds.js) and the first test fails on the stored id and then a 401;
@@ -32,6 +38,11 @@
  * deletion tests fail (401 / 403); drop the rewrite in migrateCredentialId and
  * the legacy sign-in test fails on the stored id; offer stored ids unconverted
  * in credentialDescriptors and the authenticator refuses the legacy challenges.
+ * For Settings: answer with the stored passkeys instead of passkeySummary() and
+ * the public-key checks fail; drop the `$nor` condition on the removal and the
+ * passwordless test gets a 200; skip the flag update in recordUse and the
+ * legacy sync-status test fails; fall through to next() for a bearer token and
+ * the session test fails.
  *
  * Isolation: every test registers its own account under a unique email, for
  * the reasons at the top of tests/http/auth.test.js.
@@ -270,5 +281,128 @@ describe('DELETE /auth/account confirmed with a passkey', () => {
       .send({ email: t.email, passkey: authenticator.assert(challenge.body) }));
     assert.equal(res.status, 204, `deletion failed: ${res.status} ${JSON.stringify(res.body)}`);
     assert.equal(await User.countDocuments({ _id: t.userId }), 0, 'the account must be gone');
+  });
+});
+
+describe('passkey management from Settings', () => {
+  const SUMMARY_FIELDS = ['backedUp', 'createdAt', 'credentialID', 'deviceType', 'lastUsedAt'];
+
+  /** No response may carry a public key: not by name, and not as any field a summary does not list. */
+  function assertNoPublicKey(res) {
+    assert.ok(!/publickey/i.test(res.text), `a response named a public key: ${res.text}`);
+    for (const pk of res.body?.passkeys ?? []) assert.deepEqual(Object.keys(pk).sort(), SUMMARY_FIELDS);
+  }
+
+  const list = async (t) =>
+    called('GET /auth/webauthn/passkeys', await t.agent.get('/auth/webauthn/passkeys'));
+  const remove = async (t, id) =>
+    called(`DELETE /auth/webauthn/passkeys/${id}`, await t.agent.delete(`/auth/webauthn/passkeys/${encodeURIComponent(id)}`));
+  const summary = (res) => res.body.passkeys.map(pk => [pk.credentialID, pk.deviceType, pk.backedUp, pk.lastUsedAt]);
+
+  test("GET lists the caller's own passkeys with what labels them, and no public key", async () => {
+    const a = await tenant('manage-list-a');
+    const b = await tenant('manage-list-b');
+    const synced = device({ synced: true });
+    const bound = device({ synced: false });
+    await addPasskey(a, synced);
+    await addPasskey(a, bound);
+    await addPasskey(b, device());
+
+    const res = await list(a);
+    assert.equal(res.status, 200);
+    assertNoPublicKey(res);
+    assert.equal(res.body.hasPassword, true);
+    assert.deepEqual(summary(res), [[synced.id, 'multiDevice', true, null], [bound.id, 'singleDevice', false, null]],
+      "only this account's passkeys, in the order they were added");
+    assert.ok(!Number.isNaN(Date.parse(res.body.passkeys[0].createdAt)), 'createdAt must be a date');
+
+    const none = await list(await tenant('manage-list-none'));
+    assert.deepEqual(none.body, { passkeys: [], hasPassword: true });
+  });
+
+  test('both routes need a browser session: 401 without one, 403 for the bearer token', async () => {
+    const routes = [
+      ['GET', () => request(app).get('/auth/webauthn/passkeys')],
+      ['DELETE', () => request(app).delete('/auth/webauthn/passkeys/anything')],
+    ];
+    for (const [method, pending] of routes) {
+      assert.equal(called(`${method} (anonymous)`, await pending()).status, 401, method);
+    }
+    process.env.BEARER_TOKEN = 'test-bearer-token';
+    try {
+      for (const [method, pending] of routes) {
+        const res = called(`${method} (bearer)`, await pending().set('Authorization', 'Bearer test-bearer-token'));
+        assert.equal(res.status, 403, `${method}: a connector must not manage how an account signs in`);
+      }
+    } finally {
+      delete process.env.BEARER_TOKEN;
+    }
+  });
+
+  test('a sign-in records when it happened, and the sync status a legacy passkey never had', async () => {
+    const t = await tenant('manage-last-used');
+    const authenticator = device({ synced: true });
+    await addPasskey(t, authenticator);
+    await makeLegacy(t.userId, authenticator);
+    await User.updateOne({ _id: t.userId }, { $unset: { 'passkeys.0.deviceType': 1, 'passkeys.0.backedUp': 1 } });
+    log('light', `user ${t.userId}: passkey sync status unset (source: this test, standing in for a pre-KOL-024 registration)`);
+
+    const before = await list(t);
+    assertNoPublicKey(before);
+    assert.deepEqual(summary(before), [[authenticator.id, null, null, null]],
+      'a legacy passkey is listed by the id the browser knows, its sync status unknown');
+
+    const startedAt = Date.now();
+    assert.equal((await signIn(authenticator)).res.status, 200);
+
+    const [after] = (await list(t)).body.passkeys;
+    assert.equal(after.deviceType, 'multiDevice', 'the assertion fills in what registration never recorded');
+    assert.equal(after.backedUp, true);
+    assert.ok(Date.parse(after.lastUsedAt) >= startedAt, `lastUsedAt must be this sign-in, got ${after.lastUsedAt}`);
+  });
+
+  test("DELETE removes only the caller's own passkey, in either stored form", async () => {
+    const a = await tenant('manage-remove-a');
+    const b = await tenant('manage-remove-b');
+    const mine = device();
+    const theirs = device();
+    await addPasskey(a, mine);
+    await addPasskey(b, theirs);
+    await makeLegacy(a.userId, mine);
+
+    const refused = await remove(a, theirs.id);
+    assert.equal(refused.status, 404, "another account's passkey is not found, not removed");
+    assertNoPublicKey(refused);
+    assert.equal((await storedPasskeys(b.userId)).length, 1, "another account's passkey must survive");
+
+    const res = await remove(a, mine.id);
+    assert.equal(res.status, 200, `removal failed: ${res.status} ${JSON.stringify(res.body)}`);
+    assertNoPublicKey(res);
+    assert.deepEqual(res.body, { passkeys: [], hasPassword: true },
+      'an account with a password may remove its only passkey');
+    assert.equal((await storedPasskeys(a.userId)).length, 0);
+    assert.equal((await signIn(mine, a.email)).res.status, 401, 'a removed passkey must not sign in');
+    assert.equal((await remove(a, mine.id)).status, 404, 'removing it again is a 404');
+  });
+
+  test('DELETE refuses to remove the last way into an account with no password', async () => {
+    const t = await tenant('manage-passwordless');
+    const first = device();
+    const second = device();
+    await addPasskey(t, first);
+    await addPasskey(t, second);
+    // Every account has a password today. This rule is for the passwordless
+    // ones, so the hash is unset directly, past the schema.
+    await User.updateOne({ _id: t.userId }, { $unset: { passwordHash: 1 } });
+    log('light', `user ${t.userId}: password unset (source: this test, standing in for a passwordless account)`);
+    assert.equal((await list(t)).body.hasPassword, false);
+
+    const res = await remove(t, first.id);
+    assert.equal(res.status, 200, `with two passkeys, one may go: ${res.status} ${JSON.stringify(res.body)}`);
+    assert.deepEqual(res.body.passkeys.map(pk => pk.credentialID), [second.id]);
+
+    const refused = await remove(t, second.id);
+    assert.equal(refused.status, 409, `the last one must stay: ${refused.status} ${JSON.stringify(refused.body)}`);
+    assert.deepEqual((await storedPasskeys(t.userId)).map(pk => pk.credentialID), [second.id]);
   });
 });

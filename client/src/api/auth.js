@@ -1,4 +1,4 @@
-import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
+import { startRegistration, startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -33,9 +33,12 @@ export async function registerPasskey() {
   });
 }
 
+export const passkeysSupported = () => browserSupportsWebAuthn();
+
 /**
  * Like req(), but a refusal keeps the server's message and, on a 409, the
- * workspaces that blocked it — account deletion shows both to the user.
+ * workspaces that blocked it — account deletion shows both to the user, and
+ * passkey management shows the message.
  */
 async function accountReq(path, options) {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -61,6 +64,14 @@ export async function deleteAccountWithPasskey(email) {
   const passkey = await startAuthentication({ optionsJSON: options });
   return accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, passkey }) });
 }
+
+/** `{ passkeys, hasPassword }`: the signed-in user's passkeys, as Settings lists them. */
+export const listPasskeys = () =>
+  accountReq('/auth/webauthn/passkeys', { method: 'GET' });
+
+/** Removes one of the signed-in user's passkeys; answers the list as it now stands. */
+export const removePasskey = (credentialID) =>
+  accountReq(`/auth/webauthn/passkeys/${encodeURIComponent(credentialID)}`, { method: 'DELETE' });
 
 export async function loginWithPasskey(email) {
   const options = await req('/auth/webauthn/login/begin', {

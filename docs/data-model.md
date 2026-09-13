@@ -468,9 +468,10 @@ simultaneous runs would each pass the same budget check; this caps the overshoot
     publicKey:    Buffer,
     counter:      Number,
     transports:   [String],
-    deviceType:   String,   // 'singleDevice' | 'multiDevice', from registration
-    backedUp:     Boolean,  // from registration
+    deviceType:   String,   // 'singleDevice' | 'multiDevice', from registration, refreshed by each sign-in
+    backedUp:     Boolean,  // likewise
     createdAt:    Date,
+    lastUsedAt:   Date,     // the last verified assertion (sign-in, or confirming an account deletion)
   }],
   createdAt:    Date,
   updatedAt:    Date,
@@ -484,7 +485,10 @@ password login.
 registered before KOL-024 hold that id base64url-encoded a second time. Every lookup also accepts
 that legacy form, and the first successful sign-in with such a passkey rewrites it to the correct
 form ([`lib/passkeyIds.js`](../server/src/lib/passkeyIds.js)). Those older passkeys have no
-`deviceType` or `backedUp`, because registration never recorded them.
+`deviceType` or `backedUp` until their next sign-in, which records both from the assertion's flags.
+
+Settings → Passkeys lists, adds and removes a user's passkeys (KOL-025). An account with no password
+keeps at least one: removing its last passkey is refused.
 
 ---
 

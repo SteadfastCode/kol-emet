@@ -139,8 +139,10 @@ A foreign or malformed id is 404.
 | GET | `/auth/me` | Current session user |
 | DELETE | `/auth/account` | Hard-delete the signed-in account: the user, every workspace they solely own and everything in it ([`accountDeleter.js`](../server/src/lib/accountDeleter.js)). `requireActor`, session only; a bearer token is 403. Body `{ email, password }` or `{ email, passkey }`: the account's email as a typed confirmation, plus a fresh credential. 204 and the session is destroyed; 400 missing or mismatched email; 403 wrong password or failed passkey; 409 `{ error, memberships }` while the user belongs to a workspace they don't solely own, deleting nothing |
 | POST | `/auth/account/passkey-challenge` | WebAuthn challenge for confirming `DELETE /auth/account` with a passkey (`requireActor`, session only). One use, and kept apart from the sign-in challenge |
-| POST | `/auth/webauthn/register/begin` · `/complete` | Add a passkey (`requireAuth`) |
-| POST | `/auth/webauthn/login/begin` · `/complete` | Passwordless login via passkey |
+| POST | `/auth/webauthn/register/begin` · `/complete` | Add a passkey (`requireAuth`): the prompt after signup, and Settings → Passkeys |
+| GET | `/auth/webauthn/passkeys` | The signed-in user's passkeys, for Settings: `{ passkeys: [{ credentialID, deviceType, backedUp, createdAt, lastUsedAt }], hasPassword }`. `requireAuth`, session only; a bearer token is 403. Never includes a public key |
+| DELETE | `/auth/webauthn/passkeys/:credentialID` | Remove one of the signed-in user's own passkeys (`requireAuth`, session only). Answers the list as it now stands; 404 when this account holds no such passkey, another account's included; 409 when it is the last way into an account with no password |
+| POST | `/auth/webauthn/login/begin` · `/complete` | Passwordless login via passkey. With an email or without one (discoverable credentials). Records the passkey's `lastUsedAt` and sync status |
 
 ## AI chat
 

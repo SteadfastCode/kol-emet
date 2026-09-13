@@ -32,11 +32,14 @@
  * ids only, never an email. Credential ids are public identifiers, not
  * secrets, but they still appear only at verbose, and only their first
  * characters.
- *   light   — every change to a stored passkey (added, or rewritten from the
- *             legacy form), each naming the request that made it
+ *   light   — every change to a stored passkey (added, removed, rewritten from
+ *             the legacy form, or its sync status changed), each naming the
+ *             request that made it
  *   normal  — light, plus every sign-in lookup: recognized (and in which
- *             form), not recognized, or refused by verification
- *   verbose — normal, plus the credential ids looked up and offered
+ *             form), not recognized, or refused by verification; and every
+ *             refused removal
+ *   verbose — normal, plus the credential ids looked up, offered and removed,
+ *             and each listing
  */
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
@@ -107,6 +110,37 @@ export function browserCredentialId(stored) {
 /** `allowCredentials` / `excludeCredentials` entries for `passkeys`, in the form the browser matches on. */
 export function credentialDescriptors(passkeys) {
   return (passkeys ?? []).map(pk => ({ id: browserCredentialId(pk.credentialID), transports: pk.transports }));
+}
+
+/**
+ * Records a verified assertion on the passkey that made it: its counter, when
+ * it was used, and the backup state the authenticator reports now. That state
+ * fills in passkeys registered before KOL-024 recorded it, and follows one
+ * that has since been synced. The caller saves the user.
+ */
+export function recordUse(passkey, authenticationInfo, { userId, source }) {
+  const { newCounter, credentialDeviceType, credentialBackedUp } = authenticationInfo;
+  passkey.counter = newCounter;
+  passkey.lastUsedAt = new Date();
+  if (passkey.deviceType === credentialDeviceType && passkey.backedUp === credentialBackedUp) return;
+  logPasskey('light', `user ${userId}: passkey sync status ${passkey.deviceType ?? 'unrecorded'}${passkey.backedUp ? ', backed up' : ''} → ${credentialDeviceType}${credentialBackedUp ? ', backed up' : ''} (source: ${source})`);
+  passkey.deviceType = credentialDeviceType;
+  passkey.backedUp = credentialBackedUp;
+}
+
+/**
+ * What Settings shows of a passkey, by the id the browser knows it by. A list
+ * of fields rather than the stored document minus some, so a field added to
+ * the schema later, like the public key now, stays on the server.
+ */
+export function passkeySummary(passkey) {
+  return {
+    credentialID: browserCredentialId(passkey.credentialID),
+    deviceType: passkey.deviceType ?? null,
+    backedUp: passkey.backedUp ?? null,
+    createdAt: passkey.createdAt ?? null,
+    lastUsedAt: passkey.lastUsedAt ?? null,
+  };
 }
 
 /** The `credential` verifyAuthenticationResponse takes for `passkey`, which the browser calls `browserId`. */

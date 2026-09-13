@@ -112,6 +112,11 @@
           <div class="settings-group-title">Account</div>
           <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
         </div>
+        <div class="settings-group">
+          <div class="settings-group-title">Passkeys</div>
+          <!-- Mounted only while settings shows: fetched fresh on each open, never on page load. -->
+          <PasskeySettings v-if="settingsVisible" />
+        </div>
         <!-- Last on purpose: the irreversible action sits at the bottom of settings. -->
         <div class="settings-group">
           <div class="settings-group-title">Delete account</div>
@@ -182,6 +187,7 @@ import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
 import GeneratorOverlay from './generator/GeneratorOverlay.vue';
 import AccountDeletion from './AccountDeletion.vue';
+import PasskeySettings from './PasskeySettings.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -235,6 +241,7 @@ const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
 // The settings overlay. On mobile portrait, settings is the 'settings' tab
 // instead, and this class has no effect there (see the styles).
 const settingsOpen = ref(false);
+const settingsVisible = computed(() => settingsOpen.value || mobileTab.value === 'settings');
 
 function setMobileTab(tab) {
   if (tab === 'detail' && !activePanelId.value) return;
