@@ -21,11 +21,11 @@
  * the 409 test fails on its status; drop refusedBearer() and the bearer test
  * deletes the account.
  *
- * Not covered: a *successful* passkey confirmation, which needs a real
- * authenticator signing a real assertion (see auth.test.js on WebAuthn). The
- * refusals around it are covered, since they are where a mistake deletes an
- * account. They all answer the same 403; the route's light-tier log line says
- * which check refused.
+ * A *successful* passkey confirmation needs an authenticator signing a real
+ * assertion, so it lives in tests/http/passkeys.test.js with the software
+ * authenticator. The refusals around it are covered here, since they are where
+ * a mistake deletes an account. They all answer the same 403; the route's
+ * light-tier log line says which check refused.
  *
  * Isolation: every test registers its own users under unique emails and diffs
  * the whole database around its own request, so tests neither clear the

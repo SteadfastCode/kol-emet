@@ -1,10 +1,12 @@
 import mongoose from 'mongoose';
 
 const passkeySchema = new mongoose.Schema({
-  credentialID: { type: String, required: true },   // base64url string for querying
+  credentialID: { type: String, required: true },   // base64url, exactly the id the browser sends (see lib/passkeyIds.js)
   publicKey: { type: Buffer, required: true },
   counter: { type: Number, required: true, default: 0 },
   transports: [String],
+  deviceType: String,   // 'singleDevice' | 'multiDevice' from registration; unset on passkeys added before KOL-024
+  backedUp: Boolean,    // from registration; likewise
   createdAt: { type: Date, default: Date.now },
 });
 

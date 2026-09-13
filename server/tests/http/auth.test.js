@@ -46,10 +46,10 @@
  * `req.session.destroy()` for a bare `res.clearCookie()` and the logout test
  * fails on the replayed cookie.
  *
- * Deliberately not covered: the WebAuthn ceremonies. Registering or asserting a
- * passkey needs a browser authenticator (or a software one signing real
- * attestation objects); faking it would test the mock. `/auth/webauthn/*` is
- * therefore untested here and should be marked so in any coverage discussion.
+ * Not here: the WebAuthn ceremonies. `/auth/webauthn/*` is covered in
+ * tests/http/passkeys.test.js, driven by a software authenticator
+ * (tests/helpers/softAuthenticator.js) that signs real attestation and
+ * assertion objects, so the library's own verification runs unstubbed.
  *
  * ─── Two gaps this file documents rather than asserts ────────────────────────
  * Both are real, both are in `src/routes/auth.js`, and fixing either is an auth
