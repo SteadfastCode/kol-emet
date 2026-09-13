@@ -6,8 +6,9 @@ const passkeySchema = new mongoose.Schema({
   counter: { type: Number, required: true, default: 0 },
   transports: [String],
   deviceType: String,   // 'singleDevice' | 'multiDevice' from registration; unset on passkeys added before KOL-024
-  backedUp: Boolean,    // from registration; likewise
+  backedUp: Boolean,    // from registration, refreshed by each sign-in; likewise
   createdAt: { type: Date, default: Date.now },
+  lastUsedAt: Date,     // the last verified assertion; unset until the first one after KOL-025
 });
 
 const userSchema = new mongoose.Schema({
