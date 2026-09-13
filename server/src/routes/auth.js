@@ -11,12 +11,26 @@ import Workspace from '../models/Workspace.js';
 import { requireAuth, requireActor } from '../middleware/auth.js';
 import { seedWorkspace } from '../lib/workspaceSeeder.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
+import {
+  credentialDescriptors,
+  credentialIdQuery,
+  findPasskey,
+  logPasskey,
+  migrateCredentialId,
+  passkeyFromRegistration,
+  shortId,
+  webAuthnCredential,
+} from '../lib/passkeyIds.js';
 
 const router = Router();
 
 const RP_NAME = process.env.WEBAUTHN_RP_NAME ?? 'Kol Emet';
 const RP_ID   = process.env.WEBAUTHN_RP_ID   ?? 'localhost';
 const ORIGIN  = process.env.WEBAUTHN_ORIGIN  ?? 'http://localhost:5173';
+
+// Named in every passkey log line (PASSKEY_LOG_LEVEL, see lib/passkeyIds.js).
+const REGISTER_SOURCE = 'POST /auth/webauthn/register/complete';
+const LOGIN_SOURCE    = 'POST /auth/webauthn/login/complete';
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
@@ -112,10 +126,7 @@ router.post('/webauthn/register/begin', requireAuth, async (req, res) => {
     userName: user.email,
     userDisplayName: user.email,
     attestationType: 'none',
-    excludeCredentials: user.passkeys.map(pk => ({
-      id: pk.credentialID,
-      transports: pk.transports,
-    })),
+    excludeCredentials: credentialDescriptors(user.passkeys),
     authenticatorSelection: {
       residentKey: 'preferred',
       userVerification: 'preferred',
@@ -151,14 +162,11 @@ router.post('/webauthn/register/complete', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Passkey verification failed' });
   }
 
-  const { credential } = verification.registrationInfo;
-  user.passkeys.push({
-    credentialID: Buffer.from(credential.id).toString('base64url'),
-    publicKey: Buffer.from(credential.publicKey),
-    counter: credential.counter,
-    transports: credential.transports ?? [],
-  });
+  const passkey = passkeyFromRegistration(verification.registrationInfo);
+  user.passkeys.push(passkey);
   await user.save();
+  logPasskey('light', `user ${user._id}: passkey added, ${passkey.deviceType}${passkey.backedUp ? ', backed up' : ''} (source: ${REGISTER_SOURCE})`);
+  logPasskey('verbose', `user ${user._id}: the added passkey is credential ${shortId(passkey.credentialID)}`);
 
   res.json({ ok: true });
 });
@@ -171,10 +179,8 @@ router.post('/webauthn/login/begin', async (req, res) => {
   if (email) {
     const user = await User.findOne({ email });
     if (user) {
-      allowCredentials = user.passkeys.map(pk => ({
-        id: pk.credentialID,
-        transports: pk.transports,
-      }));
+      allowCredentials = credentialDescriptors(user.passkeys);
+      logPasskey('verbose', `sign-in challenge for user ${user._id} offers ${allowCredentials.map(c => shortId(c.id)).join(', ') || 'no passkeys'} (source: POST /auth/webauthn/login/begin)`);
     }
   }
 
@@ -193,10 +199,16 @@ router.post('/webauthn/login/complete', async (req, res) => {
   const expectedChallenge = req.session.currentChallenge;
   delete req.session.currentChallenge;
 
-  const user = await User.findOne({ 'passkeys.credentialID': req.body.id });
-  if (!user) return res.status(401).json({ error: 'Passkey not recognized' });
-
-  const passkey = user.passkeys.find(pk => pk.credentialID === req.body.id);
+  // The browser's id, matched against both stored forms. Anything but a
+  // non-empty string names no credential and must not reach the query.
+  const browserId = typeof req.body?.id === 'string' ? req.body.id : '';
+  logPasskey('verbose', `sign-in lookup for credential ${shortId(browserId)} (source: ${LOGIN_SOURCE})`);
+  const user = browserId ? await User.findOne(credentialIdQuery(browserId)) : null;
+  const found = user && findPasskey(user.passkeys, browserId);
+  if (!found) {
+    logPasskey('normal', `passkey sign-in refused: no account holds the credential (source: ${LOGIN_SOURCE})`);
+    return res.status(401).json({ error: 'Passkey not recognized' });
+  }
 
   let verification;
   try {
@@ -205,23 +217,22 @@ router.post('/webauthn/login/complete', async (req, res) => {
       expectedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
-      credential: {
-        id: Buffer.from(passkey.credentialID, 'base64url'),
-        publicKey: new Uint8Array(passkey.publicKey),
-        counter: passkey.counter,
-        transports: passkey.transports,
-      },
+      credential: webAuthnCredential(found.passkey, browserId),
       requireUserVerification: false,
     });
   } catch (err) {
+    logPasskey('normal', `passkey sign-in refused for user ${user._id}: ${err.message} (source: ${LOGIN_SOURCE})`);
     return res.status(400).json({ error: err.message });
   }
 
   if (!verification.verified) {
+    logPasskey('normal', `passkey sign-in refused for user ${user._id}: the assertion did not verify (source: ${LOGIN_SOURCE})`);
     return res.status(401).json({ error: 'Passkey authentication failed' });
   }
 
-  passkey.counter = verification.authenticationInfo.newCounter;
+  logPasskey('normal', `passkey sign-in for user ${user._id}, stored id in the ${found.legacy ? 'legacy' : 'current'} form (source: ${LOGIN_SOURCE})`);
+  found.passkey.counter = verification.authenticationInfo.newCounter;
+  migrateCredentialId(found, browserId, { userId: user._id, source: LOGIN_SOURCE });
   await user.save();
 
   req.session.regenerate((err) => {
@@ -276,8 +287,8 @@ async function passkeyRefusal(req, user, response) {
   delete req.session.accountDeleteChallenge;
   if (!expectedChallenge) return 'no passkey challenge was issued to this session';
 
-  const passkey = user.passkeys.find(pk => pk.credentialID === response.id);
-  if (!passkey) return 'the passkey is not registered to this account';
+  const found = findPasskey(user.passkeys, response.id);
+  if (!found) return 'the passkey is not registered to this account';
 
   try {
     const verification = await verifyAuthenticationResponse({
@@ -285,18 +296,15 @@ async function passkeyRefusal(req, user, response) {
       expectedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
-      credential: {
-        id: passkey.credentialID,
-        publicKey: new Uint8Array(passkey.publicKey),
-        counter: passkey.counter,
-        transports: passkey.transports,
-      },
+      credential: webAuthnCredential(found.passkey, response.id),
       requireUserVerification: false,
     });
     if (!verification.verified) return 'the passkey assertion did not verify';
-    // Kept current even though a success usually deletes the user: a 409
-    // refusal leaves the account, and its passkey, in place.
-    passkey.counter = verification.authenticationInfo.newCounter;
+    // The counter kept current, and a legacy id repaired, even though a success
+    // usually deletes the user: a 409 refusal leaves the account, and its
+    // passkey, in place.
+    found.passkey.counter = verification.authenticationInfo.newCounter;
+    migrateCredentialId(found, response.id, { userId: user._id, source: DELETE_SOURCE });
     await user.save();
     return null;
   } catch (err) {
@@ -313,7 +321,7 @@ router.post('/account/passkey-challenge', requireActor, async (req, res) => {
 
     const options = await generateAuthenticationOptions({
       rpID: RP_ID,
-      allowCredentials: user.passkeys.map(pk => ({ id: pk.credentialID, transports: pk.transports })),
+      allowCredentials: credentialDescriptors(user.passkeys),
       userVerification: 'preferred',
     });
     // Its own key, not currentChallenge: a challenge minted to sign in must not

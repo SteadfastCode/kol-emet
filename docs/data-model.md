@@ -464,10 +464,12 @@ simultaneous runs would each pass the same budget check; this caps the overshoot
   email:        String,   // required, unique, lowercased, trimmed
   passwordHash: String,   // required — bcrypt, 12 rounds
   passkeys: [{
-    credentialID: String,   // base64url, for querying
+    credentialID: String,   // base64url, exactly the id the browser sends
     publicKey:    Buffer,
     counter:      Number,
     transports:   [String],
+    deviceType:   String,   // 'singleDevice' | 'multiDevice', from registration
+    backedUp:     Boolean,  // from registration
     createdAt:    Date,
   }],
   createdAt:    Date,
@@ -477,6 +479,12 @@ simultaneous runs would each pass the same budget check; this caps the overshoot
 
 Registration is **open** — anyone can create an account. Passkeys (WebAuthn) are supported alongside
 password login.
+
+`credentialID` is stored as the browser's own base64url id and compared with `===`. Passkeys
+registered before KOL-024 hold that id base64url-encoded a second time. Every lookup also accepts
+that legacy form, and the first successful sign-in with such a passkey rewrites it to the correct
+form ([`lib/passkeyIds.js`](../server/src/lib/passkeyIds.js)). Those older passkeys have no
+`deviceType` or `backedUp`, because registration never recorded them.
 
 ---
 
