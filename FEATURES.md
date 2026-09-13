@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-025) Passkeys on phones: add, list and remove passkeys from Settings** (needs KOL-024)
+- [x] **(KOL-025) Passkeys on phones: add, list and remove passkeys from Settings** (needs KOL-024)
   The only way to add a passkey today is the one-time prompt right after signup (`LoginView.vue`,
   `step === 'passkey-prompt'`; `registerPasskey()` has no other caller). A passkey lives on the
   device or password manager that made it, so an account created on a desktop can never get one

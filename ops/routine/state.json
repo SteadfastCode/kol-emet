@@ -1,29 +1,13 @@
 {
   "version": 1,
   "items": {
-    "KOL-024": {
+    "KOL-025": {
       "order": 1,
-      "title": "Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized",
-      "status": "done",
+      "title": "Passkeys on phones: add, list and remove passkeys from Settings",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-024",
-      "dependsOn": [],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-09-13T07:15:06.357Z",
-      "runId": "2026-09-13T07:07:17.804Z",
-      "lastFail": null
-    },
-    "KOL-025": {
-      "order": 2,
-      "title": "Passkeys on phones: add, list and remove passkeys from Settings",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-025",
       "dependsOn": [
         "KOL-024"
       ],
@@ -31,12 +15,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-13T07:32:05.827Z",
+      "runId": "2026-09-13T07:07:17.804Z",
       "lastFail": null
     },
     "KOL-012": {
-      "order": 3,
+      "order": 2,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -55,7 +39,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 4,
+      "order": 3,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -75,7 +59,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 5,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -91,7 +75,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 6,
+      "order": 5,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -109,7 +93,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 7,
+      "order": 6,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -125,7 +109,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -141,7 +125,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -154,6 +138,22 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-024": {
+      "order": null,
+      "title": "Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-024",
+      "dependsOn": [],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-13T07:15:06.357Z",
+      "runId": "2026-09-13T07:07:17.804Z",
       "lastFail": null
     },
     "KOL-023": {
