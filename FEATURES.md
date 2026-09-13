@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-024) Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized**
+- [x] **(KOL-024) Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized**
   `@simplewebauthn/server` 13 returns `registrationInfo.credential.id` as a base64url string, and
   `POST /auth/webauthn/register/complete` stores `Buffer.from(credential.id).toString('base64url')`,
   which encodes that string a second time. Every lookup compares against the browser's raw id —

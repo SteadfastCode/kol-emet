@@ -4,16 +4,17 @@
     "KOL-024": {
       "order": 1,
       "title": "Passkey sign-in: credential IDs are stored double-encoded, so no passkey is ever recognized",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-024",
       "dependsOn": [],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
-      "claimedAtUtc": null,
-      "runId": null,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-13T07:15:06.357Z",
+      "runId": "2026-09-13T07:07:17.804Z",
       "lastFail": null
     },
     "KOL-025": {
@@ -29,6 +30,7 @@
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -47,6 +49,7 @@
       "needsHuman": true,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -66,6 +69,7 @@
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -81,6 +85,7 @@
       "needsHuman": true,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -98,6 +103,7 @@
       "needsHuman": true,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -113,6 +119,7 @@
       "needsHuman": true,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -128,6 +135,7 @@
       "needsHuman": true,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -143,6 +151,7 @@
       "needsHuman": true,
       "distribute": null,
       "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
