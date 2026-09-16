@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 /**
  * The per-workspace registry of entity types — Phase 6 step 1.
@@ -45,5 +47,9 @@ entityTypeSchema.index(
   { workspaceId: 1, name: 1 },
   { unique: true, collation: { locale: 'en', strength: 2 } }
 );
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+entityTypeSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('EntityType', entityTypeSchema);

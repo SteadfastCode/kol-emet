@@ -163,7 +163,9 @@ describe('seeding', () => {
   });
 
   test('seedEntityTypes adds only what is missing, so a re-run never duplicates', async () => {
-    const workspaceId = new mongoose.Types.ObjectId();
+    // A real workspace: content written under an id with no workspace behind it
+    // is discarded by the owner guard (lib/ownerGuard.js).
+    const { _id: workspaceId } = await Workspace.create({ name: 'Seeding', ownerId: new mongoose.Types.ObjectId() });
     await EntityType.create({ name: 'characters', workspaceId }); // a user's own, differently cased
 
     const wouldAdd = await seedEntityTypes(workspaceId, undefined, { apply: false });

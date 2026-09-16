@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const openQuestionSchema = new mongoose.Schema(
   {
@@ -9,5 +11,9 @@ const openQuestionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+openQuestionSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('OpenQuestion', openQuestionSchema);

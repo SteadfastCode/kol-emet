@@ -33,13 +33,12 @@
  *
  * Writes that race the deletion: each owner is deleted before its data gets a
  * final sweep. Content is swept once the workspaces are gone, and UserMemory and
- * Conversation once the User is gone. For those two user-keyed models that
- * closes the window, because they look up their owner after every insert
- * (lib/ownerGuard.js). An insert before the final sweep gets swept, and one
- * after it finds no user and deletes itself. Workspace-scoped models have no
- * such check yet, so for them the second sweep only narrows the window. A
- * request that resolved the workspace before it was deleted can still insert
- * after the sweep, and that row is left behind.
+ * Conversation once the User is gone. That closes the window because every one
+ * of those models looks up its owner after each insert (lib/ownerGuard.js):
+ * content its workspace, UserMemory and Conversation their user. An insert
+ * before the final sweep gets swept. One after it finds no owner and deletes
+ * itself. So a request that resolved the workspace before it was deleted
+ * cannot leave a row behind, whenever its insert lands.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * ACCOUNT_DELETE_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -68,7 +67,10 @@ import Draft from '../models/Draft.js';
 import Conversation from '../models/Conversation.js';
 import ChangeLog from '../models/ChangeLog.js';
 
-/** Every model whose documents carry workspaceId. A new one must be added here. */
+/**
+ * Every model whose documents carry workspaceId. A new one must be added here,
+ * and must carry ownerGuard on workspaceId (the tests check both).
+ */
 export const WORKSPACE_SCOPED_MODELS = [
   Entity,
   RelationshipGroup,
