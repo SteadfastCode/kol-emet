@@ -17,13 +17,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-026) The race is only fixed for UserMemory and Conversation.**
-  Found by the grader of KOL-023 (medium, server/src/lib/accountDeleter.js:36). The race is only
-  fixed for UserMemory and Conversation. Workspace-scoped models (entities, relationship groups,
-  open questions and the rest) have no owner guard. A request that looked up its workspace before
-  deletion can still insert after the final content sweep, and that row stays forever because a
-  re-run finds no workspaces left. The item's defect stays open for all workspace content; the
-  diff says so and defers it.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
@@ -56,6 +49,13 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-026) The race is only fixed for UserMemory and Conversation.** (routine 2026-09-16, 8478f74)
+  Found by the grader of KOL-023 (medium, server/src/lib/accountDeleter.js:36). The race is only
+  fixed for UserMemory and Conversation. Workspace-scoped models (entities, relationship groups,
+  open questions and the rest) have no owner guard. A request that looked up its workspace before
+  deletion can still insert after the final content sweep, and that row stays forever because a
+  re-run finds no workspaces left. The item's defect stays open for all workspace content; the
+  diff says so and defers it.
 - [x] **(KOL-025) Passkeys on phones: add, list and remove passkeys from Settings** (needs KOL-024) (routine 2026-09-13, b1ae9c6)
   The only way to add a passkey today is the one-time prompt right after signup (`LoginView.vue`,
   `step === 'passkey-prompt'`; `registerPasskey()` has no other caller). A passkey lives on the
