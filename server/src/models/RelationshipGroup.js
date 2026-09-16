@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const memberSchema = new mongoose.Schema({
   refId:    { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -16,5 +18,9 @@ const relationshipGroupSchema = new mongoose.Schema({
 }, { timestamps: false });
 
 relationshipGroupSchema.index({ 'members.refId': 1 });
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+relationshipGroupSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('RelationshipGroup', relationshipGroupSchema);

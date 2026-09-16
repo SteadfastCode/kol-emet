@@ -18,18 +18,27 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 
 import * as db from '../helpers/db.js';
-import Entity, { BLOCK_TYPES } from '../../src/models/Entity.js';
-import EntityType from '../../src/models/EntityType.js';
 import { CATEGORIES } from '../../src/config/categories.js';
 
 // Workspace reads AI_TRIAL_GRANT_MICROS once, when the schema is built at
 // module load, so the environment has to be in place before the import — hence
-// the dynamic import here rather than a static one at the top of the file. The
-// value is deliberately not the production default, so a test that passed by
-// coincidence would show up as a mismatch.
+// the dynamic imports here rather than static ones at the top of the file.
+// Entity and EntityType import Workspace too (their owner guard), so they wait
+// as well. The value is deliberately not the production default, so a test that
+// passed by coincidence would show up as a mismatch.
 const TRIAL_GRANT_MICROS = 1_234_567;
 process.env.AI_TRIAL_GRANT_MICROS = String(TRIAL_GRANT_MICROS);
 const { default: Workspace } = await import('../../src/models/Workspace.js');
+const { default: Entity, BLOCK_TYPES } = await import('../../src/models/Entity.js');
+const { default: EntityType } = await import('../../src/models/EntityType.js');
+
+/**
+ * The id of a real workspace. Content written under an id with no workspace
+ * behind it is discarded by the owner guard (lib/ownerGuard.js).
+ */
+async function newWorkspaceId() {
+  return (await Workspace.create({ name: 'Fixture', ownerId: new mongoose.Types.ObjectId() }))._id;
+}
 
 /** A valid entity, for tests that vary exactly one field away from valid. */
 function validEntity(overrides = {}) {
@@ -69,15 +78,15 @@ describe('Entity.category', () => {
 
 describe('Entity.category against the workspace registry', () => {
   test('a workspace with no types yet is held to the enum alone', async () => {
-    const workspaceId = new mongoose.Types.ObjectId();
+    const workspaceId = await newWorkspaceId();
     const entity = await Entity.create(validEntity({ workspaceId, category: 'Timeline' }));
     assert.equal(entity.category, 'Timeline');
   });
 
   test('once a workspace has types, a category must be one of them, on create and on update', async () => {
-    const workspaceId = new mongoose.Types.ObjectId();
+    const workspaceId = await newWorkspaceId();
     await EntityType.create({ name: 'Worlds', workspaceId });
-    await EntityType.create({ name: 'Timeline', workspaceId: new mongoose.Types.ObjectId() }); // someone else's
+    await EntityType.create({ name: 'Timeline', workspaceId: await newWorkspaceId() }); // someone else's
 
     const entity = await Entity.create(validEntity({ workspaceId }));
     const isRegistryRefusal = (err) => {
@@ -97,7 +106,7 @@ describe('Entity.category against the workspace registry', () => {
   });
 
   test('an update whose filter names no workspace is refused, not waved through', async () => {
-    const workspaceId = new mongoose.Types.ObjectId();
+    const workspaceId = await newWorkspaceId();
     await EntityType.create({ name: 'Worlds', workspaceId });
     await EntityType.create({ name: 'Timeline', workspaceId });
     const entity = await Entity.create(validEntity({ workspaceId }));

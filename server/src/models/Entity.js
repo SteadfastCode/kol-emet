@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { CATEGORIES } from '../config/categories.js';
 import { categoryValidator } from '../lib/entityTypeRegistry.js';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
 
@@ -35,6 +37,10 @@ const entitySchema = new mongoose.Schema(
 // looks entities up by (workspace, title). This schema declared no indexes at
 // all, unlike RelationshipGroup, OpenQuestion and ChangeLog.
 entitySchema.index({ workspaceId: 1, title: 1 });
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+entitySchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export { BLOCK_TYPES };
 export default mongoose.model('Entity', entitySchema, 'entities');

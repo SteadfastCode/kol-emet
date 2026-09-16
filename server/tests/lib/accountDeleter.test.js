@@ -57,10 +57,11 @@ async function seedTenant(label) {
   });
   const workspaceId = workspace._id;
 
+  // The type first, so the entity's category is registered in its workspace.
+  await EntityType.create({ name: 'Worlds', workspaceId });
   const entity = await Entity.create({ title: `${label} entity`, category: 'Worlds', summary: 'fixture', workspaceId });
   await RelationshipGroup.create({ workspaceId, members: [{ refId: entity._id, refModel: 'Entity' }] });
   await RelationshipType.create({ name: `${label} ally`, workspaceId });
-  await EntityType.create({ name: `${label} vehicles`, workspaceId });
   await OpenQuestion.create({ question: `Who is ${label}?`, entry_ids: [entity._id], workspaceId });
   await Draft.create({ workspaceId, createdBy: user._id, title: `${label} draft` });
   await Conversation.create({ workspaceId, userId: user._id, provider: 'test', model: 'test' });
@@ -289,5 +290,107 @@ describe('user-keyed writes that race the deletion', () => {
     assert.equal(result.deleted.UserMemory, 3, 'the seeded memory and both late ones');
     assert.equal(result.deleted.Conversation, 3, 'both seeded chats and the late one');
     assert.deepEqual(await snapshot(), without(before, a));
+  });
+});
+
+describe('workspace-scoped writes that race the deletion', () => {
+  /**
+   * A valid document for each workspace-scoped model, as a request that
+   * resolved `workspaceId` before the deletion goes on to write it. `writerId`
+   * is the member making the write.
+   */
+  const lateContent = {
+    Entity: (workspaceId) => ({ title: 'late entity', category: 'Worlds', summary: 'late', workspaceId }),
+    RelationshipGroup: (workspaceId) => ({ workspaceId, members: [] }),
+    RelationshipType: (workspaceId) => ({ name: 'late ally', workspaceId }),
+    EntityType: (workspaceId) => ({ name: 'Timeline', workspaceId }),
+    OpenQuestion: (workspaceId) => ({ question: 'Who wrote this late?', workspaceId }),
+    Draft: (workspaceId, writerId) => ({ workspaceId, createdBy: writerId, title: 'late draft' }),
+    Conversation: (workspaceId, writerId) => ({ workspaceId, userId: writerId, provider: 'test', model: 'test' }),
+    ChangeLog: (workspaceId, writerId) => ({
+      workspaceId,
+      entityId: new mongoose.Types.ObjectId(),
+      entityTitle: 'late entity',
+      changeType: 'created',
+      actorId: writerId,
+      actorType: 'user',
+      actorLabel: 'late',
+    }),
+  };
+
+  function lateDoc(model, a, b) {
+    const make = lateContent[model.modelName];
+    assert.ok(make, `fixture gap: no late ${model.modelName} to write`);
+    return make(a.workspace._id, b.user._id);
+  }
+
+  /**
+   * Tenant A about to be deleted, with tenant B editing in A's workspace. B's
+   * account survives A's deletion, so a write B makes there can only be caught
+   * by its workspace, never by its user.
+   */
+  async function seedSharedWorkspace() {
+    const a = await seedTenant('a');
+    const b = await seedTenant('b');
+    await Workspace.updateOne({ _id: a.workspace._id }, { $push: { members: { userId: b.user._id, role: 'editor' } } });
+    return { a, b, before: await snapshot() };
+  }
+
+  for (const model of WORKSPACE_SCOPED_MODELS) {
+    for (const [how, driverMethod] of [['create', 'insertOne'], ['insertMany', 'insertMany']]) {
+      test(`${model.modelName}.${how} landing after its workspace is gone deletes itself`, async (t) => {
+        const { a, b, before } = await seedSharedWorkspace();
+
+        // The write validates while the workspace still exists, then the whole
+        // deletion runs before the insert reaches the database. That is the
+        // ordering the final sweep cannot see.
+        const { collection } = model;
+        const insert = collection[driverMethod].bind(collection);
+        let deleted = false;
+        t.mock.method(collection, driverMethod, async (...args) => {
+          if (!deleted) {
+            deleted = true;
+            assert.equal((await deleteAccount(a.user._id)).ok, true);
+          }
+          return insert(...args);
+        });
+
+        const doc = lateDoc(model, a, b);
+        const write = how === 'create' ? model.create(doc) : model.insertMany([doc]);
+
+        await assert.rejects(write, OwnerGoneError);
+        assert.ok(deleted, 'the deletion ran between validation and insert');
+        assert.deepEqual(await snapshot(), without(before, a), 'nothing written into A\'s workspace was left behind');
+      });
+    }
+  }
+
+  test('inserts that pass their check just before the workspace goes are caught by the sweep', async (t) => {
+    const { a, b, before } = await seedSharedWorkspace();
+
+    // The inserts land after the content pass but while the workspace still
+    // exists, so each guard's check passes. That is the window the sweep covers.
+    const deleteWorkspaces = Workspace.deleteMany.bind(Workspace);
+    t.mock.method(Workspace, 'deleteMany', async (...args) => {
+      for (const model of WORKSPACE_SCOPED_MODELS) await model.create(lateDoc(model, a, b));
+      return deleteWorkspaces(...args);
+    });
+
+    const result = await deleteAccount(a.user._id);
+
+    assert.equal(result.ok, true);
+    for (const model of WORKSPACE_SCOPED_MODELS) {
+      assert.equal(await model.countDocuments({ workspaceId: a.workspace._id }), 0, `late ${model.modelName} left behind`);
+    }
+    assert.deepEqual(await snapshot(), without(before, a));
+  });
+
+  test("a live workspace's inserts stand", async () => {
+    const { a, b } = await seedSharedWorkspace();
+
+    for (const model of WORKSPACE_SCOPED_MODELS) {
+      await model.create(lateDoc(model, a, b));
+      assert.equal(await model.countDocuments({ workspaceId: a.workspace._id }), 2, `${model.modelName}: the seeded row and the new one`);
+    }
   });
 });

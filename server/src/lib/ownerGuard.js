@@ -2,20 +2,29 @@
  * Write, then check the owner: the writer's half of account deletion's promise
  * that nothing it removes comes back.
  *
- * deleteAccount() removes a user's UserMemory and Conversation rows, then the
- * User, then sweeps both collections again. Checking the user *before* writing
- * cannot close the gap, because the check and the write are apart in time:
- * memory extraction reads the user, spends seconds on a model call, then
- * inserts. So the check comes *after* the write. Each side writes, then reads
- * what the other wrote:
+ * deleteAccount() deletes an owner, then sweeps the rows that point at it. It
+ * does this twice. It deletes the user's workspaces and sweeps their content by
+ * workspaceId, then deletes the User and sweeps UserMemory and Conversation by
+ * userId. Checking the owner *before* writing cannot close the gap, because the
+ * check and the write are apart in time. Memory extraction reads the user,
+ * spends seconds on a model call, then inserts. A content write resolves its
+ * workspace at the start of the request and inserts later. So the check comes
+ * *after* the write. Each side writes, then reads what the other wrote:
  *
- *   deleter: delete the User          → sweep the collection by userId
- *   writer:  insert the document       → look the User up; gone → delete it
+ *   deleter: delete the owner          → sweep the collection by owner id
+ *   writer:  insert the document       → look the owner up; gone → delete it
  *
  * Whichever reads second sees the other's write. An insert that lands before
- * the final sweep is swept. One that lands after it also comes after the User
- * delete, so its own lookup finds no user and it deletes itself. No ordering
- * leaves a row behind.
+ * the final sweep is swept. One that lands after it also comes after the owner
+ * was deleted, so its own lookup finds no owner and it deletes itself. No
+ * ordering leaves a row behind.
+ *
+ * Two owners, one plugin:
+ *   { path: 'userId', owner: User }           — UserMemory, Conversation
+ *   { path: 'workspaceId', owner: Workspace } — every model in the deleter's
+ *                                               WORKSPACE_SCOPED_MODELS
+ * Conversation carries both. An editor's chat in a deleted workspace has a
+ * user who still exists, so only its workspace can catch it.
  *
  * It only works if the check runs on every insert, whichever code path does
  * it, so it is a schema plugin and not a helper each writer has to remember to
@@ -87,9 +96,11 @@ async function discardIfOwnerGone(model, docs, { path, owner }, op) {
 /**
  * Schema plugin. `path` is the field holding the owner's id; `owner` is the
  * model it points at. Documents with no owner id (a null or missing `path`)
- * pass unchecked.
+ * pass unchecked. An id with no owner behind it counts as gone, whether the
+ * owner was deleted or never existed.
  *
  *   schema.plugin(ownerGuard, { path: 'userId', owner: User });
+ *   schema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
  */
 export function ownerGuard(schema, opts) {
   schema.pre('save', function () {

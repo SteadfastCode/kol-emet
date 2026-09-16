@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import User from './User.js';
+import Workspace from './Workspace.js';
 import { ownerGuard } from '../lib/ownerGuard.js';
 
 const messageSchema = new mongoose.Schema(
@@ -23,8 +24,11 @@ const conversationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Account deletion removes conversations by userId. One created after that
-// deletes itself (lib/ownerGuard.js).
+// Account deletion removes conversations by userId, and by workspaceId for the
+// workspaces it deletes. One created after either owner is gone deletes itself
+// (lib/ownerGuard.js). Both guards are needed: an editor's chat in a deleted
+// workspace has a user who still exists.
 conversationSchema.plugin(ownerGuard, { path: 'userId', owner: User });
+conversationSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('Conversation', conversationSchema);

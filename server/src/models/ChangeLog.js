@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const changeLogSchema = new mongoose.Schema(
   {
@@ -31,5 +33,9 @@ const changeLogSchema = new mongoose.Schema(
 
 // Auto-expire after 30 days
 changeLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+changeLogSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('ChangeLog', changeLogSchema);

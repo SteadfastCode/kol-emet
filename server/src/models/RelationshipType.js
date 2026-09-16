@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import { categoryValidator } from '../lib/entityTypeRegistry.js';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const relationshipTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -28,5 +30,9 @@ const relationshipTypeSchema = new mongoose.Schema({
 
 // Compound index: names are meant to be unique per workspace (not enforced here).
 relationshipTypeSchema.index({ name: 1, workspaceId: 1 });
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+relationshipTypeSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('RelationshipType', relationshipTypeSchema);

@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import Workspace from './Workspace.js';
+import { ownerGuard } from '../lib/ownerGuard.js';
 
 const { ObjectId } = mongoose.Schema.Types;
 
@@ -171,6 +173,10 @@ const draftSchema = new mongoose.Schema({
 
 draftSchema.index({ workspaceId: 1, createdAt: -1 });
 draftSchema.index({ workspaceId: 1, status: 1 });
+
+// Account deletion sweeps content by workspaceId once the workspace is gone.
+// One inserted after that deletes itself (lib/ownerGuard.js).
+draftSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 /** Recomputes `counts` from items. Call after any decision or apply. */
 draftSchema.methods.recountItems = function recountItems() {
