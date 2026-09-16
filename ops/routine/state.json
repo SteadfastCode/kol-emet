@@ -23,17 +23,17 @@
     "KOL-026": {
       "order": 2,
       "title": "The race is only fixed for UserMemory and Conversation.",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-026",
       "dependsOn": [],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-16T09:09:48.287Z",
+      "runId": "2026-09-16T09:09:36.045Z",
       "lastFail": null
     },
     "KOL-013": {

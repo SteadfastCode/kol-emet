@@ -17,7 +17,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-026) The race is only fixed for UserMemory and Conversation.**
+- [x] **(KOL-026) The race is only fixed for UserMemory and Conversation.**
   Found by the grader of KOL-023 (medium, server/src/lib/accountDeleter.js:36). The race is only
   fixed for UserMemory and Conversation. Workspace-scoped models (entities, relationship groups,
   open questions and the rest) have no owner guard. A request that looked up its workspace before
