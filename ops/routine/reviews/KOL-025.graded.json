@@ -1,0 +1,94 @@
+{
+  "item": "KOL-025",
+  "repo": "kol-emet",
+  "mergeSha": "b1ae9c64c12d3805e089e8829587f7e428306b20",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-16T08:09:45.194Z",
+  "gradedAtUtc": "2026-09-16T08:10:21.796Z",
+  "independent": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 328,
+      "severity": "low",
+      "summary": "DELETE reads the passkey list first and only then runs the conditional `$pull`. Suppose a passwordless account has passkeys A and B, and two removals of A run at once. The first one wins and leaves only B. The second still finds A in the list it already loaded, its `$nor` condition fails because one passkey is left, and it gets `matchedCount === 0` and a 409 saying 'This passkey is the only way to sign in'. The right answer is a 404, because A is already gone."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "accountReq throws a rejection carrying the status and message on any non-OK response, and PasskeySettings.load() catches it and shows loadError."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "removePasskey goes through accountReq, which throws on any non-OK response, and remove() catches it and handles 401, 404 and 409 separately."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "A test case that isn't there is not a defect, and add() already turns any registration failure into a generic error message."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Only one row can be confirming at a time, and while `busy` is set every Remove and Keep button is disabled, so a second removal can't start and the state can't get mixed up."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "recordUse only changes the user document already in memory; if the passkey was removed in the meantime, the `__v` bump makes user.save() fail, and that failure is caught (500 at sign-in, a refusal message in passkeyRefusal)."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "requireAuth admits a request without `session.userId` only when it carries the bearer token, and turning that token away with a 403 is the intended session-only rule, not an access hole."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "passkeyRefusal returns 'the passkey assertion did not verify' when `verification.verified` is false, so that path does return a value."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "The test 'a sign-in records when it happened…' checks that `lastUsedAt` is at or after the time the sign-in started."
+    },
+    {
+      "index": 9,
+      "verdict": "false-positive",
+      "reason": "That same test clears deviceType and backedUp on a legacy passkey, then checks they come back as 'multiDevice' and true after a sign-in."
+    },
+    {
+      "index": 10,
+      "verdict": "false-positive",
+      "reason": "The DELETE test checks the 200 response body, that the stored passkeys are gone, that the removed passkey can no longer sign in, that a repeat removal is a 404, and that another account's passkey is a 404."
+    },
+    {
+      "index": 11,
+      "verdict": "false-positive",
+      "reason": "The passwordless test clears passwordHash, removes one of two passkeys, and checks that removing the last one is a 409 and it stays stored."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All 11 local findings are false positives: they claim error handling or test checks are missing when the code and tests plainly have them, and the review missed the one real (minor) race in DELETE.",
+  "counts": {
+    "findings": 11,
+    "confirmed": 0,
+    "falsePositive": 11,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.5126495,
+  "numTurns": 2,
+  "durationMs": 34853,
+  "sessionId": "c4d6442f-b9b5-4d4a-8580-009541c8afcd"
+}

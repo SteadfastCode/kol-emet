@@ -1,0 +1,55 @@
+{
+  "item": "KOL-024",
+  "repo": "kol-emet",
+  "mergeSha": "6bfc564c4379c17035b6ce37d0480ba6663e0a90",
+  "localPromptVersion": "v2",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-16T08:09:45.194Z",
+  "gradedAtUtc": "2026-09-16T08:10:38.891Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "browserCredentialId only picks which id goes into allowCredentials/excludeCredentials; the rewrite happens in migrateCredentialId, only after verifyAuthenticationResponse has checked the signature, so a crafted id cannot cause a rewrite or give access."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "findPasskey calls matchCredentialId, which returns 'legacy' when stored === legacyEncoding(browserId), and credentialIdQuery asks for both forms, so legacy passkeys do match."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The diff adds tests/http/passkeys.test.js and a software authenticator that run the real register, sign-in and deletion ceremonies; the auth.test.js comment only points to that file."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "After the first sign-in, the legacy test checks that `(await storedPasskeys(t.userId))[0].credentialID` equals authenticator.id, which is exactly the rewrite check."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "A (1/4)^16 chance of a false match is negligible and documented as such; the test correctly guards against the check breaking, and the finding names no real defect."
+    }
+  ],
+  "missed": [],
+  "summary": "None of the five local findings holds up: each misreads code or tests that plainly do what the finding says they don't. I found no real defects in this change either, so there was nothing for it to miss.",
+  "counts": {
+    "findings": 5,
+    "confirmed": 0,
+    "falsePositive": 5,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.41554949999999996,
+  "numTurns": 2,
+  "durationMs": 17063,
+  "sessionId": "a47d4df9-8073-444f-bae4-9d80017f00a0"
+}

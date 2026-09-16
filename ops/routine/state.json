@@ -1,26 +1,8 @@
 {
   "version": 1,
   "items": {
-    "KOL-025": {
-      "order": 1,
-      "title": "Passkeys on phones: add, list and remove passkeys from Settings",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-025",
-      "dependsOn": [
-        "KOL-024"
-      ],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-09-13T07:32:05.827Z",
-      "runId": "2026-09-13T07:07:17.804Z",
-      "lastFail": null
-    },
     "KOL-012": {
-      "order": 2,
+      "order": 1,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -31,6 +13,22 @@
         "KOL-010"
       ],
       "needsHuman": true,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-026": {
+      "order": 2,
+      "title": "The race is only fixed for UserMemory and Conversation.",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
@@ -138,6 +136,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-025": {
+      "order": null,
+      "title": "Passkeys on phones: add, list and remove passkeys from Settings",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-025",
+      "dependsOn": [
+        "KOL-024"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-13T07:32:05.827Z",
+      "runId": "2026-09-13T07:07:17.804Z",
       "lastFail": null
     },
     "KOL-024": {

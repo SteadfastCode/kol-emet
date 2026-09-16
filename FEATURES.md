@@ -17,6 +17,13 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-026) The race is only fixed for UserMemory and Conversation.**
+  Found by the grader of KOL-023 (medium, server/src/lib/accountDeleter.js:36). The race is only
+  fixed for UserMemory and Conversation. Workspace-scoped models (entities, relationship groups,
+  open questions and the rest) have no owner guard. A request that looked up its workspace before
+  deletion can still insert after the final content sweep, and that row stays forever because a
+  re-run finds no workspaces left. The item's defect stays open for all workspace content; the
+  diff says so and defers it.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
