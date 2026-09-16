@@ -1,0 +1,70 @@
+{
+  "item": "KOL-023",
+  "repo": "kol-emet",
+  "mergeSha": "9e9216a25916c6985acef4f41eefebad6c1ebde6",
+  "completedAtUtc": "2026-09-12T18:22:13.492Z",
+  "completeRunId": "2026-09-12T18:09:15.544Z",
+  "reviewRunId": "2026-09-16T07:01:38.827Z",
+  "reviewedAtUtc": "2026-09-16T07:02:15.531Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 17675,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/lib/accountDeleter.js",
+        "server/src/lib/memoryExtractor.js",
+        "server/src/lib/ownerGuard.js",
+        "server/src/models/Conversation.js",
+        "server/src/models/UserMemory.js"
+      ],
+      "part": null,
+      "bytes": 14657,
+      "promptTokens": 4334,
+      "completionTokens": 164,
+      "latencyMs": 25957,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/accountDeleter.test.js"
+      ],
+      "part": null,
+      "bytes": 3018,
+      "promptTokens": 1249,
+      "completionTokens": 122,
+      "latencyMs": 7552,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/accountDeleter.js",
+      "line": 160,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The second sweep does not close the concurrent-write window for workspace-scoped models, leaving personal data behind.",
+      "scenario": "A write that lands after the last sweep of a workspace is left behind because the writer checks after writing and the deleter sweeps again. Workspace-scoped models do not have the same guard as user-keyed models, so they are still vulnerable to leaving personal data behind."
+    },
+    {
+      "file": "server/src/lib/accountDeleter.js",
+      "line": 146,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The second sweep does not close the concurrent-write window, leaving personal data belonging to a hard-deleted account.",
+      "scenario": "A chat exchange finishes just before deletion, allowing facts about the user to be written after the account is deleted."
+    }
+  ],
+  "summary": "The second sweep does not close the concurrent-write window for workspace-scoped models, leaving personal data behind. · One real defect found in the codebase.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 5583,
+    "completionTokens": 286
+  },
+  "latencyMs": 33510
+}

@@ -1,0 +1,129 @@
+{
+  "item": "KOL-024",
+  "repo": "kol-emet",
+  "mergeSha": "6bfc564c4379c17035b6ce37d0480ba6663e0a90",
+  "completedAtUtc": "2026-09-13T07:30:44.441Z",
+  "completeRunId": "2026-09-13T07:07:17.804Z",
+  "reviewRunId": "2026-09-16T07:01:38.827Z",
+  "reviewedAtUtc": "2026-09-16T07:03:28.678Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 51365,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/lib/passkeyIds.js",
+        "server/src/models/User.js"
+      ],
+      "part": null,
+      "bytes": 11999,
+      "promptTokens": 3852,
+      "completionTokens": 149,
+      "latencyMs": 15765,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js",
+        "server/tests/helpers/softAuthenticator.js",
+        "server/tests/http/accountDeletion.test.js"
+      ],
+      "part": null,
+      "bytes": 14820,
+      "promptTokens": 4691,
+      "completionTokens": 167,
+      "latencyMs": 18671,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/auth.test.js"
+      ],
+      "part": null,
+      "bytes": 1087,
+      "promptTokens": 963,
+      "completionTokens": 151,
+      "latencyMs": 7722,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/passkeys.test.js"
+      ],
+      "part": null,
+      "bytes": 14403,
+      "promptTokens": 4420,
+      "completionTokens": 140,
+      "latencyMs": 16288,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/passkeyIds.test.js"
+      ],
+      "part": null,
+      "bytes": 9056,
+      "promptTokens": 3089,
+      "completionTokens": 179,
+      "latencyMs": 14646,
+      "findings": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/passkeyIds.js",
+      "line": 104,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `browserCredentialId` function incorrectly decodes and checks the legacy encoding, leading to potential security issues.",
+      "scenario": "If an attacker crafts a credential ID that decodes to a valid base64url string but is not actually a double-encoded ID, it could be mistakenly treated as a legacy ID and rewritten. This could allow unauthorized access or modification of passkeys."
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 217,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Passkey sign-in fails when a legacy double-encoded credential ID is used.",
+      "scenario": "A user signs in with a passkey that was registered before the change, which stores the credential ID as double-encoded. The `findPasskey` function only matches against the correct form of the credential ID, not the legacy double-encoded form. As a result, the sign-in attempt fails with a 401 'Passkey not recognized' error."
+    },
+    {
+      "file": "server/tests/http/auth.test.js",
+      "line": 46,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The description promises that WebAuthn ceremonies are covered in tests, but the diff does not show any changes to cover these ceremonies.",
+      "scenario": "After deploying the change, the WebAuthn ceremonies may not be tested as expected, leading to potential issues that are not caught by automated tests."
+    },
+    {
+      "file": "server/tests/http/passkeys.test.js",
+      "line": 274,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the legacy passkey is correctly rewritten after a successful sign-in.",
+      "scenario": "A passkey stored in the legacy form is offered correctly, signs in, and is rewritten once. However, the test does not explicitly check if the legacy id has been updated to the correct form in the database after the first successful sign-in."
+    },
+    {
+      "file": "server/tests/unit/passkeyIds.test.js",
+      "line": 197,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The test 'never mistakes a correct id for a legacy one across 10,000 random ids' does not cover the edge case where a correct id is misread as legacy due to base64url character coincidence.",
+      "scenario": "If every byte of a randomly generated 16-byte id happens to be a valid base64url character (which has a probability of (1/4)^16), the test will fail, indicating that the check for legacy encoding is flawed."
+    }
+  ],
+  "summary": "One high-severity security issue found in the code. · One high-severity defect found in the passkey sign-in logic. · One finding: The description promises that WebAuthn ceremonies are covered in tests, but the diff does not show any changes to cover these ceremonies. · One real defect found. · One high-severity issue found in the unit tests.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 17015,
+    "completionTokens": 786
+  },
+  "latencyMs": 73093
+}

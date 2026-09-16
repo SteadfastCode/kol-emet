@@ -1,0 +1,179 @@
+{
+  "item": "KOL-025",
+  "repo": "kol-emet",
+  "mergeSha": "b1ae9c64c12d3805e089e8829587f7e428306b20",
+  "completedAtUtc": "2026-09-13T07:45:59.719Z",
+  "completeRunId": "2026-09-13T07:07:17.804Z",
+  "reviewRunId": "2026-09-16T07:01:38.827Z",
+  "reviewedAtUtc": "2026-09-16T07:05:22.269Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v2",
+  "diffBytes": 49317,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/auth.js",
+        "client/src/components/PasskeySettings.test.js"
+      ],
+      "part": null,
+      "bytes": 9613,
+      "promptTokens": 3300,
+      "completionTokens": 459,
+      "latencyMs": 29129,
+      "findings": 4,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/PasskeySettings.vue",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 15073,
+      "promptTokens": 4948,
+      "completionTokens": 140,
+      "latencyMs": 20402,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/lib/passkeyIds.js",
+        "server/src/models/User.js"
+      ],
+      "part": null,
+      "bytes": 9020,
+      "promptTokens": 2944,
+      "completionTokens": 153,
+      "latencyMs": 15713,
+      "findings": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 7317,
+      "promptTokens": 2621,
+      "completionTokens": 240,
+      "latencyMs": 17161,
+      "findings": 2,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/passkeys.test.js"
+      ],
+      "part": null,
+      "bytes": 8294,
+      "promptTokens": 2845,
+      "completionTokens": 538,
+      "latencyMs": 31125,
+      "findings": 4,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/auth.js",
+      "line": 65,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `listPasskeys` function does not handle potential errors from the server response.",
+      "scenario": "If the server returns an error or a non-200 status code, the function will not handle it properly and may lead to unhandled promise rejections."
+    },
+    {
+      "file": "client/src/api/auth.js",
+      "line": 71,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `removePasskey` function does not handle potential errors from the server response.",
+      "scenario": "If the server returns an error or a non-200 status code, the function will not handle it properly and may lead to unhandled promise rejections."
+    },
+    {
+      "file": "client/src/components/PasskeySettings.test.js",
+      "line": 162,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify the behavior when adding a passkey fails due to network issues.",
+      "scenario": "If there is a network error during the registration process, the test does not check if the component handles it correctly."
+    },
+    {
+      "file": "client/src/components/PasskeySettings.vue",
+      "line": 185,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The `remove` function does not handle the case where a passkey is removed while another removal confirmation is in progress.",
+      "scenario": "User starts removing one passkey, then quickly starts removing another before the first removal completes. The UI will be in an inconsistent state because `confirmingId` and `busy` are not reset correctly."
+    },
+    {
+      "file": "server/src/lib/passkeyIds.js",
+      "line": 134,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `recordUse` function does not handle the case where a passkey is removed while it is being used, leading to potential data inconsistency.",
+      "scenario": "If a passkey is removed from the database while it is still in use (e.g., during a sign-in process), the `recordUse` function will attempt to update fields on an object that no longer exists, causing an error or unexpected behavior."
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 256,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `sessionUserId` function does not handle the case where `req.session.userId` is falsy but `req.user` exists, which could lead to unauthorized access.",
+      "scenario": "An authenticated request with a valid session token but without a `userId` in the session object could be incorrectly handled as unauthorized."
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 301,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `passkeyRefusal` function does not handle the case where `verification.verified` is false, which could lead to a missing return statement.",
+      "scenario": "If `verification.verified` is false, the function will not return any value, potentially leading to unexpected behavior."
+    },
+    {
+      "file": "server/tests/http/passkeys.test.js",
+      "line": 283,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `lastUsedAt` field is correctly recorded when a passkey is used.",
+      "scenario": "A user signs in with a passkey, but the `lastUsedAt` field is not updated or is incorrectly set."
+    },
+    {
+      "file": "server/tests/http/passkeys.test.js",
+      "line": 320,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The test does not verify that the `deviceType` and `backedUp` fields are correctly set for legacy passkeys.",
+      "scenario": "A user signs in with a legacy passkey, but the `deviceType` and `backedUp` fields are not updated or are incorrectly set."
+    },
+    {
+      "file": "server/tests/http/passkeys.test.js",
+      "line": 357,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `DELETE /auth/webauthn/passkeys/:credentialID` endpoint correctly handles removing a passkey.",
+      "scenario": "A user attempts to remove a passkey, but the endpoint does not correctly update the database or return the correct response."
+    },
+    {
+      "file": "server/tests/http/passkeys.test.js",
+      "line": 384,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `DELETE /auth/webauthn/passkeys/:credentialID` endpoint correctly handles removing the last passkey from an account with no password.",
+      "scenario": "A user attempts to remove the last passkey from an account with no password, but the endpoint does not correctly prevent the removal or return the correct response."
+    }
+  ],
+  "summary": "There are several potential issues with error handling in both the client API functions and the tests. The `listPasskeys` and `removePasskey` functions do not handle server errors properly, and the tests do not cover network failure scenarios for adding or removing passkeys. · One potential defect found. · 1 high-severity defect found. · Found 2 real defects in the provided diff. · The tests do not verify that the `lastUsedAt` field is correctly recorded when a passkey is used, that the `deviceType` and `backedUp` fields are correctly set for legacy passkeys, that the `DELETE /auth/webauthn/passkeys/:credentialID` endpoint correctly handles removing a passkey, and that the `DELETE /auth/webauthn/passkeys/:credentialID` endpoint correctly handles removing the last passkey from an account with no password.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 16658,
+    "completionTokens": 1530
+  },
+  "latencyMs": 113530
+}
