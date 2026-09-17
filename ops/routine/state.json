@@ -1,13 +1,13 @@
 {
   "version": 1,
   "items": {
-    "KOL-028": {
+    "KOL-029": {
       "order": 1,
-      "title": "Phase 6 step 3: MCP and chat read entity types from the registry",
-      "status": "done",
+      "title": "Phase 6 step 4: client pills, filters, pickers and colours read from /entity-types",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-028",
+      "branch": "routine/item/KOL-029",
       "dependsOn": [
         "KOL-027"
       ],
@@ -15,30 +15,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-09-17T07:33:54.183Z",
+      "claimedAtUtc": "2026-09-17T07:51:36.146Z",
       "runId": "2026-09-17T07:08:04.751Z",
       "lastFail": null
     },
-    "KOL-029": {
-      "order": 2,
-      "title": "Phase 6 step 4: client pills, filters, pickers and colours read from /entity-types",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [
-        "KOL-027"
-      ],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-030": {
-      "order": 3,
+      "order": 2,
       "title": "Phase 6 step 5: ship the Software Architecture template alongside Worldbuilding",
       "status": "pending",
       "attempts": 0,
@@ -56,7 +38,7 @@
       "lastFail": null
     },
     "KOL-031": {
-      "order": 4,
+      "order": 3,
       "title": "Onboarding: choose a template on signup",
       "status": "pending",
       "attempts": 0,
@@ -74,7 +56,7 @@
       "lastFail": null
     },
     "KOL-033": {
-      "order": 5,
+      "order": 4,
       "title": "First vertical-ingestion producer: a docker-compose.yml becomes a reviewable Draft",
       "status": "pending",
       "attempts": 0,
@@ -92,7 +74,7 @@
       "lastFail": null
     },
     "KOL-012": {
-      "order": 6,
+      "order": 5,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +93,7 @@
       "lastFail": null
     },
     "KOL-034": {
-      "order": 7,
+      "order": 6,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -127,7 +109,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 8,
+      "order": 7,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +129,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 9,
+      "order": 8,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -163,7 +145,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 10,
+      "order": 9,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +163,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 11,
+      "order": 10,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -197,7 +179,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 12,
+      "order": 11,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -213,7 +195,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 13,
+      "order": 12,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -226,6 +208,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-028": {
+      "order": null,
+      "title": "Phase 6 step 3: MCP and chat read entity types from the registry",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-028",
+      "dependsOn": [
+        "KOL-027"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-17T07:33:54.183Z",
+      "runId": "2026-09-17T07:08:04.751Z",
       "lastFail": null
     },
     "KOL-027": {
