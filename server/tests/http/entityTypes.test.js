@@ -42,6 +42,8 @@ import Workspace from '../../src/models/Workspace.js';
 import EntityType from '../../src/models/EntityType.js';
 import Entity from '../../src/models/Entity.js';
 import RelationshipType from '../../src/models/RelationshipType.js';
+import RelationshipGroup from '../../src/models/RelationshipGroup.js';
+import OpenQuestion from '../../src/models/OpenQuestion.js';
 import { CATEGORIES } from '../../src/config/categories.js';
 import { seedEntityTypes } from '../../src/lib/workspaceSeeder.js';
 
@@ -70,16 +72,17 @@ let bob;
 /** One of alice's types, marked in before(), for bob to probe. */
 let aliceSecret;
 
-async function registerUser(email) {
+/** Registers `email`, naming `template` in the body when one is given. */
+async function registerUser(email, template) {
   const agent = request.agent(app);
-  const res = await agent.post('/auth/register').send({ email, password: PASSWORD });
+  const res = await agent.post('/auth/register').send({ email, password: PASSWORD, ...(template && { template }) });
   assert.equal(res.status, 201, `POST /auth/register (${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
 
   const user = await User.findOne({ email }).select('_id').lean();
   const workspace = await Workspace.findOne({ 'members.userId': user._id }).select('_id').lean();
   assert.ok(workspace, `registration should have created a workspace for ${email}`);
 
-  log('light', `registered ${email} (source: POST /auth/register) → workspace ${workspace._id} (source: Workspace.members.userId lookup)`);
+  log('light', `registered ${email} (source: POST /auth/register, template ${template ? `"${template}"` : 'not named'}) → workspace ${workspace._id} (source: Workspace.members.userId lookup)`);
   return { agent, email, workspaceId: String(workspace._id) };
 }
 
@@ -162,6 +165,66 @@ describe('seeding', () => {
 
     const aliceIds = new Set((await listTypes(alice)).map(t => String(t._id)));
     assert.ok((await listTypes(bob)).every(t => !aliceIds.has(String(t._id))), 'each workspace gets its own rows, not shared ones');
+  });
+
+  test('registering with the software-architecture template seeds its five types, in order, with their own colours, and its relationship vocabulary', async () => {
+    const architect = await registerUser('architect@example.test', 'software-architecture');
+
+    const types = await listTypes(architect);
+    assert.deepEqual(types.map(t => t.name), ['Service', 'Data Store', 'API', 'Team', 'External Dependency'], 'exactly the five types, in order — none of the worldbuilding six');
+    assert.deepEqual(types.map(t => t.order), [0, 1, 2, 3, 4]);
+    for (const t of types) {
+      assert.equal(String(t.workspaceId), architect.workspaceId, `seeded "${t.name}" must be in architect's workspace`);
+      assert.match(t.color?.bg ?? '', /^#[0-9A-F]{6}$/i, `"${t.name}" needs a background colour`);
+      assert.match(t.color?.text ?? '', /^#[0-9A-F]{6}$/i, `"${t.name}" needs a text colour`);
+    }
+    const pair = t => `${t.color.bg}/${t.color.text}`.toUpperCase();
+    assert.equal(new Set(types.map(pair)).size, types.length, 'no two of the five share a colour pair');
+    const worldbuildingPairs = new Set((await listTypes(alice)).map(pair));
+    assert.ok(types.every(t => !worldbuildingPairs.has(pair(t))), 'none reuses a worldbuilding colour pair');
+
+    const vocabulary = await architect.agent.get('/relationship-types');
+    assert.equal(vocabulary.status, 200, JSON.stringify(vocabulary.body));
+    log('verbose', `GET /relationship-types as ${architect.email} → ${vocabulary.body.map(t => `${t.name} (${t.scope})`).join(', ')}`);
+    const named = scope => vocabulary.body.filter(t => t.scope === scope).map(t => t.name).sort();
+    assert.deepEqual(named('group'), ['Calls', 'Depends on', 'Exposes', 'Owned by']);
+    for (const role of ['Dependent', 'Dependency', 'Owner', 'Owned', 'Caller', 'Callee', 'Provider', 'Endpoint']) {
+      assert.ok(named('member').includes(role), `member role "${role}" should be seeded`);
+    }
+    assert.ok(!vocabulary.body.some(t => t.name === 'Marriage'), 'no worldbuilding vocabulary');
+    const owner = vocabulary.body.find(t => t.name === 'Owner');
+    assert.deepEqual([owner.sourceCategory, owner.targetCategory], ['Team', 'Service'], 'category hints name the template\'s own types');
+
+    // Seeding swallows its errors so registration never fails on it, so a
+    // starter entity its own registry refused would leave only this to notice.
+    const workspaceId = architect.workspaceId;
+    const entities = await Entity.find({ workspaceId }).sort({ title: 1 }).lean();
+    assert.deepEqual(entities.map(e => [e.title, e.category]), [['Example Database', 'Data Store'], ['Example Service', 'Service']]);
+    const [database, service] = entities;
+
+    const groups = await RelationshipGroup.find({ workspaceId }).lean();
+    assert.equal(groups.length, 1, 'one starter relationship group');
+    assert.equal(groups[0].label, 'Depends on');
+    assert.deepEqual(
+      groups[0].members.map(m => [String(m.refId), m.label]),
+      [[String(service._id), 'Dependent'], [String(database._id), 'Dependency']],
+    );
+
+    const questions = await OpenQuestion.find({ workspaceId }).lean();
+    assert.equal(questions.length, 1, 'one starter open question');
+    assert.deepEqual(questions[0].entry_ids.map(String), [String(service._id)]);
+    log('light', `software-architecture seed checked in workspace ${workspaceId} (source: POST /auth/register as ${architect.email}): ${types.length} types, ${vocabulary.body.length} relationship types, ${entities.length} entities, ${groups.length} group, ${questions.length} question`);
+  });
+
+  test('a registration that names no template still gets exactly the six worldbuilding types', async () => {
+    const plain = await registerUser('no-template@example.test');
+
+    const types = await listTypes(plain);
+    assert.deepEqual(types.map(t => t.name), CATEGORIES, 'the six and nothing else');
+    const vocabulary = await plain.agent.get('/relationship-types');
+    assert.equal(vocabulary.status, 200, JSON.stringify(vocabulary.body));
+    assert.ok(vocabulary.body.some(t => t.name === 'Marriage' && t.scope === 'group'), 'worldbuilding vocabulary');
+    assert.ok(!vocabulary.body.some(t => t.name === 'Depends on'), 'no software-architecture vocabulary');
   });
 
   test('seedEntityTypes adds only what is missing, so a re-run never duplicates', async () => {
