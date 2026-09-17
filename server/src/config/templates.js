@@ -8,11 +8,20 @@
  * demonstrates blocks and the relationship graph, and is easy to delete once
  * the user has their own.
  *
+ * Two ship: Worldbuilding (the default, and the six categories every workspace
+ * had before the registry) and Software Architecture (Service, Data Store, API,
+ * Team, External Dependency). Registration seeds whichever `req.body.template`
+ * names (routes/auth.js → lib/workspaceSeeder.js).
+ *
  * Entity types seed the EntityType registry, which is the only gate on
  * `Entity.category` since Phase 6 step 2 dropped the hardcoded enum — so a
- * template's types can be any names. That makes a second template (software
- * architecture: Service, Data Store, API, Team, External Dependency) possible;
- * it is not built yet, so only the worldbuilding one is real.
+ * template's types can be any names. They are checked on insert all the same:
+ * a template's relationship-type category hints and starter entities must name
+ * its own types, or seeding fails partway (tests/unit/templates.test.js holds
+ * every template to that).
+ *
+ * Templates are code, not data: there is no admin UI, and changing one affects
+ * only workspaces registered afterwards.
  */
 
 import { CATEGORIES } from './categories.js';
@@ -30,6 +39,16 @@ const WORLDBUILDING_COLORS = {
   'Timeline':         { bg: '#FAC775', text: '#633806' },
   'Open Questions':   { bg: '#F4C4C4', text: '#7C0C0C' },
 };
+
+// Software Architecture's types, in pill order. Five hues none of the six above
+// use, at the same light-background/dark-text contrast (6.3–6.9:1).
+const SOFTWARE_ARCHITECTURE_TYPES = [
+  { name: 'Service',             color: { bg: '#C0DD97', text: '#27500A' } },
+  { name: 'Data Store',          color: { bg: '#D3D1C7', text: '#444441' } },
+  { name: 'API',                 color: { bg: '#F4C0D1', text: '#72243E' } },
+  { name: 'Team',                color: { bg: '#F6E27A', text: '#5A4A00' } },
+  { name: 'External Dependency', color: { bg: '#A6E1EE', text: '#0B4A58' } },
+];
 
 export const TEMPLATES = {
   worldbuilding: {
@@ -182,8 +201,126 @@ export const TEMPLATES = {
       linkTo: ['protagonist'],
     },
   },
+
+  'software-architecture': {
+    name: 'Software Architecture',
+    description: 'Services, data stores, APIs and teams, and what depends on, calls and owns what.',
+
+    entityTypes: SOFTWARE_ARCHITECTURE_TYPES.map(({ name, color }, order) => ({
+      name,
+      order,
+      icon: null,
+      color,
+    })),
+
+    // Same two label positions as Worldbuilding's (see the comment there): a
+    // group label says what kind of relationship it is, and each group comes
+    // with the pair of member roles that says which side of it an entity is on.
+    //
+    // For a member role, sourceCategory is the type that usually plays the role
+    // and targetCategory the type on the other side — Owner is a Team owning a
+    // Service. Null where either side is commonly several types: a service
+    // depends on data stores, APIs, other services and external dependencies
+    // alike. Hints for a future picker, not constraints.
+    relationshipTypes: [
+      // ── group labels: what kind of relationship this is ──────────────────
+      { name: 'Depends on', scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Owned by',   scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Calls',      scope: 'group', sourceCategory: null, targetCategory: null },
+      { name: 'Exposes',    scope: 'group', sourceCategory: null, targetCategory: null },
+
+      // ── member roles: this entity's part in the relationship ─────────────
+      // Depends on
+      { name: 'Dependent',  scope: 'member', sourceCategory: 'Service', targetCategory: null },
+      { name: 'Dependency', scope: 'member', sourceCategory: null,      targetCategory: 'Service' },
+      // Owned by
+      { name: 'Owner',      scope: 'member', sourceCategory: 'Team',    targetCategory: 'Service' },
+      { name: 'Owned',      scope: 'member', sourceCategory: 'Service', targetCategory: 'Team' },
+      // Calls
+      { name: 'Caller',     scope: 'member', sourceCategory: 'Service', targetCategory: null },
+      { name: 'Callee',     scope: 'member', sourceCategory: null,      targetCategory: 'Service' },
+      // Exposes
+      { name: 'Provider',   scope: 'member', sourceCategory: 'Service', targetCategory: 'API' },
+      { name: 'Endpoint',   scope: 'member', sourceCategory: 'API',     targetCategory: 'Service' },
+    ],
+
+    starterEntities: [
+      {
+        key: 'service',
+        title: 'Example Service',
+        category: 'Service',
+        summary: 'A starter service — edit or delete it once your own architecture takes over.',
+        tags: ['example'],
+        blocks: [
+          {
+            type: 'text',
+            order: 0,
+            data: {
+              markdown:
+                '## About\n\nThis is a **text block**. Entities are built from ordered blocks, ' +
+                'so you can mix prose, attributes, quotes and timeline events in one page.\n\n' +
+                'Delete this entity whenever you like — nothing depends on it.',
+            },
+          },
+          { type: 'attribute', order: 1, data: { label: 'Status', value: 'In production' } },
+          { type: 'attribute', order: 2, data: { label: 'Runtime', value: 'Container' } },
+        ],
+      },
+      {
+        key: 'database',
+        title: 'Example Database',
+        category: 'Data Store',
+        summary: 'The database your example service reads and writes. Also safe to delete.',
+        tags: ['example'],
+        blocks: [
+          {
+            type: 'text',
+            order: 0,
+            data: {
+              markdown:
+                '## Overview\n\nServices, data stores, APIs and teams are all *entities* — ' +
+                'the difference is the type. What makes the wiki a graph is the ' +
+                'relationships between them, shown in the sidebar and the graph view.',
+            },
+          },
+        ],
+      },
+    ],
+
+    starterRelationship: {
+      label: 'Depends on',
+      members: [
+        { entityKey: 'service',  label: 'Dependent' },
+        { entityKey: 'database', label: 'Dependency' },
+      ],
+    },
+
+    starterOpenQuestion: {
+      question: 'Which team owns this service, and who is paged when it fails? (An example open question — resolve or delete it.)',
+      linkTo: ['service'],
+    },
+  },
 };
 
+/**
+ * Whether `key` names a template. Own keys only, so a request body's
+ * `template: 'constructor'` or `'__proto__'` is not mistaken for one.
+ */
+export function hasTemplate(key) {
+  return typeof key === 'string' && Object.hasOwn(TEMPLATES, key);
+}
+
+/** `key`'s template, or the default one when `key` names none. */
 export function getTemplate(key) {
-  return TEMPLATES[key] ?? TEMPLATES[DEFAULT_TEMPLATE];
+  return TEMPLATES[hasTemplate(key) ? key : DEFAULT_TEMPLATE];
+}
+
+/**
+ * Every template's key, name and description, in definition order (the
+ * default first) — what a picker offers.
+ *
+ * @returns {{ key: string, name: string, description: string }[]}
+ */
+export function listTemplates() {
+  return Object.entries(TEMPLATES).map(([key, { name, description }]) => ({ key, name, description }));
 }

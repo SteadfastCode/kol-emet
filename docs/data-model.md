@@ -148,9 +148,12 @@ offers, while `Entity.category` holds a type's **name** as a plain string.
 
 - Unique index on `{ workspaceId, name }` with a case-insensitive collation: entities reference a
   type by name, so two same-named types in one workspace would make those entities ambiguous.
-- Registration seeds the template's types — for worldbuilding, the six current categories with the
-  client's pill colours. `server/scripts/seed-entity-types.js` backfills workspaces created before
-  the registry (dry-run by default, `--apply` to write; adds only missing names).
+- Registration seeds the template's types ([`templates.js`](../server/src/config/templates.js); the
+  `template` field of `POST /auth/register`, default `worldbuilding`). For worldbuilding: the six
+  current categories with the client's pill colours. For `software-architecture`: Service, Data
+  Store, API, Team and External Dependency, with its own colours. A key that names no template seeds
+  worldbuilding. `server/scripts/seed-entity-types.js` backfills workspaces created before the
+  registry (dry-run by default, `--apply` to write; adds only missing names).
 - **The only gate on category names** ([`entityTypeRegistry.js`](../server/src/lib/entityTypeRegistry.js)).
   `Entity.category` has no enum (Phase 6 step 2). These rules keep the registry and the data from
   drifting apart:

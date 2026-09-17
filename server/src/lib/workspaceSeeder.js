@@ -13,7 +13,7 @@ import RelationshipType from '../models/RelationshipType.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import Entity from '../models/Entity.js';
-import { getTemplate, DEFAULT_TEMPLATE } from '../config/templates.js';
+import { getTemplate, hasTemplate, DEFAULT_TEMPLATE } from '../config/templates.js';
 
 // off | light | normal — seeding runs unattended at registration, so the
 // default tier records enough to tell a seeded workspace from a bare one.
@@ -21,6 +21,18 @@ const LEVELS = { off: 0, light: 1, normal: 2 };
 function log(level, msg) {
   const active = LEVELS[process.env.SEED_LOG_LEVEL] ?? LEVELS.light;
   if (active >= LEVELS[level]) console.log(`[workspaceSeeder:${level}] ${msg}`);
+}
+
+/**
+ * The template key `requested` resolves to — itself, or the default when it
+ * names no template (getTemplate's fallback) — worded for a log line so a
+ * fallback is visible rather than silent. `requested` comes straight from a
+ * request body, so it is clipped rather than logged whole.
+ */
+function describeTemplate(requested) {
+  return hasTemplate(requested)
+    ? `template "${requested}"`
+    : `template "${DEFAULT_TEMPLATE}" (requested ${String(JSON.stringify(requested)).slice(0, 80)}, which is not a template)`;
 }
 
 /**
@@ -40,7 +52,7 @@ export async function seedEntityTypes(workspaceId, templateKey = DEFAULT_TEMPLAT
   const missing = wanted.filter(t => !have.has(t.name.toLowerCase()));
 
   if (apply && missing.length) await EntityType.insertMany(missing.map(t => ({ ...t, workspaceId })));
-  log('normal', `${apply ? 'added' : 'would add'} ${missing.length} entity type(s) to workspace ${workspaceId} (source: template "${templateKey}"): ${missing.map(t => t.name).join(', ') || '(none)'}`);
+  log('normal', `${apply ? 'added' : 'would add'} ${missing.length} entity type(s) to workspace ${workspaceId} (source: ${describeTemplate(templateKey)}): ${missing.map(t => t.name).join(', ') || '(none)'}`);
   return missing.map(t => t.name);
 }
 
@@ -52,7 +64,7 @@ export async function seedWorkspace(workspaceId, templateKey = DEFAULT_TEMPLATE)
   const counts = { entityTypes: 0, relationshipTypes: 0, entities: 0, relationshipGroups: 0, openQuestions: 0 };
 
   try {
-    log('light', `seeding workspace ${workspaceId} from template "${templateKey}"`);
+    log('light', `seeding workspace ${workspaceId} from ${describeTemplate(templateKey)}`);
 
     // ── Entity types ─────────────────────────────────────────────────────────
     // The registry behind the category pills. First, because the relationship
