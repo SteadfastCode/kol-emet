@@ -35,6 +35,7 @@ Mount points and their guards:
 | Prefix | Guard | Notes |
 |--------|-------|-------|
 | `/auth` | mixed | Login/registration; individual routes guard themselves |
+| `/templates` | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
 | `/mcp` | self | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
 | `/` (oauth) | none | OAuth discovery/authorize/token for the MCP connector |
 | `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace |
@@ -133,7 +134,7 @@ A foreign or malformed id is 404.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/auth/register` | Create account (open registration) |
+| POST | `/auth/register` | Create account (open registration). Body `{ email, password, template? }`: `template` is a key from [`GET /templates`](#templates) and decides what the new workspace is seeded with; left out, it is `worldbuilding`. 201 `{ ok: true }` and a session; 400 missing email or password; 400 `Unknown template` for a `template` that names none (including `null` or a non-string), creating no user or workspace; 409 email already registered |
 | POST | `/auth/login` | Password login → session |
 | POST | `/auth/logout` | End session (`requireAuth`) |
 | GET | `/auth/me` | Current session user |
@@ -143,6 +144,12 @@ A foreign or malformed id is 404.
 | GET | `/auth/webauthn/passkeys` | The signed-in user's passkeys, for Settings: `{ passkeys: [{ credentialID, deviceType, backedUp, createdAt, lastUsedAt }], hasPassword }`. `requireAuth`, session only; a bearer token is 403. Never includes a public key |
 | DELETE | `/auth/webauthn/passkeys/:credentialID` | Remove one of the signed-in user's own passkeys (`requireAuth`, session only). Answers the list as it now stands; 404 when this account holds no such passkey, another account's included; 409 when it is the last way into an account with no password |
 | POST | `/auth/webauthn/login/begin` · `/complete` | Passwordless login via passkey. With an email or without one (discoverable credentials). Records the passkey's `lastUsedAt` and sync status |
+
+## Templates
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/templates` | The workspace templates registration can seed from, as `[{ key, name, description }]` in definition order, the default (`worldbuilding`) first. No auth, and it sets no session: the signup form's "Start with" picker reads it. Code-defined in [`config/templates.js`](../server/src/config/templates.js); only these three fields are returned, never a template's content |
 
 ## AI chat
 

@@ -9,15 +9,22 @@
  *   - email autocomplete="email" → "username", and removed
  *   - password autocomplete ternary branches swapped
  *   - password autocomplete pinned to 'current-password' (register mode never switches)
+ *
+ * The template picker suite below goes red when submit() stops passing the chosen key to
+ * register() (both registration cases fail).
  */
-import { describe, it, expect, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
 import LoginView from './LoginView.vue';
+import { register, getTemplates } from '../api/auth.js';
 
-// Markup only: nothing here should reach the network or WebAuthn.
+// Nothing here should reach the network or WebAuthn. getTemplates answers an
+// empty list unless a test says otherwise, so the picker stays out of the
+// suites that are not about it.
 vi.mock('../api/auth.js', () => ({
   login: vi.fn(),
   register: vi.fn(),
+  getTemplates: vi.fn(async () => []),
   loginWithPasskey: vi.fn(),
   registerPasskey: vi.fn(),
 }));
@@ -82,5 +89,103 @@ describe('LoginView notice', () => {
 
   it('shows none by default', () => {
     expect(mount(LoginView).find('[role="status"]').exists()).toBe(false);
+  });
+});
+
+describe('LoginView template picker', () => {
+  // As GET /templates answers: the default first.
+  const TEMPLATES = [
+    { key: 'worldbuilding', name: 'Worldbuilding', description: 'Characters, worlds, organizations and the relationships between them.' },
+    { key: 'software-architecture', name: 'Software Architecture', description: 'Services, data stores, APIs and teams, and what depends on, calls and owns what.' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getTemplates.mockResolvedValue(TEMPLATES);
+    register.mockResolvedValue({ ok: true });
+  });
+
+  async function registerMode() {
+    const wrapper = mount(LoginView);
+    await switchTo(wrapper, 'Create account');
+    await flushPromises();
+    return wrapper;
+  }
+
+  async function fillCredentials(wrapper) {
+    await wrapper.get('form input[type="email"]').setValue('new@example.test');
+    await wrapper.get('form input[type="password"]').setValue('correct-horse-battery-staple');
+  }
+
+  const radios = (wrapper) => wrapper.findAll('.template-picker input[type="radio"]');
+
+  it('create-account mode lists the fetched templates, name and description, under "Start with"', async () => {
+    const wrapper = await registerMode();
+    const picker = wrapper.get('form .template-picker');
+
+    expect(picker.get('legend').text()).toBe('Start with');
+    expect(radios(wrapper).map((r) => r.attributes('value'))).toEqual(['worldbuilding', 'software-architecture']);
+    const options = picker.findAll('label');
+    TEMPLATES.forEach((t, i) => {
+      expect(options[i].text()).toContain(t.name);
+      expect(options[i].text()).toContain(t.description);
+    });
+  });
+
+  it('defaults to worldbuilding, wherever it is listed', async () => {
+    getTemplates.mockResolvedValue([...TEMPLATES].reverse());
+    const wrapper = await registerMode();
+
+    const checked = radios(wrapper).filter((r) => r.element.checked);
+    expect(checked.map((r) => r.attributes('value'))).toEqual(['worldbuilding']);
+  });
+
+  it('registers with the chosen template', async () => {
+    const wrapper = await registerMode();
+    await fillCredentials(wrapper);
+    await wrapper.get('.template-picker input[value="software-architecture"]').setValue();
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', 'software-architecture');
+  });
+
+  it('registers with worldbuilding when the choice is left alone', async () => {
+    const wrapper = await registerMode();
+    await fillCredentials(wrapper);
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', 'worldbuilding');
+  });
+
+  it('sits in the form, above the disclosure, and leaves the credential inputs alone', async () => {
+    const wrapper = await registerMode();
+
+    expect(wrapper.find('form .template-picker').exists()).toBe(true);
+    expect(wrapper.get('form + .login-disclosure').exists()).toBe(true);
+    expect(autocomplete(wrapper, 'form input[type="email"]')).toBe('email');
+    expect(autocomplete(wrapper, 'form input[type="password"]')).toBe('new-password');
+  });
+
+  it('sign-in mode neither shows nor fetches it', async () => {
+    const wrapper = mount(LoginView);
+    await flushPromises();
+
+    expect(wrapper.find('.template-picker').exists()).toBe(false);
+    expect(getTemplates).not.toHaveBeenCalled();
+  });
+
+  it('when the list cannot be fetched, there is no picker and registration names no template', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    getTemplates.mockRejectedValue(Object.assign(new Error('503'), { status: 503 }));
+    const wrapper = await registerMode();
+
+    expect(wrapper.find('.template-picker').exists()).toBe(false);
+    await fillCredentials(wrapper);
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined);
   });
 });

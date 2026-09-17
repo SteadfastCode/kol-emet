@@ -10,8 +10,10 @@
  *
  * Two ship: Worldbuilding (the default, and the six categories every workspace
  * had before the registry) and Software Architecture (Service, Data Store, API,
- * Team, External Dependency). Registration seeds whichever `req.body.template`
- * names (routes/auth.js → lib/workspaceSeeder.js).
+ * Team, External Dependency). The signup form lists them from the public
+ * `GET /templates` (routes/templates.js), and registration seeds whichever
+ * `req.body.template` names (routes/auth.js → lib/workspaceSeeder.js) — the
+ * default when it names none, a 400 when it names one that isn't here.
  *
  * Entity types seed the EntityType registry, which is the only gate on
  * `Entity.category` since Phase 6 step 2 dropped the hardcoded enum — so a

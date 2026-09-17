@@ -28,6 +28,13 @@
  *   by setting a cookie — then registration doubles as an address oracle for
  *   anyone with a list. So the assertion is on raw bytes, not on a parsed body.
  *
+ *   The template a signup names is the shape of the workspace it gets, so a
+ *   key registration does not know must be refused before the account exists
+ *   — not quietly swapped for the default, leaving a user who picked one
+ *   vocabulary holding another. And `GET /templates` has to answer without a
+ *   session, because the signup form that lists them is shown before there is
+ *   one.
+ *
  *   Logout has to end the session on the server. Clearing the cookie only
  *   removes the browser's copy; a session left live in the store is still
  *   usable by anyone holding the value, which is the case logout exists for.
@@ -44,7 +51,9 @@
  * registration test fails; change either 401 in `POST /auth/login` to name
  * which half was wrong and the enumeration test fails; swap
  * `req.session.destroy()` for a bare `res.clearCookie()` and the logout test
- * fails on the replayed cookie.
+ * fails on the replayed cookie; drop the `hasTemplate` check from
+ * `POST /auth/register` and the unknown-template test fails on its 201; mount
+ * `/templates` behind `requireAuth` and the listing test fails on its 401.
  *
  * Not here: the WebAuthn ceremonies. `/auth/webauthn/*` is covered in
  * tests/http/passkeys.test.js, driven by a software authenticator
@@ -94,6 +103,7 @@ import * as db from '../helpers/db.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import RelationshipType from '../../src/models/RelationshipType.js';
+import EntityType from '../../src/models/EntityType.js';
 
 // createApp() reads NODE_ENV when called, and the OAuth router reads its token
 // at module load, so the environment has to be in place before src/app.js is
@@ -298,6 +308,58 @@ describe('POST /auth/register', () => {
     assert.equal(noBody.status, 400, 'a bodyless request must be refused, not crash on destructuring');
 
     assert.equal(await User.countDocuments({ email }), 0, 'a rejected registration must persist nothing');
+  });
+});
+
+describe('POST /auth/register with a template', () => {
+  test('a named template is what the new workspace is seeded from', async () => {
+    const email = uniqueEmail('architect');
+    const agent = request.agent(app);
+    const res = called('POST /auth/register (template software-architecture)', await agent
+      .post('/auth/register')
+      .send({ email, password: PASSWORD, template: 'software-architecture' }));
+    assert.equal(res.status, 201, `registration failed: ${res.status} ${JSON.stringify(res.body)}`);
+
+    const user = await User.findOne({ email }).select('_id').lean();
+    const workspace = await Workspace.findOne({ 'members.userId': user._id }).select('_id').lean();
+    const types = await EntityType.find({ workspaceId: workspace._id }).sort({ order: 1 }).lean();
+    log('light', `registered ${email} (source: POST /auth/register, template "software-architecture") → workspace ${workspace._id} with types ${types.map(t => t.name).join(', ')}`);
+
+    // Exactly these five: the picked registry, with none of the default's six
+    // alongside it (tests/http/entityTypes.test.js covers the rest of the seed).
+    assert.deepEqual(types.map(t => t.name), ['Service', 'Data Store', 'API', 'Team', 'External Dependency']);
+  });
+
+  test('an unknown template is 400 and creates no user or workspace', async () => {
+    const unknown = ['nope', 'Worldbuilding', 'software_architecture', 'constructor', '__proto__', '', null, 42, ['software-architecture']];
+
+    for (const template of unknown) {
+      const email = uniqueEmail('unknown-template');
+      const workspacesBefore = await Workspace.countDocuments();
+      const res = called(`POST /auth/register (template ${JSON.stringify(template)})`, await request(app)
+        .post('/auth/register')
+        .send({ email, password: PASSWORD, template }));
+
+      assert.equal(res.status, 400, `template ${JSON.stringify(template)} must be refused, not fall back to the default`);
+      assert.equal(res.body.error, 'Unknown template');
+      assert.equal(sessionCookie(res), null, 'a refused registration must not open a session');
+      assert.equal(await User.countDocuments({ email }), 0, `template ${JSON.stringify(template)} must not create a user`);
+      assert.equal(await Workspace.countDocuments(), workspacesBefore, `template ${JSON.stringify(template)} must not create a workspace`);
+    }
+  });
+});
+
+describe('GET /templates', () => {
+  test('lists both templates without a session', async () => {
+    const res = called('GET /templates (anonymous)', await request(app).get('/templates'));
+
+    assert.equal(res.status, 200, 'the signup form lists templates before an account exists');
+    assert.deepEqual(res.body.map(t => t.key), ['worldbuilding', 'software-architecture'], 'every template, the default first');
+    for (const t of res.body) {
+      assert.deepEqual(Object.keys(t).sort(), ['description', 'key', 'name'], `${t.key} lists only its key, name and description`);
+      assert.ok(t.name.trim() && t.description.trim(), `${t.key} needs a name and description to show`);
+    }
+    assert.equal(sessionCookie(res), null, 'listing templates must not open a session');
   });
 });
 

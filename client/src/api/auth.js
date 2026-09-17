@@ -12,8 +12,16 @@ async function req(path, options = {}) {
   return res.json();
 }
 
-export const register = (email, password) =>
-  req('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) });
+/**
+ * The templates a new workspace can start from, `[{ key, name, description }]`
+ * with the default first. Public: the signup form asks before there is a session.
+ */
+export const getTemplates = () =>
+  req('/templates');
+
+/** `template` is a key from getTemplates(); left out, the server seeds its default. */
+export const register = (email, password, template) =>
+  req('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(template && { template }) }) });
 
 export const login = (email, password) =>
   req('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
