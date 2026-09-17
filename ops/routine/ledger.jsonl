@@ -83,3 +83,4 @@
 {"event":"claim","runId":"2026-09-17T07:08:04.751Z","item":"KOL-029","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-09-17T07:51:36.146Z"}
 {"event":"complete","runId":"2026-09-17T07:08:04.751Z","item":"KOL-029","mergeSha":"def7dab037a2c5c6404d95e5f512014848c1f58b","durationMin":6,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-09-17T07:57:55.492Z"}
 {"event":"claim","runId":"2026-09-17T12:07:35.963Z","item":"KOL-030","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-09-17T12:08:04.652Z"}
+{"event":"complete","runId":"2026-09-17T12:07:35.963Z","item":"KOL-030","mergeSha":"627b0a759793954f3405c25e8374323f3ef017f0","durationMin":7,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-09-17T12:14:46.998Z"}

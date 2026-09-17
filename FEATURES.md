@@ -8,22 +8,6 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [x] **(KOL-030) Phase 6 step 5: ship the Software Architecture template alongside Worldbuilding** (needs KOL-027)
-  Templates already exist as code-defined bundles: `server/src/config/templates.js` (`TEMPLATES`, `getTemplate`) holds Worldbuilding
-  (today's six types with colours, 38 relationship types, two starter entities, one group, one open question) and `seedWorkspace` in
-  `server/src/lib/workspaceSeeder.js` seeds it at registration (`server/src/routes/auth.js:69`, which already accepts
-  `req.body.template`). The second template was withheld only because the enum would reject its names. Build: add
-  `'software-architecture'` (`name: 'Software Architecture'`) with `entityTypes` Service, Data Store, API, Team, External Dependency
-  (ordered, each with a `{ bg, text }` colour pair distinct from the six worldbuilding ones), `relationshipTypes` in the same
-  `scope: 'group'` / `scope: 'member'` shape as Worldbuilding — group labels Depends on, Owned by, Calls, Exposes with a member-role
-  pair each (e.g. Dependent/Dependency, Owner/Owned, Caller/Callee, Provider/Endpoint; `sourceCategory`/`targetCategory` hints such as
-  Team → Service for Owner) — and a small starter set mirroring Worldbuilding's shape (one Service, one Data Store, one Depends-on
-  group, one open question). Export `listTemplates()` returning `[{ key, name, description }]` and `hasTemplate(key)`; rewrite the
-  header comment that says only the worldbuilding template is real. Verify: extend the `seeding` describe in
-  `server/tests/http/entityTypes.test.js` — registering with `template: 'software-architecture'` yields exactly the five types in
-  order with colours and relationship types including the four group labels, while a default registration still yields the six;
-  `yarn test` green. Out of scope: a template picker on signup and a public listing route (KOL-031), changing an existing
-  workspace's template, an admin UI for templates.
 - [ ] **(KOL-031) Onboarding: choose a template on signup** (needs KOL-030)
   Registration already seeds the personal workspace from the Worldbuilding template by default, and the empty states exist
   (`EntitySidebar.vue:64-80` list, `GraphView.vue:13-15` graph, the generator's input stage), so a new user never lands blank. What
@@ -118,6 +102,22 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-030) Phase 6 step 5: ship the Software Architecture template alongside Worldbuilding** (needs KOL-027) (routine 2026-09-17, 627b0a7)
+  Templates already exist as code-defined bundles: `server/src/config/templates.js` (`TEMPLATES`, `getTemplate`) holds Worldbuilding
+  (today's six types with colours, 38 relationship types, two starter entities, one group, one open question) and `seedWorkspace` in
+  `server/src/lib/workspaceSeeder.js` seeds it at registration (`server/src/routes/auth.js:69`, which already accepts
+  `req.body.template`). The second template was withheld only because the enum would reject its names. Build: add
+  `'software-architecture'` (`name: 'Software Architecture'`) with `entityTypes` Service, Data Store, API, Team, External Dependency
+  (ordered, each with a `{ bg, text }` colour pair distinct from the six worldbuilding ones), `relationshipTypes` in the same
+  `scope: 'group'` / `scope: 'member'` shape as Worldbuilding — group labels Depends on, Owned by, Calls, Exposes with a member-role
+  pair each (e.g. Dependent/Dependency, Owner/Owned, Caller/Callee, Provider/Endpoint; `sourceCategory`/`targetCategory` hints such as
+  Team → Service for Owner) — and a small starter set mirroring Worldbuilding's shape (one Service, one Data Store, one Depends-on
+  group, one open question). Export `listTemplates()` returning `[{ key, name, description }]` and `hasTemplate(key)`; rewrite the
+  header comment that says only the worldbuilding template is real. Verify: extend the `seeding` describe in
+  `server/tests/http/entityTypes.test.js` — registering with `template: 'software-architecture'` yields exactly the five types in
+  order with colours and relationship types including the four group labels, while a default registration still yields the six;
+  `yarn test` green. Out of scope: a template picker on signup and a public listing route (KOL-031), changing an existing
+  workspace's template, an admin UI for templates.
 - [x] **(KOL-029) Phase 6 step 4: client pills, filters, pickers and colours read from /entity-types** (needs KOL-027) (routine 2026-09-17, def7dab)
   Every client category list is hardcoded: `client/src/config/categories.js` (`CATEGORIES`, `CAT_COLORS`) feeds the pill row in
   `client/src/components/EntitySidebar.vue:41,90`, the pickers in `EntityEditor.vue:17-19,123` and `EntityHeader.vue:37-38,65,75`, and
