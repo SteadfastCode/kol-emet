@@ -14,7 +14,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { CAT_COLORS } from '../config/categories.js';
+import { useEntityTypes } from '../composables/useEntityTypes.js';
 
 const props = defineProps({
   entity: Object,
@@ -23,9 +23,11 @@ const props = defineProps({
 
 defineEmits(['select']);
 
+const { styleFor } = useEntityTypes();
+
 const catStyle = computed(() => {
-  const c = CAT_COLORS[props.entity.category];
-  return c ? { background: c.bg, color: c.color } : { background: '#333', color: '#aaa' };
+  const c = styleFor(props.entity.category);
+  return { background: c.bg, color: c.color };
 });
 </script>
 

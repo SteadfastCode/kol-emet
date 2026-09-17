@@ -68,7 +68,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { CAT_COLORS } from '../../config/categories.js';
+import { useEntityTypes } from '../../composables/useEntityTypes.js';
 
 const props = defineProps({
   item:  { type: Object, required: true },
@@ -78,11 +78,13 @@ const props = defineProps({
 });
 defineEmits(['accept', 'reject', 'edit', 'undo', 'merge', 'keep-separate']);
 
+const { styleFor } = useEntityTypes();
+
 // What the reviewer signed off on, if they edited — otherwise the proposal.
 const payload  = computed(() => props.item.accepted ?? props.item.proposed ?? {});
 const category = computed(() => payload.value.normalizedCategory ?? payload.value.category ?? '');
 const catStyle = computed(() => {
-  const c = CAT_COLORS[category.value] ?? { bg: '#333', color: '#aaa' };
+  const c = styleFor(category.value);
   return { background: c.bg, color: c.color };
 });
 

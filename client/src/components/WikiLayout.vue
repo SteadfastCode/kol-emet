@@ -193,6 +193,7 @@ import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
 import { useEvents } from '../composables/useEvents.js';
 import { useToasts } from '../composables/useToasts.js';
+import { useEntityTypes } from '../composables/useEntityTypes.js';
 
 const EDITOR_ID = '__new_entity__';
 
@@ -206,6 +207,7 @@ const {
 const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag, resetFilters } = useFilters(entities);
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
+const { loadEntityTypes } = useEntityTypes();
 
 // Applying is the only point at which a draft reaches the graph, so this is
 // where the entity list has to be refetched.
@@ -279,7 +281,10 @@ const minimizedPanels = computed(() =>
   panels.value.filter(p => p.id !== activePanelId.value)
 );
 
-onMounted(() => loadEntities());
+onMounted(() => {
+  loadEntities();
+  loadEntityTypes('WikiLayout mount');
+});
 
 function openEntry(id, title) {
   const existing = panels.value.find(p => p.id === id);

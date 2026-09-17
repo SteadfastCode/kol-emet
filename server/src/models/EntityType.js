@@ -17,8 +17,8 @@ import { ownerGuard } from '../lib/ownerGuard.js';
  * the only gate on category names: Entity and RelationshipType writes check
  * theirs against it (lib/entityTypeRegistry.js), so any name a user gives a
  * type is usable. The MCP tools (list_entity_types) and the chat assistant
- * read it too (Phase 6 step 3); the client's pills and picker move onto it in
- * a later step.
+ * read it too (Phase 6 step 3), and so do the client's pills, pickers and
+ * category colours (Phase 6 step 4, client/src/composables/useEntityTypes.js).
  */
 const entityTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -28,8 +28,8 @@ const entityTypeSchema = new mongoose.Schema({
 
   /**
    * The pill colours as the client paints them: `bg` behind, `text` on top.
-   * A pair rather than one accent colour because the six defaults are pairs
-   * (CAT_COLORS in client/src/config/categories.js) and must survive the move.
+   * A pair rather than one accent colour because the six defaults were pairs
+   * in the client's old hardcoded CAT_COLORS, and had to survive the move.
    */
   color: {
     bg:   { type: String, default: null },

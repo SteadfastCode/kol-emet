@@ -38,7 +38,7 @@
 
       <div class="cat-pills">
         <span
-          v-for="cat in ['All', ...CATEGORIES]"
+          v-for="cat in ['All', ...categoryNames]"
           :key="cat"
           class="pill"
           :class="{ active: (activeCat === cat || (cat === 'All' && !activeCat)) && !activeTag }"
@@ -87,7 +87,7 @@
 import { computed } from 'vue';
 import VirtualList from './VirtualList.vue';
 import SidebarCard from './SidebarCard.vue';
-import { CATEGORIES } from '../config/categories.js';
+import { useEntityTypes } from '../composables/useEntityTypes.js';
 
 const props = defineProps({
   entities: Array,
@@ -98,6 +98,9 @@ const props = defineProps({
   loading: Boolean,
   graphOpen: Boolean,
 });
+
+// The workspace's entity types, in registry order; WikiLayout loads them.
+const { names: categoryNames } = useEntityTypes();
 
 // `entities` is already filtered, so an empty list alone can't distinguish
 // "no content" from "no matches" — the active filters are what separates them.

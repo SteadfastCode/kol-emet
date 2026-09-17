@@ -1,8 +1,10 @@
 /**
  * Where the Passkeys group sits: in Settings, between Account and Delete account, and mounted only
  * while Settings shows, so its list is fetched fresh on each open and never on page load. What the
- * group itself does is pinned in PasskeySettings.test.js. Shallow: every child is a stub, and the
- * composables that would reach the network or open an EventSource are replaced.
+ * group itself does is pinned in PasskeySettings.test.js. Also that the entity-type registry is
+ * loaded once on mount; what the sidebar does with it is pinned in EntitySidebar.test.js. Shallow:
+ * every child is a stub, and the composables that would reach the network or open an EventSource
+ * are replaced.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { shallowMount } from '@vue/test-utils';
@@ -36,8 +38,25 @@ vi.mock('../composables/useNavigation.js', async () => {
 });
 vi.mock('../composables/useEvents.js', () => ({ useEvents: vi.fn() }));
 vi.mock('../composables/useToasts.js', () => ({ useToasts: () => ({ addToast: vi.fn() }) }));
+const { loadEntityTypes } = vi.hoisted(() => ({ loadEntityTypes: vi.fn() }));
+vi.mock('../composables/useEntityTypes.js', async () => {
+  const { ref } = await import('vue');
+  return {
+    useEntityTypes: () => ({
+      types: ref([]), names: ref([]), styleFor: () => ({ bg: '#333', color: '#aaa' }), loadEntityTypes,
+    }),
+  };
+});
 
 const settingsTab = (wrapper) => wrapper.findAll('.tab-btn').find((b) => b.text() === 'Settings');
+
+describe('WikiLayout entity types', () => {
+  it('loads the entity-type registry once when it mounts', () => {
+    loadEntityTypes.mockClear();
+    shallowMount(WikiLayout);
+    expect(loadEntityTypes).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('WikiLayout settings', () => {
   it('has a Passkeys group between Account and Delete account', () => {
