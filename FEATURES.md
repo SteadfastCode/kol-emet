@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-028) Phase 6 step 3: MCP and chat read entity types from the registry** (needs KOL-027)
+- [x] **(KOL-028) Phase 6 step 3: MCP and chat read entity types from the registry** (needs KOL-027)
   `server/src/routes/mcp.js` still declares `category: z.enum(CATEGORIES)` on `search_entities` (:124), `create_entity` (:170) and
   `update_entity` (:201), and `server/src/routes/chat.js:150` hands the in-app assistant the same frozen list. Build: those three
   become `z.string()` with a `.describe()` telling the agent to call `list_entity_types` for the valid names (the schema validator
