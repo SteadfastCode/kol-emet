@@ -4,7 +4,7 @@
     "KOL-033": {
       "order": 1,
       "title": "First vertical-ingestion producer: a docker-compose.yml becomes a reviewable Draft",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-033",
