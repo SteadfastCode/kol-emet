@@ -4,6 +4,7 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
+import { openQuestionsIn } from '../lib/scopedPopulate.js';
 
 const router = Router();
 
@@ -27,9 +28,14 @@ function normalizeBlockOrder(blocks) {
  * Strips any client-supplied tenancy key. Without this a caller could set
  * workspaceId in the request body and write into someone else's workspace —
  * the workspace is the server's to decide, never the client's.
+ *
+ * `open_questions` and `relationships` go too: both are back-references the
+ * server maintains (open-question and relationship-group routes, the draft
+ * applier, the seeder), and a client-written array is how another workspace's
+ * id would get planted in one.
  */
 function stripTenancy(body) {
-  const { workspaceId, ...rest } = body;
+  const { workspaceId, open_questions, relationships, ...rest } = body;
   return rest;
 }
 
@@ -49,7 +55,7 @@ router.get('/', async (req, res) => {
     }
     const entities = await Entity.find(filter)
       .sort({ title: 1 })
-      .populate('open_questions', 'question status');
+      .populate(openQuestionsIn(req.workspaceId));
     res.json(entities);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -60,7 +66,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const entity = await Entity.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
-      .populate('open_questions', 'question status')
+      .populate(openQuestionsIn(req.workspaceId))
       .lean();
     // 404 rather than 403 for a foreign id — don't confirm it exists elsewhere.
     if (!entity) return res.status(404).json({ error: 'Not found' });
@@ -118,7 +124,7 @@ router.put('/:id', requireActor, async (req, res) => {
     const after = await Entity.findOneAndUpdate(scope, data, {
       new: true,
       runValidators: true,
-    }).populate('open_questions', 'question status');
+    }).populate(openQuestionsIn(req.workspaceId));
     if (!after) return res.status(404).json({ error: 'Not found' });
 
     const clientId = req.headers['x-sse-client-id'] ?? null;

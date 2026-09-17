@@ -116,6 +116,7 @@ import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import Settings from '../../src/models/Settings.js';
 import Entity from '../../src/models/Entity.js';
+import OpenQuestion from '../../src/models/OpenQuestion.js';
 import { setMcpUser } from '../../src/lib/mcpUserStore.js';
 
 // `src/routes/mcp.js` reads MCP_BEARER_TOKEN at module load, and createApp()
@@ -654,6 +655,50 @@ describe('workspace scoping', () => {
       // note in src/routes/entities.js.
       assert.match(res.text, /not found/i, `unexpected error text: ${res.text}`);
       assert.doesNotMatch(res.text, new RegExp(BOB_ENTITY.title, 'i'), 'the error must not echo the foreign entity');
+    });
+
+    describe('with a foreign id already stored in a populated array', () => {
+      const ALICE_QUESTION = 'Alice asks about her own entity.';
+      const BOB_QUESTION   = 'Bob asks something alice must never read.';
+      let bobQuestionId;
+      let aliceQuestionId;
+
+      before(async () => {
+        const bobQuestion = await bob.agent.post('/open-questions').send({ question: BOB_QUESTION, entry_ids: [owned.bobEntityId] });
+        assert.equal(bobQuestion.status, 201, `POST /open-questions as bob failed: ${JSON.stringify(bobQuestion.body)}`);
+        bobQuestionId = String(bobQuestion.body._id);
+
+        // alice's own question is the control: the scoped populate must still
+        // resolve it, or "no foreign text" would pass on an empty array.
+        const aliceQuestion = await alice.agent.post('/open-questions').send({ question: ALICE_QUESTION, entry_ids: [owned.aliceEntityId] });
+        assert.equal(aliceQuestion.status, 201, `POST /open-questions as alice failed: ${JSON.stringify(aliceQuestion.body)}`);
+        aliceQuestionId = String(aliceQuestion.body._id);
+
+        // Written past every route — the REST API strips open_questions and
+        // filters entry_ids, so a direct write is the only way to plant one now.
+        await Entity.updateOne({ _id: owned.aliceEntityId }, { $addToSet: { open_questions: bobQuestionId } });
+        await OpenQuestion.updateOne({ _id: aliceQuestionId }, { $addToSet: { entry_ids: owned.bobEntityId } });
+        log('light', `planted bob's question ${bobQuestionId} on alice's entity ${owned.aliceEntityId}, and bob's entity ${owned.bobEntityId} on alice's question ${aliceQuestionId} (source: direct model write)`);
+      });
+
+      test('get_entity does not resolve another tenant\'s question', async () => {
+        const res = await callTool('get_entity', { id: owned.aliceEntityId });
+        const entity = parsed('get_entity', res);
+
+        assert.doesNotMatch(res.text, new RegExp(BOB_QUESTION, 'i'), "bob's question text leaked through open_questions");
+        assert.ok(entity.open_questions.every(q => q && typeof q === 'object'), `no null or unresolved entry may remain: ${JSON.stringify(entity.open_questions)}`);
+        assert.deepEqual(entity.open_questions.map(q => q.question), [ALICE_QUESTION], "alice's own question must still resolve");
+      });
+
+      test('list_open_questions does not resolve another tenant\'s entity', async () => {
+        const res = await callTool('list_open_questions', {});
+        const questions = parsed('list_open_questions', res);
+
+        assert.doesNotMatch(res.text, new RegExp(BOB_ENTITY.title, 'i'), "bob's entity title leaked through entry_ids");
+        const own = questions.find(q => String(q._id) === aliceQuestionId);
+        assert.ok(own, "alice's question should be listed");
+        assert.deepEqual(own.entry_ids.map(e => e.title), [ALICE_ENTITY.title], "alice's own entity must still resolve");
+      });
     });
   });
 

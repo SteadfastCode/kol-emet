@@ -402,12 +402,20 @@ which no scoped query matches;
 [`scripts/migrate-workspaces.js`](../server/scripts/migrate-workspaces.js) adopts them into a named
 workspace.
 
-**Known gap:** `populate()` is unscoped for `Entity.open_questions` (entity routes, changelog
-rollback, the MCP entity tools) and `OpenQuestion.entry_ids` (open-question routes,
-`list_open_questions`). A caller who writes another workspace's id into either array can read back
-that row's question text or entity title.
-[`tests/http/tenancy.test.js`](../server/tests/http/tenancy.test.js) pins both as `todo` tests that
-pass once the populate is scoped (`match: { workspaceId }`) or foreign ids are rejected on write.
+**Populated id arrays are scoped too (closed 2026-09-17, KOL-032).** `Entity.open_questions` and
+`OpenQuestion.entry_ids` used to be populated unscoped, so a caller who wrote another workspace's id
+into either array could read back that row's question text or entity title. Now every populate of
+either array (entity routes, changelog rollback, open-question routes, and the MCP
+`search_entities`, `get_entity`, `update_entity` and `list_open_questions` tools) goes through
+[`lib/scopedPopulate.js`](../server/src/lib/scopedPopulate.js) with `match: { workspaceId }`. An
+unmatched id is dropped from the response, not returned as `null`. The write side is closed as
+well. `POST`/`PUT /entities` strip `open_questions` and `relationships` from the body, since both
+are back-references only the server writes. `POST`/`PUT /open-questions` and `add_open_question`
+keep only the `entry_ids` that name entities in the caller's workspace.
+[`tests/http/tenancy.test.js`](../server/tests/http/tenancy.test.js) and
+[`tests/http/mcp.test.js`](../server/tests/http/mcp.test.js) test each side separately. The
+read-side tests plant the foreign id with a direct model write, because the API no longer accepts
+one.
 
 Members are modelled from the start rather than a bare `ownerId`, so shared workspaces don't require
 reshaping the schema later. Registration creates a personal workspace with the new user as sole owner.

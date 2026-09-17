@@ -13,6 +13,7 @@ import { getMcpUser } from '../lib/mcpUserStore.js';
 import Workspace from '../models/Workspace.js';
 import { CATEGORIES } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
+import { openQuestionsIn, entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
 
 const router = Router();
 
@@ -137,7 +138,7 @@ function createMcpServer() {
       }
       const entities = await Entity.find(filter)
         .sort({ title: 1 })
-        .populate('open_questions', 'question status');
+        .populate(openQuestionsIn(filter.workspaceId));
       return { content: [{ type: 'text', text: JSON.stringify(entities, null, 2) }] };
     }
   );
@@ -151,7 +152,7 @@ function createMcpServer() {
     async ({ id }) => {
       const workspaceId = await mcpWorkspaceId();
       const entity = await Entity.findOne({ _id: id, workspaceId })
-        .populate('open_questions', 'question status').lean();
+        .populate(openQuestionsIn(workspaceId)).lean();
       if (!entity) throw new Error(`Entity not found: ${id}`);
       const rawGroups = await RelationshipGroup.find({
         workspaceId,
@@ -213,7 +214,7 @@ function createMcpServer() {
       const before = await Entity.findOne({ _id: id, workspaceId }).lean();
       if (!before) throw new Error(`Entity not found: ${id}`);
       const after = await Entity.findOneAndUpdate({ _id: id, workspaceId }, data, { new: true, runValidators: true })
-        .populate('open_questions', 'question status');
+        .populate(openQuestionsIn(workspaceId));
       if (!after) throw new Error(`Entity not found: ${id}`);
       const actor = await resolveMcpActor();
       if (actor) {
@@ -230,8 +231,10 @@ function createMcpServer() {
       question: z.string().describe('The unresolved question'),
       entry_ids: z.array(z.string()).describe('MongoDB ObjectIds of entities to link this question to'),
     },
-    async ({ question, entry_ids }) => {
+    async ({ question, entry_ids: requested }) => {
       const workspaceId = await mcpWorkspaceId();
+      // Same rule as POST /open-questions: only this workspace's entities.
+      const entry_ids = await ownEntryIds(requested, workspaceId);
       const oq = await OpenQuestion.create({ question, entry_ids, workspaceId });
       if (entry_ids.length) {
         await Entity.updateMany(
@@ -254,7 +257,7 @@ function createMcpServer() {
       if (status) filter.status = status;
       const questions = await OpenQuestion.find(filter)
         .sort({ createdAt: -1 })
-        .populate('entry_ids', 'title category');
+        .populate(entriesIn(filter.workspaceId));
       return { content: [{ type: 'text', text: JSON.stringify(questions, null, 2) }] };
     }
   );

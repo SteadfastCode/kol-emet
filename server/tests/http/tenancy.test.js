@@ -56,6 +56,8 @@ import request from 'supertest';
 import * as db from '../helpers/db.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
+import Entity from '../../src/models/Entity.js';
+import OpenQuestion from '../../src/models/OpenQuestion.js';
 
 // createApp() reads NODE_ENV when called, and the OAuth router reads its token
 // at module load, so the environment has to be in place before src/app.js is
@@ -381,30 +383,31 @@ describe('/open-questions', () => {
 });
 
 /**
- * Known gap, found while writing this suite and deliberately left unfixed here:
- * fixing it means changing routes, which is outside this item.
+ * `Entity.open_questions` and `OpenQuestion.entry_ids` are id arrays that
+ * `populate()` resolves into another collection. Populate knows nothing about
+ * workspaces, so a foreign id in either array would read back as the other
+ * tenant's question text or entity title. Two defences, tested separately:
  *
- * Both routes call `populate()` without a workspace filter, and both arrays
- * they populate can be pointed at another workspace's ids by the caller —
- * `entry_ids` is taken from the POST body, and `stripTenancy` in
- * `src/routes/entities.js` strips only `workspaceId`, so `open_questions` is
- * writable too. Planting a foreign id in your own document and reading it back
- * therefore discloses the other tenant's entity title/category, or its question
- * text. Self-inflicted — the attacker supplies the id — but it crosses the
- * boundary, which is the thing this file exists to defend.
+ *   write side — `stripTenancy` drops `open_questions` (and `relationships`)
+ *   from entity bodies, and the open-question routes keep only `entry_ids`
+ *   naming entities in the caller's workspace, so a request cannot plant a
+ *   foreign id.
  *
- * `todo` rather than a route change: these assert the guarantee the product
- * should make, fail today, and go green the moment the populate calls are
- * scoped (`match: { workspaceId }`) or the ids are rejected on write. They do
- * not fail `yarn test`.
+ *   read side — every populate of either array carries
+ *   `match: { workspaceId }` (`src/lib/scopedPopulate.js`), so an id that is
+ *   already stored — written before the write side was filtered, or by a path
+ *   that doesn't filter — still resolves to nothing. These plant the id with a
+ *   direct model write, because the HTTP API no longer can; without that the
+ *   read side would go untested behind the write side.
  */
-describe('known gap: unscoped populate() reaches across workspaces', () => {
-  test("open-questions: entry_ids resolve another tenant's entity", { todo: 'scope the populate in src/routes/openQuestions.js' }, async () => {
+describe('foreign ids in populated arrays', () => {
+  test("open-questions: entry_ids never resolve another tenant's entity", async () => {
     const created = await bob.agent.post('/open-questions').send({
       question: "Bob's question, pointed at alice's entity.",
       entry_ids: [aliceOwns.entityId],
     });
     assert.equal(created.status, 201);
+    assert.deepEqual(created.body.entry_ids, [], "alice's entity id must not be stored on bob's question");
 
     const res = await bob.agent.get(`/open-questions/${created.body._id}`);
     assert.equal(res.status, 200);
@@ -412,7 +415,7 @@ describe('known gap: unscoped populate() reaches across workspaces', () => {
     assert.ok(!titles.includes(ALICE_ENTITY_TITLE), `alice's entity title leaked through entry_ids: ${JSON.stringify(titles)}`);
   });
 
-  test("entities: open_questions resolve another tenant's question", { todo: 'scope the populate in src/routes/entities.js, or strip open_questions on write' }, async () => {
+  test("entities: open_questions never resolve another tenant's question", async () => {
     const created = await bob.agent.post('/entities').send({
       title: "Bob's Carrier",
       category: 'Characters',
@@ -420,10 +423,127 @@ describe('known gap: unscoped populate() reaches across workspaces', () => {
       open_questions: [aliceOwns.questionId],
     });
     assert.equal(created.status, 201);
+    assert.deepEqual(created.body.open_questions, [], 'a client-supplied open_questions array must be stripped');
 
     const res = await bob.agent.get(`/entities/${created.body._id}`);
     assert.equal(res.status, 200);
     const questions = (res.body.open_questions ?? []).map(q => q.question);
     assert.ok(!questions.includes(ALICE_QUESTION), `alice's question text leaked through open_questions: ${JSON.stringify(questions)}`);
+  });
+
+  test('PUT /entities/:id strips open_questions and relationships from the body', async () => {
+    const carrier = await createEntity(bob, { title: "Bob's Second Carrier", category: 'Worlds', summary: 'Target of a PUT carrying back-references.' });
+
+    const res = await bob.agent.put(`/entities/${carrier._id}`).send({
+      summary: 'Edited alongside planted back-references.',
+      open_questions: [aliceOwns.questionId],
+      relationships: [aliceOwns.groupId],
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.summary, 'Edited alongside planted back-references.', 'the rest of the update must still apply');
+    const stored = await Entity.findById(carrier._id).lean();
+    assert.deepEqual(stored.open_questions, [], 'open_questions must not be writable through PUT');
+    assert.deepEqual(stored.relationships, [], 'relationships must not be writable through PUT');
+  });
+
+  test("PUT /open-questions/:id keeps only the caller's entry_ids", async () => {
+    const own = await createEntity(bob, { title: "Bob's Question Target", category: 'Worlds', summary: 'Entry for a retargeted question.' });
+    const created = await bob.agent.post('/open-questions').send({ question: "Bob's question to retarget." });
+    assert.equal(created.status, 201);
+
+    const res = await bob.agent.put(`/open-questions/${created.body._id}`).send({
+      entry_ids: [aliceOwns.entityId, own._id],
+    });
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.entry_ids.map(e => e.title), ["Bob's Question Target"], "only bob's own entity may be kept");
+    const stored = await OpenQuestion.findById(created.body._id).lean();
+    assert.deepEqual(stored.entry_ids.map(String), [String(own._id)], "alice's entity id must not be stored");
+
+    const asAlice = await alice.agent.get(`/entities/${aliceOwns.entityId}`);
+    const linked = (asAlice.body.open_questions ?? []).map(q => String(q._id));
+    assert.ok(!linked.includes(String(created.body._id)), "bob's question must not be back-linked onto alice's entity");
+  });
+
+  describe('an already-stored foreign id', () => {
+    const planted = { entityId: null, questionId: null };
+    const BOB_OWN_QUESTION = 'A question bob asked about his own entity.';
+
+    before(async () => {
+      const carrier = await createEntity(bob, { title: "Bob's Legacy Carrier", category: 'Characters', summary: 'Holds a foreign id written past the routes.' });
+      planted.entityId = String(carrier._id);
+
+      // bob's own question on the entity: the control that proves the scoped
+      // populate still resolves the caller's ids, rather than resolving nothing.
+      const own = await bob.agent.post('/open-questions').send({
+        question: BOB_OWN_QUESTION,
+        entry_ids: [planted.entityId],
+      });
+      assert.equal(own.status, 201);
+      planted.questionId = String(own.body._id);
+
+      // Direct writes, past every route: the foreign id sits first in each
+      // array, ahead of the caller's own.
+      await Entity.updateOne({ _id: planted.entityId }, { $push: { open_questions: { $each: [aliceOwns.questionId], $position: 0 } } });
+      await OpenQuestion.updateOne({ _id: planted.questionId }, { $push: { entry_ids: { $each: [aliceOwns.entityId], $position: 0 } } });
+      log('light', `planted alice's question ${aliceOwns.questionId} on bob's entity ${planted.entityId}, and alice's entity ${aliceOwns.entityId} on bob's question ${planted.questionId} (source: direct model write)`);
+    });
+
+    /** Asserts a populated open_questions array is exactly bob's own question. */
+    function assertOnlyOwnQuestion(what, openQuestions) {
+      log('verbose', `${what} open_questions: ${JSON.stringify(openQuestions)}`);
+      assert.ok(Array.isArray(openQuestions), `${what}: open_questions should be an array`);
+      assert.ok(openQuestions.every(q => q && typeof q === 'object'), `${what}: no null or unresolved entry may remain: ${JSON.stringify(openQuestions)}`);
+      assert.deepEqual(openQuestions.map(q => q.question), [BOB_OWN_QUESTION], `${what}: expected only bob's own question`);
+    }
+
+    /** Asserts a populated entry_ids array is exactly bob's own entity. */
+    function assertOnlyOwnEntry(what, entryIds) {
+      log('verbose', `${what} entry_ids: ${JSON.stringify(entryIds)}`);
+      assert.ok(Array.isArray(entryIds), `${what}: entry_ids should be an array`);
+      assert.ok(entryIds.every(e => e && typeof e === 'object'), `${what}: no null or unresolved entry may remain: ${JSON.stringify(entryIds)}`);
+      assert.deepEqual(entryIds.map(e => e.title), ["Bob's Legacy Carrier"], `${what}: expected only bob's own entity`);
+    }
+
+    test('GET /entities/:id does not resolve it', async () => {
+      const res = await bob.agent.get(`/entities/${planted.entityId}`);
+      assert.equal(res.status, 200);
+      assertOnlyOwnQuestion('GET /entities/:id', res.body.open_questions);
+    });
+
+    test('GET /entities does not resolve it', async () => {
+      const res = await bob.agent.get('/entities');
+      assert.equal(res.status, 200);
+      const carrier = res.body.find(e => String(e._id) === planted.entityId);
+      assert.ok(carrier, "bob's carrier should be listed");
+      assertOnlyOwnQuestion('GET /entities', carrier.open_questions);
+    });
+
+    test('PUT /entities/:id does not resolve it', async () => {
+      const res = await bob.agent.put(`/entities/${planted.entityId}`).send({ summary: 'Touched.' });
+      assert.equal(res.status, 200);
+      assertOnlyOwnQuestion('PUT /entities/:id', res.body.open_questions);
+    });
+
+    test('GET /open-questions/:id does not resolve it', async () => {
+      const res = await bob.agent.get(`/open-questions/${planted.questionId}`);
+      assert.equal(res.status, 200);
+      assertOnlyOwnEntry('GET /open-questions/:id', res.body.entry_ids);
+    });
+
+    test('GET /open-questions does not resolve it', async () => {
+      const res = await bob.agent.get('/open-questions');
+      assert.equal(res.status, 200);
+      const question = res.body.find(q => String(q._id) === planted.questionId);
+      assert.ok(question, "bob's question should be listed");
+      assertOnlyOwnEntry('GET /open-questions', question.entry_ids);
+    });
+
+    test('PUT /open-questions/:id does not resolve it', async () => {
+      const res = await bob.agent.put(`/open-questions/${planted.questionId}`).send({ status: 'resolved' });
+      assert.equal(res.status, 200);
+      assertOnlyOwnEntry('PUT /open-questions/:id', res.body.entry_ids);
+    });
   });
 });
