@@ -22,6 +22,7 @@ import openQuestionsRouter from './routes/openQuestions.js';
 import relationshipTypesRouter from './routes/relationshipTypes.js';
 import entityTypesRouter from './routes/entityTypes.js';
 import authRouter from './routes/auth.js';
+import templatesRouter from './routes/templates.js';
 import mcpRouter from './routes/mcp.js';
 import oauthRouter from './routes/oauth.js';
 import eventsRouter from './routes/events.js';
@@ -75,6 +76,8 @@ export function createApp({ sessionStore } = {}) {
 
   app.use('/', oauthRouter);
   app.use('/auth', authRouter);
+  // Unauthenticated: the signup form lists these before an account exists.
+  app.use('/templates', templatesRouter);
   app.use('/mcp', mcpRouter);
   // resolveWorkspace here too: the SSE stream pushes full entity documents, so
   // each connection must be tagged with a workspace to filter broadcasts by.

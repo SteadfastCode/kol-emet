@@ -10,6 +10,7 @@ import User from '../models/User.js';
 import Workspace from '../models/Workspace.js';
 import { requireAuth, requireActor } from '../middleware/auth.js';
 import { seedWorkspace } from '../lib/workspaceSeeder.js';
+import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
 import {
   credentialDescriptors,
@@ -36,9 +37,15 @@ const LOGIN_SOURCE    = 'POST /auth/webauthn/login/complete';
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
-  const { email, password } = req.body ?? {};
+  const { email, password, template } = req.body ?? {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
+  }
+  // Naming no template gets the default; naming one that doesn't exist is
+  // refused before anything is written, rather than quietly seeding the
+  // default (getTemplate's fallback) into a workspace the user didn't pick.
+  if (template !== undefined && !hasTemplate(template)) {
+    return res.status(400).json({ error: 'Unknown template' });
   }
 
   const existing = await User.findOne({ email });
@@ -66,7 +73,7 @@ router.post('/register', async (req, res) => {
   // Seed starting content so the new workspace isn't an empty shell. Awaited
   // so the first page load sees it, but never fatal — seedWorkspace reports
   // failure rather than throwing, and an unseeded workspace still works.
-  const seed = await seedWorkspace(workspace._id, req.body?.template);
+  const seed = await seedWorkspace(workspace._id, template);
   if (!seed.ok) console.error(`[auth] workspace ${workspace._id} seeded partially:`, seed.error);
 
   req.session.regenerate((err) => {

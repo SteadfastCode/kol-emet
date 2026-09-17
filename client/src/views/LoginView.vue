@@ -49,6 +49,17 @@
             required
           />
 
+          <fieldset v-if="mode === 'register' && templates.length" class="template-picker" :disabled="loading">
+            <legend>Start with</legend>
+            <label v-for="t in templates" :key="t.key" class="template-option">
+              <input v-model="template" type="radio" name="template" :value="t.key" />
+              <span class="template-text">
+                <span class="template-name">{{ t.name }}</span>
+                <span class="template-desc">{{ t.description }}</span>
+              </span>
+            </label>
+          </fieldset>
+
           <p v-if="error" class="login-error">{{ error }}</p>
 
           <button type="submit" class="btn-sm primary full" :disabled="loading || !email || !password">
@@ -76,7 +87,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { login, register, loginWithPasskey, registerPasskey } from '../api/auth.js';
+import { login, register, getTemplates, loginWithPasskey, registerPasskey } from '../api/auth.js';
 
 // Shown above the form; App passes one after an account is deleted.
 defineProps({ notice: { type: String, default: '' } });
@@ -90,9 +101,35 @@ const password = ref('');
 const error    = ref('');
 const loading  = ref(false);
 
+// The "Start with" picker. Fetched the first time the form enters register
+// mode (sign-in never needs it), and fetched again on a later visit if that
+// failed. With no list there is no picker, and registration names no template,
+// so the server seeds its default — a signup never waits on this.
+const DEFAULT_TEMPLATE = 'worldbuilding';
+const templates = ref([]);   // [{ key, name, description }] from GET /templates
+const template  = ref(DEFAULT_TEMPLATE);
+let templatesLoading = false;
+
+async function loadTemplates() {
+  if (templates.value.length || templatesLoading) return;
+  templatesLoading = true;
+  try {
+    const list = await getTemplates();
+    templates.value = Array.isArray(list) ? list : [];
+    if (templates.value.length && !templates.value.some((t) => t.key === template.value)) {
+      template.value = templates.value[0].key;
+    }
+  } catch (err) {
+    console.warn('[LoginView] GET /templates failed; signing up without a picker (server default template):', err.message);
+  } finally {
+    templatesLoading = false;
+  }
+}
+
 function switchMode(m) {
   mode.value = m;
   error.value = '';
+  if (m === 'register') loadTemplates();
 }
 
 async function submit() {
@@ -103,7 +140,7 @@ async function submit() {
       await login(email.value, password.value);
       emit('login-success');
     } else {
-      await register(email.value, password.value);
+      await register(email.value, password.value, templates.value.length ? template.value : undefined);
       step.value = 'passkey-prompt';
     }
   } catch (err) {
@@ -274,6 +311,68 @@ input:disabled { opacity: 0.5; }
   padding: 8px 12px;
   margin: 0 0 1rem;
   line-height: 1.5;
+}
+
+.template-picker {
+  border: none;
+  margin: 4px 0 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.template-picker:disabled { opacity: 0.5; }
+
+.template-picker legend {
+  font-size: 12px;
+  color: #888;
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.template-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.template-option:has(input:checked) {
+  border-color: #555;
+  background: #121212;
+}
+
+/* Undo the text-input styling above for the radios. */
+.template-picker input[type="radio"] {
+  width: auto;
+  margin: 2px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  accent-color: #e0e0e0;
+  flex-shrink: 0;
+}
+
+.template-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.template-name {
+  font-size: 13px;
+  color: #e0e0e0;
+}
+
+.template-desc {
+  font-size: 12px;
+  color: #777;
+  line-height: 1.4;
 }
 
 .login-disclosure {
