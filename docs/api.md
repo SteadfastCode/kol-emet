@@ -185,6 +185,7 @@ the graph. Nothing here writes to `entities` or `relationshipgroups` except `POS
 | GET | `/drafts` | List, newest first, max 50. Omits `items`, `source.text`, `diagnostics.rawOutput` and `grounding.systemPrompt` — the list view only needs counts. Excludes `discarded`. Lazily ages out runs stuck on `generating` for >10 min. |
 | GET | `/drafts/quota` | Remaining AI allowance for the workspace: `{ granted, spent, remaining, exhausted }` in micro-dollars plus display strings. |
 | POST | `/drafts` | Generate, streaming progress over **SSE**. Body: `{ text, provider?, roleStyle? }`. |
+| POST | `/drafts/compose` | Build a draft from a docker-compose file — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | GET | `/drafts/:id` | Full draft including `items` and the source text. |
 | PATCH | `/drafts/:id/items/:itemId` | Record one decision. Body: `{ decision: 'accepted' \| 'edited' \| 'rejected', payload?, note? }`. `payload` is required for `edited` and is validated against the same schema `POST /entities` accepts. |
 | POST | `/drafts/:id/items/:itemId/retarget` | Resolve a duplicate: `{ targetEntityId }` turns a create into an update against that entity; `null` reverts it to a create. Entity items only. |
@@ -215,6 +216,39 @@ Pre-stream failures are ordinary JSON errors, not SSE frames:
 | 400 | Empty text, or longer than `GENERATOR_MAX_CHARS` (25,000) |
 | 402 | Not enough AI allowance to start a run (`GENERATOR_MIN_RUN_MICROS`, default $0.015) |
 | 409 | A generation is already running for this workspace — one at a time, since cost is only known after a run finishes |
+
+### `POST /drafts/compose`
+
+The first vertical-ingestion producer ([`server/src/lib/producers/dockerCompose.js`](../server/src/lib/producers/dockerCompose.js)).
+The client reads the file in the browser and sends its text; the server parses the YAML and returns
+the finished draft in one response — no SSE, no allowance check, no generation lock, because no model
+is called. The draft then goes through the same decision and apply routes as a generated one.
+
+Recorded on the draft: `source.producer: 'docker-compose'`, `source.producerVersion: 'docker-compose@1'`,
+`source.textHash` computed exactly as `POST /drafts` computes it (SHA-256 of the trimmed text),
+`grounding.categories` from the workspace's entity types, and `route.strategy: 'deterministic'`.
+`filename`, when given, becomes the draft's title.
+
+| Compose | Proposed |
+|---------|----------|
+| `services.<name>` | Entity titled `<name>`: **Data Store** when the image's own name (registry, namespace and tag stripped) is postgres/postgresql, mysql, mariadb, mongo/mongodb, redis, memcached, elasticsearch, rabbitmq, kafka or minio; otherwise **Service**. An `attribute` block each for `image` and `ports`; tag `docker-compose`. |
+| `depends_on` (list or map form), `links` | `Depends on` group — Dependent, Dependency |
+| An `environment` value holding a URL whose host is another service (its name, `hostname` or `container_name`) | `Calls` group — Caller, Callee |
+| An `environment` URL whose host is not a service (loopback, `host.docker.internal` and `${…}` hosts ignored) | One **External Dependency** entity per host, plus a `Depends on` group |
+
+Every item's `input.evidence.quote` is the YAML line that produced it, with offsets into `source.text`.
+Titles are deduplicated against the workspace as a braindump's are: an exact normalized-title match
+becomes `op: 'update'` (`matchedBy: 'exact-normalized-title'`), and such an update leaves out any
+attribute block the entity already has, so re-importing an unchanged file does not stack copies. A
+near-miss is flagged `duplicate_candidate`, never merged. YAML `<<` merge keys and anchors are followed.
+
+| Status | Meaning |
+|--------|---------|
+| 201 | The draft, `status: 'ready'` |
+| 400 | `text` missing or longer than 60,000 characters; invalid YAML (`{ error, line }` — the message names the line in the file as sent); no top-level `services:` mapping; or the workspace lacks an entity type the file needs (`{ error, missingCategories }`) — no draft is created |
+
+`COMPOSE_LOG_LEVEL` = `off | light | normal | verbose` (default `light`) logs each draft created, refusals
+and drop reasons, and each proposed item.
 
 ### Decisions vs. apply
 

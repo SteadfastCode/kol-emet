@@ -41,6 +41,14 @@ export const applyDraft = (draftId) =>
   req(`/drafts/${draftId}/apply`, { method: 'POST' });
 
 /**
+ * Turn a docker-compose file's text into a draft. No model is involved, so
+ * this is a plain request rather than a stream: the draft comes back complete
+ * and 'ready' for review. A YAML error is a 400 whose message names the line.
+ */
+export const createComposeDraft = ({ text, filename }) =>
+  req('/drafts/compose', { method: 'POST', body: JSON.stringify({ text, filename }) });
+
+/**
  * Start a generation, yielding progress events:
  *   { type: 'created', draftId }
  *   { type: 'stage',   stage, chunk?, of? }

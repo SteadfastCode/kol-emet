@@ -14,6 +14,7 @@
         :busy="false"
         :error="error"
         @generate="start"
+        @drafted="onDrafted"
         @close="tryClose"
       />
 
@@ -137,6 +138,15 @@ async function start(text) {
     stage.value = err.status === 402 || err.status === 409 ? 'input' : 'failed';
     if (err.body?.remaining) allowance.value = err.body;
   }
+}
+
+/** A producer that needs no generation step (docker-compose) hands over a finished draft. */
+function onDrafted(draft) {
+  error.value = '';
+  draftId.value = String(draft._id);
+  counts.value = draft.counts ?? { proposed: 0, dropped: 0 };
+  stage.value = 'review';
+  emit('generated', { draftId: draftId.value, counts: counts.value });
 }
 
 function onApplied(res) {

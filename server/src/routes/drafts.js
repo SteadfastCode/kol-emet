@@ -12,6 +12,11 @@ import { makePseudonymizer, toJsonl } from '../lib/draftExporter.js';
 import { requireActor } from '../middleware/auth.js';
 import { broadcast } from '../lib/broadcaster.js';
 import Entity from '../models/Entity.js';
+import { getCategories } from '../config/categories.js';
+import {
+  parseCompose, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
+  PRODUCER_VERSION as COMPOSE_PRODUCER_VERSION, MAX_COMPOSE_CHARS,
+} from '../lib/producers/dockerCompose.js';
 
 const router = Router();
 
@@ -28,6 +33,19 @@ const MIN_RUN_MICROS = Number(process.env.GENERATOR_MIN_RUN_MICROS ?? 15_000); /
 // otherwise leave a row spinning on 'generating' forever. Listing lazily ages
 // those out, which costs no cron.
 const STALE_GENERATING_MS = 10 * 60 * 1000;
+
+// COMPOSE_LOG_LEVEL = off | light | normal | verbose (default light)
+//   light   — one line per compose draft created, naming the request, file and workspace
+//   normal  — light, plus every refused request and every drop reason
+//   verbose — normal, plus each proposed item
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+function log(level, msg) {
+  const active = LEVELS[process.env.COMPOSE_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[drafts:compose:${level}] ${msg}`);
+}
+
+/** The source fingerprint every producer stores, so identical input is recognisable across them. */
+const hashText = text => `sha256:${crypto.createHash('sha256').update(text).digest('hex')}`;
 
 async function expireStuckGenerations(workspaceId) {
   const cutoff = new Date(Date.now() - STALE_GENERATING_MS);
@@ -130,7 +148,7 @@ router.post('/', async (req, res) => {
       source: {
         producer: 'braindump',
         text: source,
-        textHash: `sha256:${crypto.createHash('sha256').update(source).digest('hex')}`,
+        textHash: hashText(source),
       },
     });
   } catch (err) {
@@ -214,6 +232,114 @@ router.post('/', async (req, res) => {
   } finally {
     await releaseGeneration(req.workspaceId);
     if (open) res.end();
+  }
+});
+
+/**
+ * POST /drafts/compose — a docker-compose file becomes a reviewable draft.
+ *
+ * Body { text, filename? }. The client reads the file in the browser, as it
+ * does for a braindump import, so only the text ever reaches the server.
+ *
+ * Deterministic (lib/producers/dockerCompose.js): no model call, so none of
+ * POST /drafts' allowance check, generation lock or SSE — the draft is
+ * complete by the time this responds, and arrives 'ready' for the same review
+ * and apply routes a generated one goes through.
+ */
+router.post('/compose', async (req, res) => {
+  const { text, filename } = req.body ?? {};
+  const refuse = (status, error, extra = {}) => {
+    log('normal', `refused POST /drafts/compose for workspace ${req.workspaceId} (file ${JSON.stringify(filename ?? null)}): ${status} ${error}`);
+    return res.status(status).json({ error, ...extra });
+  };
+
+  if (typeof text !== 'string' || !text.trim()) return refuse(400, 'text is required');
+  if (filename !== undefined && filename !== null && typeof filename !== 'string') {
+    return refuse(400, 'filename must be a string');
+  }
+  // Trimmed exactly as POST /drafts trims, so textHash means the same thing.
+  const source = text.trim();
+  if (source.length > MAX_COMPOSE_CHARS) {
+    return refuse(400, `The file is ${source.length.toLocaleString()} characters; the limit is ${MAX_COMPOSE_CHARS.toLocaleString()}.`);
+  }
+  // Lines trimmed off the top, so a parse error names the line in the user's file.
+  const lineOffset = (text.slice(0, text.length - text.trimStart().length).match(/\n/g) ?? []).length;
+
+  try {
+    const started = Date.now();
+    const roster = await Entity.find({ workspaceId: req.workspaceId }).select('_id title updatedAt').lean();
+
+    let parsed = parseCompose(source, { existingEntities: roster, lineOffset });
+
+    // Updates append blocks, so a re-import must see which attributes its
+    // targets already carry. Fetched for the matched entities alone rather than
+    // loading every entity's blocks up front, then parsed again against them.
+    const targetIds = parsed.items.filter(i => i.targetEntityId).map(i => i.targetEntityId);
+    if (targetIds.length) {
+      const withBlocks = await Entity.find({ _id: { $in: targetIds }, workspaceId: req.workspaceId })
+        .select('_id blocks').lean();
+      const blocksById = new Map(withBlocks.map(e => [String(e._id), e.blocks]));
+      const enriched = roster.map(e => (blocksById.has(String(e._id)) ? { ...e, blocks: blocksById.get(String(e._id)) } : e));
+      parsed = parseCompose(source, { existingEntities: enriched, lineOffset });
+    }
+    const { items, dropReasons } = parsed;
+
+    // Checked here rather than left to apply, where every entity would fail
+    // one at a time on a type the workspace does not have.
+    const categories = await getCategories(req.workspaceId);
+    const missing = [...new Set(items.filter(i => i.kind === 'entity').map(i => i.proposed.category))]
+      .filter(c => !categories.includes(c));
+    if (missing.length) {
+      return refuse(400,
+        `This workspace has no ${missing.map(c => `"${c}"`).join(', ')} entity type${missing.length === 1 ? '' : 's'}, ` +
+        'which a docker-compose import needs. Add them, or import into a Software Architecture workspace.',
+        { missingCategories: missing });
+    }
+
+    const draft = new Draft({
+      workspaceId: req.workspaceId,
+      createdBy: await resolveUserId(req),
+      title: (typeof filename === 'string' && filename.trim() ? filename.trim() : 'docker-compose').slice(0, 60),
+      status: 'ready',
+      source: {
+        producer: COMPOSE_PRODUCER,
+        producerVersion: COMPOSE_PRODUCER_VERSION,
+        text: source,
+        textHash: hashText(source),
+      },
+      grounding: {
+        categories,
+        rosterCount: roster.length,
+        rosterTruncated: false,
+      },
+      route: { provider: null, model: null, strategy: 'deterministic' },
+      items,
+      diagnostics: {
+        parsedVia: ['yaml'],
+        dropReasons,
+        passes: 1,
+        generationMs: Date.now() - started,
+      },
+      counts: { dropped: dropReasons.length },
+    });
+    draft.recountItems();
+    await draft.save();
+
+    const entityItems = items.filter(i => i.kind === 'entity');
+    log('light',
+      `draft ${draft._id} created for workspace ${req.workspaceId} (source: POST /drafts/compose, file ${JSON.stringify(draft.title)}, ` +
+      `${source.length} chars): ${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
+      `${items.length - entityItems.length} relationships, ${dropReasons.length} dropped`);
+    for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
+    for (const i of items) {
+      log('verbose', `draft ${draft._id} ${i.localKey} ${i.kind} ${i.op} ${JSON.stringify(i.proposed.title ?? i.proposed.label)} (line: ${JSON.stringify(i.input.evidence.quote)})`);
+    }
+
+    res.status(201).json(draft.toObject());
+  } catch (err) {
+    if (err instanceof ComposeParseError) return refuse(400, err.message, { line: err.line });
+    console.error('[drafts] compose draft failed:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

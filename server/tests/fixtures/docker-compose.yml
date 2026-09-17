@@ -1,0 +1,30 @@
+# Fixture for tests/unit/dockerCompose.test.js and tests/http/composeDraft.test.js.
+services:
+  web:
+    build: ./web
+    ports:
+      - "8080:80"
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/app
+      PAYMENTS_API: https://api.stripe.com/v1
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build: ./worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
