@@ -4,7 +4,7 @@
     "KOL-028": {
       "order": 1,
       "title": "Phase 6 step 3: MCP and chat read entity types from the registry",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-028",
