@@ -13,14 +13,20 @@
 
 const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.text', '.rtf'];
 const DOCX_EXTENSIONS = ['.docx'];
+// A docker-compose file is not notes: it goes to its own producer
+// (POST /drafts/compose), which reads the structure rather than a model.
+const COMPOSE_EXTENSIONS = ['.yml', '.yaml'];
 
-export const ACCEPT_ATTR = [...TEXT_EXTENSIONS, ...DOCX_EXTENSIONS].join(',');
-export const SUPPORTED_LABEL = 'Text, Markdown or Word (.txt, .md, .docx)';
+export const ACCEPT_ATTR = [...TEXT_EXTENSIONS, ...DOCX_EXTENSIONS, ...COMPOSE_EXTENSIONS].join(',');
+export const SUPPORTED_LABEL = 'Text, Markdown, Word or docker-compose (.txt, .md, .docx, .yml)';
 
 const extOf = name => {
   const i = String(name).lastIndexOf('.');
   return i === -1 ? '' : name.slice(i).toLowerCase();
 };
+
+/** Whether `file` should be imported as a docker-compose file rather than as notes. */
+export const isComposeFile = file => COMPOSE_EXTENSIONS.includes(extOf(file?.name ?? ''));
 
 /** Word leaves a lot of blank paragraphs behind; collapse them so the chunker
  *  sees real paragraph boundaries rather than runs of empty lines. */
@@ -49,6 +55,14 @@ async function readDocx(file) {
  */
 export async function extractText(file) {
   const ext = extOf(file.name);
+
+  // Read verbatim, not tidied: the server names the line of a YAML error, and
+  // collapsing blank lines here would make that line wrong.
+  if (COMPOSE_EXTENSIONS.includes(ext)) {
+    const text = await file.text();
+    if (!text.trim()) throw new Error(`"${file.name}" appears to be empty.`);
+    return { name: file.name, text };
+  }
 
   if (DOCX_EXTENSIONS.includes(ext)) {
     try {

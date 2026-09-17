@@ -271,8 +271,8 @@ accommodate pre-tenancy rows. A new collection has none, so it fails closed from
   // The producer seam: drift / repo / openapi become new enum values here
   // rather than new collections.
   source: {
-    producer:        'braindump',
-    producerVersion: String,      // 'braindump@1'
+    producer:        'braindump' | 'docker-compose',
+    producerVersion: String,      // 'braindump@1' | 'docker-compose@1'
     text:            String,      // the input, verbatim
     textHash:        String,      // 'sha256:…'
   },

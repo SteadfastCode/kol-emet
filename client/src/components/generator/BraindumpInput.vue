@@ -5,7 +5,8 @@
       <p>
         Paste or import rough notes — a character sketch, a session of worldbuilding, a chapter
         of background. Kol Emet reads them and proposes entities and relationships for you to
-        review. <strong>Nothing is saved until you approve it.</strong>
+        review. A docker-compose file becomes a draft of its services and what they depend on.
+        <strong>Nothing is saved until you approve it.</strong>
       </p>
     </div>
 
@@ -21,7 +22,7 @@
         ref="ta"
         v-model="text"
         class="dump"
-        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md or .docx file here."
+        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx or docker-compose .yml file here."
         :disabled="busy || importing"
         @keydown.meta.enter="submit"
         @keydown.ctrl.enter="submit"
@@ -74,7 +75,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { extractAll, ACCEPT_ATTR } from '../../lib/importFile.js';
+import { extractAll, extractText, isComposeFile, ACCEPT_ATTR } from '../../lib/importFile.js';
+import { createComposeDraft } from '../../api/drafts.js';
 
 const props = defineProps({
   maxChars:  { type: Number, default: 25000 },
@@ -82,7 +84,7 @@ const props = defineProps({
   busy:      { type: Boolean, default: false },
   error:     { type: String, default: '' },
 });
-const emit = defineEmits(['generate', 'close']);
+const emit = defineEmits(['generate', 'drafted', 'close']);
 
 const text = ref('');
 const ta = ref(null);
@@ -112,6 +114,8 @@ async function ingest(files) {
   const list = [...files];
   if (!list.length) return;
 
+  if (list.some(isComposeFile)) return ingestCompose(list);
+
   importing.value = true;
   importingName.value = list.length === 1 ? list[0].name : `${list.length} files`;
   importErrors.value = [];
@@ -129,6 +133,34 @@ async function ingest(files) {
     importing.value = false;
     importingName.value = '';
     if (picker.value) picker.value.value = '';   // let the same file be re-picked
+  }
+}
+
+/**
+ * A docker-compose file skips the textarea: its draft is built from the file's
+ * structure, not generated from notes, so there is nothing to edit first and no
+ * allowance spent. The finished draft goes straight to review.
+ */
+async function ingestCompose(list) {
+  importErrors.value = [];
+  if (list.length > 1) {
+    importErrors.value = ['Import a docker-compose file on its own — it becomes a draft directly, not notes.'];
+    if (picker.value) picker.value.value = '';
+    return;
+  }
+
+  importing.value = true;
+  importingName.value = list[0].name;
+  try {
+    const { name, text: yaml } = await extractText(list[0]);
+    const draft = await createComposeDraft({ text: yaml, filename: name });
+    emit('drafted', draft);
+  } catch (err) {
+    importErrors.value = [err.message];
+  } finally {
+    importing.value = false;
+    importingName.value = '';
+    if (picker.value) picker.value.value = '';
   }
 }
 

@@ -14,7 +14,7 @@
 import { z } from 'zod';
 import { normalizeTitle, similarity } from './similarity.js';
 
-const DUPLICATE_THRESHOLD = 0.72;
+export const DUPLICATE_THRESHOLD = 0.72;
 export const MAX_ITEMS = 60;
 
 const rawEntitySchema = z.object({

@@ -20,6 +20,7 @@
     "express-session": "^1.19.0",
     "mongoose": "^8.24.1",
     "openai": "^6.34.0",
+    "yaml": "^2",
     "zod": "^3.23.8"
   },
   "_comment_qs_pin": "CVE-2026-82562 (array-limit bypass) is fixed in qs 6.16.0, but express 4 pins ~6.15.1. Forced rather than moving to express 5, which is a breaking major. Declared twice on purpose: yarn reads `resolutions`, npm reads `overrides`, and each silently ignores the other — so a deploy that switched package manager would quietly drop the pin. Revisit when express 4 widens its range; re-verify query-string parsing if changed.",

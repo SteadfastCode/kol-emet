@@ -111,7 +111,7 @@ const draftSchema = new mongoose.Schema({
   // The producer seam: drift / repo / openapi become new enum values here
   // rather than new collections.
   source: {
-    producer:        { type: String, enum: ['braindump'], default: 'braindump' },
+    producer:        { type: String, enum: ['braindump', 'docker-compose'], default: 'braindump' },
     producerVersion: { type: String, default: 'braindump@1' },
     text:            { type: String, default: '' },
     textHash:        { type: String, default: null },
