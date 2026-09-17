@@ -29,6 +29,21 @@ registration, or removes a feature.
   `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
+- [ ] **(KOL-042) Backlog audit: file new candidates under Proposed** [not-before: 2026-09-24]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[needs-human]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
 
 ## Proposed
 
@@ -59,6 +74,91 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+- [ ] **(KOL-035) Throttle failed password and passkey sign-in attempts** [needs-human]
+  Nothing limits guessing today: `POST /auth/login` (`server/src/routes/auth.js:90`) runs a bcrypt compare for every request, and
+  the Decision Log (KOL-021 entry) records that the password check is not rate-limited, including the one in `DELETE /auth/account`
+  (:445). Build `server/src/lib/attemptLimiter.js`: `createAttemptLimiter({ max, windowMs, now = Date.now })` with fixed-window
+  counters in a `Map`, expired entries pruned on access. Count failures only: per lowercased email (default 10 per 15 min) and per
+  `req.ip` (default 100 per 15 min; `trust proxy` is already set in `server/src/app.js:52`). Check before the bcrypt compare, so a
+  blocked key costs no hash. Answer 429 `{ error: 'Too many attempts. Try again later.' }` with `Retry-After`, byte-identical for
+  known and unknown emails (the no-enumeration rule `auth.test.js:382` pins). A successful sign-in resets that email's counter.
+  Apply to `POST /auth/login`, failures of `POST /auth/webauthn/login/complete` (keyed by IP; that body has no email), and failed
+  re-authentication in `DELETE /auth/account` (keyed by user id). Build the limiter inside `createApp` from an `authLimits` option
+  (defaults from env) so every test app gets fresh counters. Add tiered logging `AUTH_LIMIT_LOG_LEVEL` (off/light/normal/verbose,
+  shaped like `logPasskey`): light logs each block with the key kind and the source route and never the email. Add a Decision Log
+  line. Verify: `server/tests/unit/attemptLimiter.test.js` with an injected clock (blocks at max+1, the window expiry unblocks,
+  reset clears); a new describe in `server/tests/http/auth.test.js` on an app built with `authLimits: { perEmail: 3 }`: three wrong
+  passwords, then 429 even with the right one; an unknown email gets the identical 429 body; another email is still 401; `cd server
+  && yarn test` green. Out of scope: counters shared across several API instances (in-process today), CAPTCHA or signup throttling,
+  account lockout, `/oauth/token`.
+- [ ] **(KOL-036) Refuse a passkey whose credential id is already registered to any account** [needs-human]
+  The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
+  pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.
+  `login/begin` lists an account's ids to anyone who knows its email, so a crafted authenticator can register a copy on a second
+  account and make the sign-in lookup (`User.findOne(credentialIdQuery(...))`, :215) ambiguous. Build: after verification, and
+  before `user.passkeys.push`, run `User.exists(credentialIdQuery(passkey.credentialID))` (it matches both stored forms,
+  `server/src/lib/passkeyIds.js:86`). If a match is found, answer 409 `{ error: 'This passkey is already registered' }` and save
+  nothing. Use the same answer whether the holder is the caller or another account. Log at light with the source route, and put the
+  `shortId` at verbose. Update the Known gaps sentence in the KOL-024 Decision Log entry. Verify: in
+  `server/tests/http/passkeys.test.js` (real P-256 keys, nothing stubbed), alice registers credential X; bob registering the same X
+  gets 409 and still has no passkeys; alice registering X again gets 409 and keeps exactly one; X stored in the legacy
+  double-encoded form on alice also blocks bob; `cd server && yarn test` green. Out of scope: a unique index on
+  `passkeys.credentialID` (an Atlas index change; the check-then-push race stays a documented gap), and `login/begin`'s listing.
+- [ ] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance** [needs-human]
+  `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
+  is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
+  `POST /auth/logout` clears the cookie with a bare `res.clearCookie('connect.sid')` (`server/src/routes/auth.js:116`), which the
+  comment at :494 says misses the domain-scoped production cookie. Build `server/src/lib/sessionCookie.js`:
+  `sessionCookieOptions(env)` (httpOnly; secure and `sameSite: 'none'` in production, `'lax'` otherwise; `domain` from
+  `SESSION_COOKIE_DOMAIN`, host-only when unset) used by `createApp`, and `clearSessionCookie(req, res)`, which reads the
+  attributes from `req.session.cookie` before destroy. Logout and `DELETE /auth/account` (:495-502) both call the helper. Document
+  the variable in `server/.env.example`. needs-human: Daniel sets `SESSION_COOKIE_DOMAIN=.kol-emet.danielecker.dev` on Railway
+  before this deploys; otherwise signed-in browsers end up holding two `connect.sid` cookies. Verify:
+  `server/tests/unit/sessionCookie.test.js` covers production with the variable, production without it, and development; in
+  `server/tests/http/auth.test.js`, logout's expiring Set-Cookie carries the same Path, HttpOnly and SameSite as the login cookie;
+  `grep -rn "danielecker" server/src` prints nothing; `cd server && yarn test` green. Out of scope: cookie name, CORS and WebAuthn
+  settings (already env-driven).
+- [ ] **(KOL-038) `GET /auth/me` answers 401 and ends the session when its user no longer exists** [needs-human]
+  The KOL-021 Decision Log entry's known gap: after `DELETE /auth/account`, the user's other sessions still hold the deleted id.
+  Tenant routes refuse them, but `GET /auth/me` (`server/src/routes/auth.js:122`) reads only the session, answers
+  `{ authenticated: true }`, and so the client (`client/src/App.vue:12-20`) shows the wiki to a deleted account. Build: `/auth/me`
+  checks `User.exists({ _id: req.session.userId })`. When the user is gone, it destroys the session, clears the cookie with its own
+  attributes (as :495-502 does) and answers the same 401 `{ authenticated: false }` as an anonymous caller. A lookup error answers
+  500, never 200. Update the comment at :497-500 and the Known gaps sentence in the Decision Log. Verify: in
+  `server/tests/http/accountDeletion.test.js`, two agents sign in as one user and the first deletes the account; the second's
+  `GET /auth/me` is 401 `{ authenticated: false }` and expires `connect.sid` (`clearsSessionCookie`); the `GET /auth/me` tests in
+  `auth.test.js` stay green; `cd server && yarn test` green. Out of scope: finding the user's other sessions in the store (connect-mongo
+  stores them serialized, not queryable by user), changes to `requireAuth`/`requireActor`.
+- [ ] **(KOL-039) Dedup key: trim a title before stripping its leading article** [needs-human]
+  Found by the KOL-001 grader and still open. `normalizeTitle` (`server/src/lib/similarity.js:39`) strips `the|a|an` before it trims,
+  so `'  The Iron Gate'` keys as `the iron gate`. That misses the exact match against an existing "The Iron Gate", and it misses the
+  fuzzy fallback too (≈0.64 < `DUPLICATE_THRESHOLD` 0.72, `server/src/lib/draftNormalizer.js:17`). A padded generated title
+  becomes a duplicate entity instead of an update. Callers: `draftNormalizer.js` (:157, :180, :215, :274) and
+  `server/src/lib/producers/dockerCompose.js`. No model persists a normalized key, so no migration. Build: collapse and trim
+  whitespace before the article strip. Verify: flip the test at `server/tests/unit/similarity.test.js:72-79`, which pins the quirk,
+  to assert `normalizeTitle('  The Iron Gate  ') === normalizeTitle('The Iron Gate')`; add `server/tests/unit/draftNormalizer.test.js`,
+  where `normalizeDraft` with `existingEntities: [{ _id, title: 'The Iron Gate' }]` and a raw entity titled `'  The Iron Gate'`
+  yields `op: 'update'` with `matchedBy: 'exact-normalized-title'`; `cd server && yarn test` green. Out of scope: trimming the
+  `proposed` titles stored on drafts (training records), and any change to the threshold.
+- [ ] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed** [needs-human]
+  Found by the KOL-021 grader and still open. The sidebar's Settings button (`openSettings`, `client/src/components/WikiLayout.vue:256`)
+  sets `settingsOpen` along with `mobileTab = 'settings'`. `setMobileTab` (:248) changes only `mobileTab`, and mobile portrait has
+  no ✕, so the flag stays set. Rotating to landscape, or anything else that stops the portrait query matching, then brings back the
+  full-screen Settings/Delete-account overlay the user had left. Build: `setMobileTab` clears `settingsOpen` whenever the new tab is
+  not `settings`. Verify: in `client/src/components/WikiLayout.test.js`, following the test at :69, emit `settings` from
+  `EntitySidebar`, click the list tab, and assert the Passkeys group is unmounted; `cd client && yarn test && yarn build` green. Out
+  of scope: settings layout, adding a close button on mobile.
+- [ ] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`** [needs-human]
+  Wishlist "Tag autocomplete on entry editor". The workspace-scoped `GET /tags` (`server/src/routes/tags.js`) exists, but no client
+  code calls it. The editor's tags field is a plain comma-separated input (`client/src/components/EntityEditor.vue:28-32`,
+  `tagsInput`). Build: `client/src/api/tags.js` `getTags()`, using the same `req` shape as `client/src/api/entityTypes.js`. In
+  `EntityEditor.vue`, fetch once on mount and list up to 8 workspace tags matching the token after the last comma, case-insensitive
+  (prefix matches first, then substring matches), excluding tags already entered. A click, or arrow keys then Enter, replaces that
+  token and appends `, `; Esc closes the list without closing the editor. Use ARIA combobox attributes (`role="combobox"`,
+  `aria-expanded`, `aria-controls`, `aria-activedescendant`). The input stays a text input, and a failed fetch just means no
+  suggestions. Verify: new `client/src/components/EntityEditor.test.js` mocking `/tags`: typing `ca` after `alpha, ` lists the
+  matching tags but not `alpha`; choosing `castle` gives `alpha, castle, `; a failed fetch renders no list and the typed tags still
+  save; `cd client && yarn test && yarn build` green. Out of scope: bulk tag rename/merge, tag colours, any server change.
 
 ## Blocked Items
 
