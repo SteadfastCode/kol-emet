@@ -35,7 +35,7 @@
 
         <div class="edit-row">
           <select v-model="form.category" class="input edit-select">
-            <option v-for="cat in CATEGORIES" :key="cat">{{ cat }}</option>
+            <option v-for="cat in categoryNames" :key="cat">{{ cat }}</option>
           </select>
         </div>
 
@@ -62,7 +62,7 @@
 
 <script setup>
 import { ref, computed, reactive } from 'vue';
-import { CAT_COLORS, CATEGORIES } from '../config/categories.js';
+import { useEntityTypes } from '../composables/useEntityTypes.js';
 import PencilIcon from './icons/PencilIcon.vue';
 
 const props = defineProps({ entity: Object });
@@ -72,7 +72,10 @@ const isEditing = ref(false);
 const isSaving = ref(false);
 const form = reactive({ title: '', category: '', summary: '', tagsRaw: '' });
 
-const catStyle = computed(() => CAT_COLORS[props.entity.category] ?? { bg: '#333', color: '#aaa' });
+const { names: categoryNames, styleFor } = useEntityTypes();
+
+// Text colour only: this pill has never been given a background here.
+const catStyle = computed(() => ({ color: styleFor(props.entity.category).color }));
 
 function startEdit() {
   form.title = props.entity.title;

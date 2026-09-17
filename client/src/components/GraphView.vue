@@ -47,11 +47,15 @@
 <script setup>
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import * as d3 from 'd3';
-import { CAT_COLORS } from '../config/categories.js';
+import { useEntityTypes } from '../composables/useEntityTypes.js';
 import { getEntities } from '../api/entities.js';
 import { getAllGroups } from '../api/relationshipGroups.js';
 
 const emit = defineEmits(['close', 'open-entry']);
+
+// The graph's own fallbacks for a category the registry lacks, darker than the pills'.
+const { styleFor } = useEntityTypes();
+const NODE_FALLBACK = { bg: '#444', color: '#888' };
 
 const containerRef = ref(null);
 const svgRef = ref(null);
@@ -99,11 +103,11 @@ function truncate(str, max = 18) {
 }
 
 function getNodeColor(category) {
-  return CAT_COLORS[category]?.bg ?? '#444';
+  return styleFor(category, NODE_FALLBACK).bg;
 }
 
 function getNodeStroke(category) {
-  return CAT_COLORS[category]?.color ?? '#888';
+  return styleFor(category, NODE_FALLBACK).color;
 }
 
 function initGraph() {

@@ -23,7 +23,7 @@ uses — no path bypasses validation, changelog, or auth.
 ### Frontend — `client/` (Vue 3 + Vite)
 Single-page app. `LoginView` gates an authenticated `WikiLayout` shell. Key pieces:
 
-- **Entity browsing/editing** — `EntitySidebar`, `EntityCard`, `EntityDetail`, `EntityEditor`,
+- **Entity browsing/editing** — `EntitySidebar`, `SidebarCard`, `EntityDetail`, `EntityEditor`,
   `EntityHeader`, `BlockList` and the `blocks/` renderers (`TextBlock`, `TimelineEventBlock`,
   `AttributeBlock`, `QuoteBlock`, `GalleryBlock`). Blocks are drag-reorderable (vuedraggable).
 - **Relationships** — `RelationshipsSection`, with type autocomplete backed by Fuse.js.
@@ -31,7 +31,8 @@ Single-page app. `LoginView` gates an authenticated `WikiLayout` shell. Key piec
 - **AI** — `ChatPanel` streams from `/chat` over SSE.
 - **Chrome** — `BreadcrumbBar`, `WikiLayout`, `VirtualList` (windowed list for large wikis),
   `ToastNotification`.
-- **Composables** — `useEntities`, `useEvents` (SSE sync), `useFilters`, `useNavigation`, `useToasts`.
+- **Composables** — `useEntities`, `useEntityTypes` (the workspace's entity types: category pills,
+  pickers and colours), `useEvents` (SSE sync), `useFilters`, `useNavigation`, `useToasts`.
 - Dev server proxies the API to `localhost:3004`.
 
 ### Backend — `server/` (Node + Express)

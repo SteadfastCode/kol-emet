@@ -16,7 +16,7 @@
 
       <select v-model="form.category" class="input" @change="applyDefaultBlocks">
         <option value="" disabled>Select category</option>
-        <option v-for="cat in CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+        <option v-for="cat in categoryNames" :key="cat" :value="cat">{{ cat }}</option>
       </select>
 
       <input
@@ -120,7 +120,7 @@
 <script setup>
 import { ref, reactive } from 'vue';
 import draggable from 'vuedraggable';
-import { CATEGORIES } from '../config/categories.js';
+import { useEntityTypes } from '../composables/useEntityTypes.js';
 import { getDefaultBlocks } from '../config/defaultBlocks.js';
 
 const BLOCK_TYPES = ['text', 'timeline_event', 'attribute', 'quote', 'gallery'];
@@ -140,6 +140,8 @@ const BLOCK_DEFAULTS = {
 };
 
 const emit = defineEmits(['saved', 'cancel']);
+
+const { names: categoryNames } = useEntityTypes();
 
 /**
  * `initial` hydrates the editor from an existing payload — used by the draft

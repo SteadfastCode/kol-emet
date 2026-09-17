@@ -19,9 +19,9 @@ import { CATEGORIES } from './categories.js';
 
 export const DEFAULT_TEMPLATE = 'worldbuilding';
 
-// The client's pill colours for today's six categories (CAT_COLORS in
-// client/src/config/categories.js), carried into the registry so existing
-// data looks the same once the client reads its colours from there.
+// The client's pill colours for the six categories, carried over from its old
+// hardcoded CAT_COLORS so existing data looks the same now that the client
+// reads its colours from the registry (client/src/composables/useEntityTypes.js).
 const WORLDBUILDING_COLORS = {
   'Characters':       { bg: '#B5D4F4', text: '#0C447C' },
   'Worlds':           { bg: '#9FE1CB', text: '#085041' },
