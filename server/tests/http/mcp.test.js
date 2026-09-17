@@ -53,6 +53,14 @@
  *   rather than return undefined, because Mongoose would cast an undefined
  *   filter value to null and quietly widen the query).
  *
+ *   Entity types are per workspace (the EntityType registry), so the category
+ *   parameters are free strings and `list_entity_types` is how the model learns
+ *   the valid names. That list is scoped like any other read, and the write is
+ *   the gate: `create_entity` with a name alice's workspace has no type for —
+ *   here, one only bob's has — must error and write nothing, while one of her
+ *   own custom types must work. A workspace that predates the registry lists
+ *   the built-in names, because those are what its writes accept.
+ *
  * Both fixture accounts register through the real endpoint, so both get the
  * default workspace template seeded into them. That is deliberate: every
  * workspace here is non-empty and holds same-titled example content, so the
@@ -69,14 +77,19 @@
  * and the tool-list test fails; remove `workspaceId` from the `Entity.find`
  * filter in `search_entities`, or from the `Entity.findOne` filter in
  * `get_entity`, and the scoping group fails; make `mcpWorkspaceId()` return
- * `null` instead of throwing and the fail-closed test fails.
+ * `null` instead of throwing and the fail-closed test fails; put back
+ * `z.enum(CATEGORIES)` on a category parameter and the schema test and the
+ * custom-type create fail; drop the `workspaceId` filter from
+ * `list_entity_types` and its scoping test fails; drop its empty-registry
+ * fallback and the pre-registry test fails.
  *
  * Deliberately not covered: the identity model behind `Settings.mcpUserId` —
  * a single global "the MCP user" is a single-tenant assumption that KOL-014
  * replaces. This file uses `setMcpUser()` as it exists today and asserts only
  * that the tools follow whatever identity it names. Also not covered: the write
- * tools (create/update/relationships) and the OAuth flow the Claude.ai
- * connector uses to obtain a token, which `tests/http/oauth.test.js` owns.
+ * tools beyond the category check on create/update (their other fields, and
+ * the relationship tools) and the OAuth flow the Claude.ai connector uses to
+ * obtain a token, which `tests/http/oauth.test.js` owns.
  *
  * A note on "throws": a tool handler that throws does not surface as a JSON-RPC
  * error. The SDK's `McpServer` catches it and answers with a normal result
@@ -117,6 +130,9 @@ import Workspace from '../../src/models/Workspace.js';
 import Settings from '../../src/models/Settings.js';
 import Entity from '../../src/models/Entity.js';
 import OpenQuestion from '../../src/models/OpenQuestion.js';
+import EntityType from '../../src/models/EntityType.js';
+import ChangeLog from '../../src/models/ChangeLog.js';
+import { CATEGORIES } from '../../src/config/categories.js';
 import { setMcpUser } from '../../src/lib/mcpUserStore.js';
 
 // `src/routes/mcp.js` reads MCP_BEARER_TOKEN at module load, and createApp()
@@ -165,6 +181,7 @@ const PASSWORD = 'correct-horse-battery-staple';
 const DOCUMENTED_TOOLS = [
   'search_entities',
   'get_entity',
+  'list_entity_types',
   'create_entity',
   'update_entity',
   'add_open_question',
@@ -592,7 +609,7 @@ describe('tools/list', () => {
       'tools/list must match the table in docs/architecture.md — a tool added to ' +
       'src/routes/mcp.js has to be documented, and a documented tool has to exist'
     );
-    assert.equal(names.length, 13, 'the documented contract is 13 tools');
+    assert.equal(names.length, 14, 'the documented contract is 14 tools');
   });
 
   test('every tool carries a description and an input schema', async () => {
@@ -604,6 +621,20 @@ describe('tools/list', () => {
       assert.equal(tool.inputSchema?.type, 'object', `${tool.name} has no object input schema`);
     }
   });
+
+  test('category parameters take any name and point at list_entity_types', async () => {
+    // A fixed enum in a session's schema would offer the six built-ins to every
+    // workspace — hiding user-defined types and offering deleted ones. The
+    // valid names come from list_entity_types; the write refuses the rest.
+    const { tools } = await mcp.listTools();
+    for (const name of ['search_entities', 'create_entity', 'update_entity']) {
+      const category = tools.find(t => t.name === name)?.inputSchema?.properties?.category;
+      assert.ok(category, `${name} should take a category`);
+      assert.equal(category.type, 'string', `${name}.category should be a string: ${JSON.stringify(category)}`);
+      assert.equal(category.enum, undefined, `${name}.category must not be a fixed enum: ${JSON.stringify(category.enum)}`);
+      assert.match(category.description ?? '', /list_entity_types/, `${name}.category should tell the model where the valid names come from`);
+    }
+  });
 });
 
 describe('workspace scoping', () => {
@@ -613,9 +644,11 @@ describe('workspace scoping', () => {
     const stored = await Settings.findById('global').lean();
     assert.equal(stored?.mcpUserId ?? null, null, 'this test must run before any setMcpUser call');
 
-    const res = await callTool('search_entities', {});
-    assert.equal(res.isError, true, 'search_entities must refuse to run without an MCP identity');
-    assert.match(res.text, /not authorized/i, `unexpected error text: ${res.text}`);
+    for (const name of ['search_entities', 'list_entity_types']) {
+      const res = await callTool(name, {});
+      assert.equal(res.isError, true, `${name} must refuse to run without an MCP identity`);
+      assert.match(res.text, /not authorized/i, `unexpected error text: ${res.text}`);
+    }
   });
 
   describe('acting as alice', () => {
@@ -700,6 +733,62 @@ describe('workspace scoping', () => {
         assert.deepEqual(own.entry_ids.map(e => e.title), [ALICE_ENTITY.title], "alice's own entity must still resolve");
       });
     });
+
+    describe('entity types from the registry', () => {
+      const ALICE_TYPE = 'Starships';
+      const BOB_TYPE   = 'Bob Guilds';
+
+      before(async () => {
+        for (const [who, name] of [[alice, ALICE_TYPE], [bob, BOB_TYPE]]) {
+          const res = await who.agent.post('/entity-types').send({ name, icon: '*', color: { bg: '#123', text: '#fff' } });
+          assert.equal(res.status, 201, `POST /entity-types as ${who.email} failed: ${res.status} ${JSON.stringify(res.body)}`);
+          assert.equal(String(res.body.workspaceId), who.workspaceId, `${who.email}'s type must land in their own workspace`);
+          log('light', `created entity type ${res.body._id} "${name}" (source: POST /entity-types as ${who.email}) in workspace ${res.body.workspaceId}`);
+        }
+      });
+
+      test('list_entity_types returns exactly alice\'s types, in GET /entity-types order', async () => {
+        const types = parsed('list_entity_types', await callTool('list_entity_types', {}));
+
+        const rest = await alice.agent.get('/entity-types');
+        assert.equal(rest.status, 200);
+        const expected = rest.body.map(({ name, icon, color, order }) => ({ name, icon, color, order }));
+        assert.ok(expected.length > 1, 'fixture problem: alice should have the seeded types plus her own');
+        assert.deepEqual(types, expected, 'list_entity_types must be alice\'s registry, with the same fields and order as GET /entity-types');
+
+        const names = types.map(t => t.name);
+        assert.ok(names.includes(ALICE_TYPE), `alice's custom type is missing: ${names.join(', ')}`);
+        assert.ok(!names.includes(BOB_TYPE), `bob's type leaked into alice's list: ${names.join(', ')}`);
+      });
+
+      test('create_entity accepts alice\'s custom type', async () => {
+        const entity = parsed('create_entity', await callTool('create_entity', { title: 'Alice Ship', category: ALICE_TYPE, summary: 'A ship of alice\'s own type.' }));
+
+        assert.equal(entity.category, ALICE_TYPE);
+        assert.equal(String(entity.workspaceId), alice.workspaceId);
+        assert.ok(await Entity.exists({ _id: entity._id, workspaceId: alice.workspaceId }), 'the entity should have been written');
+      });
+
+      test('create_entity with a type alice\'s workspace lacks errors and writes nothing', async () => {
+        // BOB_TYPE is registered — in bob's workspace. Refusing it here proves
+        // the check reads the acting workspace, not the registry as a whole.
+        const title = 'Alice Guild Hall';
+        const res = await callTool('create_entity', { title, category: BOB_TYPE, summary: 'Named for a type only bob has.' });
+
+        assert.equal(res.isError, true, `a name alice has no type for must be refused: ${res.text}`);
+        assert.match(res.text, /is not an entity type in this workspace/, `the validator's message should reach the model: ${res.text}`);
+        assert.equal(await Entity.countDocuments({ title }), 0, 'a refused create must not write the entity');
+      });
+
+      test('update_entity to a type alice\'s workspace lacks errors and leaves the category', async () => {
+        const res = await callTool('update_entity', { id: owned.aliceOtherId, category: BOB_TYPE });
+
+        assert.equal(res.isError, true, `a name alice has no type for must be refused: ${res.text}`);
+        assert.match(res.text, /is not an entity type in this workspace/, `unexpected error text: ${res.text}`);
+        const stored = await Entity.findById(owned.aliceOtherId).select('category').lean();
+        assert.equal(stored.category, ALICE_OTHER.category, 'a refused update must not change the category');
+      });
+    });
   });
 
   describe('after the MCP identity changes to bob', () => {
@@ -722,6 +811,38 @@ describe('workspace scoping', () => {
 
       assert.equal(res.isError, true, "alice's entity must not be readable as bob");
       assert.match(res.text, /not found/i, `unexpected error text: ${res.text}`);
+    });
+  });
+
+  describe('a workspace that predates the registry', () => {
+    let carol;
+
+    before(async () => {
+      carol = await registerUser('mcp-carol@example.test');
+      // What a workspace created before the registry looks like: no types.
+      const { deletedCount } = await EntityType.deleteMany({ workspaceId: carol.workspaceId });
+      assert.ok(deletedCount > 0, 'fixture problem: registration should have seeded types to remove');
+      log('light', `removed ${deletedCount} entity type(s) from workspace ${carol.workspaceId} (source: direct EntityType.deleteMany, simulating a pre-registry workspace)`);
+      await actAs(carol);
+    });
+
+    test('list_entity_types lists the built-in names its writes accept', async () => {
+      const types = parsed('list_entity_types', await callTool('list_entity_types', {}));
+
+      assert.deepEqual(types.map(t => t.name), CATEGORIES, 'an empty registry is held to the built-in categories, so those are the valid names');
+
+      // And they are valid: the first one listed is one create_entity takes.
+      const entity = parsed('create_entity', await callTool('create_entity', { title: 'Carol First', category: types[0].name, summary: 'Carol content.' }));
+      assert.equal(String(entity.workspaceId), carol.workspaceId);
+
+      // The tool writes its changelog entry fire-and-forget. This is the file's
+      // last write, so wait for that entry rather than let it race the
+      // disconnect in after().
+      const deadline = Date.now() + 2000;
+      while (!(await ChangeLog.exists({ entityId: entity._id })) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      assert.ok(await ChangeLog.exists({ entityId: entity._id, actorType: 'mcp' }), 'the create should have been logged as an MCP change');
     });
   });
 });

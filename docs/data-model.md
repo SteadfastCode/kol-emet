@@ -165,10 +165,11 @@ offers, while `Entity.category` holds a type's **name** as a plain string.
   - A workspace with **no** types predates the registry, or its seeding failed. It is checked
     against the six built-in categories (`CATEGORIES`) until `seed-entity-types.js` backfills it.
     Refusing to delete the last type is what stops a user from switching the gate off this way.
-  - The client and the MCP/chat category lists still offer the six built-in names, so they can
-    offer a type the workspace has deleted or renamed (writing it is refused), and do not offer a
-    user-defined type yet. The server's own `getCategories(workspaceId)`, used by the generator
-    and draft edits, reads the registry.
+  - The server reads the registry wherever it offers category names: `getCategories(workspaceId)`
+    for the generator, draft edits and the in-app chat's `search_entities` enum, and the MCP
+    `list_entity_types` tool, whose category parameters are free strings the write validates. The
+    client still offers the six built-in names, so it can offer a type the workspace has deleted
+    or renamed (writing it is refused), and does not offer a user-defined type yet.
 
 ---
 

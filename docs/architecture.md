@@ -68,6 +68,7 @@ MCP tools exposed (defined in [`routes/mcp.js`](../server/src/routes/mcp.js)):
 |------|---------|
 | `search_entities` | Search by keyword, tag, or category |
 | `get_entity` | Fetch one entity (with resolved relationships) |
+| `list_entity_types` | List the workspace's entity types — the valid category names |
 | `create_entity` | Create an entity (blocks-aware) |
 | `update_entity` | Update an entity |
 | `add_open_question` | Attach/update an open question |

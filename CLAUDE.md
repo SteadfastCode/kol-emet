@@ -109,6 +109,7 @@ Served as a Streamable-HTTP endpoint at `/mcp` with OAuth (not a stdio process).
 |------|-------------|
 | `search_entities` | Search by keyword, tag, or category |
 | `get_entity` | Retrieve a single entity (with relationships) |
+| `list_entity_types` | List the workspace's entity types (the valid category names) |
 | `create_entity` | Add a new entity (blocks-aware) |
 | `update_entity` | Edit an existing entity |
 | `add_open_question` | Attach/update an open question |
