@@ -1,26 +1,8 @@
 {
   "version": 1,
   "items": {
-    "KOL-033": {
-      "order": 1,
-      "title": "First vertical-ingestion producer: a docker-compose.yml becomes a reviewable Draft",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-033",
-      "dependsOn": [
-        "KOL-030"
-      ],
-      "needsHuman": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-09-17T12:30:34.515Z",
-      "runId": "2026-09-17T12:07:35.963Z",
-      "lastFail": null
-    },
     "KOL-012": {
-      "order": 2,
+      "order": 1,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -39,23 +21,23 @@
       "lastFail": null
     },
     "KOL-034": {
-      "order": 3,
+      "order": 2,
       "title": "Backlog audit: file new candidates under Proposed",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-034",
       "dependsOn": [],
       "needsHuman": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-17T12:44:02.093Z",
+      "runId": "2026-09-17T12:07:35.963Z",
       "lastFail": null
     },
     "KOL-013": {
-      "order": 4,
+      "order": 3,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -75,7 +57,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 5,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -91,7 +73,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 6,
+      "order": 5,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -109,7 +91,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 7,
+      "order": 6,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -125,7 +107,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -141,7 +123,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -154,6 +136,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-033": {
+      "order": null,
+      "title": "First vertical-ingestion producer: a docker-compose.yml becomes a reviewable Draft",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-033",
+      "dependsOn": [
+        "KOL-030"
+      ],
+      "needsHuman": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-17T12:30:34.515Z",
+      "runId": "2026-09-17T12:07:35.963Z",
       "lastFail": null
     },
     "KOL-031": {
