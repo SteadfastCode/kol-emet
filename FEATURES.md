@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-031) Onboarding: choose a template on signup** (needs KOL-030)
+- [x] **(KOL-031) Onboarding: choose a template on signup** (needs KOL-030)
   Registration already seeds the personal workspace from the Worldbuilding template by default, and the empty states exist
   (`EntitySidebar.vue:64-80` list, `GraphView.vue:13-15` graph, the generator's input stage), so a new user never lands blank. What
   is missing is the choice. Build: a public `GET /templates` (no auth — it is shown before an account exists; mount in
