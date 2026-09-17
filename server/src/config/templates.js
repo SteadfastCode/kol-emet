@@ -8,13 +8,11 @@
  * demonstrates blocks and the relationship graph, and is easy to delete once
  * the user has their own.
  *
- * Entity types seed the EntityType registry (Phase 6 step 1), but the Entity
- * model still validates `category` against the hardcoded enum, so a template's
- * types must be exactly that enum for now. Once step 2 drops it, a second
- * template (software architecture: Service, Data Store, API, Team, External
- * Dependency) becomes possible. Until then, shipping a non-worldbuilding
- * template would mean handing users categories that do not fit their domain,
- * so only the worldbuilding one is real.
+ * Entity types seed the EntityType registry, which is the only gate on
+ * `Entity.category` since Phase 6 step 2 dropped the hardcoded enum — so a
+ * template's types can be any names. That makes a second template (software
+ * architecture: Service, Data Store, API, Team, External Dependency) possible;
+ * it is not built yet, so only the worldbuilding one is real.
  */
 
 import { CATEGORIES } from './categories.js';
@@ -38,9 +36,9 @@ export const TEMPLATES = {
     name: 'Worldbuilding',
     description: 'Characters, worlds, organizations and the relationships between them.',
 
-    // Derived from CATEGORIES rather than listed a second time, so the registry
-    // and the Entity enum cannot disagree while the enum stands. No icons: the
-    // client has none to carry over.
+    // Derived from CATEGORIES rather than listed a second time, so the seed and
+    // the names a pre-registry workspace falls back to cannot disagree. No
+    // icons: the client has none to carry over.
     entityTypes: CATEGORIES.map((name, order) => ({
       name,
       order,

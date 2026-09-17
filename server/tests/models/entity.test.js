@@ -3,9 +3,10 @@
  *
  * These cover the two schema guards the rest of the system trusts without
  * re-checking: an entity's `category` and its blocks' `type`. Routes, the MCP
- * tools and the generator all write entities, and only the schema — the enum,
- * plus the check against the workspace's EntityType registry — stops a typo'd
- * or deleted category from creating a category the UI has no pill for.
+ * tools and the generator all write entities, and only the schema — the check
+ * against the workspace's EntityType registry, the one gate now that the enum
+ * is gone — stops a typo'd or deleted category from creating a category the UI
+ * has no pill for.
  *
  * Workspace's AI budget default lives here too — it is the other value that is
  * only ever set implicitly, at document creation, and never asserted by any
@@ -18,12 +19,12 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 
 import * as db from '../helpers/db.js';
-import { CATEGORIES } from '../../src/config/categories.js';
 
 // Workspace reads AI_TRIAL_GRANT_MICROS once, when the schema is built at
 // module load, so the environment has to be in place before the import — hence
 // the dynamic imports here rather than static ones at the top of the file.
-// Entity and EntityType import Workspace too (their owner guard), so they wait
+// Entity and EntityType import Workspace too (their owner guard), and
+// config/categories.js imports EntityType (its registry lookup), so they wait
 // as well. The value is deliberately not the production default, so a test that
 // passed by coincidence would show up as a mismatch.
 const TRIAL_GRANT_MICROS = 1_234_567;
@@ -31,6 +32,7 @@ process.env.AI_TRIAL_GRANT_MICROS = String(TRIAL_GRANT_MICROS);
 const { default: Workspace } = await import('../../src/models/Workspace.js');
 const { default: Entity, BLOCK_TYPES } = await import('../../src/models/Entity.js');
 const { default: EntityType } = await import('../../src/models/EntityType.js');
+const { CATEGORIES } = await import('../../src/config/categories.js');
 
 /**
  * The id of a real workspace. Content written under an id with no workspace
@@ -54,33 +56,58 @@ before(async () => { await db.connect(); });
 beforeEach(async () => { await db.clear(); });
 after(async () => { await db.disconnect(); });
 
-describe('Entity.category', () => {
-  test('accepts every configured category', async () => {
+/** The refusal the registry check gives: a ValidationError on the category path. */
+function isRegistryRefusal(err) {
+  assert.ok(err instanceof mongoose.Error.ValidationError, `expected a ValidationError, got ${err.name}`);
+  assert.match(err.errors.category?.message ?? '', /not an entity type/, `the error should name the category path, got ${Object.keys(err.errors)}`);
+  return true;
+}
+
+describe('Entity.category in a workspace with no types (pre-registry)', () => {
+  test('accepts every built-in category', async () => {
+    const workspaceId = await newWorkspaceId();
     for (const category of CATEGORIES) {
-      const entity = await Entity.create(validEntity({ category }));
+      const entity = await Entity.create(validEntity({ workspaceId, category }));
       assert.equal(entity.category, category);
     }
   });
 
-  test('rejects a category that is not in the configured list', async () => {
-    await assert.rejects(
-      Entity.create(validEntity({ category: 'Vehicles' })),
-      (err) => {
-        assert.ok(err instanceof mongoose.Error.ValidationError, `expected a ValidationError, got ${err.name}`);
-        assert.ok(err.errors.category, 'the error should name the category path');
-        return true;
-      }
-    );
-
+  test('rejects a category that is not built in, on create and on update', async () => {
+    const workspaceId = await newWorkspaceId();
+    await assert.rejects(Entity.create(validEntity({ workspaceId, category: 'Vehicles' })), isRegistryRefusal);
     assert.equal(await Entity.countDocuments(), 0, 'a rejected entity must not be persisted');
+
+    const entity = await Entity.create(validEntity({ workspaceId }));
+    await assert.rejects(
+      Entity.findOneAndUpdate({ _id: entity._id, workspaceId }, { category: 'Vehicles' }, { runValidators: true }),
+      isRegistryRefusal
+    );
+    assert.equal((await Entity.findById(entity._id)).category, 'Worlds', 'the refused update must change nothing');
+  });
+
+  test('an entity with no workspace at all is held to the built-in categories too', async () => {
+    assert.equal((await Entity.create(validEntity({ category: 'Timeline' }))).category, 'Timeline');
+    await assert.rejects(Entity.create(validEntity({ category: 'Vehicles' })), isRegistryRefusal);
   });
 });
 
 describe('Entity.category against the workspace registry', () => {
-  test('a workspace with no types yet is held to the enum alone', async () => {
+  test('a user-defined type is usable: the schema has no enum of its own', async () => {
     const workspaceId = await newWorkspaceId();
-    const entity = await Entity.create(validEntity({ workspaceId, category: 'Timeline' }));
-    assert.equal(entity.category, 'Timeline');
+    await EntityType.create({ name: 'Vehicles', workspaceId });
+
+    const entity = await Entity.create(validEntity({ workspaceId, category: 'Vehicles' }));
+    assert.equal(entity.category, 'Vehicles');
+  });
+
+  test('a seeded workspace rejects a category it has no type for', async () => {
+    const workspaceId = await newWorkspaceId();
+    await EntityType.insertMany(CATEGORIES.map((name, order) => ({ name, order, workspaceId })));
+    await EntityType.create({ name: 'Vehicles', workspaceId: await newWorkspaceId() }); // someone else's
+
+    await assert.rejects(Entity.create(validEntity({ workspaceId, category: 'Vehicles' })), isRegistryRefusal);
+    await assert.rejects(Entity.create(validEntity({ workspaceId, category: 'worlds' })), isRegistryRefusal, 'names match exactly, as stored');
+    assert.equal(await Entity.countDocuments({ workspaceId }), 0);
   });
 
   test('once a workspace has types, a category must be one of them, on create and on update', async () => {
@@ -89,11 +116,6 @@ describe('Entity.category against the workspace registry', () => {
     await EntityType.create({ name: 'Timeline', workspaceId: await newWorkspaceId() }); // someone else's
 
     const entity = await Entity.create(validEntity({ workspaceId }));
-    const isRegistryRefusal = (err) => {
-      assert.ok(err instanceof mongoose.Error.ValidationError, `expected a ValidationError, got ${err.name}`);
-      assert.match(err.errors.category?.message ?? '', /not an entity type/, `the error should name the category path, got ${Object.keys(err.errors)}`);
-      return true;
-    };
 
     await assert.rejects(Entity.create(validEntity({ workspaceId, category: 'Timeline' })), isRegistryRefusal);
     await assert.rejects(

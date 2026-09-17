@@ -159,7 +159,7 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
   log('light', `generating for workspace ${workspaceId} via ${route.provider}/${route.model} (${source.length} chars)`);
 
   const client = makeClient(route.provider);
-  const categories = getCategories(workspaceId);
+  const categories = await getCategories(workspaceId);
 
   // Grounding: the existing graph, so the model does not re-propose what is
   // already there and can point relationships at live entities.

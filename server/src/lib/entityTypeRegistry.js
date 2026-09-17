@@ -1,25 +1,27 @@
 /**
- * The EntityType registry as a write-time gate — what keeps the registry and
- * the data from drifting apart while `Entity.category` still has its enum.
+ * The EntityType registry as the write-time gate on category names — the only
+ * one, now that `Entity.category` has no enum (Phase 6 step 2).
  *
  * Two things hold a category name: `Entity.category`, and a RelationshipType's
  * `sourceCategory`/`targetCategory`. Both schemas validate through
  * `categoryValidator` below, so every write path — the REST routes, the MCP
  * tools, applying a draft, a changelog rollback — refuses a name the writer's
- * workspace has no type for, the same way the enum refuses a name outside it.
- * The reverse direction lives in routes/entityTypes.js: a type something still
- * uses cannot be renamed or deleted, and a type's name must be one the enum
- * accepts (`canonicalCategory`), so every registered type is usable.
+ * workspace has no type for. The reverse direction lives in
+ * routes/entityTypes.js: a type something still uses cannot be deleted, and
+ * renaming one carries the new name to everything that used the old one, so the
+ * registry and the data cannot drift apart.
  *
  * A workspace with no types at all predates the registry (or its seeding failed
- * at registration) and is checked against the enum alone until
- * scripts/seed-entity-types.js backfills it. The route never lets a workspace
- * delete its last type, so an emptied registry cannot reopen that fallback.
+ * at registration) and is checked against the built-in CATEGORIES until
+ * scripts/seed-entity-types.js backfills it — the names the enum used to allow,
+ * so such a workspace keeps working exactly as before. The route never lets a
+ * workspace delete its last type, so an emptied registry cannot reopen that
+ * fallback.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * ENTITY_TYPE_LOG_LEVEL = off | light | normal | verbose (default light)
  *   off     — nothing
- *   light   — a write allowed only by the pre-registry fallback, and a write
+ *   light   — a write checked by the pre-registry fallback, and a write
  *             refused for want of a workspace to check against
  *   normal  — light, plus every name refused because the workspace lacks it
  *   verbose — normal, plus every name accepted
@@ -37,16 +39,6 @@ function log(level, msg) {
 }
 
 /**
- * The enum's spelling of `name`, matched case-insensitively, or null when the
- * enum has no such category. A registered type must be usable by an entity, so
- * while the enum stands a type's name is one of its values.
- */
-export function canonicalCategory(name) {
-  const wanted = String(name).trim().toLowerCase();
-  return CATEGORIES.find(c => c.toLowerCase() === wanted) ?? null;
-}
-
-/**
  * Whether `name` names an entity type in `workspaceId`'s registry — exactly,
  * since that is how `Entity.category` stores it. `source` says who is asking,
  * for the log.
@@ -55,8 +47,9 @@ export async function isRegisteredCategory(workspaceId, name, source) {
   const names = (await EntityType.find({ workspaceId }).select('name').lean()).map(t => t.name);
 
   if (!names.length) {
-    log('light', `workspace ${workspaceId} has no entity types, so "${name}" was checked against the built-in categories only (source: ${source}; backfill with scripts/seed-entity-types.js)`);
-    return true;
+    const ok = CATEGORIES.includes(name);
+    log('light', `workspace ${workspaceId} has no entity types, so "${name}" was checked against the built-in categories: ${ok ? 'accepted' : 'refused'} (source: ${source}; backfill with scripts/seed-entity-types.js)`);
+    return ok;
   }
 
   const ok = names.includes(name);

@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { CATEGORIES } from '../config/categories.js';
 import { categoryValidator } from '../lib/entityTypeRegistry.js';
 import Workspace from './Workspace.js';
 import { ownerGuard } from '../lib/ownerGuard.js';
@@ -15,12 +14,13 @@ const blockSchema = new mongoose.Schema({
 const entitySchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
-    // Both checks apply: the enum, and the writer's workspace must have a type
-    // of this name (lib/entityTypeRegistry.js), so a deleted type stays unusable.
+    // A type's name, checked against the writer's workspace registry
+    // (lib/entityTypeRegistry.js) — the only gate, so a deleted type stays
+    // unusable and a user-defined one is usable. No enum: the names are the
+    // workspace's own.
     category: {
       type: String,
       required: true,
-      enum: CATEGORIES,
       validate: categoryValidator('Entity'),
     },
     summary: { type: String, required: true },

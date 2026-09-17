@@ -22,12 +22,16 @@ const blockSchema = z.object({
   _id:   z.any().optional(),
 });
 
-export function entityPayloadSchema(workspaceId) {
+/**
+ * Async because the category list is the workspace's own: it is read from the
+ * EntityType registry, so an edit can use exactly the names POST /entities
+ * would accept in that workspace — a user-defined type included.
+ */
+export async function entityPayloadSchema(workspaceId) {
+  const categories = await getCategories(workspaceId);
   return z.object({
     title:    z.string().min(1).max(200),
-    // Validated against the live registry, not a frozen list, so this keeps
-    // working when categories become user-defined in Phase 6.
-    category: z.enum(getCategories(workspaceId)),
+    category: z.enum(categories),
     summary:  z.string().max(400).optional().default(''),
     tags:     z.array(z.string()).max(24).optional().default([]),
     blocks:   z.array(blockSchema).optional().default([]),
@@ -62,11 +66,14 @@ export const openQuestionPayloadSchema = z.object({
 }).strict();
 
 /**
- * @returns {{ok: true, value: object} | {ok: false, error: string}}
+ * Only an entity payload reads the database (its workspace's categories); the
+ * other kinds, and an unknown kind, resolve without a query.
+ *
+ * @returns {Promise<{ok: true, value: object} | {ok: false, error: string}>}
  */
-export function validateItemPayload(kind, payload, workspaceId) {
+export async function validateItemPayload(kind, payload, workspaceId) {
   const schema =
-    kind === 'entity'        ? entityPayloadSchema(workspaceId) :
+    kind === 'entity'        ? await entityPayloadSchema(workspaceId) :
     kind === 'relationship'  ? relationshipPayloadSchema :
     kind === 'open_question' ? openQuestionPayloadSchema : null;
 
