@@ -3,6 +3,7 @@ import ChangeLog from '../models/ChangeLog.js';
 import Entity from '../models/Entity.js';
 import { requireActor } from '../middleware/auth.js';
 import { logUpdate } from '../lib/changeLogger.js';
+import { openQuestionsIn } from '../lib/scopedPopulate.js';
 
 const router = Router({ mergeParams: true });
 
@@ -48,7 +49,7 @@ router.post('/entities/:id/rollback/:logId', requireActor, async (req, res) => {
     const after = await Entity.findOneAndUpdate(scope, snapshotData, {
       new: true,
       runValidators: true,
-    }).populate('open_questions', 'question status');
+    }).populate(openQuestionsIn(req.workspaceId));
 
     if (!after) return res.status(404).json({ error: 'Entity not found' });
 

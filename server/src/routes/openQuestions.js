@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import OpenQuestion from '../models/OpenQuestion.js';
 import Entity from '../models/Entity.js';
+import { entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.get('/', async (req, res) => {
     if (req.query.status) filter.status = req.query.status;
     const questions = await OpenQuestion.find(filter)
       .sort({ createdAt: -1 })
-      .populate('entry_ids', 'title category');
+      .populate(entriesIn(req.workspaceId));
     res.json(questions);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const q = await OpenQuestion.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
-      .populate('entry_ids', 'title category');
+      .populate(entriesIn(req.workspaceId));
     if (!q) return res.status(404).json({ error: 'Not found' });
     res.json(q);
   } catch (err) {
@@ -33,15 +34,18 @@ router.get('/:id', async (req, res) => {
 // POST /open-questions
 router.post('/', async (req, res) => {
   try {
-    const { question, entry_ids = [] } = req.body;
+    const { question, entry_ids: requested = [] } = req.body;
+    // Only this workspace's entities are kept, so another tenant's entity id is
+    // never stored — nor back-linked below.
+    const entry_ids = await ownEntryIds(requested, req.workspaceId);
     const oq = await OpenQuestion.create({
       question,
       entry_ids,
       workspaceId: req.workspaceId,
     });
 
-    // Back-link on each entry. Scoped so a foreign entry id in the request
-    // body cannot be made to reference this workspace's question.
+    // Back-link on each entry. Still scoped, as a second line behind the
+    // filter above.
     if (entry_ids.length) {
       await Entity.updateMany(
         { _id: { $in: entry_ids }, workspaceId: req.workspaceId },
@@ -58,16 +62,19 @@ router.post('/', async (req, res) => {
 // PUT /open-questions/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { question, status, entry_ids } = req.body;
+    const { question, status, entry_ids: requested } = req.body;
     const scope = { _id: req.params.id, workspaceId: req.workspaceId };
     const update = {};
     if (question !== undefined) update.question = question;
     if (status !== undefined) update.status = status;
 
-    if (entry_ids !== undefined) {
+    if (requested !== undefined) {
       // Sync back-links: remove from old entries, add to new
       const existing = await OpenQuestion.findOne(scope);
       if (!existing) return res.status(404).json({ error: 'Not found' });
+
+      // Same rule as POST: another tenant's entity ids are dropped, not stored.
+      const entry_ids = await ownEntryIds(requested, req.workspaceId);
 
       const oldIds = existing.entry_ids.map(id => id.toString());
       const newIds = entry_ids.map(id => id.toString());
@@ -91,7 +98,7 @@ router.put('/:id', async (req, res) => {
     }
 
     const oq = await OpenQuestion.findOneAndUpdate(scope, update, { new: true })
-      .populate('entry_ids', 'title category');
+      .populate(entriesIn(req.workspaceId));
     if (!oq) return res.status(404).json({ error: 'Not found' });
     res.json(oq);
   } catch (err) {

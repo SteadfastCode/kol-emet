@@ -27,8 +27,8 @@ every route that touches tenant content, resolves the acting user (the session u
 `Settings.mcpUserId` for a bearer token), and sets `req.workspaceId` from their workspace membership;
 those routes filter their queries on it. No user → 401; no workspace → 403. It fails closed rather
 than falling through to unscoped data, and must stay behind `requireAuth` so an anonymous request is
-a 401 before any workspace lookup. One known gap — two unscoped `populate()` calls — is described
-under [Workspace](data-model.md#workspace).
+a 401 before any workspace lookup. Populated id arrays (`open_questions`, `entry_ids`) are scoped
+the same way; see [Workspace](data-model.md#workspace).
 
 Mount points and their guards:
 
@@ -57,8 +57,8 @@ Mount points and their guards:
 |--------|-------|-------------|
 | GET | `/entities` | List. Query params: `category`, `tag`, `q` (case-insensitive regex over title/summary/blocks). Populates `open_questions`. |
 | GET | `/entities/:id` | Single entity, with `relationships` resolved live from `RelationshipGroup` (not the back-reference). |
-| POST | `/entities` | Create. Validates block types; normalizes block `order`. 400 if `category` is not a type in the workspace's [registry](#entity-types). Logs to ChangeLog. |
-| PUT | `/entities/:id` | Replace/update. Same validation + ChangeLog. |
+| POST | `/entities` | Create. Validates block types; normalizes block `order`. 400 if `category` is not a type in the workspace's [registry](#entity-types). Ignores `workspaceId`, `open_questions` and `relationships` in the body (server-maintained). Logs to ChangeLog. |
+| PUT | `/entities/:id` | Replace/update. Same validation, ignored fields + ChangeLog. |
 | DELETE | `/entities/:id` | Delete and prune the entity from all relationship groups. Logs to ChangeLog. |
 
 Block payloads must be `{ type, order, data }` with `type` in the `BLOCK_TYPES` enum; `order` is
@@ -118,8 +118,8 @@ A foreign or malformed id is 404.
 |--------|-------|-------------|
 | GET | `/open-questions` | List. Supports `?status=open|resolved`. |
 | GET | `/open-questions/:id` | Single question |
-| POST | `/open-questions` | Create |
-| PUT | `/open-questions/:id` | Update (question text, status, linked entities) |
+| POST | `/open-questions` | Create. `entry_ids` naming entities outside the caller's workspace are dropped. |
+| PUT | `/open-questions/:id` | Update (question text, status, linked entities; same `entry_ids` rule) |
 | DELETE | `/open-questions/:id` | Delete |
 
 ## Changelog / history
