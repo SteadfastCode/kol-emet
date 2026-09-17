@@ -22,7 +22,7 @@ registration, or removes a feature.
   is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
   3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
   then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
-  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[needs-human]` — Daniel
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
   promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
   generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
   item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-035) Throttle failed password and passkey sign-in attempts** [needs-human]
+- [ ] **(KOL-035) Throttle failed password and passkey sign-in attempts**
   Nothing limits guessing today: `POST /auth/login` (`server/src/routes/auth.js:90`) runs a bcrypt compare for every request, and
   the Decision Log (KOL-021 entry) records that the password check is not rate-limited, including the one in `DELETE /auth/account`
   (:445). Build `server/src/lib/attemptLimiter.js`: `createAttemptLimiter({ max, windowMs, now = Date.now })` with fixed-window
@@ -76,7 +76,7 @@ registration, or removes a feature.
   passwords, then 429 even with the right one; an unknown email gets the identical 429 body; another email is still 401; `cd server
   && yarn test` green. Out of scope: counters shared across several API instances (in-process today), CAPTCHA or signup throttling,
   account lockout, `/oauth/token`.
-- [ ] **(KOL-036) Refuse a passkey whose credential id is already registered to any account** [needs-human]
+- [ ] **(KOL-036) Refuse a passkey whose credential id is already registered to any account**
   The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
   pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.
   `login/begin` lists an account's ids to anyone who knows its email, so a crafted authenticator can register a copy on a second
@@ -89,7 +89,7 @@ registration, or removes a feature.
   gets 409 and still has no passkeys; alice registering X again gets 409 and keeps exactly one; X stored in the legacy
   double-encoded form on alice also blocks bob; `cd server && yarn test` green. Out of scope: a unique index on
   `passkeys.credentialID` (an Atlas index change; the check-then-push race stays a documented gap), and `login/begin`'s listing.
-- [ ] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance** [needs-human]
+- [ ] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance**
   `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
   is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
   `POST /auth/logout` clears the cookie with a bare `res.clearCookie('connect.sid')` (`server/src/routes/auth.js:116`), which the
@@ -103,7 +103,7 @@ registration, or removes a feature.
   `server/tests/http/auth.test.js`, logout's expiring Set-Cookie carries the same Path, HttpOnly and SameSite as the login cookie;
   `grep -rn "danielecker" server/src` prints nothing; `cd server && yarn test` green. Out of scope: cookie name, CORS and WebAuthn
   settings (already env-driven).
-- [ ] **(KOL-038) `GET /auth/me` answers 401 and ends the session when its user no longer exists** [needs-human]
+- [ ] **(KOL-038) `GET /auth/me` answers 401 and ends the session when its user no longer exists**
   The KOL-021 Decision Log entry's known gap: after `DELETE /auth/account`, the user's other sessions still hold the deleted id.
   Tenant routes refuse them, but `GET /auth/me` (`server/src/routes/auth.js:122`) reads only the session, answers
   `{ authenticated: true }`, and so the client (`client/src/App.vue:12-20`) shows the wiki to a deleted account. Build: `/auth/me`
@@ -114,7 +114,7 @@ registration, or removes a feature.
   `GET /auth/me` is 401 `{ authenticated: false }` and expires `connect.sid` (`clearsSessionCookie`); the `GET /auth/me` tests in
   `auth.test.js` stay green; `cd server && yarn test` green. Out of scope: finding the user's other sessions in the store (connect-mongo
   stores them serialized, not queryable by user), changes to `requireAuth`/`requireActor`.
-- [ ] **(KOL-039) Dedup key: trim a title before stripping its leading article** [needs-human]
+- [ ] **(KOL-039) Dedup key: trim a title before stripping its leading article**
   Found by the KOL-001 grader and still open. `normalizeTitle` (`server/src/lib/similarity.js:39`) strips `the|a|an` before it trims,
   so `'  The Iron Gate'` keys as `the iron gate`. That misses the exact match against an existing "The Iron Gate", and it misses the
   fuzzy fallback too (≈0.64 < `DUPLICATE_THRESHOLD` 0.72, `server/src/lib/draftNormalizer.js:17`). A padded generated title
@@ -125,7 +125,7 @@ registration, or removes a feature.
   where `normalizeDraft` with `existingEntities: [{ _id, title: 'The Iron Gate' }]` and a raw entity titled `'  The Iron Gate'`
   yields `op: 'update'` with `matchedBy: 'exact-normalized-title'`; `cd server && yarn test` green. Out of scope: trimming the
   `proposed` titles stored on drafts (training records), and any change to the threshold.
-- [ ] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed** [needs-human]
+- [ ] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed**
   Found by the KOL-021 grader and still open. The sidebar's Settings button (`openSettings`, `client/src/components/WikiLayout.vue:256`)
   sets `settingsOpen` along with `mobileTab = 'settings'`. `setMobileTab` (:248) changes only `mobileTab`, and mobile portrait has
   no ✕, so the flag stays set. Rotating to landscape, or anything else that stops the portrait query matching, then brings back the
@@ -133,7 +133,7 @@ registration, or removes a feature.
   not `settings`. Verify: in `client/src/components/WikiLayout.test.js`, following the test at :69, emit `settings` from
   `EntitySidebar`, click the list tab, and assert the Passkeys group is unmounted; `cd client && yarn test && yarn build` green. Out
   of scope: settings layout, adding a close button on mobile.
-- [ ] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`** [needs-human]
+- [ ] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`**
   Wishlist "Tag autocomplete on entry editor". The workspace-scoped `GET /tags` (`server/src/routes/tags.js`) exists, but no client
   code calls it. The editor's tags field is a plain comma-separated input (`client/src/components/EntityEditor.vue:28-32`,
   `tagsInput`). Build: `client/src/api/tags.js` `getTags()`, using the same `req` shape as `client/src/api/entityTypes.js`. In
@@ -157,7 +157,7 @@ registration, or removes a feature.
   is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
   3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
   then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
-  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[needs-human]` — Daniel
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
   promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
   generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
   item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
