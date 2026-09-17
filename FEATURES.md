@@ -8,19 +8,6 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [x] **(KOL-031) Onboarding: choose a template on signup** (needs KOL-030)
-  Registration already seeds the personal workspace from the Worldbuilding template by default, and the empty states exist
-  (`EntitySidebar.vue:64-80` list, `GraphView.vue:13-15` graph, the generator's input stage), so a new user never lands blank. What
-  is missing is the choice. Build: a public `GET /templates` (no auth — it is shown before an account exists; mount in
-  `server/src/app.js` next to `/auth`) returning `listTemplates()`; `POST /auth/register` answers 400 for a `template` that
-  `hasTemplate` rejects, creating nothing, instead of silently seeding Worldbuilding via `getTemplate`'s fallback; `register` in
-  `client/src/api/auth.js:15` takes an optional `template`; in `client/src/views/LoginView.vue` register mode, a radio group "Start
-  with" listing the fetched templates (name + description), defaulting to worldbuilding, above the disclosure line, with the
-  credential inputs and their `autocomplete` attributes untouched. Document the route in `docs/api.md`. Verify: `server/tests/http/auth.test.js` —
-  register with `template: 'software-architecture'` seeds that registry, an unknown key is 400 with no `User` or `Workspace` created,
-  and `GET /templates` lists both without a session; `client/src/views/LoginView.test.js` — the picker renders the fetched templates,
-  defaults to worldbuilding, and `register` is called with the chosen key; `cd server && yarn test`, `cd client && yarn test && yarn build`
-  green. Out of scope: switching a workspace's template later, starter-content or empty-state changes, a public template gallery.
 - [ ] **(KOL-033) First vertical-ingestion producer: a docker-compose.yml becomes a reviewable Draft** (needs KOL-030)
   `Draft.source.producer` (`server/src/models/Draft.js`) is the seam the roadmap names for vertical ingestion and has one value,
   `braindump`. Build a deterministic producer — no LLM call, no budget check, no `reserveGeneration`. Parser
@@ -102,6 +89,19 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-031) Onboarding: choose a template on signup** (needs KOL-030) (routine 2026-09-17, 5bcc3b9)
+  Registration already seeds the personal workspace from the Worldbuilding template by default, and the empty states exist
+  (`EntitySidebar.vue:64-80` list, `GraphView.vue:13-15` graph, the generator's input stage), so a new user never lands blank. What
+  is missing is the choice. Build: a public `GET /templates` (no auth — it is shown before an account exists; mount in
+  `server/src/app.js` next to `/auth`) returning `listTemplates()`; `POST /auth/register` answers 400 for a `template` that
+  `hasTemplate` rejects, creating nothing, instead of silently seeding Worldbuilding via `getTemplate`'s fallback; `register` in
+  `client/src/api/auth.js:15` takes an optional `template`; in `client/src/views/LoginView.vue` register mode, a radio group "Start
+  with" listing the fetched templates (name + description), defaulting to worldbuilding, above the disclosure line, with the
+  credential inputs and their `autocomplete` attributes untouched. Document the route in `docs/api.md`. Verify: `server/tests/http/auth.test.js` —
+  register with `template: 'software-architecture'` seeds that registry, an unknown key is 400 with no `User` or `Workspace` created,
+  and `GET /templates` lists both without a session; `client/src/views/LoginView.test.js` — the picker renders the fetched templates,
+  defaults to worldbuilding, and `register` is called with the chosen key; `cd server && yarn test`, `cd client && yarn test && yarn build`
+  green. Out of scope: switching a workspace's template later, starter-content or empty-state changes, a public template gallery.
 - [x] **(KOL-030) Phase 6 step 5: ship the Software Architecture template alongside Worldbuilding** (needs KOL-027) (routine 2026-09-17, 627b0a7)
   Templates already exist as code-defined bundles: `server/src/config/templates.js` (`TEMPLATES`, `getTemplate`) holds Worldbuilding
   (today's six types with colours, 38 relationship types, two starter entities, one group, one open question) and `seedWorkspace` in

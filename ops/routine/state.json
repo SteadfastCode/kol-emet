@@ -4,7 +4,7 @@
     "KOL-031": {
       "order": 1,
       "title": "Onboarding: choose a template on signup",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-031",
