@@ -4,7 +4,7 @@
     "KOL-029": {
       "order": 1,
       "title": "Phase 6 step 4: client pills, filters, pickers and colours read from /entity-types",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-029",
