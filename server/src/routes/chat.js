@@ -28,7 +28,7 @@ import UserMemory from '../models/UserMemory.js';
 import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
-import { CATEGORIES } from '../config/categories.js';
+import { getCategories } from '../config/categories.js';
 import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
 import { checkBudget, recordSpend } from '../lib/usageMeter.js';
 
@@ -117,7 +117,12 @@ async function streamViaResponsesApi(client, model, systemPrompt, messages, send
 // ─── Completions API path (function tools, local execution) ──────────────────
 
 
-const WIKI_TOOLS = [
+/**
+ * The function tools offered to the model. Built per request because the
+ * category filter lists the requesting workspace's entity types (the EntityType
+ * registry, via getCategories), not a fixed set.
+ */
+const wikiTools = categories => [
   {
     type: 'function',
     function: {
@@ -147,7 +152,7 @@ const WIKI_TOOLS = [
         type: 'object',
         properties: {
           q:        { type: 'string', description: 'Keyword to search titles, summaries, and content' },
-          category: { type: 'string', enum: CATEGORIES, description: 'Filter to a specific category' },
+          category: { type: 'string', enum: categories, description: 'Filter to a specific category' },
           tag:      { type: 'string', description: 'Filter by tag' },
         },
       },
@@ -216,7 +221,7 @@ async function executeTool(name, args, ctx = {}) {
  * Stream via Chat Completions API (function calling, local execution).
  * Returns the full assistant text (from whichever phase produced it).
  */
-async function streamViaCompletions(client, model, systemPrompt, messages, send, ctx = {}) {
+async function streamViaCompletions(client, model, systemPrompt, messages, send, ctx = {}, tools) {
   let currentMessages = [
     { role: 'system', content: systemPrompt },
     ...messages,
@@ -226,7 +231,7 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send,
   const firstStream = await client.chat.completions.create({
     model,
     messages:    currentMessages,
-    tools:       WIKI_TOOLS,
+    tools:       tools,
     tool_choice: 'auto',
     stream:      true,
     stream_options: { include_usage: true },
@@ -380,7 +385,8 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
 
     const assistantText = useResponsesApi
       ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send, ctx)
-      : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send, ctx);
+      : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send, ctx,
+          wikiTools(await getCategories(req.workspaceId)));
 
     // Persist the new exchange to the conversation
     if (conversation && assistantText) {

@@ -16,8 +16,9 @@ import { ownerGuard } from '../lib/ownerGuard.js';
  * predate the registry. Since Phase 6 step 2 dropped the Entity enum, this is
  * the only gate on category names: Entity and RelationshipType writes check
  * theirs against it (lib/entityTypeRegistry.js), so any name a user gives a
- * type is usable. The client's pills and picker and the MCP/chat category
- * lists move onto it in later Phase 6 steps.
+ * type is usable. The MCP tools (list_entity_types) and the chat assistant
+ * read it too (Phase 6 step 3); the client's pills and picker move onto it in
+ * a later step.
  */
 const entityTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },

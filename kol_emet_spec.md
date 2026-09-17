@@ -124,6 +124,7 @@ Supporting collections: `RelationshipGroup`, `RelationshipType`, `OpenQuestion`,
 |------|-------------|
 | `search_entities` | Search by keyword, tag, or category |
 | `get_entity` | Retrieve a single entity by id (with relationships) |
+| `list_entity_types` | List the workspace's entity types (the valid category names) |
 | `create_entity` | Add a new entity |
 | `update_entity` | Edit an existing entity |
 | `add_open_question` | Attach or update an open question on an entity |
@@ -238,3 +239,9 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   **Rejected alternative:** keeping renames of in-use types frozen, as KOL-020 did. That was only ever a stand-in for this cascade while the enum could not accept the new name.
 
   **Known gaps:** the cascade is ordered, not transactional (transactions need a replica set, as before). If it fails part-way, the type keeps its new name and the route answers 500; renaming it back runs the cascade the other way and restores consistency. An entity write that validated the old name just before the rename can land after the `updateMany` and keep the old name, the same interleaving KOL-022 left open for deletes. The cascade writes no `ChangeLog` entries, so rolling an entity back to a snapshot taken before a rename restores the old name, which the validator refuses. Pending draft items that name the old category fail at apply the same way; their `proposed` payloads are training records and are deliberately not rewritten.
+- **MCP category parameters are free strings plus a `list_entity_types` tool; chat builds its enum per request (decided 2026-09-17, KOL-028)**: Phase 6 step 3 moves the AI surfaces off the built-in `CATEGORIES` list.
+  - **MCP: no enum, a list tool instead.** `search_entities`, `create_entity` and `update_entity` take `category` as `z.string()`, described as "call `list_entity_types` for the valid names". The new tool returns the acting workspace's types (`name`, `icon`, `color`, `order`), sorted as `GET /entity-types` sorts them. A tool's input schema is fixed when the MCP session is created, but the workspace is resolved on every call (`mcpWorkspaceId()`), and the identity behind it can change mid-session. An enum built at session start could therefore be wrong for later calls. The write stays the gate: `categoryValidator` refuses an unregistered name, and the tool returns that message to the model.
+  - **Empty registry lists the built-ins.** When a workspace has no types (it predates the registry), `list_entity_types` returns the six built-in names from `getCategories()`, with null icon and colour. Those are the names its writes accept, so the list never disagrees with the write.
+  - **Chat: enum per request.** The in-app assistant's function tools are built for each `POST /chat` from `getCategories(req.workspaceId)`. That schema is sent fresh with every provider call, so an enum costs nothing and keeps the model from guessing names.
+
+  **Rejected alternative:** building a per-workspace enum into the MCP schemas when the session is created. It would go stale when types are added or renamed, or when the MCP identity changes during a live session.

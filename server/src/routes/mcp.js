@@ -11,7 +11,8 @@ import OpenQuestion from '../models/OpenQuestion.js';
 import User from '../models/User.js';
 import { getMcpUser } from '../lib/mcpUserStore.js';
 import Workspace from '../models/Workspace.js';
-import { CATEGORIES } from '../config/categories.js';
+import EntityType from '../models/EntityType.js';
+import { getCategories } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
 import { openQuestionsIn, entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
 
@@ -113,6 +114,13 @@ const BlockInput = z.object({
   data: z.record(z.unknown()),
 });
 
+// Category names are each workspace's own (the EntityType registry), and a
+// session's tool schemas are fixed when it is created while its workspace is
+// resolved per call — so the schemas take any string and point the model at
+// list_entity_types. The write itself is the gate: Entity's categoryValidator
+// refuses a name the workspace has no type for, and the tool returns its message.
+const CATEGORY_HINT = 'call list_entity_types for the valid names';
+
 function createMcpServer() {
   const server = new McpServer({ name: 'kol-emet', version: '0.1.0' });
 
@@ -122,7 +130,7 @@ function createMcpServer() {
     {
       q: z.string().optional().describe('Keyword to search title, summary, and block content'),
       tag: z.string().optional().describe('Filter by tag'),
-      category: z.enum(CATEGORIES).optional(),
+      category: z.string().optional().describe(`Filter by entity type name, exactly as spelled — ${CATEGORY_HINT}`),
     },
     async ({ q, tag, category }) => {
       const filter = { workspaceId: await mcpWorkspaceId() };
@@ -164,11 +172,38 @@ function createMcpServer() {
   );
 
   server.tool(
+    'list_entity_types',
+    "List this workspace's entity types — the only valid values for an entity's category. " +
+    'Returns name, icon, color and order for each, in display order. ' +
+    'Call this before create_entity, or before changing a category with update_entity.',
+    {},
+    async () => {
+      const workspaceId = await mcpWorkspaceId();
+      // Sorted as GET /entity-types sorts them.
+      let types = await EntityType.find({ workspaceId })
+        .sort({ order: 1, name: 1 })
+        .select({ _id: 0, name: 1, icon: 1, color: 1, order: 1 })
+        .lean();
+      if (!types.length) {
+        // A workspace that predates the registry is held to the built-in names
+        // (lib/entityTypeRegistry.js); getCategories() returns those, so the
+        // list names exactly what create_entity would accept.
+        const names = await getCategories(workspaceId);
+        log('light', `list_entity_types: workspace ${workspaceId} has no entity types, so the built-in categories were listed (source: getCategories fallback; backfill with scripts/seed-entity-types.js)`);
+        types = names.map((name, order) => ({ name, icon: null, color: { bg: null, text: null }, order }));
+      }
+      log('verbose', `list_entity_types: ${types.length} type(s) for workspace ${workspaceId}: ${types.map(t => t.name).join(', ')}`);
+      return { content: [{ type: 'text', text: JSON.stringify(types, null, 2) }] };
+    }
+  );
+
+  server.tool(
     'create_entity',
-    'Add a new wiki entity. Use blocks for structured content.',
+    'Add a new wiki entity. Use blocks for structured content. ' +
+    "category must name one of this workspace's entity types exactly — call list_entity_types first; any other name is refused.",
     {
       title: z.string(),
-      category: z.enum(CATEGORIES),
+      category: z.string().describe(`Entity type name, exactly as list_entity_types returns it — ${CATEGORY_HINT}`),
       summary: z.string().optional().describe('One-line description'),
       tags: z.array(z.string()).optional(),
       blocks: z.array(BlockInput).optional().describe(
@@ -195,11 +230,12 @@ function createMcpServer() {
 
   server.tool(
     'update_entity',
-    'Edit an existing wiki entity. Only provided fields are updated. To update blocks, pass the full blocks array — unlisted blocks are removed.',
+    'Edit an existing wiki entity. Only provided fields are updated. To update blocks, pass the full blocks array — unlisted blocks are removed. ' +
+    "A new category must name one of this workspace's entity types exactly — call list_entity_types first; any other name is refused.",
     {
       id: z.string().describe('MongoDB ObjectId of the entity'),
       title: z.string().optional(),
-      category: z.enum(CATEGORIES).optional(),
+      category: z.string().optional().describe(`Entity type name, exactly as list_entity_types returns it — ${CATEGORY_HINT}`),
       summary: z.string().optional(),
       tags: z.array(z.string()).optional(),
       blocks: z.array(BlockInput).optional(),
