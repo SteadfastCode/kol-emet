@@ -4,7 +4,7 @@
     "KOL-032": {
       "order": 1,
       "title": "Scope the two unscoped populate() calls so a planted foreign id never resolves",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-032",

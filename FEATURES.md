@@ -8,20 +8,6 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [x] **(KOL-032) Scope the two unscoped populate() calls so a planted foreign id never resolves**
-  The known gap in `docs/data-model.md` ("Known gap", ~line 405): `Entity.open_questions` is populated unscoped in
-  `server/src/routes/entities.js:52,63,121`, `server/src/routes/changelog.js:51` (rollback) and `server/src/routes/mcp.js:140,154,216`
-  (`search_entities`, `get_entity`, `update_entity`); `OpenQuestion.entry_ids` in `server/src/routes/openQuestions.js:14,25,94` and
-  `mcp.js:257` (`list_open_questions`). A caller who writes another tenant's id into either array reads back its title or question
-  text. Build: every one of those populates takes `match: { workspaceId: <the request's or the MCP user's workspace> }` and the
-  routes drop the `null` entries populate leaves for unmatched ids; `stripTenancy` in `entities.js:31` also strips `open_questions`
-  and `relationships` from POST/PUT bodies, since both are server-maintained back-references written only by the open-question,
-  relationship-group, applier and seeder code (rollback restores a snapshot and is untouched); `POST/PUT /open-questions` keeps only
-  the `entry_ids` that exist in the caller's workspace. Then turn the two `{ todo }` tests at `server/tests/http/tenancy.test.js:402,415`
-  into real tests (drop the option, keep the assertions) and add one MCP case in `server/tests/http/mcp.test.js` (`get_entity` on an
-  entity carrying a foreign question id returns no foreign text). Update the "Known gap" paragraph in `docs/data-model.md` and the
-  roadmap Phase 8 bullet (`docs/roadmap.md:88-91`) to say it is closed. Verify: `cd server && yarn test` green with zero `todo` tests
-  left in `tenancy.test.js`. Out of scope: the per-user MCP identity (KOL-014), any change to what `resolveWorkspace` does.
 - [ ] **(KOL-027) Phase 6 step 2: drop the Entity category enum; the EntityType registry alone gates category names**
   KOL-020/022 already built the registry, the write-time check (`categoryValidator` in `server/src/lib/entityTypeRegistry.js`, on
   `Entity.category` and `RelationshipType.sourceCategory/targetCategory`), idempotent per-workspace seeding (`seedEntityTypes` in
@@ -180,6 +166,20 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-032) Scope the two unscoped populate() calls so a planted foreign id never resolves** (routine 2026-09-17, 05679a6)
+  The known gap in `docs/data-model.md` ("Known gap", ~line 405): `Entity.open_questions` is populated unscoped in
+  `server/src/routes/entities.js:52,63,121`, `server/src/routes/changelog.js:51` (rollback) and `server/src/routes/mcp.js:140,154,216`
+  (`search_entities`, `get_entity`, `update_entity`); `OpenQuestion.entry_ids` in `server/src/routes/openQuestions.js:14,25,94` and
+  `mcp.js:257` (`list_open_questions`). A caller who writes another tenant's id into either array reads back its title or question
+  text. Build: every one of those populates takes `match: { workspaceId: <the request's or the MCP user's workspace> }` and the
+  routes drop the `null` entries populate leaves for unmatched ids; `stripTenancy` in `entities.js:31` also strips `open_questions`
+  and `relationships` from POST/PUT bodies, since both are server-maintained back-references written only by the open-question,
+  relationship-group, applier and seeder code (rollback restores a snapshot and is untouched); `POST/PUT /open-questions` keeps only
+  the `entry_ids` that exist in the caller's workspace. Then turn the two `{ todo }` tests at `server/tests/http/tenancy.test.js:402,415`
+  into real tests (drop the option, keep the assertions) and add one MCP case in `server/tests/http/mcp.test.js` (`get_entity` on an
+  entity carrying a foreign question id returns no foreign text). Update the "Known gap" paragraph in `docs/data-model.md` and the
+  roadmap Phase 8 bullet (`docs/roadmap.md:88-91`) to say it is closed. Verify: `cd server && yarn test` green with zero `todo` tests
+  left in `tenancy.test.js`. Out of scope: the per-user MCP identity (KOL-014), any change to what `resolveWorkspace` does.
 - [x] **(KOL-026) The race is only fixed for UserMemory and Conversation.** (routine 2026-09-16, 8478f74)
   Found by the grader of KOL-023 (medium, server/src/lib/accountDeleter.js:36). The race is only
   fixed for UserMemory and Conversation. Workspace-scoped models (entities, relationship groups,
