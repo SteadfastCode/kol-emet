@@ -8,12 +8,143 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
+- [ ] **(KOL-032) Scope the two unscoped populate() calls so a planted foreign id never resolves**
+  The known gap in `docs/data-model.md` ("Known gap", ~line 405): `Entity.open_questions` is populated unscoped in
+  `server/src/routes/entities.js:52,63,121`, `server/src/routes/changelog.js:51` (rollback) and `server/src/routes/mcp.js:140,154,216`
+  (`search_entities`, `get_entity`, `update_entity`); `OpenQuestion.entry_ids` in `server/src/routes/openQuestions.js:14,25,94` and
+  `mcp.js:257` (`list_open_questions`). A caller who writes another tenant's id into either array reads back its title or question
+  text. Build: every one of those populates takes `match: { workspaceId: <the request's or the MCP user's workspace> }` and the
+  routes drop the `null` entries populate leaves for unmatched ids; `stripTenancy` in `entities.js:31` also strips `open_questions`
+  and `relationships` from POST/PUT bodies, since both are server-maintained back-references written only by the open-question,
+  relationship-group, applier and seeder code (rollback restores a snapshot and is untouched); `POST/PUT /open-questions` keeps only
+  the `entry_ids` that exist in the caller's workspace. Then turn the two `{ todo }` tests at `server/tests/http/tenancy.test.js:402,415`
+  into real tests (drop the option, keep the assertions) and add one MCP case in `server/tests/http/mcp.test.js` (`get_entity` on an
+  entity carrying a foreign question id returns no foreign text). Update the "Known gap" paragraph in `docs/data-model.md` and the
+  roadmap Phase 8 bullet (`docs/roadmap.md:88-91`) to say it is closed. Verify: `cd server && yarn test` green with zero `todo` tests
+  left in `tenancy.test.js`. Out of scope: the per-user MCP identity (KOL-014), any change to what `resolveWorkspace` does.
+- [ ] **(KOL-027) Phase 6 step 2: drop the Entity category enum; the EntityType registry alone gates category names**
+  KOL-020/022 already built the registry, the write-time check (`categoryValidator` in `server/src/lib/entityTypeRegistry.js`, on
+  `Entity.category` and `RelationshipType.sourceCategory/targetCategory`), idempotent per-workspace seeding (`seedEntityTypes` in
+  `server/src/lib/workspaceSeeder.js`, tested at `server/tests/http/entityTypes.test.js:165`) and the backfill
+  `server/scripts/seed-entity-types.js`. What remains is the enum itself. Build: remove `enum: CATEGORIES` from
+  `server/src/models/Entity.js:22` (the validator stays and is now the only gate; keep its clear 400 message); in
+  `isRegisteredCategory`, a workspace with no types is checked against `CATEGORIES` explicitly instead of returning true, so an
+  unseeded or pre-registry workspace keeps today's behaviour; in `server/src/routes/entityTypes.js` drop `canonicalCategory` and
+  `notACategory` (any non-blank name is creatable), and make a rename cascade — rename the type, then `updateMany` the workspace's
+  `Entity.category` and `RelationshipType.sourceCategory/targetCategory` from the old name to the new — while delete keeps its
+  in-use 409 and the last-type 409; `getCategories(workspaceId)` in `server/src/config/categories.js` becomes an async registry
+  lookup (names sorted by `order`, falling back to `CATEGORIES` when the workspace has none) and its callers follow:
+  `server/src/lib/generator.js:162` and `entityPayloadSchema`/`validateItemPayload` in `server/src/lib/draftItemSchema.js:30`
+  (callers `server/src/routes/drafts.js:270` and `server/tests/unit/draftItemSchema.test.js`); `CATEGORIES` stays exported as the
+  seed list. Update the tests the enum backed: `server/tests/models/entity.test.js` (an unknown category is still rejected in a
+  seeded workspace and in an unseeded one), `entityTypes.test.js:212` (a custom name such as "Vehicles" is now 201 and an entity can
+  use it) and `:345` (a rename of an in-use type is 200 and cascades to the entities and relationship types that named it). Update
+  `docs/api.md` rows for `POST/PUT /entity-types`, the comment blocks in `EntityType.js`, `entityTypeRegistry.js`, `categories.js`
+  and `config/templates.js` that say the enum stands, and add the step-2 line to the Decision Log in `kol_emet_spec.md`. Verify:
+  `cd server && yarn test` green, including a rejected unknown category and the existing idempotent-seed test. Out of scope: the MCP
+  and chat category lists (KOL-028), the client (KOL-029), any second template (KOL-030).
+- [ ] **(KOL-028) Phase 6 step 3: MCP and chat read entity types from the registry** (needs KOL-027)
+  `server/src/routes/mcp.js` still declares `category: z.enum(CATEGORIES)` on `search_entities` (:124), `create_entity` (:170) and
+  `update_entity` (:201), and `server/src/routes/chat.js:150` hands the in-app assistant the same frozen list. Build: those three
+  become `z.string()` with a `.describe()` telling the agent to call `list_entity_types` for the valid names (the schema validator
+  from KOL-027 refuses anything else, so `create_entity` with an unregistered name throws its message); add a `list_entity_types`
+  tool returning the workspace's types (`name`, `icon`, `color`, `order`, sorted like `GET /entity-types`) scoped by
+  `mcpWorkspaceId()`; update the `create_entity`/`update_entity` descriptions; in `chat.js` build the `search_entities` tool's
+  `category` enum per request from `await getCategories(req.workspaceId)` (the route has `resolveWorkspace`, `chat.js:324`) instead
+  of the module constant. Docs: add the tool row to the table in `docs/architecture.md` (~line 69-81) and the MCP Tools table in
+  `CLAUDE.md`; drop the `CATEGORIES` import from both routes. Verify: extend `server/tests/http/mcp.test.js` — the `tools/list`
+  contract at `:582-594` goes from 13 to 14 names including `list_entity_types`; `list_entity_types` as alice returns only alice's
+  types; `create_entity` with a registered custom type succeeds and with an unregistered one errors without writing; `yarn test`
+  green. Out of scope: the per-user MCP identity (KOL-014), the client (KOL-029).
+- [ ] **(KOL-029) Phase 6 step 4: client pills, filters, pickers and colours read from /entity-types** (needs KOL-027)
+  Every client category list is hardcoded: `client/src/config/categories.js` (`CATEGORIES`, `CAT_COLORS`) feeds the pill row in
+  `client/src/components/EntitySidebar.vue:41,90`, the pickers in `EntityEditor.vue:17-19,123` and `EntityHeader.vue:37-38,65,75`, and
+  the colours in `SidebarCard.vue:17,27` and `generator/DraftItemCard.vue:71,85`. Build: `client/src/api/entityTypes.js`
+  (`getEntityTypes()` → `GET /entity-types`, same `req` shape as `client/src/api/entities.js`) and a `useEntityTypes` composable in
+  `client/src/composables/` that fetches once when `WikiLayout.vue` mounts and exposes the ordered names plus a `styleFor(name)`
+  returning `{ bg, color }` from the registry's `{ bg, text }` pair, with today's `{ bg: '#333', color: '#aaa' }` fallback for a name
+  the registry lacks; move the five consumers onto it and delete `config/categories.js`. `client/src/components/EntityCard.vue`
+  carries its own copies (:91,105) but nothing imports it — delete it rather than migrate it. `config/defaultBlocks.js` stays keyed
+  by name (unknown names already get no defaults). No visual change for the six seeded types, whose colours the registry carries.
+  Verify: `cd client && yarn test && yarn build` green, with a new `client/src/components/EntitySidebar.test.js` (pattern:
+  `WikiLayout.test.js`) that mocks `/entity-types` and asserts the pills render the fetched names in order and a name absent from the
+  registry still renders with the fallback colour; `grep -rn "config/categories" client/src` prints nothing. Out of scope: creating
+  or editing types from the UI, icons (render none until a type has one), the MCP layer (KOL-028).
+- [ ] **(KOL-030) Phase 6 step 5: ship the Software Architecture template alongside Worldbuilding** (needs KOL-027)
+  Templates already exist as code-defined bundles: `server/src/config/templates.js` (`TEMPLATES`, `getTemplate`) holds Worldbuilding
+  (today's six types with colours, 38 relationship types, two starter entities, one group, one open question) and `seedWorkspace` in
+  `server/src/lib/workspaceSeeder.js` seeds it at registration (`server/src/routes/auth.js:69`, which already accepts
+  `req.body.template`). The second template was withheld only because the enum would reject its names. Build: add
+  `'software-architecture'` (`name: 'Software Architecture'`) with `entityTypes` Service, Data Store, API, Team, External Dependency
+  (ordered, each with a `{ bg, text }` colour pair distinct from the six worldbuilding ones), `relationshipTypes` in the same
+  `scope: 'group'` / `scope: 'member'` shape as Worldbuilding — group labels Depends on, Owned by, Calls, Exposes with a member-role
+  pair each (e.g. Dependent/Dependency, Owner/Owned, Caller/Callee, Provider/Endpoint; `sourceCategory`/`targetCategory` hints such as
+  Team → Service for Owner) — and a small starter set mirroring Worldbuilding's shape (one Service, one Data Store, one Depends-on
+  group, one open question). Export `listTemplates()` returning `[{ key, name, description }]` and `hasTemplate(key)`; rewrite the
+  header comment that says only the worldbuilding template is real. Verify: extend the `seeding` describe in
+  `server/tests/http/entityTypes.test.js` — registering with `template: 'software-architecture'` yields exactly the five types in
+  order with colours and relationship types including the four group labels, while a default registration still yields the six;
+  `yarn test` green. Out of scope: a template picker on signup and a public listing route (KOL-031), changing an existing
+  workspace's template, an admin UI for templates.
+- [ ] **(KOL-031) Onboarding: choose a template on signup** (needs KOL-030)
+  Registration already seeds the personal workspace from the Worldbuilding template by default, and the empty states exist
+  (`EntitySidebar.vue:64-80` list, `GraphView.vue:13-15` graph, the generator's input stage), so a new user never lands blank. What
+  is missing is the choice. Build: a public `GET /templates` (no auth — it is shown before an account exists; mount in
+  `server/src/app.js` next to `/auth`) returning `listTemplates()`; `POST /auth/register` answers 400 for a `template` that
+  `hasTemplate` rejects, creating nothing, instead of silently seeding Worldbuilding via `getTemplate`'s fallback; `register` in
+  `client/src/api/auth.js:15` takes an optional `template`; in `client/src/views/LoginView.vue` register mode, a radio group "Start
+  with" listing the fetched templates (name + description), defaulting to worldbuilding, above the disclosure line, with the
+  credential inputs and their `autocomplete` attributes untouched. Document the route in `docs/api.md`. Verify: `server/tests/http/auth.test.js` —
+  register with `template: 'software-architecture'` seeds that registry, an unknown key is 400 with no `User` or `Workspace` created,
+  and `GET /templates` lists both without a session; `client/src/views/LoginView.test.js` — the picker renders the fetched templates,
+  defaults to worldbuilding, and `register` is called with the chosen key; `cd server && yarn test`, `cd client && yarn test && yarn build`
+  green. Out of scope: switching a workspace's template later, starter-content or empty-state changes, a public template gallery.
+- [ ] **(KOL-033) First vertical-ingestion producer: a docker-compose.yml becomes a reviewable Draft** (needs KOL-030)
+  `Draft.source.producer` (`server/src/models/Draft.js`) is the seam the roadmap names for vertical ingestion and has one value,
+  `braindump`. Build a deterministic producer — no LLM call, no budget check, no `reserveGeneration`. Parser
+  `server/src/lib/producers/dockerCompose.js`: `parseCompose(text, { existingEntities })` → `{ items, dropReasons }` in exactly the
+  item shape `normalizeDraft` emits (`server/src/lib/draftNormalizer.js`: server-assigned `localKey`/`seq`, `kind`, `op`, `proposed`
+  matching `entityPayloadSchema`/`relationshipPayloadSchema` in `draftItemSchema.js`, `input.evidence.quote` = the YAML line that
+  produced the item, exact-normalized-title dedup via `normalizeTitle` setting `op: 'update'`, `targetEntityId`,
+  `matchedBy: 'exact-normalized-title'`). Mapping: each `services.<name>` → an entity of category Service, or Data Store when `image`
+  matches a short known list (postgres, mysql, mariadb, mongo, redis, memcached, elasticsearch, rabbitmq, kafka, minio), with an
+  `attribute` block each for `image` and `ports`; `depends_on` (list or map form) and `links` → a "Depends on" group with
+  Dependent/Dependency roles; an env value holding a URL whose host is another service name → a "Calls" group (Caller/Callee); a URL
+  whose host is not a service → one External Dependency entity per host plus a "Depends on" group. Add the `yaml` package to
+  `server/package.json` (the one new dependency); parse errors are a 400 naming the line. Route `POST /drafts/compose` in
+  `server/src/routes/drafts.js`, body `{ text, filename? }` (the client extracts text in the browser like `importFile.js` already
+  does), returning 201 with the draft: `status: 'ready'`, `source.producer: 'docker-compose'`, `producerVersion: 'docker-compose@1'`,
+  `textHash` as `POST /drafts` computes it, `grounding.categories` from `getCategories`; extend the `producer` enum. Client: `.yml`/
+  `.yaml` in `client/src/lib/importFile.js`, `createComposeDraft` in `client/src/api/drafts.js`, and `BraindumpInput.vue` routes a
+  compose file to it and hands the result to the existing review stage in `GeneratorOverlay.vue` — `DraftReview.vue` and the applier
+  are untouched. Document the route in `docs/api.md` and add the Decision Log line. Verify: `server/tests/unit/dockerCompose.test.js`
+  against a fixture `server/tests/fixtures/docker-compose.yml` (web + worker with `depends_on`, postgres and redis images, a
+  `DATABASE_URL` pointing at postgres, an external `https://` URL) asserting categories, the Depends-on/Calls groups, the External
+  Dependency, and that a second parse against existing entities of the same titles yields updates; `server/tests/http/composeDraft.test.js`
+  registering with `template: 'software-architecture'`, posting the fixture, asserting the producer fields, then `decide-clean` +
+  `apply` lands the entities with those categories; `yarn test` green. Out of scope: k8s/OpenAPI/repo producers, drift detection,
+  LLM enrichment of the parsed graph, any change to the review UI.
 - [ ] **(KOL-012) GitHub Actions CI running both test suites and the client build** (needs KOL-003, KOL-010) [needs-human]
   Create `.github/workflows/ci.yml`: on push + pull_request, ubuntu-latest, Node 22 via `actions/setup-node` with yarn caching; job
   `server` = `yarn install --frozen-lockfile && yarn test` in `server/`; job `client` = the same plus `yarn build` in `client/`.
   Cache `~/.cache/mongodb-binaries` so `mongodb-memory-server` downloads once. Verify: `gh pr checks` on the routine's own PR shows
   both jobs green before merge. Out of scope: deploys, branch protection (a repo setting Daniel must flip — flag it in the PR).
   needs-human because `.github/**` is denylisted for automated runs (a run may never add or edit its own CI); Daniel adds this one.
+- [ ] **(KOL-034) Backlog audit: file new candidates under Proposed**
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[needs-human]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
 
 ## Proposed
 
