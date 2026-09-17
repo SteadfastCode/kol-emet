@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-035) Throttle failed password and passkey sign-in attempts**
+- [x] **(KOL-035) Throttle failed password and passkey sign-in attempts**
   Nothing limits guessing today: `POST /auth/login` (`server/src/routes/auth.js:90`) runs a bcrypt compare for every request, and
   the Decision Log (KOL-021 entry) records that the password check is not rate-limited, including the one in `DELETE /auth/account`
   (:445). Build `server/src/lib/attemptLimiter.js`: `createAttemptLimiter({ max, windowMs, now = Date.now })` with fixed-window
