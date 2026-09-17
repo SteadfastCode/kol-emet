@@ -91,17 +91,17 @@ re-densified server-side.
 
 ## Entity types
 
-The per-workspace registry of entity types (Phase 6 step 1). `Entity.category` still validates
-against the hardcoded enum, and it must also name a type in this registry. So must a relationship
-type's `sourceCategory`/`targetCategory`. While the enum stands, a type's `name` must be one of
-the six built-in categories. The client and the MCP/chat category lists move onto the registry in
-later Phase 6 steps. See [EntityType](data-model.md#entitytype).
+The per-workspace registry of entity types (Phase 6). `Entity.category` has no hardcoded enum: it
+must name a type in this registry, and so must a relationship type's
+`sourceCategory`/`targetCategory`. A workspace with no types is held to the six built-in categories.
+The client and the MCP/chat category lists move onto the registry in later Phase 6 steps. See
+[EntityType](data-model.md#entitytype).
 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/entity-types` | List the workspace's types, sorted by `order` then `name`. `?q=` fuzzy-filters by name. |
-| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. `name` is matched case-insensitively to a built-in category and stored in its spelling; any other name is 400 `{ error, categories }`. 409 on an existing name (case-insensitive). A near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
-| PUT | `/entity-types/:id` | Update any of `name` (same rule), `icon`, `color` (either half), `order`. 409 if the new name exists. A rename is also 409 `{ error, inUse, entities, relationshipTypes }` while any entity or relationship type in the workspace names the type. |
+| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. Any non-blank `name` (trimmed) is allowed, and entities can use it at once; a blank one is 400. 409 on an existing name (case-insensitive). A near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
+| PUT | `/entity-types/:id` | Update any of `name` (non-blank, trimmed), `icon`, `color` (either half), `order`. 409 if another type has the new name (case-insensitive). A rename, including a change of case alone, cascades: every entity `category` and relationship type `sourceCategory`/`targetCategory` in the workspace that held the old name takes the new one, and the response adds `relabelled: { entities, sourceCategories, targetCategories }`. The steps are ordered, not transactional; if the cascade fails the type keeps its new name and the answer is 500, and renaming it back repairs the data. |
 | DELETE | `/entity-types/:id` | Delete. 409 with the same counts while anything names the type, and 409 for the workspace's last type. |
 
 A foreign or malformed id is 404.

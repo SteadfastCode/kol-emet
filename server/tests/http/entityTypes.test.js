@@ -1,5 +1,5 @@
 /**
- * The entity-type registry (Phase 6 step 1) across real accounts.
+ * The entity-type registry (Phase 6) across real accounts.
  *
  * Same harness and reasoning as tenancy.test.js: `createApp()` over supertest,
  * real `POST /auth/register` — so the six default types arrive through the real
@@ -15,9 +15,9 @@
  * type's source/target category, and the registry must not drift from either
  * (src/lib/entityTypeRegistry.js, src/routes/entityTypes.js): an entity or
  * relationship type cannot name a type its workspace lacks, a type something
- * uses cannot be renamed or deleted, and while the Entity enum stands a type's
- * name is one of the built-in categories. That last rule is why the fixtures
- * below make room — delete an unused type — before creating one.
+ * uses cannot be deleted, and renaming one carries the new name to everything
+ * that used the old. With the Entity enum gone (Phase 6 step 2), the registry
+ * is the only gate, so any name a type is given is one an entity can use.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_ENTITY_TYPES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -40,6 +40,8 @@ import * as db from '../helpers/db.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import EntityType from '../../src/models/EntityType.js';
+import Entity from '../../src/models/Entity.js';
+import RelationshipType from '../../src/models/RelationshipType.js';
 import { CATEGORIES } from '../../src/config/categories.js';
 import { seedEntityTypes } from '../../src/lib/workspaceSeeder.js';
 
@@ -149,7 +151,7 @@ describe('seeding', () => {
     for (const who of [alice, bob]) {
       const seeded = (await listTypes(who)).filter(t => CATEGORIES.includes(t.name));
 
-      assert.deepEqual(seeded.map(t => t.name), CATEGORIES, `${who.email}'s registry must match the Entity enum, in its order`);
+      assert.deepEqual(seeded.map(t => t.name), CATEGORIES, `${who.email}'s registry must match the built-in categories, in their order`);
       assert.deepEqual(seeded.map(t => t.order), [0, 1, 2, 3, 4, 5]);
       for (const t of seeded) assert.equal(String(t.workspaceId), who.workspaceId, `seeded "${t.name}" must be in ${who.email}'s workspace`);
     }
@@ -180,24 +182,24 @@ describe('seeding', () => {
 
 describe("CRUD in the caller's workspace", () => {
   test('create, read, update and delete a type', async () => {
-    // A fresh workspace has all six, so a create needs room: nothing uses Open Questions.
-    const gone = await deleteType(alice, 'Open Questions');
-    assert.ok(!(await listTypes(alice)).some(t => t._id === gone._id), 'a deleted type is no longer listed');
-    assert.equal((await alice.agent.delete(`/entity-types/${gone._id}`)).status, 404, 'a second delete finds nothing');
-
-    const created = await createType(alice, { name: '  open questions  ', icon: '❓', color: { bg: '#111111', text: '#EEEEEE' } });
-    assert.equal(created.name, 'Open Questions', "the name is trimmed and takes the category's spelling");
+    const created = await createType(alice, { name: '  Airships  ', icon: '🎈', color: { bg: '#111111', text: '#EEEEEE' } });
+    assert.equal(created.name, 'Airships', 'the name is trimmed');
     const before = await listTypes(alice);
     assert.equal(created.order, Math.max(...before.filter(t => t._id !== created._id).map(t => t.order)) + 1,
       'with no order given, a new type goes after the last one');
-    assert.equal(before.at(-1).name, 'Open Questions', 'the list is sorted by order');
+    assert.equal(before.at(-1).name, 'Airships', 'the list is sorted by order');
 
-    const put = await alice.agent.put(`/entity-types/${created._id}`).send({ name: 'OPEN QUESTIONS', order: 99, color: { text: '#FFFFFF' } });
+    const put = await alice.agent.put(`/entity-types/${created._id}`).send({ name: ' Airships ', order: 99, color: { text: '#FFFFFF' } });
     assert.equal(put.status, 200, JSON.stringify(put.body));
-    assert.equal(put.body.name, 'Open Questions', 'a differently cased current name is not a rename');
+    assert.equal(put.body.name, 'Airships');
+    assert.equal(put.body.relabelled, undefined, 'resending the current name is not a rename');
     assert.equal(put.body.order, 99);
     assert.deepEqual(put.body.color, { bg: '#111111', text: '#FFFFFF' }, 'a partial colour update keeps the other half');
-    assert.equal(put.body.icon, '❓', 'fields not in the body are untouched');
+    assert.equal(put.body.icon, '🎈', 'fields not in the body are untouched');
+
+    const gone = await deleteType(alice, 'Airships');
+    assert.ok(!(await listTypes(alice)).some(t => t._id === gone._id), 'a deleted type is no longer listed');
+    assert.equal((await alice.agent.delete(`/entity-types/${gone._id}`)).status, 404, 'a second delete finds nothing');
   });
 
   test('names are unique per workspace, case-insensitively', async () => {
@@ -211,15 +213,17 @@ describe("CRUD in the caller's workspace", () => {
     assert.equal((await typeNamed(alice, 'Open Questions'))._id, openQuestions._id, 'the refused rename changed nothing');
   });
 
-  test('a name that is not a built-in category is 400, since no entity could use it', async () => {
-    const create = probed(alice, 'POST /entity-types "Vehicles"', await alice.agent.post('/entity-types').send({ name: 'Vehicles' }));
-    assert.equal(create.status, 400);
-    assert.deepEqual(create.body.categories, CATEGORIES, 'the refusal lists the names that are allowed');
+  test('a name that is not a built-in category is 201, and an entity can use it at once', async () => {
+    const vehicles = await createType(alice, { name: 'Vehicles' });
+    assert.equal(vehicles.name, 'Vehicles');
 
-    const openQuestions = await typeNamed(alice, 'Open Questions');
-    const rename = probed(alice, 'PUT rename to "Vehicles"', await alice.agent.put(`/entity-types/${openQuestions._id}`).send({ name: 'Vehicles' }));
-    assert.equal(rename.status, 400);
-    assert.ok(!(await listTypes(alice)).some(t => t.name === 'Vehicles'), 'neither write registered it');
+    const entity = await postEntity(alice, 'Vehicles', 'The Night Express');
+    assert.equal(entity.status, 201, JSON.stringify(entity.body));
+    assert.equal(entity.body.category, 'Vehicles');
+
+    const foreign = await postEntity(bob, 'Vehicles');
+    assert.equal(foreign.status, 400, "alice's type opens the name in her workspace only");
+    assert.match(foreign.body.error, /not an entity type/);
   });
 
   test('a missing or blank name is 400', async () => {
@@ -264,8 +268,7 @@ describe('tenancy', () => {
   });
 
   test("a client-supplied workspaceId is ignored on create and update", async () => {
-    await deleteType(bob, 'Open Questions');
-    const planted = await createType(bob, { name: 'Open Questions', workspaceId: alice.workspaceId });
+    const planted = await createType(bob, { name: 'Planted', workspaceId: alice.workspaceId });
     assert.ok(!(await listTypes(alice)).some(t => t._id === planted._id), "the planted type must not appear in alice's registry");
 
     const moved = await alice.agent.put(`/entity-types/${aliceSecret._id}`).send({ workspaceId: bob.workspaceId, order: 50 });
@@ -294,7 +297,7 @@ describe('the registry gates the category names data can hold', () => {
 
     // A rename moves the gate with it: the old name closes, the new one opens.
     const openQuestions = await typeNamed(bob, 'Open Questions');
-    const rename = await bob.agent.put(`/entity-types/${openQuestions._id}`).send({ name: 'lore & mechanics' });
+    const rename = await bob.agent.put(`/entity-types/${openQuestions._id}`).send({ name: 'Lore & Mechanics' });
     assert.equal(rename.status, 200, JSON.stringify(rename.body));
     assert.equal(rename.body.name, 'Lore & Mechanics');
     assert.equal((await postEntity(bob, 'Lore & Mechanics')).status, 201);
@@ -344,24 +347,64 @@ describe('the registry gates the category names data can hold', () => {
 });
 
 describe('types in use by entities', () => {
-  test('cannot be renamed or deleted while the Entity enum stands, but can be restyled', async () => {
-    // The starter "Example Character" seeded at registration uses Characters.
-    // bob has no Open Questions type since the rename above, so it is a free name.
+  /** Sorted string ids of `model` documents in `workspaceId` matching `filter`. */
+  async function idsWhere(model, workspaceId, filter) {
+    return (await model.find({ workspaceId, ...filter }).select('_id').lean()).map(d => String(d._id)).sort();
+  }
+
+  test('a rename is 200 and cascades to the entities and relationship types that named it; a delete is still 409', async () => {
+    // The starter "Example Character" and most seeded member roles use Characters.
     const characters = await typeNamed(bob, 'Characters');
+    const ws = bob.workspaceId;
+    const entityIds = await idsWhere(Entity, ws, { category: 'Characters' });
+    const sourceIds = await idsWhere(RelationshipType, ws, { sourceCategory: 'Characters' });
+    const targetIds = await idsWhere(RelationshipType, ws, { targetCategory: 'Characters' });
+    assert.ok(entityIds.length && sourceIds.length && targetIds.length,
+      `the type must be in use on every path the cascade covers, or this proves nothing: ${entityIds.length}/${sourceIds.length}/${targetIds.length}`);
+    const aliceBefore = {
+      entities: await idsWhere(Entity, alice.workspaceId, { category: 'Characters' }),
+      sources: await idsWhere(RelationshipType, alice.workspaceId, { sourceCategory: 'Characters' }),
+    };
+    assert.ok(aliceBefore.entities.length, 'alice uses a "Characters" of her own, so a leak across workspaces would show');
 
-    const rename = probed(bob, 'PUT rename in-use "Characters"', await bob.agent
+    const rename = probed(bob, 'PUT rename in-use "Characters" → "People"', await bob.agent
       .put(`/entity-types/${characters._id}`)
-      .send({ name: 'Open Questions' }));
-    assert.equal(rename.status, 409);
-    assert.ok(rename.body.entities >= 1, `the refusal should say how many entities use the type: ${JSON.stringify(rename.body)}`);
+      .send({ name: 'People' }));
+    assert.equal(rename.status, 200, JSON.stringify(rename.body));
+    assert.equal(rename.body.name, 'People');
+    assert.deepEqual(rename.body.relabelled,
+      { entities: entityIds.length, sourceCategories: sourceIds.length, targetCategories: targetIds.length },
+      'the response counts what moved');
 
-    const del = probed(bob, 'DELETE in-use "Characters"', await bob.agent.delete(`/entity-types/${characters._id}`));
+    assert.deepEqual(await idsWhere(Entity, ws, { category: 'People' }), entityIds, 'exactly the entities that named the type moved');
+    assert.deepEqual(await idsWhere(RelationshipType, ws, { sourceCategory: 'People' }), sourceIds);
+    assert.deepEqual(await idsWhere(RelationshipType, ws, { targetCategory: 'People' }), targetIds);
+    assert.equal(await Entity.countDocuments({ workspaceId: ws, category: 'Characters' }), 0, 'nothing is left on the old name');
+    assert.equal(await RelationshipType.countDocuments({ workspaceId: ws, $or: [{ sourceCategory: 'Characters' }, { targetCategory: 'Characters' }] }), 0);
+
+    assert.deepEqual(await idsWhere(Entity, alice.workspaceId, { category: 'Characters' }), aliceBefore.entities, "alice's entities are untouched");
+    assert.deepEqual(await idsWhere(RelationshipType, alice.workspaceId, { sourceCategory: 'Characters' }), aliceBefore.sources, "alice's relationship types are untouched");
+
+    // Read back through the API, and still writable under the new name.
+    assert.equal((await bob.agent.get(`/entities/${entityIds[0]}`)).body.category, 'People');
+    const edit = await bob.agent.put(`/entities/${entityIds[0]}`).send({ category: 'People', summary: 'renamed type' });
+    assert.equal(edit.status, 200, `a relabelled entity must pass validation: ${JSON.stringify(edit.body)}`);
+    assert.equal((await postEntity(bob, 'Characters')).status, 400, 'the old name is closed');
+
+    // Case alone is a rename too: entities store the name as spelled.
+    const recased = await bob.agent.put(`/entity-types/${characters._id}`).send({ name: 'PEOPLE' });
+    assert.equal(recased.status, 200, JSON.stringify(recased.body));
+    assert.equal(recased.body.relabelled.entities, entityIds.length);
+    assert.equal((await bob.agent.get(`/entities/${entityIds[0]}`)).body.category, 'PEOPLE');
+
+    const del = probed(bob, 'DELETE in-use "PEOPLE"', await bob.agent.delete(`/entity-types/${characters._id}`));
     assert.equal(del.status, 409);
+    assert.ok(del.body.entities >= 1, `the refusal should say how many entities use the type: ${JSON.stringify(del.body)}`);
 
-    const restyle = await bob.agent.put(`/entity-types/${characters._id}`).send({ name: 'Characters', icon: '👤' });
+    const restyle = await bob.agent.put(`/entity-types/${characters._id}`).send({ name: 'PEOPLE', icon: '👤' });
     assert.equal(restyle.status, 200, 'resending the current name is not a rename');
     assert.equal(restyle.body.icon, '👤');
-    assert.equal(restyle.body.name, 'Characters');
+    assert.equal(restyle.body.relabelled, undefined);
   });
 
   test("use is counted in the caller's workspace only — and a deleted type stays unusable", async () => {

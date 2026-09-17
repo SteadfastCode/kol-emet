@@ -30,7 +30,7 @@ content now lives in an ordered `blocks` array, and there is **no `body` field**
 {
   _id:        ObjectId,
   title:      String,          // required
-  category:   String,          // required, enum (see below)
+  category:   String,          // required, an entity type name (see below)
   summary:    String,          // required, one-line description
   tags:       [String],        // queryable string array (default [])
   blocks:     [Block],         // ordered content blocks (default [])
@@ -42,9 +42,10 @@ content now lives in an ordered `blocks` array, and there is **no `body` field**
 }
 ```
 
-**`category`** enum: `Characters`, `Worlds`, `Organizations`, `Lore & Mechanics`, `Timeline`,
-`Open Questions`. The value must also name a type in the entity's workspace
-[registry](#entitytype), checked on every create and validated update.
+**`category`** must name a type in the entity's workspace [registry](#entitytype), exactly as
+spelled, checked on every create and validated update. There is no enum: a workspace's types are
+its own. A workspace with no types is held to the built-in `Characters`, `Worlds`,
+`Organizations`, `Lore & Mechanics`, `Timeline`, `Open Questions`.
 
 ### Block
 
@@ -128,7 +129,7 @@ rather than global.
 
 ## EntityType
 
-The per-workspace registry of entity types — Phase 6 step 1 of making categories user-defined
+The per-workspace registry of entity types — Phase 6 of making categories user-defined
 ([build plan](build-plan.md), Part A). Mirrors `RelationshipType`: the registry is what a picker
 offers, while `Entity.category` holds a type's **name** as a plain string.
 
@@ -150,21 +151,24 @@ offers, while `Entity.category` holds a type's **name** as a plain string.
 - Registration seeds the template's types — for worldbuilding, the six current categories with the
   client's pill colours. `server/scripts/seed-entity-types.js` backfills workspaces created before
   the registry (dry-run by default, `--apply` to write; adds only missing names).
-- **A gate alongside the enum** ([`entityTypeRegistry.js`](../server/src/lib/entityTypeRegistry.js)).
-  Until the enum goes, these rules keep the registry and the data from drifting apart:
+- **The only gate on category names** ([`entityTypeRegistry.js`](../server/src/lib/entityTypeRegistry.js)).
+  `Entity.category` has no enum (Phase 6 step 2). These rules keep the registry and the data from
+  drifting apart:
   - `Entity.category`, `RelationshipType.sourceCategory` and `RelationshipType.targetCategory` must
-    name a type in the writer's workspace, on create and on validated update. This covers every
-    write path, including MCP, draft apply and rollback.
-  - A type's name must be one of the enum's categories. It is matched case-insensitively and
-    stored in the enum's spelling, so every registered type can be used.
-  - A type that an entity or relationship type in the workspace names cannot be renamed or
-    deleted (409).
+    name a type in the writer's workspace, exactly as spelled, on create and on validated update.
+    This covers every write path, including MCP, draft apply and rollback.
+  - Any non-blank name can be a type, so any registered type can be used.
+  - Renaming a type cascades: the workspace's entities and relationship types that named the old
+    name are moved to the new one.
+  - A type that an entity or relationship type in the workspace names cannot be deleted (409).
   - A workspace's last type cannot be deleted (409).
   - A workspace with **no** types predates the registry, or its seeding failed. It is checked
-    against the enum alone until `seed-entity-types.js` backfills it. Refusing to delete the last
-    type is what stops a user from switching the gate off this way.
+    against the six built-in categories (`CATEGORIES`) until `seed-entity-types.js` backfills it.
+    Refusing to delete the last type is what stops a user from switching the gate off this way.
   - The client and the MCP/chat category lists still offer the six built-in names, so they can
-    offer a type the workspace has deleted. Writing it is refused.
+    offer a type the workspace has deleted or renamed (writing it is refused), and do not offer a
+    user-defined type yet. The server's own `getCategories(workspaceId)`, used by the generator
+    and draft edits, reads the registry.
 
 ---
 

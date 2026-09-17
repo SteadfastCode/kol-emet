@@ -3,8 +3,6 @@ import mongoose from 'mongoose';
 import EntityType from '../models/EntityType.js';
 import Entity from '../models/Entity.js';
 import RelationshipType from '../models/RelationshipType.js';
-import { CATEGORIES } from '../config/categories.js';
-import { canonicalCategory } from '../lib/entityTypeRegistry.js';
 import { similarity, findSimilar } from '../lib/similarity.js';
 
 /**
@@ -12,27 +10,40 @@ import { similarity, findSimilar } from '../lib/similarity.js';
  *
  * Mirrors routes/relationshipTypes.js, with differences that come from entities
  * pointing at a type by NAME. Together with the write-time check in
- * lib/entityTypeRegistry.js, these keep the registry and the data from
- * drifting apart while the Entity enum stands:
+ * lib/entityTypeRegistry.js — the only gate on category names since Phase 6
+ * step 2 dropped the Entity enum — these keep the registry and the data from
+ * drifting apart:
  *
- *   - A type's name must be one of the enum's categories (matched
- *     case-insensitively, stored in the enum's spelling), so every registered
- *     type is one an entity can actually use. Other names wait for Phase 6
- *     step 2, which drops the enum.
+ *   - Any non-blank name can be a type (trimmed, unique per workspace
+ *     case-insensitively), and an entity can use it at once.
+ *   - A rename cascades. The type is renamed first, which is what opens the new
+ *     name to writes, and then every entity's category and relationship type's
+ *     source/target category in the workspace that held the old name is moved
+ *     to the new one. The response counts what moved (`relabelled`). The steps
+ *     are ordered, not transactional (transactions need a replica set); if the
+ *     cascade fails part-way the type keeps its new name and the response is
+ *     500 — renaming it back runs the cascade the other way and restores a
+ *     consistent state.
  *   - A type that anything in the workspace still names — an entity's
  *     category, or a relationship type's source/target category — cannot be
- *     renamed or deleted (409, with the counts). The build plan's answer is a
- *     rename that cascades, but while the enum stands a cascade could only
- *     write names the schema rejects.
+ *     deleted (409, with the counts): deleting would strand those names.
  *   - A workspace's last type cannot be deleted (409). An empty registry is
  *     how a workspace that predates the registry is recognised, and it is
- *     checked against the enum alone — so emptying one would switch the
- *     registry check off.
+ *     checked against the built-in categories instead — so emptying one would
+ *     switch the registry check off.
  *   - A foreign or malformed id is 404, never 403 or 400, as in
  *     routes/entities.js: nothing may confirm that an id exists elsewhere.
  *
  * Only name, icon, color and order are ever read from a body, so a forged
  * workspaceId there is ignored.
+ *
+ * ─── Tiered debug logging ────────────────────────────────────────────────────
+ * ENTITY_TYPE_LOG_LEVEL = off | light | normal | verbose (default light), shared
+ * with lib/entityTypeRegistry.js
+ *   off     — nothing
+ *   light   — every rename cascade: who renamed what, and what it relabelled,
+ *             or the step it failed at
+ *   normal  — light, plus each create and delete
  */
 
 const router = Router();
@@ -43,15 +54,16 @@ const isDuplicateKey = err => err?.code === 11000;
 
 const isPlainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-function sameName(a, b) {
-  return a.toLowerCase() === b.toLowerCase();
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  // Resolved per call, not at module load, so a test can change it.
+  const active = LEVELS[process.env.ENTITY_TYPE_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[entityTypes:${level}] ${msg}`);
 }
 
-function notACategory(name) {
-  return {
-    error: `"${name}" is not one of the built-in categories. Until entity types are fully user-defined, a type must be one of: ${CATEGORIES.join(', ')}`,
-    categories: CATEGORIES,
-  };
+function sameName(a, b) {
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 /** How many entities and relationship types in the workspace name `name`. */
@@ -72,6 +84,25 @@ function inUseBody({ entities, relationshipTypes, inUse }, name, action) {
     inUse,
     entities,
     relationshipTypes,
+  };
+}
+
+/**
+ * Moves every name `from` in the workspace to `to`: entity categories, then
+ * relationship types' source and target categories. Runs after the type itself
+ * is renamed, so the writes name a registered type; they skip the validators
+ * for that reason. Returns what moved.
+ */
+async function relabel(workspaceId, from, to) {
+  const entities = await Entity.updateMany({ workspaceId, category: from }, { $set: { category: to } });
+  // One pass per end: a relationship type can name the type on both, so these
+  // count ends moved, not relationship types.
+  const sources = await RelationshipType.updateMany({ workspaceId, sourceCategory: from }, { $set: { sourceCategory: to } });
+  const targets = await RelationshipType.updateMany({ workspaceId, targetCategory: from }, { $set: { targetCategory: to } });
+  return {
+    entities: entities.modifiedCount,
+    sourceCategories: sources.modifiedCount,
+    targetCategories: targets.modifiedCount,
   };
 }
 
@@ -109,18 +140,17 @@ router.post('/', async (req, res) => {
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Name is required' });
     if (color !== null && !isPlainObject(color)) return res.status(400).json({ error: 'color must be { bg, text }' });
 
-    const canonical = canonicalCategory(name);
-    if (!canonical) return res.status(400).json(notACategory(name.trim()));
+    const trimmed = name.trim();
 
     const existing = await EntityType.find({ workspaceId: req.workspaceId });
 
-    const exact = existing.find(t => sameName(t.name, canonical));
+    const exact = existing.find(t => sameName(t.name, trimmed));
     if (exact) return res.status(409).json({ error: 'Entity type already exists', existing: exact });
 
     // Near-duplicate warning (still creates, but warns)
-    const similar = findSimilar(canonical, existing);
+    const similar = findSimilar(trimmed, existing);
     const type = await EntityType.create({
-      name: canonical,
+      name: trimmed,
       icon,
       color: { bg: color?.bg ?? null, text: color?.text ?? null },
       // Appended after the existing types unless the caller placed it.
@@ -128,6 +158,7 @@ router.post('/', async (req, res) => {
       workspaceId: req.workspaceId,
     });
 
+    log('normal', `created entity type ${type._id} "${type.name}" in workspace ${req.workspaceId} (source: POST /entity-types)`);
     const response = { ...type.toObject() };
     if (similar.length) response.warning = `Similar types exist: ${similar.join(', ')}`;
     res.status(201).json(response);
@@ -148,16 +179,14 @@ router.put('/:id', async (req, res) => {
 
     if (name !== undefined) {
       if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Name is required' });
-      const canonical = canonicalCategory(name);
-      if (!canonical) return res.status(400).json(notACategory(name.trim()));
-      if (canonical !== type.name) {
+      const trimmed = name.trim();
+      // Exact comparison: entities store the name as spelled, so a change of
+      // case alone is a rename and cascades like any other.
+      if (trimmed !== type.name) {
         const others = await EntityType.find({ workspaceId: req.workspaceId, _id: { $ne: type._id } });
-        const clash = others.find(t => sameName(t.name, canonical));
+        const clash = others.find(t => sameName(t.name, trimmed));
         if (clash) return res.status(409).json({ error: 'Entity type already exists', existing: clash });
-
-        const uses = await usesOf(req.workspaceId, type.name);
-        if (uses.inUse) return res.status(409).json(inUseBody(uses, type.name, 'rename'));
-        update.name = canonical;
+        update.name = trimmed;
       }
     }
     if (icon !== undefined) update.icon = icon;
@@ -178,7 +207,22 @@ router.put('/:id', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ error: 'Not found' });
-    res.json(updated);
+    if (update.name === undefined) return res.json(updated);
+
+    const from = type.name;
+    const to = updated.name;
+    const source = `PUT /entity-types/${type._id} in workspace ${req.workspaceId}`;
+    let relabelled;
+    try {
+      relabelled = await relabel(req.workspaceId, from, to);
+    } catch (err) {
+      log('light', `renamed entity type "${from}" → "${to}" but relabelling what used it failed: ${err.message} (source: ${source}; rename it back to repair)`);
+      return res.status(500).json({
+        error: `Renamed "${from}" to "${to}", but moving what used "${from}" failed: ${err.message}. Rename it back to "${from}" to restore a consistent state, then retry.`,
+      });
+    }
+    log('light', `renamed entity type "${from}" → "${to}": relabelled ${relabelled.entities} entities, ${relabelled.sourceCategories} relationship-type source and ${relabelled.targetCategories} target categories (source: ${source})`);
+    res.json({ ...updated.toObject(), relabelled });
   } catch (err) {
     if (isDuplicateKey(err)) return res.status(409).json({ error: 'Entity type already exists' });
     res.status(400).json({ error: err.message });
@@ -199,6 +243,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     await EntityType.deleteOne({ _id: type._id, workspaceId: req.workspaceId });
+    log('normal', `deleted entity type ${type._id} "${type.name}" in workspace ${req.workspaceId} (source: DELETE /entity-types)`);
     res.status(204).send();
   } catch (err) {
     res.status(500).json({ error: err.message });

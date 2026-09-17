@@ -267,7 +267,7 @@ router.patch('/:id/items/:itemId', async (req, res) => {
       if (!payload || typeof payload !== 'object') {
         return res.status(400).json({ error: 'An edited item requires a payload' });
       }
-      const check = validateItemPayload(item.kind, payload, req.workspaceId);
+      const check = await validateItemPayload(item.kind, payload, req.workspaceId);
       if (!check.ok) return res.status(400).json({ error: check.error });
       accepted = check.value;
     }

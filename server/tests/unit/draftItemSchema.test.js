@@ -49,18 +49,32 @@
  *   - Drop the `.default('')` on `summary` and the minimal-entity test fails on
  *     the returned value's shape.
  *
- * Pure: the entity schema reads the in-memory category registry, and the
- * Entity model import only registers a mongoose schema. Nothing connects.
+ *   An entity's category must be one of its workspace's entity types — the
+ *   same names POST /entities accepts there, a user-defined one included —
+ *   and a workspace with no types falls back to the built-in list.
+ *
+ * Not pure: the entity schema reads the workspace's EntityType registry, so
+ * this runs against the in-memory mongod (tests/helpers/db.js). The fixed
+ * WORKSPACE_ID has no types, so every fixture below is checked against the
+ * built-in categories; the registry group makes its own workspace.
  */
 
-import { describe, test } from 'node:test';
+import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
+import mongoose from 'mongoose';
+
+import * as db from '../helpers/db.js';
+import Workspace from '../../src/models/Workspace.js';
+import EntityType from '../../src/models/EntityType.js';
 import { validateItemPayload } from '../../src/lib/draftItemSchema.js';
 
-// getCategories() ignores its workspaceId today (the Phase 6 seam), so any
-// value will do; passing one keeps the calls shaped like the route's.
-const WORKSPACE_ID = 'workspace-under-test';
+// A workspace with no entity types: getCategories() falls back to the built-in
+// list for it. A string, as req.workspaceId reaches the route.
+const WORKSPACE_ID = '65f0000000000000000000ee';
+
+before(async () => { await db.connect(); });
+after(async () => { await db.disconnect(); });
 
 /** An existing entity's id as it arrives in an edit body: a string, not an ObjectId. */
 const EXISTING_ID = '65f0000000000000000000aa';
@@ -81,8 +95,8 @@ const minimal = {
 };
 
 /** Asserts a rejection of the right shape and returns its error text. */
-function rejected(kind, payload) {
-  const result = validateItemPayload(kind, payload, WORKSPACE_ID);
+async function rejected(kind, payload) {
+  const result = await validateItemPayload(kind, payload, WORKSPACE_ID);
   assert.equal(result.ok, false, `expected the ${kind} payload to be rejected: ${JSON.stringify(payload)}`);
   assert.equal(typeof result.error, 'string');
   assert.ok(!('value' in result), 'a rejection must not carry a value the caller could store');
@@ -90,15 +104,15 @@ function rejected(kind, payload) {
 }
 
 describe('validateItemPayload accepts a minimal payload', () => {
-  test('entity: title and category, with the optional fields defaulted', () => {
-    assert.deepEqual(validateItemPayload('entity', minimal.entity(), WORKSPACE_ID), {
+  test('entity: title and category, with the optional fields defaulted', async () => {
+    assert.deepEqual(await validateItemPayload('entity', minimal.entity(), WORKSPACE_ID), {
       ok: true,
       value: { title: 'Iron Gate', category: 'Worlds', summary: '', tags: [], blocks: [] },
     });
   });
 
-  test('relationship: one local and one existing member, each filled out to the full member shape', () => {
-    assert.deepEqual(validateItemPayload('relationship', minimal.relationship(), WORKSPACE_ID), {
+  test('relationship: one local and one existing member, each filled out to the full member shape', async () => {
+    assert.deepEqual(await validateItemPayload('relationship', minimal.relationship(), WORKSPACE_ID), {
       ok: true,
       value: {
         label: null,
@@ -110,14 +124,14 @@ describe('validateItemPayload accepts a minimal payload', () => {
     });
   });
 
-  test('open_question: the question alone, with no linked entries', () => {
-    assert.deepEqual(validateItemPayload('open_question', minimal.open_question(), WORKSPACE_ID), {
+  test('open_question: the question alone, with no linked entries', async () => {
+    assert.deepEqual(await validateItemPayload('open_question', minimal.open_question(), WORKSPACE_ID), {
       ok: true,
       value: { question: 'Who built the Iron Gate?', entry_ids: [] },
     });
   });
 
-  test('entity: every optional key the normalizer writes is allowed', () => {
+  test('entity: every optional key the normalizer writes is allowed', async () => {
     // Generated items carry `normalizedCategory`, and an edit round-trips it.
     // The strictness below must not reject a key the system itself writes, or
     // no generated entity could ever be edited.
@@ -128,9 +142,31 @@ describe('validateItemPayload accepts a minimal payload', () => {
       blocks: [{ type: 'text', order: 0, data: { text: 'Iron, and older than the line.' } }],
       normalizedCategory: 'Places',
     };
-    const result = validateItemPayload('entity', payload, WORKSPACE_ID);
+    const result = await validateItemPayload('entity', payload, WORKSPACE_ID);
     assert.equal(result.ok, true, result.error);
     assert.deepEqual(result.value, payload);
+  });
+});
+
+describe("validateItemPayload checks an entity's category against its workspace", () => {
+  test('a workspace with no types accepts only the built-in categories', async () => {
+    assert.equal((await validateItemPayload('entity', minimal.entity(), WORKSPACE_ID)).ok, true);
+    const error = await rejected('entity', { ...minimal.entity(), category: 'Vehicles' });
+    assert.match(error, /^category: /, `the error should point at category: ${error}`);
+  });
+
+  test("a workspace's own types are the list: a user-defined one is accepted, a built-in it lacks is not", async () => {
+    const { _id } = await Workspace.create({ name: 'Registry', ownerId: new mongoose.Types.ObjectId() });
+    const workspaceId = String(_id);
+    await EntityType.insertMany([{ name: 'Vehicles', order: 0, workspaceId }, { name: 'Worlds', order: 1, workspaceId }]);
+
+    const vehicle = await validateItemPayload('entity', { ...minimal.entity(), category: 'Vehicles' }, workspaceId);
+    assert.equal(vehicle.ok, true, vehicle.error);
+
+    const character = await validateItemPayload('entity', { ...minimal.entity(), category: 'Characters' }, workspaceId);
+    assert.equal(character.ok, false);
+    assert.match(character.error, /^category: /);
+    assert.ok(character.error.includes("'Vehicles'"), `the error should list the workspace's types: ${character.error}`);
   });
 });
 
@@ -151,8 +187,8 @@ describe('validateItemPayload rejects unknown keys', () => {
   ];
 
   for (const [kind, key, value] of CASES) {
-    test(`${kind}: rejects \`${key}\` and names it`, () => {
-      const error = rejected(kind, { ...minimal[kind](), [key]: value });
+    test(`${kind}: rejects \`${key}\` and names it`, async () => {
+      const error = await rejected(kind, { ...minimal[kind](), [key]: value });
       assert.match(error, /unrecognized key/i);
       assert.ok(error.includes(`'${key}'`), `the error should name the offending key: ${error}`);
     });
@@ -160,38 +196,38 @@ describe('validateItemPayload rejects unknown keys', () => {
 });
 
 describe('validateItemPayload relationship member rules', () => {
-  test('rejects a relationship with fewer than two members', () => {
+  test('rejects a relationship with fewer than two members', async () => {
     const [local] = minimal.relationship().members;
     for (const members of [[], [local]]) {
-      const error = rejected('relationship', { members });
+      const error = await rejected('relationship', { members });
       assert.match(error, /^members: /, `the error should point at members: ${error}`);
       assert.match(error, /at least 2/);
     }
   });
 
-  test('rejects a relationship with no members key at all', () => {
-    assert.match(rejected('relationship', {}), /^members: /);
+  test('rejects a relationship with no members key at all', async () => {
+    assert.match(await rejected('relationship', {}), /^members: /);
   });
 
-  test('rejects a member carrying both localKey and refId, naming the member', () => {
+  test('rejects a member carrying both localKey and refId, naming the member', async () => {
     // The bad member is second on purpose, so the path has to identify it
     // rather than defaulting to the first.
     const [local, existing] = minimal.relationship().members;
-    const error = rejected('relationship', { members: [local, { ...existing, localKey: 'e2' }] });
+    const error = await rejected('relationship', { members: [local, { ...existing, localKey: 'e2' }] });
     assert.equal(error, 'members.1: each member needs exactly one of localKey or refId');
   });
 
-  test('rejects a member carrying neither', () => {
+  test('rejects a member carrying neither', async () => {
     const [local] = minimal.relationship().members;
-    const error = rejected('relationship', { members: [local, { name: 'Someone' }] });
+    const error = await rejected('relationship', { members: [local, { name: 'Someone' }] });
     assert.equal(error, 'members.1: each member needs exactly one of localKey or refId');
   });
 
-  test('accepts members that carry both keys with one of them null', () => {
+  test('accepts members that carry both keys with one of them null', async () => {
     // The shape a stored `proposed` member actually has — both keys present,
     // one explicitly null — and so what a client sends back when it edits an
     // item it was shown. Null has to count as "not set".
-    const result = validateItemPayload('relationship', {
+    const result = await validateItemPayload('relationship', {
       members: [
         { localKey: 'e1', refId: null, name: 'Iron Gate' },
         { localKey: null, refId: EXISTING_ID, name: 'The Conductor' },
@@ -209,8 +245,8 @@ describe('validateItemPayload with an unknown kind', () => {
   const KINDS = ['delete', 'openQuestion', 'Entity', '', undefined, null];
 
   for (const kind of KINDS) {
-    test(`fails closed for ${JSON.stringify(kind) ?? 'undefined'}`, () => {
-      const result = validateItemPayload(kind, minimal.entity(), WORKSPACE_ID);
+    test(`fails closed for ${JSON.stringify(kind) ?? 'undefined'}`, async () => {
+      const result = await validateItemPayload(kind, minimal.entity(), WORKSPACE_ID);
       assert.deepEqual(result, { ok: false, error: `Unknown item kind: ${kind}` });
     });
   }

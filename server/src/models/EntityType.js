@@ -8,14 +8,16 @@ import { ownerGuard } from '../lib/ownerGuard.js';
  * Mirrors RelationshipType: a workspace-scoped vocabulary a picker reads, while
  * the data keeps a plain string. `Entity.category` holds a type's *name*, not
  * its id, so renaming or deleting a type is a question about entities too —
- * see routes/entityTypes.js for how that is handled while the Entity enum
- * still stands.
+ * see routes/entityTypes.js: a rename cascades to everything that named the
+ * type, and a type in use cannot be deleted.
  *
  * Seeded per workspace from the template's `entityTypes` (config/templates.js)
  * at registration; scripts/seed-entity-types.js backfills workspaces that
- * predate the registry. Entity and RelationshipType writes check their
- * category names against it (lib/entityTypeRegistry.js). The client's pills and
- * picker and the MCP/chat category lists move onto it in later Phase 6 steps.
+ * predate the registry. Since Phase 6 step 2 dropped the Entity enum, this is
+ * the only gate on category names: Entity and RelationshipType writes check
+ * theirs against it (lib/entityTypeRegistry.js), so any name a user gives a
+ * type is usable. The client's pills and picker and the MCP/chat category
+ * lists move onto it in later Phase 6 steps.
  */
 const entityTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
