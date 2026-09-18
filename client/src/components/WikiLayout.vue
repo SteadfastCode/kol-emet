@@ -249,6 +249,10 @@ function setMobileTab(tab) {
   if (tab === 'detail' && !activePanelId.value) return;
   mobileTab.value = tab;
   chatOpen.value = (tab === 'chat');
+  // Mobile portrait has no ✕ on settings, so the tab bar is the only way out:
+  // disarm the overlay too, or it reappears as soon as the portrait query
+  // stops matching (a rotation to landscape).
+  if (tab !== 'settings') settingsOpen.value = false;
 }
 
 // From the sidebar's Settings button: the overlay on wide screens, the tab on
