@@ -149,7 +149,7 @@
     "KOL-038": {
       "order": 9,
       "title": "`GET /auth/me` answers 401 and ends the session when its user no longer exists",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-038",

@@ -59,17 +59,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-038) `GET /auth/me` answers 401 and ends the session when its user no longer exists**
-  The KOL-021 Decision Log entry's known gap: after `DELETE /auth/account`, the user's other sessions still hold the deleted id.
-  Tenant routes refuse them, but `GET /auth/me` (`server/src/routes/auth.js:122`) reads only the session, answers
-  `{ authenticated: true }`, and so the client (`client/src/App.vue:12-20`) shows the wiki to a deleted account. Build: `/auth/me`
-  checks `User.exists({ _id: req.session.userId })`. When the user is gone, it destroys the session, clears the cookie with its own
-  attributes (as :495-502 does) and answers the same 401 `{ authenticated: false }` as an anonymous caller. A lookup error answers
-  500, never 200. Update the comment at :497-500 and the Known gaps sentence in the Decision Log. Verify: in
-  `server/tests/http/accountDeletion.test.js`, two agents sign in as one user and the first deletes the account; the second's
-  `GET /auth/me` is 401 `{ authenticated: false }` and expires `connect.sid` (`clearsSessionCookie`); the `GET /auth/me` tests in
-  `auth.test.js` stay green; `cd server && yarn test` green. Out of scope: finding the user's other sessions in the store (connect-mongo
-  stores them serialized, not queryable by user), changes to `requireAuth`/`requireActor`.
 - [ ] **(KOL-039) Dedup key: trim a title before stripping its leading article**
   Found by the KOL-001 grader and still open. `normalizeTitle` (`server/src/lib/similarity.js:39`) strips `the|a|an` before it trims,
   so `'  The Iron Gate'` keys as `the iron gate`. That misses the exact match against an existing "The Iron Gate", and it misses the
@@ -105,6 +94,17 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-038) `GET /auth/me` answers 401 and ends the session when its user no longer exists** (routine 2026-09-17, b2e740e)
+  The KOL-021 Decision Log entry's known gap: after `DELETE /auth/account`, the user's other sessions still hold the deleted id.
+  Tenant routes refuse them, but `GET /auth/me` (`server/src/routes/auth.js:122`) reads only the session, answers
+  `{ authenticated: true }`, and so the client (`client/src/App.vue:12-20`) shows the wiki to a deleted account. Build: `/auth/me`
+  checks `User.exists({ _id: req.session.userId })`. When the user is gone, it destroys the session, clears the cookie with its own
+  attributes (as :495-502 does) and answers the same 401 `{ authenticated: false }` as an anonymous caller. A lookup error answers
+  500, never 200. Update the comment at :497-500 and the Known gaps sentence in the Decision Log. Verify: in
+  `server/tests/http/accountDeletion.test.js`, two agents sign in as one user and the first deletes the account; the second's
+  `GET /auth/me` is 401 `{ authenticated: false }` and expires `connect.sid` (`clearsSessionCookie`); the `GET /auth/me` tests in
+  `auth.test.js` stay green; `cd server && yarn test` green. Out of scope: finding the user's other sessions in the store (connect-mongo
+  stores them serialized, not queryable by user), changes to `requireAuth`/`requireActor`.
 - [x] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance** (routine 2026-09-17, 3632951)
   `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
   is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
