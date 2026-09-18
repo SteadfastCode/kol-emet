@@ -149,7 +149,7 @@
     "KOL-039": {
       "order": 9,
       "title": "Dedup key: trim a title before stripping its leading article",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-039",
