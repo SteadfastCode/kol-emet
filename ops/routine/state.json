@@ -146,42 +146,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-038": {
+    "KOL-039": {
       "order": 9,
-      "title": "`GET /auth/me` answers 401 and ends the session when its user no longer exists",
-      "status": "done",
+      "title": "Dedup key: trim a title before stripping its leading article",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-038",
+      "branch": "routine/item/KOL-039",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-09-18T00:24:34.035Z",
-      "runId": "2026-09-17T23:48:58.829Z",
-      "lastFail": null
-    },
-    "KOL-039": {
-      "order": 10,
-      "title": "Dedup key: trim a title before stripping its leading article",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-18T11:10:49.272Z",
+      "runId": "2026-09-18T11:10:36.003Z",
       "lastFail": null
     },
     "KOL-040": {
-      "order": 11,
+      "order": 10,
       "title": "Mobile: leaving Settings through the tab bar must not leave the settings overlay armed",
       "status": "pending",
       "attempts": 0,
@@ -198,7 +181,7 @@
       "lastFail": null
     },
     "KOL-041": {
-      "order": 12,
+      "order": 11,
       "title": "Tag suggestions in the entity editor from `GET /tags`",
       "status": "pending",
       "attempts": 0,
@@ -212,6 +195,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-038": {
+      "order": null,
+      "title": "`GET /auth/me` answers 401 and ends the session when its user no longer exists",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-038",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-18T00:24:34.035Z",
+      "runId": "2026-09-17T23:48:58.829Z",
       "lastFail": null
     },
     "KOL-037": {

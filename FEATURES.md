@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-039) Dedup key: trim a title before stripping its leading article**
+- [x] **(KOL-039) Dedup key: trim a title before stripping its leading article**
   Found by the KOL-001 grader and still open. `normalizeTitle` (`server/src/lib/similarity.js:39`) strips `the|a|an` before it trims,
   so `'  The Iron Gate'` keys as `the iron gate`. That misses the exact match against an existing "The Iron Gate", and it misses the
   fuzzy fallback too (≈0.64 < `DUPLICATE_THRESHOLD` 0.72, `server/src/lib/draftNormalizer.js:17`). A padded generated title
