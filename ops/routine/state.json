@@ -149,7 +149,7 @@
     "KOL-035": {
       "order": 9,
       "title": "Throttle failed password and passkey sign-in attempts",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-035",

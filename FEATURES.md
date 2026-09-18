@@ -59,23 +59,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-035) Throttle failed password and passkey sign-in attempts**
-  Nothing limits guessing today: `POST /auth/login` (`server/src/routes/auth.js:90`) runs a bcrypt compare for every request, and
-  the Decision Log (KOL-021 entry) records that the password check is not rate-limited, including the one in `DELETE /auth/account`
-  (:445). Build `server/src/lib/attemptLimiter.js`: `createAttemptLimiter({ max, windowMs, now = Date.now })` with fixed-window
-  counters in a `Map`, expired entries pruned on access. Count failures only: per lowercased email (default 10 per 15 min) and per
-  `req.ip` (default 100 per 15 min; `trust proxy` is already set in `server/src/app.js:52`). Check before the bcrypt compare, so a
-  blocked key costs no hash. Answer 429 `{ error: 'Too many attempts. Try again later.' }` with `Retry-After`, byte-identical for
-  known and unknown emails (the no-enumeration rule `auth.test.js:382` pins). A successful sign-in resets that email's counter.
-  Apply to `POST /auth/login`, failures of `POST /auth/webauthn/login/complete` (keyed by IP; that body has no email), and failed
-  re-authentication in `DELETE /auth/account` (keyed by user id). Build the limiter inside `createApp` from an `authLimits` option
-  (defaults from env) so every test app gets fresh counters. Add tiered logging `AUTH_LIMIT_LOG_LEVEL` (off/light/normal/verbose,
-  shaped like `logPasskey`): light logs each block with the key kind and the source route and never the email. Add a Decision Log
-  line. Verify: `server/tests/unit/attemptLimiter.test.js` with an injected clock (blocks at max+1, the window expiry unblocks,
-  reset clears); a new describe in `server/tests/http/auth.test.js` on an app built with `authLimits: { perEmail: 3 }`: three wrong
-  passwords, then 429 even with the right one; an unknown email gets the identical 429 body; another email is still 401; `cd server
-  && yarn test` green. Out of scope: counters shared across several API instances (in-process today), CAPTCHA or signup throttling,
-  account lockout, `/oauth/token`.
 - [ ] **(KOL-036) Refuse a passkey whose credential id is already registered to any account**
   The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
   pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.
@@ -149,6 +132,23 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-035) Throttle failed password and passkey sign-in attempts** (routine 2026-09-17, 9d9f3b2)
+  Nothing limits guessing today: `POST /auth/login` (`server/src/routes/auth.js:90`) runs a bcrypt compare for every request, and
+  the Decision Log (KOL-021 entry) records that the password check is not rate-limited, including the one in `DELETE /auth/account`
+  (:445). Build `server/src/lib/attemptLimiter.js`: `createAttemptLimiter({ max, windowMs, now = Date.now })` with fixed-window
+  counters in a `Map`, expired entries pruned on access. Count failures only: per lowercased email (default 10 per 15 min) and per
+  `req.ip` (default 100 per 15 min; `trust proxy` is already set in `server/src/app.js:52`). Check before the bcrypt compare, so a
+  blocked key costs no hash. Answer 429 `{ error: 'Too many attempts. Try again later.' }` with `Retry-After`, byte-identical for
+  known and unknown emails (the no-enumeration rule `auth.test.js:382` pins). A successful sign-in resets that email's counter.
+  Apply to `POST /auth/login`, failures of `POST /auth/webauthn/login/complete` (keyed by IP; that body has no email), and failed
+  re-authentication in `DELETE /auth/account` (keyed by user id). Build the limiter inside `createApp` from an `authLimits` option
+  (defaults from env) so every test app gets fresh counters. Add tiered logging `AUTH_LIMIT_LOG_LEVEL` (off/light/normal/verbose,
+  shaped like `logPasskey`): light logs each block with the key kind and the source route and never the email. Add a Decision Log
+  line. Verify: `server/tests/unit/attemptLimiter.test.js` with an injected clock (blocks at max+1, the window expiry unblocks,
+  reset clears); a new describe in `server/tests/http/auth.test.js` on an app built with `authLimits: { perEmail: 3 }`: three wrong
+  passwords, then 429 even with the right one; an unknown email gets the identical 429 body; another email is still 401; `cd server
+  && yarn test` green. Out of scope: counters shared across several API instances (in-process today), CAPTCHA or signup throttling,
+  account lockout, `/oauth/token`.
 - [x] **(KOL-034) Backlog audit: file new candidates under Proposed** (routine 2026-09-17, 63782a7)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
