@@ -59,20 +59,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance**
-  `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
-  is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
-  `POST /auth/logout` clears the cookie with a bare `res.clearCookie('connect.sid')` (`server/src/routes/auth.js:116`), which the
-  comment at :494 says misses the domain-scoped production cookie. Build `server/src/lib/sessionCookie.js`:
-  `sessionCookieOptions(env)` (httpOnly; secure and `sameSite: 'none'` in production, `'lax'` otherwise; `domain` from
-  `SESSION_COOKIE_DOMAIN`, host-only when unset) used by `createApp`, and `clearSessionCookie(req, res)`, which reads the
-  attributes from `req.session.cookie` before destroy. Logout and `DELETE /auth/account` (:495-502) both call the helper. Document
-  the variable in `server/.env.example`. needs-human: Daniel sets `SESSION_COOKIE_DOMAIN=.kol-emet.danielecker.dev` on Railway
-  before this deploys; otherwise signed-in browsers end up holding two `connect.sid` cookies. Verify:
-  `server/tests/unit/sessionCookie.test.js` covers production with the variable, production without it, and development; in
-  `server/tests/http/auth.test.js`, logout's expiring Set-Cookie carries the same Path, HttpOnly and SameSite as the login cookie;
-  `grep -rn "danielecker" server/src` prints nothing; `cd server && yarn test` green. Out of scope: cookie name, CORS and WebAuthn
-  settings (already env-driven).
 - [ ] **(KOL-038) `GET /auth/me` answers 401 and ends the session when its user no longer exists**
   The KOL-021 Decision Log entry's known gap: after `DELETE /auth/account`, the user's other sessions still hold the deleted id.
   Tenant routes refuse them, but `GET /auth/me` (`server/src/routes/auth.js:122`) reads only the session, answers
@@ -119,6 +105,20 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance** (routine 2026-09-17, 3632951)
+  `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
+  is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
+  `POST /auth/logout` clears the cookie with a bare `res.clearCookie('connect.sid')` (`server/src/routes/auth.js:116`), which the
+  comment at :494 says misses the domain-scoped production cookie. Build `server/src/lib/sessionCookie.js`:
+  `sessionCookieOptions(env)` (httpOnly; secure and `sameSite: 'none'` in production, `'lax'` otherwise; `domain` from
+  `SESSION_COOKIE_DOMAIN`, host-only when unset) used by `createApp`, and `clearSessionCookie(req, res)`, which reads the
+  attributes from `req.session.cookie` before destroy. Logout and `DELETE /auth/account` (:495-502) both call the helper. Document
+  the variable in `server/.env.example`. needs-human: Daniel sets `SESSION_COOKIE_DOMAIN=.kol-emet.danielecker.dev` on Railway
+  before this deploys; otherwise signed-in browsers end up holding two `connect.sid` cookies. Verify:
+  `server/tests/unit/sessionCookie.test.js` covers production with the variable, production without it, and development; in
+  `server/tests/http/auth.test.js`, logout's expiring Set-Cookie carries the same Path, HttpOnly and SameSite as the login cookie;
+  `grep -rn "danielecker" server/src` prints nothing; `cd server && yarn test` green. Out of scope: cookie name, CORS and WebAuthn
+  settings (already env-driven).
 - [x] **(KOL-036) Refuse a passkey whose credential id is already registered to any account** (routine 2026-09-17, 2200ec3)
   The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
   pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.

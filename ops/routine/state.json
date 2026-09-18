@@ -149,7 +149,7 @@
     "KOL-037": {
       "order": 9,
       "title": "Session cookie domain from the environment, not hardcoded to Daniel's instance",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-037",
