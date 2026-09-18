@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance**
+- [x] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance**
   `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
   is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
   `POST /auth/logout` clears the cookie with a bare `res.clearCookie('connect.sid')` (`server/src/routes/auth.js:116`), which the
