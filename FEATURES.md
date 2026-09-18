@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed**
+- [x] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed**
   Found by the KOL-021 grader and still open. The sidebar's Settings button (`openSettings`, `client/src/components/WikiLayout.vue:256`)
   sets `settingsOpen` along with `mobileTab = 'settings'`. `setMobileTab` (:248) changes only `mobileTab`, and mobile portrait has
   no ✕, so the flag stays set. Rotating to landscape, or anything else that stops the portrait query matching, then brings back the
