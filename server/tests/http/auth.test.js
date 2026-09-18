@@ -490,6 +490,41 @@ describe('GET /auth/me', () => {
     assert.equal(afterLogout.status, 401);
     assert.deepEqual(afterLogout.body, { authenticated: false });
   });
+
+  // The route answers from the session *and* the users collection, so that a
+  // session outliving its account (deleted from another browser — see
+  // tests/http/accountDeletion.test.js) is ended rather than reported. That
+  // lookup can fail, and both easy answers are wrong: 200 would let a database
+  // blip be what keeps a deleted account signed in, and 401 would sign live
+  // accounts out for the length of it, since the client takes any failed
+  // GET /auth/me as signed out.
+  //
+  // Falsification: answer the lookup's rejection with `res.json({ authenticated: true })`
+  // and the first assertion fails; with a 401 and the last one does.
+  test('a lookup that fails is 500 — neither a signed-in 200 nor a signed-out 401', async () => {
+    const email = uniqueEmail('me-lookup-error');
+    const agent = request.agent(app);
+    assert.equal((await register(agent, email)).res.status, 201);
+    assert.equal((await agent.get('/auth/me')).status, 200, 'the session must start good');
+
+    // Restored by descriptor: `exists` is a mongoose Model static, so blind
+    // reassignment could leave an own property shadowing the real one.
+    const owned = Object.prototype.hasOwnProperty.call(User, 'exists');
+    const original = User.exists;
+    User.exists = () => Promise.reject(new Error('lookup unavailable'));
+    let res;
+    try {
+      res = called('GET /auth/me (users lookup throws)', await agent.get('/auth/me'));
+    } finally {
+      if (owned) User.exists = original; else delete User.exists;
+    }
+
+    assert.equal(res.status, 500, 'an unanswered lookup is neither an authenticated 200 nor a signed-out 401');
+    assert.notEqual(res.body.authenticated, true, 'and says nothing about the session');
+
+    // The store was never touched, so the session outlives the blip.
+    assert.equal((await agent.get('/auth/me')).status, 200, 'a failed lookup must not end a live session');
+  });
 });
 
 describe('POST /auth/logout', () => {

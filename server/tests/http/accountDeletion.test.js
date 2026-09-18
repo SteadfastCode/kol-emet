@@ -4,7 +4,9 @@
  * The cascade itself is pinned in tests/lib/accountDeleter.test.js. This file
  * defends the door: the route runs that cascade for the caller and only the
  * caller, refuses without a fresh proof of the account, and leaves a deleted
- * account's session dead rather than merely forgotten by the browser. Real
+ * account's sessions dead rather than merely forgotten by the browser — its
+ * own, which the route destroys, and the ones in other browsers, which it
+ * cannot find and `GET /auth/me` therefore ends when it meets them. Real
  * stack throughout — createApp() over supertest, real registration (bcrypt,
  * Workspace, seedWorkspace), real mongod — for the reasons at the top of
  * tests/http/auth.test.js.
@@ -82,6 +84,7 @@ function log(level, msg) {
 const PASSWORD = 'correct-horse-battery-staple';
 
 let app;
+let sessionStore;
 
 let emailCounter = 0;
 function uniqueEmail(label) {
@@ -99,6 +102,18 @@ function sessionCookie(res) {
 function clearsSessionCookie(res) {
   return (res.headers['set-cookie'] ?? [])
     .some(c => /^connect\.sid=;/.test(c) && /Expires=Thu, 01 Jan 1970/.test(c));
+}
+
+/** The session id inside a signed `connect.sid=s%3A<sid>.<sig>` cookie pair. */
+function sessionId(cookie) {
+  return decodeURIComponent(cookie.slice('connect.sid='.length)).replace(/^s:/, '').split('.')[0];
+}
+
+/** What the session store holds for `sid`, or null. */
+function storedSession(sid) {
+  return new Promise((resolve, reject) => {
+    sessionStore.get(sid, (err, stored) => (err ? reject(err) : resolve(stored ?? null)));
+  });
 }
 
 /** Logs an account-deletion call and its answer at the 'normal' tier. */
@@ -168,7 +183,11 @@ function without(snap, t) {
 
 before(async () => {
   await db.connect();
-  app = createApp({ sessionStore: new session.MemoryStore() });
+  // Held, not just passed: the session tests below ask the store what it still
+  // has, which is the difference between a session destroyed and a cookie
+  // merely cleared.
+  sessionStore = new session.MemoryStore();
+  app = createApp({ sessionStore });
 });
 
 after(async () => { await db.disconnect(); });
@@ -374,5 +393,57 @@ describe('DELETE /auth/account re-authentication is throttled', () => {
     assert.match(blocked.headers['retry-after'] ?? '', /^[1-9]\d*$/);
     assert.ok(await User.exists({ email }), 'a throttled confirmation must not delete the account');
     assert.equal((await agent.get('/auth/me')).status, 200, 'nor sign the caller out');
+  });
+});
+
+// ─── The sessions the deletion cannot reach ──────────────────────────────────
+//
+// DELETE /auth/account destroys the caller's own session. The store keeps the
+// rest serialized, with no way to look a user's sessions up, so an account
+// deleted from a laptop leaves the phone holding a record that names a user who
+// no longer exists. Every tenant route resolves that id and refuses; GET
+// /auth/me answers from the session, so it is the one place that has to check
+// for itself — and until it did, the phone was shown a wiki that answered 401
+// to everything, with no way back to the login form but a manual logout.
+//
+// Falsification: drop the User.exists() check from GET /auth/me and the second
+// browser answers 200; clear the cookie without destroy() and the store still
+// holds the record; destroy() without clearing and clearsSessionCookie fails.
+describe('GET /auth/me with a session the deletion could not reach', () => {
+  test('ends that session and answers exactly what an anonymous caller gets', async () => {
+    const a = await tenant('second-browser');
+
+    // The same account signed in twice, the way a laptop and a phone are.
+    const second = request.agent(app);
+    const login = called('POST /auth/login (second browser)', await second
+      .post('/auth/login')
+      .send({ email: a.email, password: PASSWORD }));
+    assert.equal(login.status, 200, `the second sign-in failed: ${login.status} ${JSON.stringify(login.body)}`);
+    const cookie = sessionCookie(login);
+    assert.ok(cookie, 'the second sign-in must issue its own session cookie');
+    const sid = sessionId(cookie);
+    log('light', `second browser signed in as ${a.email} (source: POST /auth/login) → session ${sid}`);
+    assert.equal((await second.get('/auth/me')).status, 200, 'the second browser starts signed in');
+
+    const deleted = called('DELETE /auth/account (first browser)', await a.agent
+      .delete('/auth/account')
+      .send({ email: a.email, password: PASSWORD }));
+    assert.equal(deleted.status, 204, `deletion failed: ${deleted.status} ${JSON.stringify(deleted.body)}`);
+    assert.equal(await User.exists({ email: a.email }), null, 'the account must be gone');
+    // Only as strong as the premise: the deletion is supposed to be unable to
+    // reach this one. If some later change sweeps it, this test stops testing
+    // anything and should be rewritten rather than deleted.
+    assert.ok(await storedSession(sid), 'premise gone: the deletion reached the second browser\'s session');
+
+    const me = called('GET /auth/me (second browser, account deleted)', await second.get('/auth/me'));
+    assert.equal(me.status, 401, 'a session naming a deleted account must not be reported as authenticated');
+    assert.deepEqual(me.body, { authenticated: false }, 'and must say what an anonymous caller is told, no more');
+    assert.ok(clearsSessionCookie(me), 'and must expire connect.sid in the browser');
+    assert.equal(await storedSession(sid), null, 'the session must be destroyed in the store, not just forgotten by the browser');
+
+    // Replayed by anything that kept the value — a second tab, a proxy log.
+    const replayed = called('GET /auth/me with the ended session cookie', await request(app).get('/auth/me').set('Cookie', cookie));
+    assert.equal(replayed.status, 401, 'the ended session must not be usable by a client that kept the cookie');
+    assert.deepEqual(replayed.body, { authenticated: false });
   });
 });
