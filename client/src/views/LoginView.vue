@@ -148,6 +148,10 @@ async function submit() {
       ? 'An account with that email already exists.'
       : err.status === 401
       ? 'Invalid email or password.'
+      // The server throttles failed sign-ins (KOL-035). "Try again" is exactly
+      // the wrong advice here, so say what to do instead.
+      : err.status === 429
+      ? 'Too many sign-in attempts. Wait a few minutes and try again.'
       : 'Something went wrong. Please try again.';
   } finally {
     loading.value = false;
@@ -163,6 +167,10 @@ async function doPasskeyLogin() {
   } catch (err) {
     if (err.message?.includes('cancelled') || err.name === 'NotAllowedError') {
       error.value = '';
+    } else if (err.status === 429) {
+      // Throttled by address, so the password would be refused too — do not
+      // send them to a door that is also shut.
+      error.value = 'Too many sign-in attempts. Wait a few minutes and try again.';
     } else {
       error.value = 'Passkey sign-in failed. Try your password instead.';
     }

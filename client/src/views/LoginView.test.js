@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import LoginView from './LoginView.vue';
-import { register, getTemplates } from '../api/auth.js';
+import { login, register, getTemplates } from '../api/auth.js';
 
 // Nothing here should reach the network or WebAuthn. getTemplates answers an
 // empty list unless a test says otherwise, so the picker stays out of the
@@ -187,5 +187,48 @@ describe('LoginView template picker', () => {
     await flushPromises();
 
     expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined);
+  });
+});
+
+/**
+ * The server throttles failed sign-ins (KOL-035) and answers 429. The generic
+ * branch reads "Something went wrong. Please try again." — which is the one
+ * piece of advice that is wrong while a throttle is running, and would have a
+ * blocked person hammering the form for as long as they have patience.
+ *
+ * Goes red if the 429 branch is removed from submit() (the message falls back
+ * to the generic one).
+ */
+describe('LoginView throttled sign-in', () => {
+  const THROTTLED = 'Too many sign-in attempts. Wait a few minutes and try again.';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getTemplates.mockResolvedValue([]);
+  });
+
+  async function signIn(wrapper) {
+    await wrapper.get('form input[type="email"]').setValue('blocked@example.test');
+    await wrapper.get('form input[type="password"]').setValue('correct-horse-battery-staple');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+  }
+
+  it('a 429 says to wait rather than to try again', async () => {
+    login.mockRejectedValue(Object.assign(new Error('429'), { status: 429 }));
+    const wrapper = mount(LoginView);
+
+    await signIn(wrapper);
+
+    expect(wrapper.get('.login-error').text()).toBe(THROTTLED);
+  });
+
+  it('a 401 still says the credentials were wrong', async () => {
+    login.mockRejectedValue(Object.assign(new Error('401'), { status: 401 }));
+    const wrapper = mount(LoginView);
+
+    await signIn(wrapper);
+
+    expect(wrapper.get('.login-error').text()).toBe('Invalid email or password.');
   });
 });
