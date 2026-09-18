@@ -149,7 +149,7 @@
     "KOL-041": {
       "order": 9,
       "title": "Tag suggestions in the entity editor from `GET /tags`",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-041",

@@ -59,7 +59,12 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`**
+
+## Blocked Items
+
+## Completed Items
+
+- [x] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`** (routine 2026-09-18, 541497c)
   Wishlist "Tag autocomplete on entry editor". The workspace-scoped `GET /tags` (`server/src/routes/tags.js`) exists, but no client
   code calls it. The editor's tags field is a plain comma-separated input (`client/src/components/EntityEditor.vue:28-32`,
   `tagsInput`). Build: `client/src/api/tags.js` `getTags()`, using the same `req` shape as `client/src/api/entityTypes.js`. In
@@ -70,11 +75,6 @@ registration, or removes a feature.
   suggestions. Verify: new `client/src/components/EntityEditor.test.js` mocking `/tags`: typing `ca` after `alpha, ` lists the
   matching tags but not `alpha`; choosing `castle` gives `alpha, castle, `; a failed fetch renders no list and the typed tags still
   save; `cd client && yarn test && yarn build` green. Out of scope: bulk tag rename/merge, tag colours, any server change.
-
-## Blocked Items
-
-## Completed Items
-
 - [x] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed** (routine 2026-09-18, 66a2186)
   Found by the KOL-021 grader and still open. The sidebar's Settings button (`openSettings`, `client/src/components/WikiLayout.vue:256`)
   sets `settingsOpen` along with `mobileTab = 'settings'`. `setMobileTab` (:248) changes only `mobileTab`, and mobile portrait has
