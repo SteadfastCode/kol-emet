@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-036) Refuse a passkey whose credential id is already registered to any account**
+- [x] **(KOL-036) Refuse a passkey whose credential id is already registered to any account**
   The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
   pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.
   `login/begin` lists an account's ids to anyone who knows its email, so a crafted authenticator can register a copy on a second
