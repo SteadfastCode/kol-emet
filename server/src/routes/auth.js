@@ -215,6 +215,34 @@ router.post('/webauthn/register/complete', requireAuth, async (req, res) => {
   }
 
   const passkey = passkeyFromRegistration(verification.registrationInfo);
+
+  // WebAuthn §7.1: a credential id already registered must not be stored
+  // again, and "already registered" means to any account, not just this one. `login/begin` lists an account's ids to anyone who knows its email, so
+  // without this a crafted authenticator could answer a challenge with a copy
+  // of someone else's id and register it here; the sign-in lookup below
+  // (`User.findOne(credentialIdQuery(...))`) would then have two accounts to
+  // choose from and pick whichever mongod returned first. The signature check
+  // still decides who gets in, so that is a denial of service rather than a
+  // takeover — but a denial of service against an account that did nothing.
+  // The query matches both stored forms (lib/passkeyIds.js), so a legacy
+  // double-encoded id blocks its correct form too.
+  //
+  // One answer whichever account holds it: telling the caller that the id is
+  // theirs and not a stranger's would say who else has registered it. A browser
+  // reaches this only by ignoring the `excludeCredentials` it was given, which
+  // is why re-registering your own device is an InvalidStateError in the
+  // browser and never gets this far.
+  //
+  // Read then write, with no index behind it: two registrations of the same id
+  // racing can still both pass this check. Closing that needs a unique index on
+  // `passkeys.credentialID`, which is a change to the deployed database, so the
+  // race stays a known gap (Decision Log, KOL-036).
+  if (await User.exists(credentialIdQuery(passkey.credentialID))) {
+    logPasskey('light', `user ${user._id}: passkey refused, its credential id is already registered (source: ${REGISTER_SOURCE})`);
+    logPasskey('verbose', `user ${user._id}: the refused credential is ${shortId(passkey.credentialID)}`);
+    return res.status(409).json({ error: 'This passkey is already registered' });
+  }
+
   user.passkeys.push(passkey);
   await user.save();
   logPasskey('light', `user ${user._id}: passkey added, ${passkey.deviceType}${passkey.backedUp ? ', backed up' : ''} (source: ${REGISTER_SOURCE})`);

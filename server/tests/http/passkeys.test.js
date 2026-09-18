@@ -22,6 +22,10 @@
  *     registration left it.
  *   - An impostor that holds the id but not the key signs in as no one and
  *     triggers no rewrite. An unknown or malformed id is a 401, not a crash.
+ *   - A credential id that is already registered is refused with 409, wherever
+ *     it is: on another account, on the caller's own, and on an account that
+ *     stored it in the legacy form. Nothing is saved, and the account holding
+ *     it keeps exactly what it had (KOL-036).
  *   - Account deletion's passkey confirmation recognizes a legacy id too, and
  *     a real assertion deletes the account. This is the success path
  *     accountDeletion.test.js could not reach.
@@ -35,9 +39,12 @@
  * Falsification checks: re-encode `credential.id` in passkeyFromRegistration
  * (lib/passkeyIds.js) and the first test fails on the stored id and then a 401;
  * drop the legacy branch of matchCredentialId and the legacy sign-in and
- * deletion tests fail (401 / 403); drop the rewrite in migrateCredentialId and
- * the legacy sign-in test fails on the stored id; offer stored ids unconverted
- * in credentialDescriptors and the authenticator refuses the legacy challenges.
+ * deletion tests fail (401 / 403), and so does the duplicate-id test that goes
+ * through a legacy value; drop the rewrite in migrateCredentialId and the
+ * legacy sign-in test fails on the stored id; offer stored ids unconverted in
+ * credentialDescriptors and the authenticator refuses the legacy challenges;
+ * drop the User.exists() check in register/complete and every duplicate-id test
+ * gets a 200 and a second account holding the same credential.
  * For Settings: answer with the stored passkeys instead of passkeySummary() and
  * the public-key checks fail; drop the `$nor` condition on the removal and the
  * passwordless test gets a 200; skip the flag update in recordUse and the
@@ -261,6 +268,81 @@ describe('passkey registration and sign-in', () => {
       assert.equal(res.status, 401, `${what}: expected 401, got ${res.status} ${JSON.stringify(res.body)}`);
       assert.equal(res.body.error, 'Passkey not recognized', what);
     }
+  });
+});
+
+describe('a credential id already registered is refused (KOL-036)', () => {
+  const ALREADY = 'This passkey is already registered';
+
+  /**
+   * A registration that ignores the exclusion list, the way a crafted
+   * authenticator would. addPasskey() is the honest path: the software
+   * authenticator refuses to register when `excludeCredentials` names it, as a
+   * browser does, so the server's own check is only reachable from a caller
+   * that does not play along. An attacker has the ids to try: an email is
+   * enough to make POST /auth/webauthn/login/begin list an account's.
+   */
+  async function registerIgnoringExclusions(t, authenticator) {
+    const begin = called('POST /auth/webauthn/register/begin', await t.agent.post('/auth/webauthn/register/begin'));
+    assert.equal(begin.status, 200);
+    return called('POST /auth/webauthn/register/complete (exclusions ignored)', await t.agent
+      .post('/auth/webauthn/register/complete')
+      .send(authenticator.register({ ...begin.body, excludeCredentials: [] })));
+  }
+
+  test("another account's credential id is refused, and nothing is stored", async () => {
+    const alice = await tenant('duplicate-alice');
+    const bob = await tenant('duplicate-bob');
+    const hers = device();
+    await addPasskey(alice, hers);
+
+    // Bob's authenticator holds her credential id and a key of its own — what
+    // anyone can build from the ids a sign-in challenge hands out for an email.
+    const res = await registerIgnoringExclusions(bob, device({ id: hers.id }));
+    assert.equal(res.status, 409, `expected 409, got ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.error, ALREADY);
+    assert.equal((await storedPasskeys(bob.userId)).length, 0, 'a refused registration must store nothing');
+
+    // Hers is untouched, so the sign-in lookup still has one account to find.
+    assert.deepEqual((await storedPasskeys(alice.userId)).map(pk => pk.credentialID), [hers.id]);
+    assert.equal((await signIn(hers, alice.email)).res.status, 200, 'the owner must still sign in');
+  });
+
+  test("the caller's own credential id gets the same answer, and the passkey it already has is kept", async () => {
+    const alice = await tenant('duplicate-own');
+    const hers = device();
+    await addPasskey(alice, hers);
+    const [before] = await storedPasskeys(alice.userId);
+
+    const again = await registerIgnoringExclusions(alice, hers);
+    assert.equal(again.status, 409, `expected 409, got ${again.status} ${JSON.stringify(again.body)}`);
+    assert.deepEqual(again.body, { error: ALREADY },
+      'the same answer as for a stranger: the refusal must not say whose the id is');
+
+    // The same id from a different key must not overwrite the key on file.
+    const overwrite = await registerIgnoringExclusions(alice, device({ id: hers.id }));
+    assert.equal(overwrite.status, 409, `expected 409, got ${overwrite.status} ${JSON.stringify(overwrite.body)}`);
+
+    const stored = await storedPasskeys(alice.userId);
+    assert.equal(stored.length, 1, 'exactly one passkey, and no second copy of it');
+    assert.equal(stored[0].credentialID, hers.id);
+    assert.deepEqual(stored[0].publicKey, before.publicKey, 'the stored key must still be the one registered first');
+    assert.equal((await signIn(hers, alice.email)).res.status, 200, 'and it still signs in');
+  });
+
+  test('a credential id stored in the legacy double-encoded form blocks a copy of it too', async () => {
+    const alice = await tenant('duplicate-legacy');
+    const bob = await tenant('duplicate-legacy-other');
+    const hers = device();
+    await addPasskey(alice, hers);
+    await makeLegacy(alice.userId, hers);
+
+    const res = await registerIgnoringExclusions(bob, device({ id: hers.id }));
+    assert.equal(res.status, 409, `expected 409, got ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.error, ALREADY);
+    assert.equal((await storedPasskeys(bob.userId)).length, 0, 'a refused registration must store nothing');
+    assert.deepEqual((await storedPasskeys(alice.userId)).map(pk => pk.credentialID), [legacyEncoding(hers.id)],
+      'the refusal must leave the legacy value alone: only a verified assertion rewrites it');
   });
 });
 
