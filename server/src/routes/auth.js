@@ -169,9 +169,47 @@ router.post('/logout', requireAuth, (req, res) => {
 });
 
 // GET /auth/me
-router.get('/me', (req, res) => {
-  if (req.session?.userId) return res.json({ authenticated: true });
-  res.status(401).json({ authenticated: false });
+//
+// Answered from the session *and* the users collection. A session outlives the
+// account it names: DELETE /auth/account destroys the caller's own, but
+// connect-mongo stores the rest serialized, with no way to look a user's
+// sessions up (see the Decision Log entry on account deletion). Every tenant
+// route resolves the id and refuses, so reading the session alone told a
+// deleted account's other browsers they were signed in and the client
+// (client/src/App.vue) showed them a wiki that answers 401 to everything. So
+// the id is checked here too, and a session naming a user who is gone is ended
+// rather than reported: destroyed in the store, expired in the browser, and
+// answered with the same 401 an anonymous caller gets.
+router.get('/me', async (req, res) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ authenticated: false });
+
+  let live;
+  try {
+    live = await User.exists({ _id: userId });
+  } catch (err) {
+    // A lookup that did not answer is never 200: a database blip must not be
+    // what keeps a deleted account signed in. Nor 401, which would claim the
+    // session was over when nothing here ended it — it survives the blip, so a
+    // reload once the database answers again signs the caller straight back in,
+    // and a client that tells the two apart can say which happened.
+    logDeletion('light', `GET /auth/me could not check user ${userId}: ${err.message} (source: User.exists)`);
+    return res.status(500).json({ error: 'Session check failed' });
+  }
+
+  if (live) return res.json({ authenticated: true });
+
+  logDeletion('light', `GET /auth/me: the session for user ${userId} names an account that no longer exists; ending it (source: User.exists returned nothing)`);
+  // Before destroy(), which takes req.session.cookie — and with it the
+  // attributes the cookie was set with — off the request; the pair is the same
+  // as in DELETE /auth/account below. See lib/sessionCookie.js.
+  clearSessionCookie(req, res);
+  req.session.destroy((err) => {
+    // Still 401: the caller is not authenticated whether or not the store
+    // could drop the record, and its cookie is expired above either way.
+    if (err) logDeletion('light', `GET /auth/me: the session for deleted user ${userId} was not destroyed: ${err.message}`);
+    res.status(401).json({ authenticated: false });
+  });
 });
 
 // POST /auth/webauthn/register/begin
@@ -605,9 +643,9 @@ router.delete('/account', requireActor, async (req, res) => {
   clearSessionCookie(req, res);
   req.session.destroy((err) => {
     // The account is already gone, so this still answers 204. A session that
-    // outlives it holds a dangling id: requireActor and resolveWorkspace look
-    // the user up and refuse; only GET /auth/me, which reads the session
-    // alone, would still say authenticated.
+    // outlives it holds a dangling id, and every route that reads one refuses:
+    // requireActor and resolveWorkspace look the user up, and GET /auth/me
+    // above does too, destroying the session it finds dangling.
     if (err) logDeletion('light', `${DELETE_SOURCE}: user ${userId} deleted, but the session was not destroyed: ${err.message}`);
     res.status(204).end();
   });
