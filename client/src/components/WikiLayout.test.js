@@ -49,6 +49,7 @@ vi.mock('../composables/useEntityTypes.js', async () => {
 });
 
 const settingsTab = (wrapper) => wrapper.findAll('.tab-btn').find((b) => b.text() === 'Settings');
+const listTab = (wrapper) => wrapper.findAll('.tab-btn').find((b) => b.text() === 'List');
 
 describe('WikiLayout entity types', () => {
   it('loads the entity-type registry once when it mounts', () => {
@@ -79,5 +80,16 @@ describe('WikiLayout settings', () => {
     wrapper.findComponent(EntitySidebar).vm.$emit('settings');
     await wrapper.vm.$nextTick();
     expect(wrapper.findComponent(PasskeySettings).exists()).toBe(true);
+  });
+
+  it('leaving Settings through the tab bar disarms the overlay, not just the tab', async () => {
+    const wrapper = shallowMount(WikiLayout);
+
+    wrapper.findComponent(EntitySidebar).vm.$emit('settings');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(PasskeySettings).exists()).toBe(true);
+
+    await listTab(wrapper).trigger('click');
+    expect(wrapper.findComponent(PasskeySettings).exists()).toBe(false);
   });
 });
