@@ -39,6 +39,7 @@ import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
 import { resolveWorkspace } from './middleware/workspace.js';
 import { createAuthLimiter } from './lib/attemptLimiter.js';
+import { sessionCookieOptions } from './lib/sessionCookie.js';
 
 /**
  * @param {object}  [options]
@@ -51,9 +52,8 @@ import { createAuthLimiter } from './lib/attemptLimiter.js';
  */
 export function createApp({ sessionStore, authLimits } = {}) {
   const app = express();
-  const isProd = process.env.NODE_ENV === 'production';
 
-  app.set('trust proxy', 1); // trust Railway's reverse proxy so secure cookies work
+  app.set('trust proxy', 1); // trust a hosted reverse proxy, so secure cookies work
 
   // Built here, not at import time, so each app — every test app included —
   // gets its own counters; routes/auth.js reads it back off req.app.locals.
@@ -74,13 +74,11 @@ export function createApp({ sessionStore, authLimits } = {}) {
     // `??` short-circuits, so the Mongo-backed store is never constructed when
     // a caller supplied its own.
     store: sessionStore ?? MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
-    cookie: {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      domain: isProd ? '.kol-emet.danielecker.dev' : undefined,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    },
+    // Built here rather than written inline: the two routes that end a session
+    // have to clear the cookie with these same attributes, and the domain is a
+    // per-deployment setting (SESSION_COOKIE_DOMAIN) rather than this
+    // instance's. See lib/sessionCookie.js.
+    cookie: sessionCookieOptions(process.env),
   }));
 
   app.use('/', oauthRouter);
