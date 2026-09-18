@@ -146,8 +146,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-040": {
+    "KOL-041": {
       "order": 9,
+      "title": "Tag suggestions in the entity editor from `GET /tags`",
+      "status": "claimed",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-041",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-18T11:23:55.940Z",
+      "runId": "2026-09-18T11:10:36.003Z",
+      "lastFail": null
+    },
+    "KOL-040": {
+      "order": null,
       "title": "Mobile: leaving Settings through the tab bar must not leave the settings overlay armed",
       "status": "done",
       "attempts": 1,
@@ -161,23 +178,6 @@
       "notBefore": null,
       "claimedAtUtc": "2026-09-18T11:19:50.063Z",
       "runId": "2026-09-18T11:10:36.003Z",
-      "lastFail": null
-    },
-    "KOL-041": {
-      "order": 10,
-      "title": "Tag suggestions in the entity editor from `GET /tags`",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
       "lastFail": null
     },
     "KOL-039": {

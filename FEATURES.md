@@ -59,7 +59,7 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`**
+- [x] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`**
   Wishlist "Tag autocomplete on entry editor". The workspace-scoped `GET /tags` (`server/src/routes/tags.js`) exists, but no client
   code calls it. The editor's tags field is a plain comma-separated input (`client/src/components/EntityEditor.vue:28-32`,
   `tagsInput`). Build: `client/src/api/tags.js` `getTags()`, using the same `req` shape as `client/src/api/entityTypes.js`. In
