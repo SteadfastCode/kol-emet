@@ -59,19 +59,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-036) Refuse a passkey whose credential id is already registered to any account**
-  The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
-  pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.
-  `login/begin` lists an account's ids to anyone who knows its email, so a crafted authenticator can register a copy on a second
-  account and make the sign-in lookup (`User.findOne(credentialIdQuery(...))`, :215) ambiguous. Build: after verification, and
-  before `user.passkeys.push`, run `User.exists(credentialIdQuery(passkey.credentialID))` (it matches both stored forms,
-  `server/src/lib/passkeyIds.js:86`). If a match is found, answer 409 `{ error: 'This passkey is already registered' }` and save
-  nothing. Use the same answer whether the holder is the caller or another account. Log at light with the source route, and put the
-  `shortId` at verbose. Update the Known gaps sentence in the KOL-024 Decision Log entry. Verify: in
-  `server/tests/http/passkeys.test.js` (real P-256 keys, nothing stubbed), alice registers credential X; bob registering the same X
-  gets 409 and still has no passkeys; alice registering X again gets 409 and keeps exactly one; X stored in the legacy
-  double-encoded form on alice also blocks bob; `cd server && yarn test` green. Out of scope: a unique index on
-  `passkeys.credentialID` (an Atlas index change; the check-then-push race stays a documented gap), and `login/begin`'s listing.
 - [ ] **(KOL-037) Session cookie domain from the environment, not hardcoded to Daniel's instance**
   `createApp` sets `cookie.domain` to `'.kol-emet.danielecker.dev'` whenever `NODE_ENV=production` (`server/src/app.js:72`). This
   is the only instance domain in `server/src`, so any other deployment of the product issues cookies its browsers reject. Also,
@@ -132,6 +119,19 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-036) Refuse a passkey whose credential id is already registered to any account** (routine 2026-09-17, 2200ec3)
+  The known gap in the Decision Log's KOL-024 entry: `POST /auth/webauthn/register/complete` (`server/src/routes/auth.js:150`)
+  pushes the verified credential without checking whether any account already holds that id, which WebAuthn §7.1 requires.
+  `login/begin` lists an account's ids to anyone who knows its email, so a crafted authenticator can register a copy on a second
+  account and make the sign-in lookup (`User.findOne(credentialIdQuery(...))`, :215) ambiguous. Build: after verification, and
+  before `user.passkeys.push`, run `User.exists(credentialIdQuery(passkey.credentialID))` (it matches both stored forms,
+  `server/src/lib/passkeyIds.js:86`). If a match is found, answer 409 `{ error: 'This passkey is already registered' }` and save
+  nothing. Use the same answer whether the holder is the caller or another account. Log at light with the source route, and put the
+  `shortId` at verbose. Update the Known gaps sentence in the KOL-024 Decision Log entry. Verify: in
+  `server/tests/http/passkeys.test.js` (real P-256 keys, nothing stubbed), alice registers credential X; bob registering the same X
+  gets 409 and still has no passkeys; alice registering X again gets 409 and keeps exactly one; X stored in the legacy
+  double-encoded form on alice also blocks bob; `cd server && yarn test` green. Out of scope: a unique index on
+  `passkeys.credentialID` (an Atlas index change; the check-then-push race stays a documented gap), and `login/begin`'s listing.
 - [x] **(KOL-035) Throttle failed password and passkey sign-in attempts** (routine 2026-09-17, 9d9f3b2)
   Nothing limits guessing today: `POST /auth/login` (`server/src/routes/auth.js:90`) runs a bcrypt compare for every request, and
   the Decision Log (KOL-021 entry) records that the password check is not rate-limited, including the one in `DELETE /auth/account`
