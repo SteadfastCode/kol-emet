@@ -503,3 +503,174 @@ describe('POST /auth/logout', () => {
     assert.equal(res.body.error, 'Unauthorized');
   });
 });
+
+// ─── Failed sign-in throttling (KOL-035) ──────────────────────────────────────
+// Its own apps, built with small limits: `createApp` builds the counters
+// (src/lib/attemptLimiter.js) so each app has a fresh set, and driving the real
+// default of 10 would cost ten bcrypt compares per case for nothing.
+//
+// What these defend, beyond "the counter counts":
+//
+//   The throttle must not become the account oracle the 401s are careful not
+//   to be. A blocked unknown address and a blocked registered one answer the
+//   same bytes — asserted the same way the 401 pair is, on raw text and on
+//   content-length, because "Too many attempts for alice@…" or a 429 that only
+//   ever happened to real accounts would leak exactly what the 401 wording
+//   protects.
+//
+//   It must be a throttle, not a lockout. A correct password after a few
+//   fumbled ones has to clear the counter, or a habitual typo would end with a
+//   person locked out of an account they can sign into.
+//
+//   It must be per key. One blocked address may not stop anyone else signing
+//   in, or anybody with a list of addresses can lock out the whole product.
+//
+// Falsification checks: move the limiter's check in `POST /auth/login` below
+// the bcrypt compare and the "even the right password" assertion fails; drop
+// the `reset` on success and the clearing test fails; key the counter on
+// something global and the "another address" test fails; word the 429 per
+// route and the enumeration test fails.
+describe('failed sign-in throttling', () => {
+  const PER_EMAIL = 3;
+  let throttled;   // POST /auth/login: 3 failures per email, default 100 per ip
+  let perIpApp;    // the passkey route is keyed by ip alone
+
+  before(() => {
+    throttled = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perEmail: PER_EMAIL } });
+    perIpApp  = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perIp: 2 } });
+  });
+
+  /** One wrong-password attempt against the given app. */
+  const wrongPassword = (on, email) =>
+    request(on).post('/auth/login').send({ email, password: WRONG_PASSWORD });
+
+  /** Fails `email` up to its limit; every one of those must still be a plain 401. */
+  async function exhaust(on, email) {
+    for (let i = 1; i <= PER_EMAIL; i += 1) {
+      const res = called(`POST /auth/login (wrong password ${i}/${PER_EMAIL})`, await wrongPassword(on, email));
+      assert.equal(res.status, 401, `attempt ${i} is inside the limit and must be a normal 401`);
+    }
+  }
+
+  test('after the limit even the right password is refused, with a Retry-After', async () => {
+    const email = uniqueEmail('throttle-lockout');
+    assert.equal((await register(request.agent(throttled), email)).res.status, 201);
+
+    await exhaust(throttled, email);
+
+    const agent = request.agent(throttled);
+    const res = called('POST /auth/login (right password, over the limit)', await agent
+      .post('/auth/login')
+      .send({ email, password: PASSWORD }));
+
+    assert.equal(res.status, 429, 'the attempt after the limit must be refused before the password is even checked');
+    assert.deepEqual(res.body, { error: 'Too many attempts. Try again later.' });
+    assert.match(res.headers['retry-after'] ?? '', /^[1-9]\d*$/, 'Retry-After must be whole seconds, and a real wait');
+    assert.ok(Number(res.headers['retry-after']) <= 15 * 60, 'and no longer than the window');
+    assert.equal(sessionCookie(res), null, 'a throttled request must not open a session');
+    assert.equal((await agent.get('/auth/me')).status, 401, 'and must not sign anyone in');
+  });
+
+  test('a blocked unknown address and a blocked registered one are byte-identical', async () => {
+    const known = uniqueEmail('throttle-known');
+    assert.equal((await register(request.agent(throttled), known)).res.status, 201);
+    const unknown = uniqueEmail('throttle-never-registered');
+
+    await exhaust(throttled, known);
+    await exhaust(throttled, unknown);
+
+    const blockedKnown   = await wrongPassword(throttled, known);
+    const blockedUnknown = await wrongPassword(throttled, unknown);
+
+    log('verbose', `blocked known body:   ${JSON.stringify(blockedKnown.text)}`);
+    log('verbose', `blocked unknown body: ${JSON.stringify(blockedUnknown.text)}`);
+
+    assert.equal(blockedKnown.status, 429, 'a registered address is throttled');
+    assert.equal(blockedUnknown.status, 429, 'and so is one that was never registered — the counter is keyed before the lookup');
+
+    // Raw bytes, as with the 401 pair above: a 429 that only ever happened to
+    // real accounts, or one that named the address, would be the enumeration
+    // oracle the 401 wording exists to close.
+    assert.equal(
+      Buffer.compare(Buffer.from(blockedKnown.text), Buffer.from(blockedUnknown.text)), 0,
+      `429 bodies differ: ${JSON.stringify(blockedKnown.text)} vs ${JSON.stringify(blockedUnknown.text)}`,
+    );
+    assert.equal(blockedKnown.headers['content-length'], blockedUnknown.headers['content-length'], 'a length difference is a signal too');
+    assert.equal(blockedKnown.headers['content-type'], blockedUnknown.headers['content-type']);
+    assert.doesNotMatch(blockedKnown.text, new RegExp(known.split('@')[0], 'i'), 'the refusal must not echo the address');
+  });
+
+  test('the block is per address: everyone else still signs in normally', async () => {
+    const blocked   = uniqueEmail('throttle-blocked');
+    const bystander = uniqueEmail('throttle-bystander');
+    assert.equal((await register(request.agent(throttled), blocked)).res.status, 201);
+    assert.equal((await register(request.agent(throttled), bystander)).res.status, 201);
+
+    await exhaust(throttled, blocked);
+    assert.equal((await wrongPassword(throttled, blocked)).status, 429);
+
+    const theirs = called('POST /auth/login (bystander, wrong password)', await wrongPassword(throttled, bystander));
+    assert.equal(theirs.status, 401, 'another address keeps its own budget');
+    assert.equal(theirs.body.error, 'Invalid email or password');
+
+    const ok = called('POST /auth/login (bystander, right password)', await request(throttled)
+      .post('/auth/login')
+      .send({ email: bystander, password: PASSWORD }));
+    assert.equal(ok.status, 200, 'and can still sign in while a neighbour is blocked');
+  });
+
+  test('a successful sign-in clears the address, so a typo is not a lockout', async () => {
+    const email = uniqueEmail('throttle-cleared');
+    assert.equal((await register(request.agent(throttled), email)).res.status, 201);
+
+    for (let i = 0; i < PER_EMAIL - 1; i += 1) {
+      assert.equal((await wrongPassword(throttled, email)).status, 401);
+    }
+
+    const ok = called('POST /auth/login (right password, under the limit)', await request(throttled)
+      .post('/auth/login')
+      .send({ email, password: PASSWORD }));
+    assert.equal(ok.status, 200);
+
+    // A full budget again. Without the reset the counter would stand at two,
+    // and the second of these would be the block.
+    for (let i = 1; i <= PER_EMAIL; i += 1) {
+      const res = called(`POST /auth/login (wrong password ${i} after a success)`, await wrongPassword(throttled, email));
+      assert.equal(res.status, 401, `attempt ${i} after a successful sign-in must be inside a fresh window`);
+    }
+  });
+
+  test('casing and surrounding space do not buy extra attempts', async () => {
+    const email = uniqueEmail('throttle-casing');
+    assert.equal((await register(request.agent(throttled), email)).res.status, 201);
+
+    await exhaust(throttled, email);
+
+    const shouted = called('POST /auth/login (upper-cased, over the limit)', await wrongPassword(throttled, email.toUpperCase()));
+    assert.equal(shouted.status, 429, 'the counter is keyed on the normalised address the schema stores');
+
+    const padded = called('POST /auth/login (padded, over the limit)', await wrongPassword(throttled, `  ${email}  `));
+    assert.equal(padded.status, 429);
+  });
+
+  test('failed passkey sign-ins are throttled by address, since that body has no email', async () => {
+    const stranger = () => request(perIpApp).post('/auth/webauthn/login/complete').send({ id: 'not-a-credential-of-anyones' });
+
+    for (let i = 1; i <= 2; i += 1) {
+      const res = called(`POST /auth/webauthn/login/complete (unknown credential ${i}/2)`, await stranger());
+      assert.equal(res.status, 401, 'inside the limit it is the usual refusal');
+      assert.equal(res.body.error, 'Passkey not recognized');
+    }
+
+    const blocked = called('POST /auth/webauthn/login/complete (over the limit)', await stranger());
+    assert.equal(blocked.status, 429);
+    assert.deepEqual(blocked.body, { error: 'Too many attempts. Try again later.' });
+    assert.ok(blocked.headers['retry-after'], 'a throttled passkey attempt says when to come back too');
+
+    // Same address, same counter: the password route is refused as well.
+    const password = called('POST /auth/login (address already over its limit)', await request(perIpApp)
+      .post('/auth/login')
+      .send({ email: uniqueEmail('throttle-shared-ip'), password: PASSWORD }));
+    assert.equal(password.status, 429, 'the ip counter is shared across the sign-in routes');
+  });
+});

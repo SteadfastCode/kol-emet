@@ -38,18 +38,27 @@ import './models/EntityType.js';
 import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
 import { resolveWorkspace } from './middleware/workspace.js';
+import { createAuthLimiter } from './lib/attemptLimiter.js';
 
 /**
  * @param {object}  [options]
  * @param {object}  [options.sessionStore] express-session store. Defaults to the
  *   MongoStore the deployed app uses; supplied by tests to stay off the database.
+ * @param {object}  [options.authLimits] sign-in throttle, `{ perEmail, perIp,
+ *   perUser, windowMs }`; anything left out comes from AUTH_LIMIT_* in the
+ *   environment (see lib/attemptLimiter.js).
  * @returns {import('express').Express}
  */
-export function createApp({ sessionStore } = {}) {
+export function createApp({ sessionStore, authLimits } = {}) {
   const app = express();
   const isProd = process.env.NODE_ENV === 'production';
 
   app.set('trust proxy', 1); // trust Railway's reverse proxy so secure cookies work
+
+  // Built here, not at import time, so each app — every test app included —
+  // gets its own counters; routes/auth.js reads it back off req.app.locals.
+  // `trust proxy` above is what makes the req.ip it keys on the real client.
+  app.locals.authLimiter = createAuthLimiter(authLimits ?? {});
 
   app.use(cors({
     origin: process.env.CLIENT_ORIGIN,

@@ -12,6 +12,7 @@ import { requireAuth, requireActor } from '../middleware/auth.js';
 import { seedWorkspace } from '../lib/workspaceSeeder.js';
 import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
+import { createAuthLimiter } from '../lib/attemptLimiter.js';
 import {
   credentialDescriptors,
   credentialIdQuery,
@@ -34,6 +35,29 @@ const ORIGIN  = process.env.WEBAUTHN_ORIGIN  ?? 'http://localhost:5173';
 // Named in every passkey log line (PASSKEY_LOG_LEVEL, see lib/passkeyIds.js).
 const REGISTER_SOURCE = 'POST /auth/webauthn/register/complete';
 const LOGIN_SOURCE    = 'POST /auth/webauthn/login/complete';
+
+// ─── Failed sign-in throttling ────────────────────────────────────────────────
+// Three routes below guess-check a credential: the password login, the passkey
+// login, and the re-authentication that account deletion demands. Each asks the
+// limiter *before* doing that work — a blocked caller costs no bcrypt hash and
+// no signature verification — records a failure after one, and clears its own
+// key on success. Limits, keys and logging (AUTH_LIMIT_LOG_LEVEL): see
+// lib/attemptLimiter.js.
+
+const PASSWORD_LOGIN_SOURCE = 'POST /auth/login';
+
+/**
+ * The counters createApp built for this app (`app.locals.authLimiter`,
+ * src/app.js). Defaulted lazily so a router mounted on a bare Express app
+ * throttles on the shipped limits rather than silently not at all.
+ */
+function limiter(req) {
+  req.app.locals.authLimiter ??= createAuthLimiter();
+  return req.app.locals.authLimiter;
+}
+
+/** The form an email is counted under: what the schema stores, so two spellings are one key. */
+const emailKey = (email) => (typeof email === 'string' ? email.trim().toLowerCase() : '');
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
@@ -93,11 +117,30 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  // Asked before the lookup as well as before the hash: an unknown address is
+  // counted and blocked exactly like a known one, so the 429 says nothing
+  // about who has an account here.
+  const keys = { email: emailKey(email), ip: req.ip };
+  const block = limiter(req).blocked(keys, PASSWORD_LOGIN_SOURCE);
+  if (block) return limiter(req).refuse(res, block);
+
   const user = await User.findOne({ email });
-  if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+  if (!user) {
+    limiter(req).recordFailure(keys, PASSWORD_LOGIN_SOURCE);
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+  if (!valid) {
+    limiter(req).recordFailure(keys, PASSWORD_LOGIN_SOURCE);
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  // The email's counter only. Clearing the address's own failures is what
+  // keeps a fat-fingered password from locking out the person who then types
+  // it right; clearing the ip's would let one valid account launder the spray
+  // limit for every other account tried from the same place.
+  limiter(req).reset({ email: keys.email }, PASSWORD_LOGIN_SOURCE);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
@@ -208,6 +251,15 @@ router.post('/webauthn/login/complete', async (req, res) => {
   const expectedChallenge = req.session.currentChallenge;
   delete req.session.currentChallenge;
 
+  // Keyed by address alone: this body carries a credential id, never an email,
+  // so there is no account to key on until the lookup below — and the lookup is
+  // what the throttle is protecting. A guessed assertion is unforgeable rather
+  // than merely expensive, but the route still reads the database and runs a
+  // signature check per request.
+  const keys = { ip: req.ip };
+  const block = limiter(req).blocked(keys, LOGIN_SOURCE);
+  if (block) return limiter(req).refuse(res, block);
+
   // The browser's id, matched against both stored forms. Anything but a
   // non-empty string names no credential and must not reach the query.
   const browserId = typeof req.body?.id === 'string' ? req.body.id : '';
@@ -215,6 +267,7 @@ router.post('/webauthn/login/complete', async (req, res) => {
   const user = browserId ? await User.findOne(credentialIdQuery(browserId)) : null;
   const found = user && findPasskey(user.passkeys, browserId);
   if (!found) {
+    limiter(req).recordFailure(keys, LOGIN_SOURCE);
     logPasskey('normal', `passkey sign-in refused: no account holds the credential (source: ${LOGIN_SOURCE})`);
     return res.status(401).json({ error: 'Passkey not recognized' });
   }
@@ -230,11 +283,13 @@ router.post('/webauthn/login/complete', async (req, res) => {
       requireUserVerification: false,
     });
   } catch (err) {
+    limiter(req).recordFailure(keys, LOGIN_SOURCE);
     logPasskey('normal', `passkey sign-in refused for user ${user._id}: ${err.message} (source: ${LOGIN_SOURCE})`);
     return res.status(400).json({ error: err.message });
   }
 
   if (!verification.verified) {
+    limiter(req).recordFailure(keys, LOGIN_SOURCE);
     logPasskey('normal', `passkey sign-in refused for user ${user._id}: the assertion did not verify (source: ${LOGIN_SOURCE})`);
     return res.status(401).json({ error: 'Passkey authentication failed' });
   }
@@ -455,6 +510,17 @@ router.delete('/account', requireActor, async (req, res) => {
       return res.status(400).json({ error: 'Confirm with your account email and your password or a passkey' });
     }
 
+    // Before the bcrypt compare (and before the passkey verification), keyed
+    // by the account rather than the address: the caller is already signed in,
+    // so who is guessing is known, and a session is not a licence to try every
+    // password its owner might have.
+    const keys = { user: String(userId) };
+    const block = limiter(req).blocked(keys, DELETE_SOURCE);
+    if (block) {
+      logDeletion('light', `${DELETE_SOURCE} refused for user ${userId}: too many failed confirmations, retry after ${block.retryAfter}s`);
+      return limiter(req).refuse(res, block);
+    }
+
     const user = await User.findById(userId).select('email passwordHash passkeys');
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -468,11 +534,20 @@ router.delete('/account', requireActor, async (req, res) => {
       ? (await bcrypt.compare(password, user.passwordHash) ? null : 'wrong password')
       : await passkeyRefusal(req, user, passkey);
     if (refusal) {
+      // Counted: a wrong password and a bad assertion are both failed
+      // re-authentication. The typed-email mismatch above is not — it is the
+      // confirmation the UI asks for, not a credential, and mistyping it
+      // should not spend the budget for getting the password right.
+      limiter(req).recordFailure(keys, DELETE_SOURCE);
       logDeletion('light', `${DELETE_SOURCE} refused for user ${userId}: ${refusal}`);
       // 403, not 401: the session is fine, the re-authentication was not, and
       // a 401 would tell the client it had been signed out.
       return res.status(403).json({ error: hasPassword ? 'Incorrect password' : 'Passkey confirmation failed' });
     }
+    // Cleared even though the account is usually about to be deleted: a 409
+    // below leaves it in place, and its owner should not then be locked out of
+    // confirming by the tries it took to get here.
+    limiter(req).reset(keys, DELETE_SOURCE);
 
     const result = await deleteAccount(userId, { source: DELETE_SOURCE });
     if (!result.ok && result.reason === 'member-elsewhere') {

@@ -323,3 +323,56 @@ describe('DELETE /auth/account with a passkey', () => {
     assert.equal((await a.agent.get('/auth/me')).status, 200, 'a refusal must leave the caller signed in');
   });
 });
+
+// ─── Throttled re-authentication (KOL-035) ────────────────────────────────────
+// A live session is not a licence to try every password its owner might have:
+// the confirmation this route demands is a credential check like any other, so
+// its failures are counted (src/lib/attemptLimiter.js), keyed by the account
+// rather than the address — the caller is signed in, so who is guessing is
+// known, and keying by address would let one user's fumbling block a colleague
+// behind the same office NAT.
+//
+// Its own app with a limit of 2, so the case costs two bcrypt compares rather
+// than the real default of ten.
+//
+// Falsification: move the limiter's check below the bcrypt compare in
+// `DELETE /auth/account` and the "refused before the password is checked"
+// assertion still passes but the third attempt pays for a hash — so the
+// assertion that carries the weight here is the 429 itself and the account
+// surviving it; count the email-mismatch case as a failure and the last
+// assertion fails.
+describe('DELETE /auth/account re-authentication is throttled', () => {
+  test('a run of wrong passwords ends in 429, the account and the session survive, and a mistyped email costs nothing', async () => {
+    const throttled = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perUser: 2 } });
+    const email = uniqueEmail('delete-throttle');
+    const agent = request.agent(throttled);
+    assert.equal((await agent.post('/auth/register').send({ email, password: PASSWORD })).status, 201);
+
+    // The typed email is the UI's confirmation, not a credential. Mistyping it
+    // must not spend the budget for getting the password right.
+    for (let i = 1; i <= 3; i += 1) {
+      const res = called(`DELETE /auth/account (mistyped email ${i}/3)`, await agent
+        .delete('/auth/account')
+        .send({ email: uniqueEmail('mistyped'), password: PASSWORD }));
+      assert.equal(res.status, 400, 'an email that does not match the account is a 400, not a counted failure');
+    }
+
+    for (let i = 1; i <= 2; i += 1) {
+      const res = called(`DELETE /auth/account (wrong password ${i}/2)`, await agent
+        .delete('/auth/account')
+        .send({ email, password: 'incorrect-horse-battery-staple' }));
+      assert.equal(res.status, 403, `attempt ${i} is inside the limit and must be the usual refusal`);
+      assert.equal(res.body.error, 'Incorrect password');
+    }
+
+    const blocked = called('DELETE /auth/account (right password, over the limit)', await agent
+      .delete('/auth/account')
+      .send({ email, password: PASSWORD }));
+
+    assert.equal(blocked.status, 429, 'the attempt after the limit is refused before the password is checked');
+    assert.deepEqual(blocked.body, { error: 'Too many attempts. Try again later.' });
+    assert.match(blocked.headers['retry-after'] ?? '', /^[1-9]\d*$/);
+    assert.ok(await User.exists({ email }), 'a throttled confirmation must not delete the account');
+    assert.equal((await agent.get('/auth/me')).status, 200, 'nor sign the caller out');
+  });
+});

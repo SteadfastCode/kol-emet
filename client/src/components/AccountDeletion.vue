@@ -82,6 +82,8 @@ function messageFor(err) {
       + 'and deleting it would leave them pointing at no one:';
   }
   if (err.status === 401) return 'Your session has expired. Sign in again to delete your account.';
+  // Too many failed confirmations (KOL-035); the server's message says to wait.
+  if (err.status === 429) return err.message;
   // The server's own wording: wrong password, email mismatch, no passkey.
   if (err.status === 400 || err.status === 403) return err.message;
   return 'Something went wrong. Please try again.';
