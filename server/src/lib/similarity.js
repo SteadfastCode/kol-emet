@@ -33,14 +33,21 @@ export function findSimilar(name, existing, threshold = 0.4) {
 
 /**
  * Normalised title key for exact-match dedup: case-folded, punctuation
- * stripped, leading article dropped, whitespace collapsed. "The Iron Gate" and
- * "iron gate" collapse to the same key.
+ * stripped, whitespace collapsed and trimmed, leading article dropped. "The
+ * Iron Gate" and "iron gate" collapse to the same key.
+ *
+ * Order matters: the whitespace pass runs BEFORE the article strip so that a
+ * padded title keys the same as a clean one. With it the other way round a
+ * leading space defeated the `^` anchor, '  The Iron Gate' kept its article,
+ * and a generated title with stray padding missed the exact match against an
+ * existing entity (and scored below the fuzzy threshold too) — so it was
+ * written as a duplicate entity instead of an update.
  */
 export function normalizeTitle(title) {
   return String(title ?? '')
     .toLowerCase()
     .replace(/[^\w\s]/g, '')
-    .replace(/^(the|a|an)\s+/, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .replace(/^(the|a|an)\s+/, '');
 }

@@ -69,13 +69,14 @@ describe('normalizeTitle', () => {
     assert.equal(normalizeTitle('An Engine'), 'engine');
   });
 
-  test('only drops a leading article when no whitespace precedes it', () => {
-    // Documents a known quirk rather than the intent: the article is stripped
-    // before whitespace is collapsed, so a leading space defeats it and
-    // '  The Iron Gate' does not share a key with 'The Iron Gate'. Worth
-    // fixing separately -- this is the dedup key for generated draft titles.
-    assert.equal(normalizeTitle('  The Iron Gate  '), 'the iron gate');
-    assert.notEqual(normalizeTitle('  The Iron Gate  '), normalizeTitle('The Iron Gate'));
+  test('drops a leading article however the title is padded', () => {
+    // The whitespace pass runs before the article strip, so padding no longer
+    // defeats the `^` anchor. Previously '  The Iron Gate' kept its article and
+    // keyed differently from 'The Iron Gate', which made a padded generated
+    // title a duplicate entity instead of an update.
+    assert.equal(normalizeTitle('  The Iron Gate  '), 'iron gate');
+    assert.equal(normalizeTitle('  The Iron Gate  '), normalizeTitle('The Iron Gate'));
+    assert.equal(normalizeTitle('\n\tAn Engine '), normalizeTitle('An Engine'));
   });
 
   test('keeps articles that are only a prefix of a longer word', () => {
