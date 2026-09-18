@@ -149,7 +149,7 @@
     "KOL-040": {
       "order": 9,
       "title": "Mobile: leaving Settings through the tab bar must not leave the settings overlay armed",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-040",

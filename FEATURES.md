@@ -59,14 +59,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [x] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed**
-  Found by the KOL-021 grader and still open. The sidebar's Settings button (`openSettings`, `client/src/components/WikiLayout.vue:256`)
-  sets `settingsOpen` along with `mobileTab = 'settings'`. `setMobileTab` (:248) changes only `mobileTab`, and mobile portrait has
-  no ✕, so the flag stays set. Rotating to landscape, or anything else that stops the portrait query matching, then brings back the
-  full-screen Settings/Delete-account overlay the user had left. Build: `setMobileTab` clears `settingsOpen` whenever the new tab is
-  not `settings`. Verify: in `client/src/components/WikiLayout.test.js`, following the test at :69, emit `settings` from
-  `EntitySidebar`, click the list tab, and assert the Passkeys group is unmounted; `cd client && yarn test && yarn build` green. Out
-  of scope: settings layout, adding a close button on mobile.
 - [ ] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`**
   Wishlist "Tag autocomplete on entry editor". The workspace-scoped `GET /tags` (`server/src/routes/tags.js`) exists, but no client
   code calls it. The editor's tags field is a plain comma-separated input (`client/src/components/EntityEditor.vue:28-32`,
@@ -83,6 +75,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-040) Mobile: leaving Settings through the tab bar must not leave the settings overlay armed** (routine 2026-09-18, 66a2186)
+  Found by the KOL-021 grader and still open. The sidebar's Settings button (`openSettings`, `client/src/components/WikiLayout.vue:256`)
+  sets `settingsOpen` along with `mobileTab = 'settings'`. `setMobileTab` (:248) changes only `mobileTab`, and mobile portrait has
+  no ✕, so the flag stays set. Rotating to landscape, or anything else that stops the portrait query matching, then brings back the
+  full-screen Settings/Delete-account overlay the user had left. Build: `setMobileTab` clears `settingsOpen` whenever the new tab is
+  not `settings`. Verify: in `client/src/components/WikiLayout.test.js`, following the test at :69, emit `settings` from
+  `EntitySidebar`, click the list tab, and assert the Passkeys group is unmounted; `cd client && yarn test && yarn build` green. Out
+  of scope: settings layout, adding a close button on mobile.
 - [x] **(KOL-039) Dedup key: trim a title before stripping its leading article** (routine 2026-09-18, 8d371cb)
   Found by the KOL-001 grader and still open. `normalizeTitle` (`server/src/lib/similarity.js:39`) strips `the|a|an` before it trims,
   so `'  The Iron Gate'` keys as `the iron gate`. That misses the exact match against an existing "The Iron Gate", and it misses the
