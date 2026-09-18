@@ -38,6 +38,9 @@
  *   Logout has to end the session on the server. Clearing the cookie only
  *   removes the browser's copy; a session left live in the store is still
  *   usable by anyone holding the value, which is the case logout exists for.
+ *   It also has to clear with the attributes the cookie was issued with, or the
+ *   browser has nothing to match and keeps sending the live cookie — invisible
+ *   here, because the response looks like a logout either way.
  *
  * Isolation: every test mints its own email via `uniqueEmail()` and asserts on
  * documents scoped to its own user or workspace, so tests neither clear the
@@ -51,7 +54,8 @@
  * registration test fails; change either 401 in `POST /auth/login` to name
  * which half was wrong and the enumeration test fails; swap
  * `req.session.destroy()` for a bare `res.clearCookie()` and the logout test
- * fails on the replayed cookie; drop the `hasTemplate` check from
+ * fails on the replayed cookie; clear it with `res.clearCookie('connect.sid')`
+ * and no options and the attribute-match test fails; drop the `hasTemplate` check from
  * `POST /auth/register` and the unknown-template test fails on its 201; mount
  * `/templates` behind `requireAuth` and the listing test fails on its 401.
  *
@@ -158,6 +162,23 @@ function sessionCookie(res) {
 function clearsSessionCookie(res) {
   const setCookie = res.headers['set-cookie'] ?? [];
   return setCookie.some(c => /^connect\.sid=;/.test(c) && /Expires=Thu, 01 Jan 1970/.test(c));
+}
+
+/**
+ * The attributes of the response's `connect.sid` Set-Cookie line, keyed
+ * lowercase, with valueless flags as `true` — everything after the name=value
+ * pair, which is what a browser matches a clearing cookie on.
+ */
+function sessionCookieAttributes(res) {
+  const line = (res.headers['set-cookie'] ?? []).find(c => c.startsWith('connect.sid='));
+  assert.ok(line, 'the response set no connect.sid cookie');
+  const [, ...attributes] = line.split(';');
+  const parsed = {};
+  for (const attribute of attributes) {
+    const [name, ...rest] = attribute.split('=');
+    parsed[name.trim().toLowerCase()] = rest.length ? rest.join('=').trim() : true;
+  }
+  return parsed;
 }
 
 /**
@@ -501,6 +522,40 @@ describe('POST /auth/logout', () => {
 
     assert.equal(res.status, 401, 'logout sits behind requireAuth');
     assert.equal(res.body.error, 'Unauthorized');
+  });
+
+  test('clears the cookie with the attributes it was issued with, so the browser matches it', async () => {
+    // A browser matches a clearing Set-Cookie against the cookie it holds by
+    // name, domain and path. Clear with any other attributes and the response
+    // still reads as a logout while the browser keeps the live cookie — the
+    // failure KOL-037 fixed, where a bare `clearCookie('connect.sid')` could
+    // not touch a domain-scoped one. The domain itself cannot be asserted here
+    // (NODE_ENV is 'test', and a domain-scoped cookie is one supertest's agent
+    // would not send back); it is covered in tests/unit/sessionCookie.test.js.
+    const email = uniqueEmail('logout-cookie-attributes');
+    assert.equal((await register(request.agent(app), email)).res.status, 201);
+
+    const agent = request.agent(app);
+    const login = await agent.post('/auth/login').send({ email, password: PASSWORD });
+    assert.equal(login.status, 200);
+    const issued = sessionCookieAttributes(login);
+
+    const res = called('POST /auth/logout', await agent.post('/auth/logout'));
+    assert.equal(res.status, 200);
+    const cleared = sessionCookieAttributes(res);
+    log('verbose', `login cookie ${JSON.stringify(issued)} vs logout cookie ${JSON.stringify(cleared)}`);
+
+    for (const attribute of ['path', 'httponly', 'samesite', 'domain', 'secure']) {
+      assert.equal(cleared[attribute], issued[attribute], `${attribute} must match the cookie being cleared`);
+    }
+    // Only as strong as the fixture: the login cookie must have carried the
+    // attributes being compared in the first place.
+    assert.equal(issued.path, '/');
+    assert.equal(issued.httponly, true);
+    assert.equal(issued.samesite, 'Lax');
+
+    assert.equal(cleared.expires, 'Thu, 01 Jan 1970 00:00:00 GMT', 'and the clear has to actually expire it');
+    assert.equal(cleared['max-age'], undefined, 'a Max-Age here would make Express recompute Expires into the future');
   });
 });
 

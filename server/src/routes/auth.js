@@ -13,6 +13,7 @@ import { seedWorkspace } from '../lib/workspaceSeeder.js';
 import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
 import { createAuthLimiter } from '../lib/attemptLimiter.js';
+import { clearSessionCookie } from '../lib/sessionCookie.js';
 import {
   credentialDescriptors,
   credentialIdQuery,
@@ -154,9 +155,15 @@ router.post('/login', async (req, res) => {
 
 // POST /auth/logout
 router.post('/logout', requireAuth, (req, res) => {
+  // Before destroy(), which takes req.session — and with it the attributes the
+  // cookie was actually set with — off the request. Clearing with different
+  // attributes leaves the browser holding the original cookie; see
+  // lib/sessionCookie.js. The header goes out with whatever this responds,
+  // including the 500 below: a logout the server could not complete should
+  // still take the credential out of the browser.
+  clearSessionCookie(req, res);
   req.session.destroy((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
-    res.clearCookie('connect.sid');
     res.json({ ok: true });
   });
 });
@@ -592,17 +599,16 @@ router.delete('/account', requireActor, async (req, res) => {
     return res.status(500).json({ error: 'Account deletion failed part-way; it is safe to try again' });
   }
 
-  // Read before destroy(), which takes req.session.cookie with it. Clearing
-  // with the attributes the cookie was set with is what lets the browser match
-  // it: a bare clearCookie misses the domain-scoped production cookie.
-  const { path, domain, secure, sameSite, httpOnly } = req.session.cookie;
+  // Before destroy(), which takes req.session.cookie with it. Clearing with the
+  // attributes the cookie was set with is what lets the browser match it: a
+  // bare clearCookie misses a domain-scoped cookie entirely.
+  clearSessionCookie(req, res);
   req.session.destroy((err) => {
     // The account is already gone, so this still answers 204. A session that
     // outlives it holds a dangling id: requireActor and resolveWorkspace look
     // the user up and refuse; only GET /auth/me, which reads the session
     // alone, would still say authenticated.
     if (err) logDeletion('light', `${DELETE_SOURCE}: user ${userId} deleted, but the session was not destroyed: ${err.message}`);
-    res.clearCookie('connect.sid', { path, domain, secure, sameSite, httpOnly });
     res.status(204).end();
   });
 });
