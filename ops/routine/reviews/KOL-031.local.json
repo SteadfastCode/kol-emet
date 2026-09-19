@@ -1,0 +1,61 @@
+{
+  "item": "KOL-031",
+  "repo": "kol-emet",
+  "mergeSha": "5bcc3b9934cad8f5c207e05663b4aa95a991453f",
+  "completedAtUtc": "2026-09-17T12:29:40.259Z",
+  "completeRunId": "2026-09-17T12:07:35.963Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:18:08.946Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 26501,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/auth.js",
+        "client/src/views/LoginView.test.js",
+        "client/src/views/LoginView.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 13521,
+      "contextBytes": 0,
+      "promptTokens": 4297,
+      "completionTokens": 149,
+      "latencyMs": 19903,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/app.js",
+        "server/src/config/templates.js",
+        "server/src/routes/auth.js",
+        "server/src/routes/templates.js",
+        "server/tests/http/auth.test.js"
+      ],
+      "part": null,
+      "bytes": 12980,
+      "contextBytes": 0,
+      "promptTokens": 3989,
+      "completionTokens": 122,
+      "latencyMs": 17663,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "summary": "One potential defect found in the code change. · One potential defect found in the change.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 16517,
+    "completionTokens": 339
+  },
+  "latencyMs": 64784
+}

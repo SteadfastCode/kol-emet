@@ -1,0 +1,111 @@
+{
+  "item": "KOL-037",
+  "repo": "kol-emet",
+  "mergeSha": "3632951",
+  "completedAtUtc": "2026-09-18T00:23:18.294Z",
+  "completeRunId": "2026-09-17T23:48:58.829Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:29:32.326Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 36267,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/.env.example",
+        "server/src/app.js"
+      ],
+      "part": null,
+      "bytes": 8552,
+      "contextBytes": 0,
+      "promptTokens": 2847,
+      "completionTokens": 161,
+      "latencyMs": 15616,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/sessionCookie.js",
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 10682,
+      "contextBytes": 0,
+      "promptTokens": 3464,
+      "completionTokens": 113,
+      "latencyMs": 15298,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/auth.test.js"
+      ],
+      "part": null,
+      "bytes": 4752,
+      "contextBytes": 0,
+      "promptTokens": 1987,
+      "completionTokens": 126,
+      "latencyMs": 11320,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/sessionCookie.test.js"
+      ],
+      "part": null,
+      "bytes": 12281,
+      "contextBytes": 0,
+      "promptTokens": 3839,
+      "completionTokens": 135,
+      "latencyMs": 15829,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/sessionCookie.js",
+      "line": 152,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Logging sensitive information about cookies in verbose mode.",
+      "scenario": "If the `SESSION_COOKIE_LOG_LEVEL` is set to 'verbose', it logs the full attribute set of session cookies, which could potentially expose sensitive information.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code logs the full attribute set of session cookies in verbose mode, which includes sensitive information."
+      }
+    },
+    {
+      "file": "server/tests/http/auth.test.js",
+      "line": 182,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the 'domain' attribute matches when clearing the cookie.",
+      "scenario": "If the 'SESSION_COOKIE_DOMAIN' environment variable is set, the logout test will pass even if the domain attribute does not match. This could lead to browsers still holding onto the live cookie.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the 'domain' attribute matches when clearing the cookie."
+      }
+    }
+  ],
+  "summary": "There is a high-severity issue with the session cookie domain handling when `SESSION_COOKIE_DOMAIN` is unset or blank. · One potential security concern identified. · 1 high severity finding · One high-severity finding identified.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 24149,
+    "completionTokens": 697
+  },
+  "latencyMs": 98729
+}

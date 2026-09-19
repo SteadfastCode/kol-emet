@@ -1,0 +1,80 @@
+{
+  "item": "KOL-036",
+  "repo": "kol-emet",
+  "mergeSha": "2200ec3cdfd55a4e5b2f3c14569791ca24b66a9a",
+  "completedAtUtc": "2026-09-18T00:10:38.808Z",
+  "completeRunId": "2026-09-17T23:48:58.829Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:27:53.558Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 18555,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 11864,
+      "contextBytes": 0,
+      "promptTokens": 3722,
+      "completionTokens": 127,
+      "latencyMs": 15843,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/passkeys.test.js"
+      ],
+      "part": null,
+      "bytes": 6691,
+      "contextBytes": 0,
+      "promptTokens": 2468,
+      "completionTokens": 146,
+      "latencyMs": 13821,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 249,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The check for existing credential ID does not prevent race conditions, leading to potential duplicate registrations.",
+      "scenario": "Two concurrent registration requests with the same credential ID could both pass the existence check and be stored, violating WebAuthn §7.1.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The finding correctly identifies that the code does not prevent race conditions for duplicate registrations."
+      }
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 150,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The code does not check if a passkey's credential ID is already registered before saving it.",
+      "scenario": "An attacker can register the same passkey on multiple accounts, leading to ambiguous sign-in lookups and potential security vulnerabilities.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff shows that the code does not check if a passkey's credential ID is already registered before saving it."
+      }
+    }
+  ],
+  "summary": "One finding identified: a potential race condition in checking for existing credential IDs. · One high-severity defect found in server/src/routes/auth.js: The code does not check if a passkey's credential ID is already registered before saving it, which can lead to security vulnerabilities.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 12291,
+    "completionTokens": 344
+  },
+  "latencyMs": 50234
+}

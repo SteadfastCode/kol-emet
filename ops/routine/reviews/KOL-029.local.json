@@ -1,0 +1,94 @@
+{
+  "item": "KOL-029",
+  "repo": "kol-emet",
+  "mergeSha": "def7dab037a2c5c6404d95e5f512014848c1f58b",
+  "completedAtUtc": "2026-09-17T07:57:55.492Z",
+  "completeRunId": "2026-09-17T07:08:04.751Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:15:42.240Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 33126,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/entityTypes.js",
+        "client/src/components/EntityCard.vue",
+        "client/src/components/EntityEditor.vue",
+        "client/src/components/EntityHeader.vue"
+      ],
+      "part": null,
+      "bytes": 12974,
+      "contextBytes": 0,
+      "promptTokens": 4611,
+      "completionTokens": 121,
+      "latencyMs": 19523,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntitySidebar.test.js",
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/GraphView.vue",
+        "client/src/components/SidebarCard.vue",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue",
+        "client/src/components/generator/DraftItemCard.vue"
+      ],
+      "part": null,
+      "bytes": 12144,
+      "contextBytes": 0,
+      "promptTokens": 4218,
+      "completionTokens": 217,
+      "latencyMs": 23190,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 2,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEntityTypes.js",
+        "client/src/config/categories.js",
+        "docs/architecture.md",
+        "server/src/config/templates.js",
+        "server/src/models/EntityType.js"
+      ],
+      "part": null,
+      "bytes": 8008,
+      "contextBytes": 0,
+      "promptTokens": 3086,
+      "completionTokens": 142,
+      "latencyMs": 15634,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/EntityHeader.vue",
+      "line": 75,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The category color background is not set in EntityHeader.vue.",
+      "scenario": "When a user views an entity, the category pill should display both text and background colors. However, the current implementation only sets the text color, leaving the background color unset.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The computed property `catStyle` in EntityHeader.vue only sets the text color using `styleFor(props.entity.category).color`, without setting the background color."
+      }
+    }
+  ],
+  "summary": "One medium severity finding identified. · Two tests need to be updated to ensure proper handling of categories not present in the registry. · One potential defect found in the change.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 27894,
+    "completionTokens": 648
+  },
+  "latencyMs": 101503
+}

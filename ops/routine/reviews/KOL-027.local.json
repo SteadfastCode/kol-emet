@@ -1,0 +1,206 @@
+{
+  "item": "KOL-027",
+  "repo": "kol-emet",
+  "mergeSha": "3e6d7ab41988a366ea5c1e34ad44b6f28408fee1",
+  "completedAtUtc": "2026-09-17T07:25:24.555Z",
+  "completeRunId": "2026-09-17T07:08:04.751Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:12:17.776Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 68369,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11747,
+      "contextBytes": 0,
+      "promptTokens": 4003,
+      "completionTokens": 384,
+      "latencyMs": 30866,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/config/categories.js",
+        "server/src/config/templates.js",
+        "server/src/lib/draftItemSchema.js",
+        "server/src/lib/entityTypeRegistry.js",
+        "server/src/lib/generator.js",
+        "server/src/models/Entity.js"
+      ],
+      "part": null,
+      "bytes": 12329,
+      "contextBytes": 0,
+      "promptTokens": 4129,
+      "completionTokens": 148,
+      "latencyMs": 19343,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/EntityType.js",
+        "server/src/routes/drafts.js",
+        "server/src/routes/entityTypes.js"
+      ],
+      "part": null,
+      "bytes": 12657,
+      "contextBytes": 0,
+      "promptTokens": 4326,
+      "completionTokens": 131,
+      "latencyMs": 19242,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8195,
+      "contextBytes": 0,
+      "promptTokens": 3207,
+      "completionTokens": 148,
+      "latencyMs": 16355,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 5743,
+      "contextBytes": 0,
+      "promptTokens": 2451,
+      "completionTokens": 135,
+      "latencyMs": 11016,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/models/entity.test.js"
+      ],
+      "part": null,
+      "bytes": 7163,
+      "contextBytes": 0,
+      "promptTokens": 2693,
+      "completionTokens": 131,
+      "latencyMs": 11476,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/draftItemSchema.test.js"
+      ],
+      "part": null,
+      "bytes": 10743,
+      "contextBytes": 0,
+      "promptTokens": 3685,
+      "completionTokens": 110,
+      "latencyMs": 13503,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 123,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The rename cascade does not handle concurrent renames of the same type, leading to data inconsistency.",
+      "scenario": "If two users attempt to rename the same entity type simultaneously, the last operation to complete will overwrite the changes made by the other, resulting in lost updates.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle concurrent renames of the same type, leading to data inconsistency."
+      }
+    },
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 150,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The rename cascade does not handle errors during the updateMany operations, leading to partial renames.",
+      "scenario": "If an error occurs during one of the updateMany operations in the rename cascade, only some entities and relationship types may be updated, leaving the system in an inconsistent state.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle errors during the updateMany operations in the rename cascade."
+      }
+    },
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 178,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The rename cascade does not handle potential conflicts during the updateMany operations, which could lead to data inconsistency.",
+      "scenario": "If there are multiple entities or relationship types with the same category name being renamed simultaneously, the updateMany operations may conflict and overwrite each other's changes, leading to inconsistent data.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The rename cascade does not handle potential conflicts during the updateMany operations."
+      }
+    },
+    {
+      "file": "server/tests/http/entityTypes.test.js",
+      "line": 268,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the renamed entity type cascades to related entities and relationship types.",
+      "scenario": "When an entity type is renamed, the test only checks if a new entity can be created with the new name. It does not verify that existing entities and relationship types that used the old name have been updated to use the new name.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test only verifies that a new entity can be created with the new name after renaming, but it does not check if existing entities and relationship types that used the old name have been updated to use the new name."
+      }
+    },
+    {
+      "file": "server/tests/unit/draftItemSchema.test.js",
+      "line": 104,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not check if the category is validated against the workspace's entity types.",
+      "scenario": "A workspace with no entity types should only accept built-in categories, but the test does not verify this.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not cover the scenario where a workspace with no entity types accepts only built-in categories."
+      }
+    }
+  ],
+  "summary": "The change introduces several issues related to data consistency and validation. The rename cascade does not handle concurrent renames or errors during updates, leading to potential data loss or inconsistency. Additionally, the categoryValidator does not properly handle case-insensitive validation for existing types, which could lead to duplicate entries. · One high-severity issue found: the `validateItemPayload` function does not handle null schemas correctly. · One high-severity finding identified in the diff. · One high-severity finding identified in server/tests/http/entityTypes.test.js. · 1 high-severity finding identified. · One high-severity finding identified. · One finding identified.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 56699,
+    "completionTokens": 1551
+  },
+  "latencyMs": 204309
+}

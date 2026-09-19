@@ -1,0 +1,39 @@
+{
+  "item": "KOL-040",
+  "repo": "kol-emet",
+  "mergeSha": "66a218696bbf91feef7103d41b2e4313f9766189",
+  "completedAtUtc": "2026-09-18T11:22:42.794Z",
+  "completeRunId": "2026-09-18T11:10:36.003Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:31:17.082Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 1959,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 1959,
+      "contextBytes": 0,
+      "promptTokens": 1100,
+      "completionTokens": 187,
+      "latencyMs": 11643,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "summary": "The change aims to ensure that leaving the Settings tab through the tab bar disarms the overlay. However, there is a potential issue where the settings overlay might not remain open as expected in certain scenarios.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 2193,
+    "completionTokens": 236
+  },
+  "latencyMs": 16846
+}

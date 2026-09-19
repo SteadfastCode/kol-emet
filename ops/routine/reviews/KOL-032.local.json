@@ -1,0 +1,76 @@
+{
+  "item": "KOL-032",
+  "repo": "kol-emet",
+  "mergeSha": "05679a63e6d57b580eaad2c9e06737a4b63ebe7b",
+  "completedAtUtc": "2026-09-17T07:15:19.129Z",
+  "completeRunId": "2026-09-17T07:08:04.751Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:08:53.411Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 36250,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md",
+        "docs/roadmap.md",
+        "kol_emet_spec.md",
+        "server/src/lib/scopedPopulate.js",
+        "server/src/routes/changelog.js"
+      ],
+      "part": null,
+      "bytes": 11790,
+      "contextBytes": 0,
+      "promptTokens": 3936,
+      "completionTokens": 147,
+      "latencyMs": 18213,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/entities.js",
+        "server/src/routes/mcp.js",
+        "server/src/routes/openQuestions.js",
+        "server/tests/http/mcp.test.js"
+      ],
+      "part": null,
+      "bytes": 13005,
+      "contextBytes": 0,
+      "promptTokens": 4199,
+      "completionTokens": 129,
+      "latencyMs": 18708,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/tenancy.test.js"
+      ],
+      "part": null,
+      "bytes": 11455,
+      "contextBytes": 0,
+      "promptTokens": 3677,
+      "completionTokens": 238,
+      "latencyMs": 22448,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 2,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "summary": "One high-severity finding identified in the changelog.js file. · One potential security issue found. · Two tests in tenancy.test.js do not fully verify that foreign ids are correctly scoped and do not leak information across workspaces.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 27167,
+    "completionTokens": 744
+  },
+  "latencyMs": 105333
+}

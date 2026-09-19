@@ -1,0 +1,56 @@
+{
+  "item": "KOL-041",
+  "repo": "kol-emet",
+  "mergeSha": "541497c316ff5808ccdfcd12c900593d447d1e6b",
+  "completedAtUtc": "2026-09-18T11:31:03.902Z",
+  "completeRunId": "2026-09-18T11:10:36.003Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:32:37.884Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 16300,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/tags.js",
+        "client/src/components/EntityEditor.test.js"
+      ],
+      "part": null,
+      "bytes": 7938,
+      "contextBytes": 0,
+      "promptTokens": 2759,
+      "completionTokens": 144,
+      "latencyMs": 13605,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityEditor.vue"
+      ],
+      "part": null,
+      "bytes": 8362,
+      "contextBytes": 0,
+      "promptTokens": 2990,
+      "completionTokens": 1024,
+      "latencyMs": 58289,
+      "findings": 0,
+      "critiqued": 0,
+      "dropped": 0,
+      "error": "output truncated at 1024 tokens"
+    }
+  ],
+  "findings": [],
+  "summary": "The tags field is a plain comma-separated input, which may not provide the desired user experience for tag selection.",
+  "errors": [
+    "output truncated at 1024 tokens"
+  ],
+  "usage": {
+    "promptTokens": 8476,
+    "completionTokens": 1195
+  },
+  "latencyMs": 80766
+}

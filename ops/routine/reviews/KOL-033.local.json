@@ -1,0 +1,268 @@
+{
+  "item": "KOL-033",
+  "repo": "kol-emet",
+  "mergeSha": "0bc4ff98fc680cd3bf53cc4887c7e98584fa78ab",
+  "completedAtUtc": "2026-09-17T12:42:58.813Z",
+  "completeRunId": "2026-09-17T12:07:35.963Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:22:45.563Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 77688,
+  "excluded": [
+    "server/yarn.lock"
+  ],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/drafts.js",
+        "client/src/components/generator/BraindumpInput.test.js",
+        "client/src/components/generator/BraindumpInput.vue",
+        "client/src/components/generator/GeneratorOverlay.vue",
+        "client/src/lib/importFile.js"
+      ],
+      "part": null,
+      "bytes": 11179,
+      "contextBytes": 0,
+      "promptTokens": 4136,
+      "completionTokens": 172,
+      "latencyMs": 20626,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/package.json",
+        "server/src/lib/draftNormalizer.js"
+      ],
+      "part": null,
+      "bytes": 10272,
+      "contextBytes": 0,
+      "promptTokens": 3835,
+      "completionTokens": 475,
+      "latencyMs": 32196,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 2,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/dockerCompose.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12391,
+      "contextBytes": 0,
+      "promptTokens": 4616,
+      "completionTokens": 134,
+      "latencyMs": 18010,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/dockerCompose.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 7092,
+      "contextBytes": 0,
+      "promptTokens": 3087,
+      "completionTokens": 126,
+      "latencyMs": 14976,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/Draft.js",
+        "server/src/routes/drafts.js",
+        "server/tests/fixtures/docker-compose.yml"
+      ],
+      "part": null,
+      "bytes": 9183,
+      "contextBytes": 0,
+      "promptTokens": 3639,
+      "completionTokens": 114,
+      "latencyMs": 13433,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/composeDraft.test.js"
+      ],
+      "part": null,
+      "bytes": 12011,
+      "contextBytes": 0,
+      "promptTokens": 4338,
+      "completionTokens": 139,
+      "latencyMs": 17182,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/dockerCompose.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12440,
+      "contextBytes": 0,
+      "promptTokens": 4390,
+      "completionTokens": 468,
+      "latencyMs": 36682,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/dockerCompose.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3561,
+      "contextBytes": 0,
+      "promptTokens": 2158,
+      "completionTokens": 128,
+      "latencyMs": 12228,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/generator/BraindumpInput.vue",
+      "line": 136,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `ingestCompose` function does not handle the case where a docker-compose file is dropped along with other non-docker-compose files.",
+      "scenario": "When a user drops both a docker-compose file and other files (e.g., notes), the `ingestCompose` function will incorrectly attempt to create a draft from the docker-compose file, ignoring the other files. This can lead to confusion for the user, as they might expect all dropped files to be processed.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `ingestCompose` function checks if any of the dropped files are docker-compose files using `list.some(isComposeFile)`. If true, it proceeds to handle only the docker-compose file(s), ignoring other types."
+      }
+    },
+    {
+      "file": "server/src/routes/drafts.js",
+      "line": 1,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `POST /drafts/compose` route does not validate that the provided text is a valid docker-compose file.",
+      "scenario": "An attacker could send invalid YAML or malformed docker-compose content, causing the server to return a draft with incorrect or incomplete information. This could lead to errors during the review and apply stages.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The route does not validate the provided text as a valid docker-compose file."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 1,
+      "severity": "medium",
+      "confidence": 0.7,
+      "summary": "The `dockerCompose` producer does not handle circular dependencies between services.",
+      "scenario": "If a docker-compose file contains circular dependencies, the producer will not correctly represent these relationships in the draft. This could lead to confusion during the review and apply stages.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The diff does not show how the `dockerCompose` producer handles circular dependencies."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 275,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Potential incomplete entity creation for external dependencies.",
+      "scenario": "If the host is not a local host and does not start with '127.', an External Dependency entity is created, but it is not added to the entities array or entityByTitle map. This could lead to missing entities in the final draft.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code creates an External Dependency entity but does not add it to the entities array or entityByTitle map."
+      }
+    },
+    {
+      "file": "server/tests/unit/dockerCompose.test.js",
+      "line": 185,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The test does not verify that the 'links' field is correctly parsed and mapped to a 'Calls' group.",
+      "scenario": "If the 'links' field in the docker-compose file is not correctly parsed, the 'Calls' group may not be created as expected, leading to incorrect relationships between services.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the 'links' field is correctly parsed and mapped to a 'Calls' group."
+      }
+    },
+    {
+      "file": "server/tests/unit/dockerCompose.test.js",
+      "line": 195,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the 'merge keys' feature is correctly parsed and mapped to entities.",
+      "scenario": "If the 'merge keys' feature in the docker-compose file is not correctly parsed, the resulting entities may be incorrect or incomplete.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not cover the 'merge keys' feature in the docker-compose file."
+      }
+    },
+    {
+      "file": "server/tests/unit/dockerCompose.test.js",
+      "line": 205,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that 'long-syntax ports' are correctly parsed and mapped to attribute blocks.",
+      "scenario": "If 'long-syntax ports' in the docker-compose file are not correctly parsed, the resulting attribute blocks may be incorrect or incomplete.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not cover the scenario where 'long-syntax ports' are parsed and mapped to attribute blocks."
+      }
+    },
+    {
+      "file": "server/tests/unit/dockerCompose.test.js",
+      "line": 215,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that 'local or interpolated hosts' are correctly parsed and mapped to entities.",
+      "scenario": "If 'local or interpolated hosts' in the docker-compose file are not correctly parsed, the resulting entities may be incorrect or incomplete.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The diff does not show any test cases for 'local or interpolated hosts'."
+      }
+    }
+  ],
+  "summary": "One potential issue found in the code change. · The `dockerCompose` producer has several potential issues that could lead to data loss or confusion during the review and apply stages. · One potential defect found. · One potential security issue found. · One potential security issue found in the code. · One high-severity finding identified. · The tests do not cover all possible scenarios for parsing docker-compose files, including 'links', 'merge keys', 'long-syntax ports', and 'local or interpolated hosts'. This could lead to incorrect parsing of these fields in the future. · One potential defect found in the unit tests for dockerCompose parsing.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 84641,
+    "completionTokens": 2312
+  },
+  "latencyMs": 276561
+}

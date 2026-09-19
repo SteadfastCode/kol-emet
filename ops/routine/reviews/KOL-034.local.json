@@ -1,0 +1,51 @@
+{
+  "item": "KOL-034",
+  "repo": "kol-emet",
+  "mergeSha": "63782a7e47ebd2d472371c721456dab4a510ed44",
+  "completedAtUtc": "2026-09-17T12:51:41.594Z",
+  "completeRunId": "2026-09-17T12:07:35.963Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:23:19.298Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 12818,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": null,
+      "bytes": 12818,
+      "contextBytes": 0,
+      "promptTokens": 4203,
+      "completionTokens": 149,
+      "latencyMs": 19462,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "FEATURES.md",
+      "line": 31,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The new item is tagged with `[needs-human]` instead of `[proposed]` as per the description.",
+      "scenario": "Daniel expects items to be tagged with `[proposed]`, but this item uses `[needs-human]`, which might lead to confusion or incorrect handling in the daily update process.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The new item is explicitly tagged with [needs-human], which differs from the expected [proposed] tag mentioned in the description."
+      }
+    }
+  ],
+  "summary": "One finding identified: The new item is tagged with `[needs-human]` instead of `[proposed]` as per the description.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 8373,
+    "completionTokens": 191
+  },
+  "latencyMs": 33697
+}

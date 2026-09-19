@@ -1,0 +1,40 @@
+{
+  "item": "KOL-039",
+  "repo": "kol-emet",
+  "mergeSha": "8d371cb541a1ed97d12afb5bb8853c965995eeb3",
+  "completedAtUtc": "2026-09-18T11:15:01.396Z",
+  "completeRunId": "2026-09-18T11:10:36.003Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:31:00.200Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 8651,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/src/lib/similarity.js",
+        "server/tests/unit/draftNormalizer.test.js",
+        "server/tests/unit/similarity.test.js"
+      ],
+      "part": null,
+      "bytes": 8651,
+      "contextBytes": 0,
+      "promptTokens": 3039,
+      "completionTokens": 168,
+      "latencyMs": 16740,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "summary": "The change introduces a new test file and modifies an existing one to ensure that titles with leading articles are handled correctly. However, there is a logical error in the normalizeTitle function where the order of operations is incorrect, potentially leading to unexpected behavior.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 6043,
+    "completionTokens": 205
+  },
+  "latencyMs": 26833
+}

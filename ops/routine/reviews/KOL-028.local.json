@@ -1,0 +1,74 @@
+{
+  "item": "KOL-028",
+  "repo": "kol-emet",
+  "mergeSha": "dd0488cf9328482e068895829e6395b393ce3381",
+  "completedAtUtc": "2026-09-17T07:41:00.585Z",
+  "completeRunId": "2026-09-17T07:08:04.751Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:14:00.692Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 35361,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "CLAUDE.md",
+        "docs/architecture.md",
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/models/EntityType.js",
+        "server/src/routes/chat.js"
+      ],
+      "part": null,
+      "bytes": 9937,
+      "contextBytes": 0,
+      "promptTokens": 3322,
+      "completionTokens": 141,
+      "latencyMs": 16315,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/mcp.js",
+        "server/tests/http/chat.test.js"
+      ],
+      "part": null,
+      "bytes": 13521,
+      "contextBytes": 0,
+      "promptTokens": 4270,
+      "completionTokens": 267,
+      "latencyMs": 25783,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 2,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/mcp.test.js"
+      ],
+      "part": null,
+      "bytes": 11903,
+      "contextBytes": 0,
+      "promptTokens": 3729,
+      "completionTokens": 143,
+      "latencyMs": 17745,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "summary": "One potential defect found: missing parameter definition in function signature. · The `create_entity` and `update_entity` tools do not provide error messages when an unregistered category is used. · One finding identified: The test for the number of documented tools is incorrect and should be updated to account for potential changes in the number of tools.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 26795,
+    "completionTokens": 753
+  },
+  "latencyMs": 102872
+}

@@ -1,0 +1,84 @@
+{
+  "item": "KOL-030",
+  "repo": "kol-emet",
+  "mergeSha": "627b0a759793954f3405c25e8374323f3ef017f0",
+  "completedAtUtc": "2026-09-17T12:14:46.998Z",
+  "completeRunId": "2026-09-17T12:07:35.963Z",
+  "reviewRunId": "2026-09-19T07:00:39.935Z",
+  "reviewedAtUtc": "2026-09-19T07:17:04.116Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 28405,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/data-model.md",
+        "kol_emet_spec.md",
+        "server/src/config/templates.js"
+      ],
+      "part": null,
+      "bytes": 11712,
+      "contextBytes": 0,
+      "promptTokens": 3824,
+      "completionTokens": 131,
+      "latencyMs": 17394,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/workspaceSeeder.js",
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": null,
+      "bytes": 9661,
+      "contextBytes": 0,
+      "promptTokens": 3167,
+      "completionTokens": 124,
+      "latencyMs": 15224,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/templates.test.js"
+      ],
+      "part": null,
+      "bytes": 7032,
+      "contextBytes": 0,
+      "promptTokens": 2517,
+      "completionTokens": 149,
+      "latencyMs": 14174,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/unit/templates.test.js",
+      "line": 105,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test for software architecture template does not verify the relationship types' member-role pairs.",
+      "scenario": "The test checks that the software architecture template has four group labels and eight member roles, but it does not verify that each group label has a corresponding member role pair. For example, 'Depends on' should have 'Dependent/Dependency', but this is not explicitly checked.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test checks for the presence of group labels and member roles separately but does not verify that each group label has a corresponding member role pair."
+      }
+    }
+  ],
+  "summary": "One high-severity issue found in the diff. · No real defects found in the provided diff. · One high-severity finding identified in the diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 18931,
+    "completionTokens": 582
+  },
+  "latencyMs": 81833
+}
