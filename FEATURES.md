@@ -32,7 +32,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…**
+- [x] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…**
   Found by the grader of KOL-033 (medium, server/src/lib/producers/dockerCompose.js:325).
   parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller
   can post a 60,000-char compose file declaring thousands of services and get an unbounded draft;

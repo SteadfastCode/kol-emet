@@ -38,42 +38,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-044": {
+    "KOL-045": {
       "order": 3,
-      "title": "A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…",
-      "status": "done",
+      "title": "parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-044",
+      "branch": "routine/item/KOL-045",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-09-21T23:17:40.984Z",
+      "claimedAtUtc": "2026-09-21T23:31:47.665Z",
       "runId": "2026-09-21T23:08:35.970Z",
       "lastFail": null
     },
-    "KOL-045": {
-      "order": 4,
-      "title": "parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-046": {
-      "order": 5,
+      "order": 4,
       "title": "The whole compose file is stored verbatim in source.text and each credential-bearing env line is…",
       "status": "pending",
       "attempts": 0,
@@ -90,7 +73,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 6,
+      "order": 5,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 8,
+      "order": 7,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +130,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 9,
+      "order": 8,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 10,
+      "order": 9,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +164,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 11,
+      "order": 10,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -195,6 +178,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-044": {
+      "order": null,
+      "title": "A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-044",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-21T23:17:40.984Z",
+      "runId": "2026-09-21T23:08:35.970Z",
       "lastFail": null
     },
     "KOL-043": {
