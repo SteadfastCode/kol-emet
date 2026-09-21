@@ -11,6 +11,11 @@
  *   - a lookup finds a stored id in either form, and exactly one passkey;
  *   - the lazy rewrite turns a legacy value into the correct one, once, and
  *     leaves a correct one alone.
+ * KOL-043 adds the fourth: the two queries are different questions. The sign-in
+ * lookup (credentialIdQuery) asks for two stored forms; registration's
+ * duplicate check (credentialConflictQuery) asks for three, because an
+ * authenticator picks its own raw bytes and a new id can be the legacy
+ * encoding of an id already on file.
  * The same functions run over HTTP, against the real library, in
  * tests/http/passkeys.test.js.
  *
@@ -22,7 +27,9 @@
  * matchCredentialId and the legacy tests fail; make migrateCredentialId rewrite
  * unconditionally and the "correct value untouched" test fails on its return
  * value; drop the round-trip check in browserCredentialId and the
- * random-id test misreads correct ids as legacy.
+ * random-id test misreads correct ids as legacy; drop the decoded form from
+ * credentialConflictQuery and the both-directions test fails, leaving the
+ * duplicate check open to KOL-043.
  *
  * Logging: the rewrite logs on PASSKEY_LOG_LEVEL, silenced here unless set.
  */
@@ -33,6 +40,7 @@ import { randomBytes } from 'node:crypto';
 
 import {
   browserCredentialId,
+  credentialConflictQuery,
   credentialDescriptors,
   credentialIdQuery,
   findPasskey,
@@ -117,6 +125,49 @@ describe('findPasskey and migrateCredentialId (the lazy rewrite)', () => {
   test('credentialIdQuery asks for both stored forms', () => {
     const id = newBrowserId();
     assert.deepEqual(credentialIdQuery(id), { 'passkeys.credentialID': { $in: [id, legacyEncoding(id)] } });
+  });
+});
+
+describe('credentialConflictQuery (registration\'s duplicate check, KOL-043)', () => {
+  /** The stored values `query` would match. */
+  const forms = (query) => query['passkeys.credentialID'].$in;
+
+  test('an ordinary new id asks for its own two forms, and nothing else', () => {
+    const id = newBrowserId();
+    assert.deepEqual(forms(credentialConflictQuery(id)), [id, legacyEncoding(id)]);
+  });
+
+  test('an id that is itself a legacy encoding also asks for the id it encodes', () => {
+    // What an authenticator reports when it picks raw credential-id bytes
+    // equal to utf8(victimId): the browser names them legacyEncoding(victimId).
+    const victimId = newBrowserId();
+    const crafted = legacyEncoding(victimId);
+    assert.deepEqual(forms(credentialConflictQuery(crafted)), [crafted, legacyEncoding(crafted), victimId]);
+  });
+
+  test('either id blocks the other, whichever was stored first', () => {
+    // The property the check rests on: if a sign-in could resolve to both rows,
+    // the second registration must be refused — from either direction.
+    const victimId = newBrowserId();
+    const crafted = legacyEncoding(victimId);
+
+    assert.ok(forms(credentialConflictQuery(crafted)).includes(victimId),
+      'a current-form id on file must block the crafted id that decodes to it');
+    assert.ok(forms(credentialConflictQuery(victimId)).includes(crafted),
+      'the crafted id on file must block the current-form id it decodes to');
+
+    // Which is exactly the pair a sign-in for victimId matches, so no stored
+    // value can be ambiguous and unblocked.
+    assert.deepEqual(forms(credentialIdQuery(victimId)), [victimId, crafted]);
+  });
+
+  test('a stranger\'s id is not asked for', () => {
+    const id = newBrowserId();
+    const stranger = newBrowserId();
+    for (const value of [stranger, legacyEncoding(stranger)]) {
+      assert.ok(!forms(credentialConflictQuery(id)).includes(value), value);
+      assert.ok(!forms(credentialConflictQuery(legacyEncoding(id))).includes(value), value);
+    }
   });
 });
 
