@@ -17,7 +17,9 @@
  *   - importing the same file again proposes updates to what the first import
  *     created rather than a second copy;
  *   - a parse error is a 400 naming the line, a workspace without the types
- *     is a 400 naming them, and another tenant cannot read the draft.
+ *     is a 400 naming them, and another tenant cannot read the draft;
+ *   - a file declaring far more services than the item cap still yields one
+ *     bounded, reviewable draft rather than thousands of items.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_COMPOSE_DRAFT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -42,6 +44,8 @@ import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import Entity from '../../src/models/Entity.js';
 import RelationshipGroup from '../../src/models/RelationshipGroup.js';
+import Draft from '../../src/models/Draft.js';
+import { MAX_ITEMS } from '../../src/lib/draftNormalizer.js';
 
 // Environment before src/app.js is imported, for the reasons in tenancy.test.js.
 process.env.NODE_ENV = 'test';
@@ -234,5 +238,27 @@ describe('POST /drafts/compose refusals', () => {
     const res = await request(app).post('/drafts/compose').send({ text: FIXTURE });
     log('normal', `anonymous POST /drafts/compose → ${res.status}`);
     assert.equal(res.status, 401);
+  });
+});
+
+describe('POST /drafts/compose bounds the draft', () => {
+  test('a file declaring hundreds of services yields a draft of at most the item cap', async () => {
+    // The file is well under MAX_COMPOSE_CHARS, so the character limit alone
+    // never stopped this: one request could produce a draft no reviewer could
+    // work through, having scanned every proposal against the whole roster.
+    const text = ['services:', ...Array.from({ length: 300 }, (_, i) =>
+      `  svc-${i + 1}:\n    image: example/svc-${i + 1}`)].join('\n');
+
+    const res = await postCompose(architect, { text, filename: 'huge-compose.yml' });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.status, 'ready');
+    assert.equal(res.body.items.length, MAX_ITEMS);
+    assert.equal(res.body.counts.proposed, MAX_ITEMS);
+    assert.equal(res.body.counts.pending, MAX_ITEMS);
+    assert.equal(res.body.counts.dropped, 1, 'the whole overflow is one drop, reported as one');
+    assert.match(res.body.diagnostics.dropReasons[0], new RegExp(`^item cap of ${MAX_ITEMS} reached — 240 further entities`));
+
+    const stored = await Draft.findById(res.body._id).lean();
+    assert.equal(stored.items.length, MAX_ITEMS, 'the cap is what was written, not just what was returned');
   });
 });

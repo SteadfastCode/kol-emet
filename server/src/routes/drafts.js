@@ -14,7 +14,7 @@ import { broadcast } from '../lib/broadcaster.js';
 import Entity from '../models/Entity.js';
 import { getCategories } from '../config/categories.js';
 import {
-  parseCompose, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
+  parseCompose, pruneKnownBlocks, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
   PRODUCER_VERSION as COMPOSE_PRODUCER_VERSION, MAX_COMPOSE_CHARS,
 } from '../lib/producers/dockerCompose.js';
 
@@ -269,20 +269,21 @@ router.post('/compose', async (req, res) => {
     const started = Date.now();
     const roster = await Entity.find({ workspaceId: req.workspaceId }).select('_id title updatedAt').lean();
 
-    let parsed = parseCompose(source, { existingEntities: roster, lineOffset });
+    const { items, dropReasons, dropped } = parseCompose(source, { existingEntities: roster, lineOffset });
 
     // Updates append blocks, so a re-import must see which attributes its
     // targets already carry. Fetched for the matched entities alone rather than
-    // loading every entity's blocks up front, then parsed again against them.
-    const targetIds = parsed.items.filter(i => i.targetEntityId).map(i => i.targetEntityId);
+    // loading every entity's blocks up front, then pruned off the items already
+    // parsed. This used to re-run parseCompose against the enriched roster,
+    // which doubled the cost of every re-import — the YAML parse and the
+    // near-miss scan over the whole workspace roster included — for a pass that
+    // only ever changes the `blocks` of items already identified as updates.
+    const targetIds = items.filter(i => i.targetEntityId).map(i => i.targetEntityId);
     if (targetIds.length) {
       const withBlocks = await Entity.find({ _id: { $in: targetIds }, workspaceId: req.workspaceId })
         .select('_id blocks').lean();
-      const blocksById = new Map(withBlocks.map(e => [String(e._id), e.blocks]));
-      const enriched = roster.map(e => (blocksById.has(String(e._id)) ? { ...e, blocks: blocksById.get(String(e._id)) } : e));
-      parsed = parseCompose(source, { existingEntities: enriched, lineOffset });
+      pruneKnownBlocks(items, new Map(withBlocks.map(e => [String(e._id), e.blocks])));
     }
-    const { items, dropReasons } = parsed;
 
     // Checked here rather than left to apply, where every entity would fail
     // one at a time on a type the workspace does not have.
@@ -320,7 +321,9 @@ router.post('/compose', async (req, res) => {
         passes: 1,
         generationMs: Date.now() - started,
       },
-      counts: { dropped: dropReasons.length },
+      // `dropped`, not dropReasons.length: past MAX_DROP_REASONS the reasons
+      // are capped so the document stays reviewable, but the count is whole.
+      counts: { dropped },
     });
     draft.recountItems();
     await draft.save();
@@ -329,7 +332,7 @@ router.post('/compose', async (req, res) => {
     log('light',
       `draft ${draft._id} created for workspace ${req.workspaceId} (source: POST /drafts/compose, file ${JSON.stringify(draft.title)}, ` +
       `${source.length} chars): ${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
-      `${items.length - entityItems.length} relationships, ${dropReasons.length} dropped`);
+      `${items.length - entityItems.length} relationships, ${dropped} dropped (${dropReasons.length} reasons listed)`);
     for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
     for (const i of items) {
       log('verbose', `draft ${draft._id} ${i.localKey} ${i.kind} ${i.op} ${JSON.stringify(i.proposed.title ?? i.proposed.label)} (line: ${JSON.stringify(i.input.evidence.quote)})`);
