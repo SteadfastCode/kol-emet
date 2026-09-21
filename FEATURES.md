@@ -32,21 +32,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-043) The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…**
-  Found by the grader of KOL-036 (medium, server/src/routes/auth.js:285). The duplicate check is
-  one-directional across the two stored id forms, so the exact attack it exists to stop is still
-  available: `credentialIdQuery(passkey.credentialID)` matches stored values equal to the new id
-  or to its legacy double-encoding, but not stored values of which the new id is itself the legacy
-  encoding. A crafted authenticator can choose raw credential-id bytes equal to `utf8(victimId)`,
-  which @simplewebauthn reports as `credential.id === legacyEncoding(victimId)`; the victim holds
-  `victimId` in the current form, so `User.exists` finds nothing and the copy is stored. Sign-in
-  for the victim then runs `User.findOne(credentialIdQuery(victimId))`, whose `$in` contains
-  `legacyEncoding(victimId)` and therefore matches both rows — mongod may return the attacker's,
-  `findPasskey` matches it via the legacy branch, the signature check fails, and the victim is
-  locked out: exactly the denial of service KOL-036 claims to close. Including
-  `browserCredentialId(passkey.credentialID)` in the query's `$in` would close it. The test suite
-  only exercises the covered direction (legacy-stored victim blocks a current-form copy), so
-  nothing catches this.
 - [ ] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…**
   Found by the grader of KOL-035 (medium, server/src/routes/auth.js:124). A non-string `email`
   silently skips the per-email counter, so the 10-per-window guessing budget collapses to the
@@ -109,6 +94,21 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-043) The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…** (routine 2026-09-21, db26166)
+  Found by the grader of KOL-036 (medium, server/src/routes/auth.js:285). The duplicate check is
+  one-directional across the two stored id forms, so the exact attack it exists to stop is still
+  available: `credentialIdQuery(passkey.credentialID)` matches stored values equal to the new id
+  or to its legacy double-encoding, but not stored values of which the new id is itself the legacy
+  encoding. A crafted authenticator can choose raw credential-id bytes equal to `utf8(victimId)`,
+  which @simplewebauthn reports as `credential.id === legacyEncoding(victimId)`; the victim holds
+  `victimId` in the current form, so `User.exists` finds nothing and the copy is stored. Sign-in
+  for the victim then runs `User.findOne(credentialIdQuery(victimId))`, whose `$in` contains
+  `legacyEncoding(victimId)` and therefore matches both rows — mongod may return the attacker's,
+  `findPasskey` matches it via the legacy branch, the signature check fails, and the victim is
+  locked out: exactly the denial of service KOL-036 claims to close. Including
+  `browserCredentialId(passkey.credentialID)` in the query's `$in` would close it. The test suite
+  only exercises the covered direction (legacy-stored victim blocks a current-form copy), so
+  nothing catches this.
 - [x] **(KOL-041) Tag suggestions in the entity editor from `GET /tags`** (routine 2026-09-18, 541497c)
   Wishlist "Tag autocomplete on entry editor". The workspace-scoped `GET /tags` (`server/src/routes/tags.js`) exists, but no client
   code calls it. The editor's tags field is a plain comma-separated input (`client/src/components/EntityEditor.vue:28-32`,

@@ -41,7 +41,7 @@
     "KOL-043": {
       "order": 3,
       "title": "The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-043",
