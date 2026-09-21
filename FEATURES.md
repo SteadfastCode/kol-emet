@@ -32,7 +32,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-043) The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…**
+- [x] **(KOL-043) The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…**
   Found by the grader of KOL-036 (medium, server/src/routes/auth.js:285). The duplicate check is
   one-directional across the two stored id forms, so the exact attack it exists to stop is still
   available: `credentialIdQuery(passkey.credentialID)` matches stored values equal to the new id
