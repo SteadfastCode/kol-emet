@@ -236,6 +236,25 @@ describe('createAuthLimiter: the three counters the routes share', () => {
     assert.equal(auth.blocked({ email: '', ip: undefined }, 'test'), null);
   });
 
+  // The other half of KOL-044, stated as the contract the routes must meet:
+  // skipping is not leniency, it is absence. `emailKey()` in src/routes/auth.js
+  // answers '' for anything that is not a string, so handing this an
+  // unvalidated body's email meant the per-email limit did not exist for that
+  // request. The route now refuses such a body outright; this pins why it has
+  // to, since nothing here can tell "no email in this body" (the passkey route,
+  // legitimately) from "an email this code could not read".
+  test("an email key of '' is not a lenient key, it is no key at all", () => {
+    const auth = createAuthLimiter({ perEmail: 1, perIp: 100, windowMs: WINDOW });
+
+    for (let i = 0; i < 50; i += 1) auth.recordFailure({ email: '', ip: '10.0.0.2' }, 'test');
+
+    assert.equal(auth.counters.email.size(), 0, 'nothing was counted on the email key');
+    assert.equal(
+      auth.blocked({ email: '', ip: '10.0.0.2' }, 'test'), null,
+      'fifty guesses that a limit of one should have stopped after the first, held back only by the ip limit',
+    );
+  });
+
   test('reset clears only the kinds it is given', () => {
     const auth = createAuthLimiter({ perEmail: 1, perIp: 1, windowMs: WINDOW });
     auth.recordFailure({ email: 'a@example.test', ip: '10.0.0.1' }, 'test');

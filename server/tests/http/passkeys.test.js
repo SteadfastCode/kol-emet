@@ -211,6 +211,30 @@ describe('passkey registration and sign-in', () => {
     assert.equal(after.counter, 2, 'each sign-in must advance the stored counter');
   });
 
+  // KOL-044. `login/begin` is unauthenticated and answers with whatever the
+  // address it is given has registered, so the body's `email` reaching
+  // `User.findOne({ email })` as the filter meant an operator object was a
+  // query: `{"$ne": null}` matched some account and handed a stranger that
+  // account's credential ids. A value that is not a string names nobody and
+  // gets what an unknown address gets — a real challenge and an empty list,
+  // because refusing here would itself say which addresses exist.
+  test('an email that is not a string is offered nobody\'s credential ids (KOL-044)', async () => {
+    const t = await tenant('begin-operator');
+    const synced = device({ synced: true });
+    await addPasskey(t, synced);
+
+    const res = called('POST /auth/webauthn/login/begin ({ $ne: null })', await request(app)
+      .post('/auth/webauthn/login/begin')
+      .send({ email: { $ne: null } }));
+
+    assert.equal(res.status, 200, 'the challenge is still issued');
+    assert.ok(res.body.challenge, 'and it is a real one');
+    assert.deepEqual(
+      (res.body.allowCredentials ?? []).map(c => c.id), [],
+      "an operator object must not be answered with some account's credential ids",
+    );
+  });
+
   test('a device-bound passkey is recorded as neither synced nor backed up', async () => {
     const t = await tenant('passkey-device-bound');
     await addPasskey(t, device({ synced: false }));

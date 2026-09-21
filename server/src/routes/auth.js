@@ -61,10 +61,36 @@ function limiter(req) {
 /** The form an email is counted under: what the schema stores, so two spellings are one key. */
 const emailKey = (email) => (typeof email === 'string' ? email.trim().toLowerCase() : '');
 
+/**
+ * Whether a request body's `email` names an address at all.
+ *
+ * JSON can put an object where an address belongs, and until KOL-044 both
+ * things downstream of that took it for nothing: `emailKey()` answers `''` for
+ * a non-string, and the limiter's `pairs()` skips a key whose value is `''`
+ * (lib/attemptLimiter.js). So `POST /auth/login` with `{"email": {...}}`
+ * passed the truthiness guard below, was never counted on the email key —
+ * collapsing the 10-failures-per-address budget into the 100-per-source-address
+ * one, and with it ~100 bcrypt hashes of this API's CPU — and still reached
+ * `User.findOne({ email })`, where mongoose reads an operator object such as
+ * `{"$regex": "^victim@example.test$"}` as a query and so lets the caller
+ * choose the account those uncounted guesses are spent on.
+ *
+ * Every route that looks an account up by a body's email asks this first and
+ * refuses a non-string with the 400 a missing address gets — before any
+ * counter, any lookup and any hash, so it costs no more than the empty body it
+ * is answered like. Deliberately not counted: it is the same refusal a missing
+ * field has always got for free, and counting a malformed body against the
+ * source address would let one broken client throttle a whole office.
+ */
+const usableEmail = (email) => typeof email === 'string' && email.trim() !== '';
+
+/** Likewise a password: only a non-empty string is something bcrypt can be handed. */
+const usablePassword = (password) => typeof password === 'string' && password !== '';
+
 // POST /auth/register
 router.post('/register', async (req, res) => {
   const { email, password, template } = req.body ?? {};
-  if (!email || !password) {
+  if (!usableEmail(email) || !usablePassword(password)) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
   // Naming no template gets the default; naming one that doesn't exist is
@@ -74,7 +100,10 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Unknown template' });
   }
 
-  const existing = await User.findOne({ email });
+  // The stored form, not the raw body value: what is checked for a duplicate is
+  // exactly what the schema would write, and the filter is a primitive string
+  // rather than whatever the request sent (KOL-044).
+  const existing = await User.findOne({ email: emailKey(email) });
   if (existing) return res.status(409).json({ error: 'Email already registered' });
 
   const passwordHash = await bcrypt.hash(password, 12);
@@ -115,18 +144,22 @@ router.post('/register', async (req, res) => {
 // POST /auth/login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body ?? {};
-  if (!email || !password) {
+  if (!usableEmail(email) || !usablePassword(password)) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
   // Asked before the lookup as well as before the hash: an unknown address is
   // counted and blocked exactly like a known one, so the 429 says nothing
-  // about who has an account here.
+  // about who has an account here. True only because the guard above has
+  // already refused everything `emailKey()` would answer `''` for — a key the
+  // limiter skips is a guess nobody counts (KOL-044).
   const keys = { email: emailKey(email), ip: req.ip };
   const block = limiter(req).blocked(keys, PASSWORD_LOGIN_SOURCE);
   if (block) return limiter(req).refuse(res, block);
 
-  const user = await User.findOne({ email });
+  // The counted key itself, so the account being guessed at is by construction
+  // the one whose budget is being spent.
+  const user = await User.findOne({ email: keys.email });
   if (!user) {
     limiter(req).recordFailure(keys, PASSWORD_LOGIN_SOURCE);
     return res.status(401).json({ error: 'Invalid email or password' });
@@ -308,8 +341,11 @@ router.post('/webauthn/login/begin', async (req, res) => {
   const { email } = req.body ?? {};
 
   let allowCredentials = [];
-  if (email) {
-    const user = await User.findOne({ email });
+  // A string address or nothing: this lookup is unauthenticated, so an operator
+  // object here would have answered with some arbitrary account's credential
+  // ids rather than none (KOL-044).
+  if (usableEmail(email)) {
+    const user = await User.findOne({ email: emailKey(email) });
     if (user) {
       allowCredentials = credentialDescriptors(user.passkeys);
       logPasskey('verbose', `sign-in challenge for user ${user._id} offers ${allowCredentials.map(c => shortId(c.id)).join(', ') || 'no passkeys'} (source: POST /auth/webauthn/login/begin)`);
