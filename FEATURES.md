@@ -32,7 +32,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…**
+- [x] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…**
   Found by the grader of KOL-033 (medium, server/src/routes/drafts.js:307). The whole compose file
   is stored verbatim in source.text and each credential-bearing env line is stored as an evidence
   quote (the fixture itself yields `DATABASE_URL: postgres://app:app@postgres:5432/app`), with no
