@@ -32,7 +32,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…**
+- [x] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…**
   Found by the grader of KOL-035 (medium, server/src/routes/auth.js:124). A non-string `email`
   silently skips the per-email counter, so the 10-per-window guessing budget collapses to the
   100-per-window IP budget. `emailKey()` (auth.js:61) returns `''` for anything that is not a
