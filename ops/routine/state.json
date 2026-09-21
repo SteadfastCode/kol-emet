@@ -147,7 +147,7 @@
       "lastFail": null
     },
     "KOL-041": {
-      "order": 9,
+      "order": null,
       "title": "Tag suggestions in the entity editor from `GET /tags`",
       "status": "done",
       "attempts": 1,
