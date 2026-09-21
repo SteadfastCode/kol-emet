@@ -32,19 +32,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…**
-  Found by the grader of KOL-035 (medium, server/src/routes/auth.js:124). A non-string `email`
-  silently skips the per-email counter, so the 10-per-window guessing budget collapses to the
-  100-per-window IP budget. `emailKey()` (auth.js:61) returns `''` for anything that is not a
-  string, and `pairs()` in createAuthLimiter (attemptLimiter.js:214) drops keys whose value is
-  `''` — so `POST /auth/login` with `{"email": {...}, "password": "guess"}` passes the `!email`
-  guard (an object is truthy), is never counted or blocked on the email key, and still reaches
-  `User.findOne({ email })` and the bcrypt compare. Because that filter is passed to mongoose
-  uncast/unsanitized, an operator object such as `{"$regex": "^victim@example.test$"}` selects a
-  chosen account, giving ~100 throttle-free guesses per window per source address against that
-  account instead of 10 (and 100 bcrypt hashes of CPU). The route comment's claim that the key is
-  counted 'before the lookup, so an unknown address is counted and blocked exactly like a known
-  one' does not hold for this input; neither the HTTP nor the unit tests cover a non-string email.
 - [ ] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…**
   Found by the grader of KOL-033 (medium, server/src/lib/producers/dockerCompose.js:325).
   parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller
@@ -94,6 +81,19 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…** (routine 2026-09-21, 9d5059c)
+  Found by the grader of KOL-035 (medium, server/src/routes/auth.js:124). A non-string `email`
+  silently skips the per-email counter, so the 10-per-window guessing budget collapses to the
+  100-per-window IP budget. `emailKey()` (auth.js:61) returns `''` for anything that is not a
+  string, and `pairs()` in createAuthLimiter (attemptLimiter.js:214) drops keys whose value is
+  `''` — so `POST /auth/login` with `{"email": {...}, "password": "guess"}` passes the `!email`
+  guard (an object is truthy), is never counted or blocked on the email key, and still reaches
+  `User.findOne({ email })` and the bcrypt compare. Because that filter is passed to mongoose
+  uncast/unsanitized, an operator object such as `{"$regex": "^victim@example.test$"}` selects a
+  chosen account, giving ~100 throttle-free guesses per window per source address against that
+  account instead of 10 (and 100 bcrypt hashes of CPU). The route comment's claim that the key is
+  counted 'before the lookup, so an unknown address is counted and blocked exactly like a known
+  one' does not hold for this input; neither the HTTP nor the unit tests cover a non-string email.
 - [x] **(KOL-043) The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…** (routine 2026-09-21, db26166)
   Found by the grader of KOL-036 (medium, server/src/routes/auth.js:285). The duplicate check is
   one-directional across the two stored id forms, so the exact attack it exists to stop is still

@@ -41,7 +41,7 @@
     "KOL-044": {
       "order": 3,
       "title": "A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-044",
