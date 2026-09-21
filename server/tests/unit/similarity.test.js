@@ -8,7 +8,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { trigrams, similarity, findSimilar, normalizeTitle } from '../../src/lib/similarity.js';
+import { trigrams, similarity, nearestTitle, findSimilar, normalizeTitle } from '../../src/lib/similarity.js';
 
 describe('trigrams', () => {
   test('splits a string into its lowercased 3-character windows', () => {
@@ -55,6 +55,56 @@ describe('similarity', () => {
     // windows to compare, so the function reports a vacuous match rather than 0.
     assert.equal(similarity('ab', 'xy'), 1);
     assert.equal(similarity('', ''), 1);
+  });
+});
+
+describe('nearestTitle', () => {
+  const roster = [
+    { _id: 'a', title: 'The Iron Gate' },
+    { _id: 'b', title: 'Iron Gates' },
+    { _id: 'c', title: 'Silver Bridge' },
+  ];
+
+  test('returns the best-scoring candidate for an already-normalized key', () => {
+    const { match, score } = nearestTitle(roster)(normalizeTitle('iron gate'));
+    assert.equal(match._id, 'a', 'the exact normalized title outscores the plural');
+    assert.equal(score, 1);
+  });
+
+  test('scores exactly as similarity over normalized titles does, candidate for candidate', () => {
+    // The producers' near-miss scan compares against DUPLICATE_THRESHOLD, so a
+    // score that drifted by a hundredth would silently change which imports get
+    // flagged as duplicates. Pinned against the loop this replaced.
+    for (const key of ['iron gate', 'iron gatez', 'silver bridge', 'zzzzzz', 'ab']) {
+      let best = null, bestScore = 0;
+      for (const cand of roster) {
+        const s = similarity(key, normalizeTitle(cand.title));
+        if (s > bestScore) { bestScore = s; best = cand; }
+      }
+      const got = nearestTitle(roster)(key);
+      assert.equal(got.score, bestScore, `${key} scored ${got.score}, the loop scored ${bestScore}`);
+      assert.equal(got.match?._id ?? null, best?._id ?? null, `${key} matched the wrong candidate`);
+    }
+  });
+
+  test('normalizes each candidate once, however many keys are scanned', () => {
+    // The point of the helper: scanning N proposals over M candidates must not
+    // rebuild the candidates' normalized titles and trigrams N times. An
+    // unbounded compose import made that the request's dominant cost.
+    let reads = 0;
+    const counted = roster.map(({ _id, title }) => ({ _id, get title() { reads++; return title; } }));
+    const nearest = nearestTitle(counted);
+    for (const key of ['iron gate', 'silver bridges', 'copper road', 'gatehouse']) nearest(key);
+    assert.equal(reads, counted.length, 'each candidate title was read once, not once per key');
+  });
+
+  test('reports no match against an empty candidate set', () => {
+    assert.deepEqual(nearestTitle([])('iron gate'), { match: null, score: 0 });
+    assert.deepEqual(nearestTitle(undefined)('iron gate'), { match: null, score: 0 });
+  });
+
+  test('never returns a candidate that scored zero', () => {
+    assert.deepEqual(nearestTitle([{ title: 'Silver Bridge' }])('zzzzzz'), { match: null, score: 0 });
   });
 });
 

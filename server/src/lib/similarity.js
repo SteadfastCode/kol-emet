@@ -13,14 +13,47 @@ export function trigrams(str) {
   return set;
 }
 
-export function similarity(a, b) {
-  const ta = trigrams(a);
-  const tb = trigrams(b);
+/** Jaccard overlap of two already-built trigram sets. */
+function jaccard(ta, tb) {
   if (ta.size === 0 && tb.size === 0) return 1;
   if (ta.size === 0 || tb.size === 0) return 0;
-  const intersection = [...ta].filter(t => tb.has(t)).length;
-  const union = new Set([...ta, ...tb]).size;
-  return intersection / union;
+  let intersection = 0;
+  for (const t of ta) if (tb.has(t)) intersection++;
+  // |A ∪ B| = |A| + |B| - |A ∩ B|, so the union set never has to be built.
+  return intersection / (ta.size + tb.size - intersection);
+}
+
+export function similarity(a, b) {
+  return jaccard(trigrams(a), trigrams(b));
+}
+
+/**
+ * A near-duplicate matcher over a FIXED candidate set, for the callers that
+ * scan many proposed titles against the same workspace roster.
+ *
+ * `similarity(key, normalizeTitle(c.title))` in a nested loop rebuilds every
+ * candidate's normalized title and trigram set once per proposal: N proposals
+ * over M candidates cost N×M string normalizations and 2×N×M trigram sets.
+ * This builds the candidates' side once — M — and leaves only the set
+ * intersections in the inner loop. The scores are identical, vacuous
+ * sub-trigram matches included.
+ *
+ * @param {{title: string}[]} candidates
+ * @returns {(key: string) => { match: object|null, score: number }} called with
+ *   an already-normalized key; `match` is null when nothing scored above 0.
+ */
+export function nearestTitle(candidates) {
+  const index = (candidates ?? []).map(candidate => ({ candidate, grams: trigrams(normalizeTitle(candidate.title)) }));
+  return key => {
+    const grams = trigrams(key);
+    let match = null;
+    let score = 0;
+    for (const entry of index) {
+      const s = jaccard(grams, entry.grams);
+      if (s > score) { score = s; match = entry.candidate; }
+    }
+    return { match, score };
+  };
 }
 
 export function findSimilar(name, existing, threshold = 0.4) {

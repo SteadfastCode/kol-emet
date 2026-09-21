@@ -37,9 +37,10 @@ import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 
 import {
-  parseCompose, ComposeParseError, imageName, isDataStoreImage,
-  PRODUCER, PRODUCER_VERSION,
+  parseCompose, pruneKnownBlocks, ComposeParseError, imageName, isDataStoreImage,
+  PRODUCER, PRODUCER_VERSION, MAX_DROP_REASONS,
 } from '../../src/lib/producers/dockerCompose.js';
+import { MAX_ITEMS } from '../../src/lib/draftNormalizer.js';
 import { relationshipPayloadSchema } from '../../src/lib/draftItemSchema.js';
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
@@ -300,5 +301,90 @@ describe('errors', () => {
     assert.equal(relationships(items).length, 0);
     assert.equal(dropReasons.length, 1);
     assert.match(dropReasons[0], /"ghost"/);
+  });
+});
+
+describe('bounds', () => {
+  /** A compose file of `n` services, optionally each depending on the first. */
+  const manyServices = (n, { dependsOnFirst = false } = {}) => [
+    'services:',
+    ...Array.from({ length: n }, (_, i) => [
+      `  svc-${i + 1}:`,
+      `    image: example/svc-${i + 1}`,
+      ...(dependsOnFirst && i > 0 ? ['    depends_on: [svc-1]'] : []),
+    ].join('\n')),
+  ].join('\n');
+
+  test('a file declaring more services than the item cap proposes exactly the cap, and says what it skipped', () => {
+    // Without this an authenticated caller could post 60,000 characters of
+    // compose and get a draft of thousands of items — unreviewable, and every
+    // one of them costing a near-miss scan over the whole workspace roster.
+    const { items, dropReasons, dropped } = parse(manyServices(MAX_ITEMS + 40), {}, `${MAX_ITEMS + 40} services`);
+
+    assert.equal(items.length, MAX_ITEMS);
+    assert.equal(entities(items).length, MAX_ITEMS, 'entities fill the cap before relationships are reached');
+    assert.equal(items.at(-1).localKey, `e${MAX_ITEMS}`);
+    assert.equal(dropped, 1);
+    assert.deepEqual(dropReasons, [`item cap of ${MAX_ITEMS} reached — 40 further entities in the file were not proposed`]);
+  });
+
+  test('relationships are capped too, counted from what the entities already used', () => {
+    const { items, dropReasons } = parse(manyServices(40, { dependsOnFirst: true }), {}, '40 services, 39 edges');
+
+    assert.equal(items.length, MAX_ITEMS);
+    assert.equal(entities(items).length, 40);
+    assert.equal(relationships(items).length, MAX_ITEMS - 40);
+    assert.deepEqual(dropReasons, [
+      `item cap of ${MAX_ITEMS} reached — ${39 - (MAX_ITEMS - 40)} further relationships in the file were not proposed`,
+    ]);
+  });
+
+  test('a file under the cap is untouched by it', () => {
+    const { items, dropReasons, dropped } = parse(manyServices(MAX_ITEMS), {}, `exactly ${MAX_ITEMS} services`);
+    assert.equal(items.length, MAX_ITEMS);
+    assert.deepEqual(dropReasons, []);
+    assert.equal(dropped, 0);
+  });
+
+  test('drop reasons are capped, and the count of what they omit is not', () => {
+    // `x-1`, `x--1`, `x---1` … all normalize to one title, so every one after
+    // the first is dropped as a duplicate without ever reaching the item cap.
+    const n = MAX_DROP_REASONS + 70;
+    const text = ['services:', ...Array.from({ length: n }, (_, i) => `  x${'-'.repeat(i + 1)}1:\n    image: example/x`)].join('\n');
+    const { items, dropReasons, dropped } = parse(text, {}, `${n} services that normalize to one title`);
+
+    assert.equal(entities(items).length, 1, 'they are one title, so one entity');
+    assert.equal(dropped, n - 1, 'every drop is counted');
+    assert.equal(dropReasons.length, MAX_DROP_REASONS + 1, 'the listed reasons are capped, plus the closing summary');
+    assert.match(dropReasons.at(-1), new RegExp(`^…and ${n - 1 - MAX_DROP_REASONS} further drops, not listed$`));
+    assert.match(dropReasons[0], /^duplicate entity/);
+  });
+});
+
+describe('pruneKnownBlocks', () => {
+  const FIRST_BLOCK = { type: 'attribute', order: 0, data: { label: 'Image', value: 'postgres:16-alpine' } };
+
+  test('produces exactly what a second parse with the blocks filled in would have', () => {
+    // The route parses once against a roster it fetched without blocks, then
+    // prunes; it used to parse the whole file a second time against an enriched
+    // roster. This pins the two as interchangeable.
+    const existing = { _id: new mongoose.Types.ObjectId(), title: 'POSTGRES', updatedAt: new Date('2026-09-01T00:00:00Z') };
+
+    const pruned = pruneKnownBlocks(
+      parse(FIXTURE, { existingEntities: [existing] }, 'fixture (parse once, then prune)').items,
+      new Map([[String(existing._id), [FIRST_BLOCK]]]),
+    );
+    const reparsed = parse(FIXTURE, { existingEntities: [{ ...existing, blocks: [FIRST_BLOCK] }] }, 'fixture (second parse)').items;
+
+    assert.deepEqual(pruned, reparsed);
+    assert.deepEqual(entityNamed(pruned, 'postgres').proposed.blocks, [
+      { type: 'attribute', order: 0, data: { label: 'Ports', value: '5432:5432' } },
+    ]);
+  });
+
+  test('leaves creates, relationships and unlisted targets alone', () => {
+    const { items } = parse(FIXTURE, {}, 'fixture (all creates)');
+    const before = JSON.parse(JSON.stringify(items));
+    assert.deepEqual(pruneKnownBlocks(items, new Map([['deadbeef', [FIRST_BLOCK]]])), before);
   });
 });
