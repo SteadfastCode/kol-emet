@@ -315,6 +315,23 @@ describe('POST /auth/register', () => {
     assert.equal(await User.countDocuments({ email }), 1);
   });
 
+  // KOL-044. The body's `email` went into `User.findOne({ email })` as the
+  // filter, and mongoose reads an object there as a query — so `{"$ne": null}`
+  // asked "is there any account at all", answered yes, and turned a signup into
+  // a 409 about somebody else. Falsification: restore `if (!email || !password)`
+  // and this fails on that 409.
+  test('an email that is not a string is 400 and creates nothing', async () => {
+    const before = await User.countDocuments();
+
+    const res = called('POST /auth/register (operator object)', await request(app)
+      .post('/auth/register')
+      .send({ email: { $ne: null }, password: PASSWORD }));
+
+    assert.equal(res.status, 400, 'an address that is not one must be refused like a missing one');
+    assert.equal(res.body.error, 'Email and password are required');
+    assert.equal(await User.countDocuments(), before, 'and no account may be created');
+  });
+
   test('a missing email or password is 400 and creates nothing', async () => {
     const email = uniqueEmail('incomplete');
 
@@ -440,6 +457,58 @@ describe('POST /auth/login', () => {
 
     const noBody = called('POST /auth/login (no body)', await request(app).post('/auth/login'));
     assert.equal(noBody.status, 400, 'a bodyless request must be refused, not crash on destructuring');
+  });
+
+  // KOL-044. Two things downstream of this route read a non-string address as
+  // nothing at all: `emailKey()` answers '' for it, and the limiter skips a key
+  // whose value is '' — so an object where the address belongs passed the old
+  // truthiness guard, was counted on no email key, and still reached
+  // `User.findOne({ email })`, where mongoose reads an operator object as a
+  // query. The caller therefore chose the account, and the only limit left over
+  // it was the ip one, ten times looser. Falsification: restore
+  // `if (!email || !password)` and this fails — `{ $ne: null }` with a password
+  // any test account here uses signs in as whichever account mongod returns
+  // first, and the address was never typed.
+  test('an email that is not a string is the same 400, before any lookup', async () => {
+    const email = uniqueEmail('operator-object');
+    assert.equal((await register(request.agent(app), email)).res.status, 201);
+
+    const missing = await request(app).post('/auth/login').send({ password: PASSWORD });
+
+    for (const value of [{ $ne: null }, { $eq: email }, [email], 42, true]) {
+      const agent = request.agent(app);
+      const res = called(`POST /auth/login (email ${JSON.stringify(value)})`, await agent
+        .post('/auth/login')
+        .send({ email: value, password: PASSWORD }));
+
+      assert.equal(res.status, 400, `${JSON.stringify(value)} names no address and must be refused like a missing one`);
+
+      // Raw bytes, as with the 401 and 429 pairs: a refusal that read
+      // differently for a malformed address than for an absent one would be
+      // one more thing to probe the route with.
+      assert.equal(
+        Buffer.compare(Buffer.from(res.text), Buffer.from(missing.text)), 0,
+        `the refusal differs from the missing-email one: ${JSON.stringify(res.text)} vs ${JSON.stringify(missing.text)}`,
+      );
+      assert.equal(sessionCookie(res), null, 'and it must not open a session');
+      assert.equal((await agent.get('/auth/me')).status, 401, 'nor sign anyone in');
+    }
+  });
+
+  test('a password that is not a string is refused before bcrypt is handed it', async () => {
+    const email = uniqueEmail('operator-password');
+    assert.equal((await register(request.agent(app), email)).res.status, 201);
+
+    // bcrypt.compare rejects on a non-string, and an async rejection in an
+    // Express 4 handler answers nothing at all — the request hangs and the
+    // unhandled rejection ends the process under Node's default.
+    const res = called('POST /auth/login (operator password)', await request(app)
+      .post('/auth/login')
+      .send({ email, password: { $ne: null } }));
+
+    assert.equal(res.status, 400, 'a password that is not a string is not a credential');
+    assert.equal(res.body.error, 'Email and password are required');
+    assert.equal(sessionCookie(res), null);
   });
 
   test('a successful login rotates the session id', async () => {
@@ -741,6 +810,33 @@ describe('failed sign-in throttling', () => {
 
     const padded = called('POST /auth/login (padded, over the limit)', await wrongPassword(throttled, `  ${email}  `));
     assert.equal(padded.status, 429);
+  });
+
+  // KOL-044: the case the counter could not see. This is the one that matters
+  // most here — the tests above all name the address as a string, which is
+  // exactly the input the counter works for.
+  test('an address the counter cannot key on is refused, not quietly uncounted', async () => {
+    const victim = uniqueEmail('throttle-operator');
+    assert.equal((await register(request.agent(throttled), victim)).res.status, 201);
+
+    // Twice the per-email budget, every one of them naming the victim through
+    // a value `emailKey()` answers '' for. Before the guard each was a plain
+    // 401: the victim's row read, a bcrypt compare paid for, and nothing
+    // counted on the email key — leaving only the ip limit, which is 100.
+    for (let i = 1; i <= PER_EMAIL * 2; i += 1) {
+      const res = called(`POST /auth/login (operator object ${i}/${PER_EMAIL * 2})`, await request(throttled)
+        .post('/auth/login')
+        .send({ email: { $eq: victim }, password: WRONG_PASSWORD }));
+      assert.equal(res.status, 400, `attempt ${i} must be refused outright, since no counter can hold it`);
+      assert.notEqual(res.status, 401, 'a 401 here would mean the lookup and the hash happened uncounted');
+    }
+
+    // Refusing them must not be a lockout either: none of that was a failure
+    // against the victim, so their own budget is untouched.
+    const ok = called('POST /auth/login (victim, right password)', await request(throttled)
+      .post('/auth/login')
+      .send({ email: victim, password: PASSWORD }));
+    assert.equal(ok.status, 200, 'the victim was never counted against and still signs in');
   });
 
   test('failed passkey sign-ins are throttled by address, since that body has no email', async () => {
