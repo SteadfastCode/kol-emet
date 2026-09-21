@@ -1,0 +1,49 @@
+{
+  "item": "KOL-036",
+  "repo": "kol-emet",
+  "mergeSha": "2200ec3cdfd55a4e5b2f3c14569791ca24b66a9a",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:51:41.996Z",
+  "independent": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 285,
+      "severity": "medium",
+      "summary": "The duplicate check is one-directional across the two stored id forms, so the exact attack it exists to stop is still available: `credentialIdQuery(passkey.credentialID)` matches stored values equal to the new id or to its legacy double-encoding, but not stored values of which the new id is itself the legacy encoding. A crafted authenticator can choose raw credential-id bytes equal to `utf8(victimId)`, which @simplewebauthn reports as `credential.id === legacyEncoding(victimId)`; the victim holds `victimId` in the current form, so `User.exists` finds nothing and the copy is stored. Sign-in for the victim then runs `User.findOne(credentialIdQuery(victimId))`, whose `$in` contains `legacyEncoding(victimId)` and therefore matches both rows — mongod may return the attacker's, `findPasskey` matches it via the legacy branch, the signature check fails, and the victim is locked out: exactly the denial of service KOL-036 claims to close. Including `browserCredentialId(passkey.credentialID)` in the query's `$in` would close it. The test suite only exercises the covered direction (legacy-stored victim blocks a current-form copy), so nothing catches this."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The check-then-write race is real but is explicitly out of scope for the item and is documented as a known gap in both the route comment and the KOL-036 Decision Log entry, so it is not a defect of this change."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The claim is untrue in this code — `server/src/routes/auth.js:285` performs exactly that `User.exists(credentialIdQuery(...))` check before `user.passkeys.push`, so the finding describes the pre-fix state rather than the merged result."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "Both findings are worthless: one restates a gap the item explicitly excluded and the change documents, the other asserts the absence of the very check the diff adds, and the real one-directional encoding bypass that reopens the same DoS was missed.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.6478425000000001,
+  "numTurns": 8,
+  "durationMs": 63215,
+  "sessionId": "f54d54cc-7f34-4790-bf82-4cd9f10a3463"
+}

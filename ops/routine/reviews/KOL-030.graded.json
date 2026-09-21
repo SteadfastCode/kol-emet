@@ -1,0 +1,44 @@
+{
+  "item": "KOL-030",
+  "repo": "kol-emet",
+  "mergeSha": "627b0a759793954f3405c25e8374323f3ef017f0",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T19:09:32.611Z",
+  "independent": [
+    {
+      "file": "kol_emet_spec.md",
+      "line": 249,
+      "severity": "low",
+      "summary": "The new decision-log entry justifies the deliberately small 12-term vocabulary with \"A workspace adds its own through `/relationship-types`\", but that route cannot add a group label: POST /relationship-types reads only `{ name, sourceCategory, targetCategory }` and PUT only those three, so `scope` always falls to the schema default `'member'`. Software Architecture ships only four group labels (vs worldbuilding's ten) and a workspace has no API path to add a fifth, so the stated escape hatch does not exist for half the vocabulary."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The template encodes relationship types as a flat list with no group→member-role association to assert (the pairing exists only in a source comment), and the test already pins the exact ordered lists of four group labels and eight member roles, so there is no defect here — only a test-completeness preference about something the data model does not represent."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The single local finding is a test-thoroughness preference about an association the data model does not encode, not a defect, and it missed the one (low-severity) inaccuracy I found in the added decision-log text.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 1.275416,
+  "numTurns": 17,
+  "durationMs": 139302,
+  "sessionId": "ae6baeb2-ba5e-4857-a453-577b716848eb"
+}

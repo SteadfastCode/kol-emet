@@ -32,6 +32,51 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-043) The duplicate check is one-directional across the two stored id forms, so the exact attack it exi…**
+  Found by the grader of KOL-036 (medium, server/src/routes/auth.js:285). The duplicate check is
+  one-directional across the two stored id forms, so the exact attack it exists to stop is still
+  available: `credentialIdQuery(passkey.credentialID)` matches stored values equal to the new id
+  or to its legacy double-encoding, but not stored values of which the new id is itself the legacy
+  encoding. A crafted authenticator can choose raw credential-id bytes equal to `utf8(victimId)`,
+  which @simplewebauthn reports as `credential.id === legacyEncoding(victimId)`; the victim holds
+  `victimId` in the current form, so `User.exists` finds nothing and the copy is stored. Sign-in
+  for the victim then runs `User.findOne(credentialIdQuery(victimId))`, whose `$in` contains
+  `legacyEncoding(victimId)` and therefore matches both rows — mongod may return the attacker's,
+  `findPasskey` matches it via the legacy branch, the signature check fails, and the victim is
+  locked out: exactly the denial of service KOL-036 claims to close. Including
+  `browserCredentialId(passkey.credentialID)` in the query's `$in` would close it. The test suite
+  only exercises the covered direction (legacy-stored victim blocks a current-form copy), so
+  nothing catches this.
+- [ ] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…**
+  Found by the grader of KOL-035 (medium, server/src/routes/auth.js:124). A non-string `email`
+  silently skips the per-email counter, so the 10-per-window guessing budget collapses to the
+  100-per-window IP budget. `emailKey()` (auth.js:61) returns `''` for anything that is not a
+  string, and `pairs()` in createAuthLimiter (attemptLimiter.js:214) drops keys whose value is
+  `''` — so `POST /auth/login` with `{"email": {...}, "password": "guess"}` passes the `!email`
+  guard (an object is truthy), is never counted or blocked on the email key, and still reaches
+  `User.findOne({ email })` and the bcrypt compare. Because that filter is passed to mongoose
+  uncast/unsanitized, an operator object such as `{"$regex": "^victim@example.test$"}` selects a
+  chosen account, giving ~100 throttle-free guesses per window per source address against that
+  account instead of 10 (and 100 bcrypt hashes of CPU). The route comment's claim that the key is
+  counted 'before the lookup, so an unknown address is counted and blocked exactly like a known
+  one' does not hold for this input; neither the HTTP nor the unit tests cover a non-string email.
+- [ ] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…**
+  Found by the grader of KOL-033 (medium, server/src/lib/producers/dockerCompose.js:325).
+  parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller
+  can post a 60,000-char compose file declaring thousands of services and get an unbounded draft;
+  worse, the near-miss scan is O(proposed entities x workspace roster) synchronous trigram work
+  (dockerCompose.js:363-374) and drafts.js re-runs the whole parse a second time when any item
+  matched, so one request can block the event loop for seconds and produce a draft no reviewer can
+  work through.
+- [ ] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…**
+  Found by the grader of KOL-033 (medium, server/src/routes/drafts.js:307). The whole compose file
+  is stored verbatim in source.text and each credential-bearing env line is stored as an evidence
+  quote (the fixture itself yields `DATABASE_URL: postgres://app:app@postgres:5432/app`), with no
+  redaction; Draft has no TTL by design, draftExporter explicitly allowlists $.source.text and
+  $.items[].input.evidence.quote as verbatim (unpseudonymized) export paths, and
+  COMPOSE_LOG_LEVEL=verbose prints the quote to server logs. Unlike a braindump the client
+  deliberately skips the textarea, so the user never sees or edits what is uploaded — and compose
+  files routinely carry POSTGRES_PASSWORD and API tokens.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`

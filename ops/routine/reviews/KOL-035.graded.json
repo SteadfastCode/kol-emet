@@ -1,0 +1,56 @@
+{
+  "item": "KOL-035",
+  "repo": "kol-emet",
+  "mergeSha": "9d9f3b2",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:54:50.802Z",
+  "independent": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 124,
+      "severity": "medium",
+      "summary": "A non-string `email` silently skips the per-email counter, so the 10-per-window guessing budget collapses to the 100-per-window IP budget. `emailKey()` (auth.js:61) returns `''` for anything that is not a string, and `pairs()` in createAuthLimiter (attemptLimiter.js:214) drops keys whose value is `''` — so `POST /auth/login` with `{\"email\": {...}, \"password\": \"guess\"}` passes the `!email` guard (an object is truthy), is never counted or blocked on the email key, and still reaches `User.findOne({ email })` and the bcrypt compare. Because that filter is passed to mongoose uncast/unsanitized, an operator object such as `{\"$regex\": \"^victim@example.test$\"}` selects a chosen account, giving ~100 throttle-free guesses per window per source address against that account instead of 10 (and 100 bcrypt hashes of CPU). The route comment's claim that the key is counted 'before the lookup, so an unknown address is counted and blocked exactly like a known one' does not hold for this input; neither the HTTP nor the unit tests cover a non-string email."
+    },
+    {
+      "file": "server/src/lib/attemptLimiter.js",
+      "line": 119,
+      "severity": "low",
+      "summary": "`sweep()` runs at most once per window (`nextSweep = at + windowMs`), so entry count is only bounded *across* windows, not within one — the `ip` map in particular has no per-window cap, since every distinct source address creates an entry on its first failure and nothing limits how many distinct addresses appear inside 15 minutes. The email map is incidentally capped by the per-IP limit; the ip map is not, so a caller sourcing from a large address range (e.g. an IPv6 /64) grows the map without bound until the next sweep, which is the unbounded-memory case the file's own comment says is prevented. No max-size or eviction bound exists."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "Throttling *is* implemented in `DELETE /auth/account` — `limiter(req).blocked({user: String(userId)})` at auth.js:590-595 before the bcrypt compare, `recordFailure` at :614 and `reset` at :623, with an HTTP test at accountDeletion.test.js covering it."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "Falling back to the documented shipped defaults when `AUTH_LIMIT_*` is unset is exactly what the item specifies (fail-closed on a bad value too, via `positiveInt`), and 'may not be appropriate for all environments' names no failure scenario."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "Both local findings are false positives — the first contradicts code plainly visible in the diff it cites, the second restates the intended design as a defect — and it missed the real per-email throttle bypass via a non-string email.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2
+  },
+  "costUsd": 1.368502,
+  "numTurns": 12,
+  "durationMs": 188765,
+  "sessionId": "e36bfb59-4f84-4438-8669-339028177285"
+}

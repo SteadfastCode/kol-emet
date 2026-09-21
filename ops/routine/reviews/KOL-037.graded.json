@@ -1,0 +1,40 @@
+{
+  "item": "KOL-037",
+  "repo": "kol-emet",
+  "mergeSha": "3632951",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:50:38.745Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The verbose lines log only cookie attributes (domain, path, secure, sameSite, httpOnly) — never the session id or cookie value — so nothing sensitive is exposed, and the tiered-logging pattern with a default of `light` matches every other lib in `server/src`."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The test does compare `domain` (it loops over `['path','httponly','samesite','domain','secure']` against the login cookie); the domain comparison is merely vacuous under `NODE_ENV=test` where no domain is set, which the test comment states explicitly and `tests/unit/sessionCookie.test.js` covers non-vacuously via a real Express round-trip with `SESSION_COOKIE_DOMAIN` set."
+    }
+  ],
+  "missed": [],
+  "summary": "Both local findings are false positives — one flags harmless attribute logging as a secret leak, the other claims an absent domain assertion that is in fact present and covered non-vacuously in the unit tests — and the review found nothing about the actual change.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 1.2202515,
+  "numTurns": 20,
+  "durationMs": 141223,
+  "sessionId": "cf35da45-9f3e-46ed-b60f-6bb07c810d25"
+}

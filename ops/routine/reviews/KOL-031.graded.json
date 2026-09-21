@@ -1,0 +1,29 @@
+{
+  "item": "KOL-031",
+  "repo": "kol-emet",
+  "mergeSha": "5bcc3b9934cad8f5c207e05663b4aa95a991453f",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T19:07:13.275Z",
+  "independent": [],
+  "grades": [],
+  "missed": [],
+  "summary": "The local model reported no findings, which matches my own cold review — the template picker, the public listing route, the register-side rejection of unknown keys (own-key `hasTemplate`, checked before any write), and the docs all line up with the item, and the client suite (52 tests) passes locally.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 1.2625785000000003,
+  "numTurns": 20,
+  "durationMs": 163935,
+  "sessionId": "be91a4dc-f0c3-4f9a-845a-52033fe8f024"
+}

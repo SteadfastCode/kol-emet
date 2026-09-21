@@ -1,0 +1,100 @@
+{
+  "item": "KOL-033",
+  "repo": "kol-emet",
+  "mergeSha": "0bc4ff98fc680cd3bf53cc4887c7e98584fa78ab",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T19:04:29.307Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 325,
+      "severity": "medium",
+      "summary": "parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can post a 60,000-char compose file declaring thousands of services and get an unbounded draft; worse, the near-miss scan is O(proposed entities x workspace roster) synchronous trigram work (dockerCompose.js:363-374) and drafts.js re-runs the whole parse a second time when any item matched, so one request can block the event loop for seconds and produce a draft no reviewer can work through."
+    },
+    {
+      "file": "server/src/routes/drafts.js",
+      "line": 307,
+      "severity": "medium",
+      "summary": "The whole compose file is stored verbatim in source.text and each credential-bearing env line is stored as an evidence quote (the fixture itself yields `DATABASE_URL: postgres://app:app@postgres:5432/app`), with no redaction; Draft has no TTL by design, draftExporter explicitly allowlists $.source.text and $.items[].input.evidence.quote as verbatim (unpseudonymized) export paths, and COMPOSE_LOG_LEVEL=verbose prints the quote to server logs. Unlike a braindump the client deliberately skips the textarea, so the user never sees or edits what is uploaded — and compose files routinely carry POSTGRES_PASSWORD and API tokens."
+    },
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 351,
+      "severity": "low",
+      "summary": "Re-importing an unchanged file produces update items whose blocks filter down to [], and applyEntityUpdate still calls target.save() and logUpdate() for each, so applying writes one ChangeLog 'updated' entry with a full entity snapshot per entity and bumps updatedAt while changing nothing — history and the staleness signal record changes that did not happen. The http test's re-import case never applies, so this path is untested."
+    },
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 333,
+      "severity": "low",
+      "summary": "normalizeTitle strips punctuation, so two distinct services or hosts whose titles differ only in punctuation (e.g. services `db-1` and `db1`, or hosts `10.0.0.1` and `1.0.0.01`) collapse to one key: the second entity is silently omitted from the draft (only a diagnostics dropReason), and titleToLocal.set(ent.title, keyToLocal.get(key)) binds its relationship member — which keeps the dropped name — to the surviving entity's localKey, so the applied group asserts a dependency on the wrong host."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "ingestCompose explicitly refuses a multi-file import with the message 'Import a docker-compose file on its own' and sends nothing (BraindumpInput.vue:146-150), and BraindumpInput.test.js covers exactly that case."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "parseCompose throws ComposeParseError on invalid YAML and on a missing top-level `services:` mapping, and the route converts both to a 400 naming the line (drafts.js:340), with tests for each."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "There is no dependency traversal to loop — each depends_on edge becomes an independent relationship group — so a cycle produces no wrong output or failure; the finding names no real failure scenario."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "The external entity is pushed to `externals` and registered in `entityByTitle` (lines 280-281), and `entities.push(...externals)` at line 289 merges it in; the http test confirms `api.stripe.com` reaches the draft and the graph."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "`links` is specified and implemented as a 'Depends on' group, not 'Calls', and the 'other compose shapes' test does assert the link-derived edge (`Dependent:api → Dependency:db`)."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "The same test asserts `db` inherits `bitnami/mongodb:7` through `<<: *base` and is categorised Data Store, explicitly labelled 'image inherited through the merge key'."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "The same test asserts the long-syntax port renders as '27018:27017/tcp' in db's attribute block."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "The same test asserts zero External Dependency entities for the `localhost` and `${UPSTREAM_HOST}` env URLs, which is exactly the claim said to be untested."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "summary": "All eight findings are false positives — four assert missing test coverage that the very test file they cite provides, three misread code that is plainly present, and one describes no failure at all; the review found nothing real and missed the unbounded item/CPU cost, the verbatim storage of compose secrets, and the no-op update writes.",
+  "counts": {
+    "findings": 8,
+    "confirmed": 0,
+    "falsePositive": 8,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 4,
+    "independent": 4
+  },
+  "costUsd": 3.252445,
+  "numTurns": 28,
+  "durationMs": 441909,
+  "sessionId": "6c6a05fe-c41e-4a89-8401-682997db97e3"
+}

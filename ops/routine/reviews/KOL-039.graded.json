@@ -1,0 +1,29 @@
+{
+  "item": "KOL-039",
+  "repo": "kol-emet",
+  "mergeSha": "8d371cb541a1ed97d12afb5bb8853c965995eeb3",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:47:11.451Z",
+  "independent": [],
+  "grades": [],
+  "missed": [],
+  "summary": "The diff is a correct, well-scoped fix (whitespace collapse/trim now precedes the article strip; tests flipped and new normalizer tests added, all 377 server tests pass, and the only other caller — src/lib/producers/dockerCompose.js — uses normalizeTitle the same way and benefits identically), so the local model's zero findings happen to match my own empty result, though it surfaced no evidence of actual verification.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 0.6515774999999999,
+  "numTurns": 10,
+  "durationMs": 84085,
+  "sessionId": "1e43acff-f466-410b-874a-21f0fc3603c8"
+}

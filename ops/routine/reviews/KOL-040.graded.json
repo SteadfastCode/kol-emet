@@ -1,0 +1,38 @@
+{
+  "item": "KOL-040",
+  "repo": "kol-emet",
+  "mergeSha": "66a218696bbf91feef7103d41b2e4313f9766189",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:45:47.333Z",
+  "independent": [
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 293,
+      "severity": "low",
+      "summary": "The same stale-flag path survives outside `setMobileTab`: from the Settings tab on mobile portrait the user can tap the Graph tab button (which only toggles `graphOpen` and never touches `settingsOpen`/`mobileTab`) and open an entry from the graph — `openEntry` (and `openSnapshot`/`openEditor`) sets `mobileTab = 'detail'` but leaves `settingsOpen === true`, so rotating to landscape still re-shows the Settings/Delete-account overlay the user left."
+    }
+  ],
+  "grades": [],
+  "missed": [
+    1
+  ],
+  "summary": "The local model reported nothing, which is defensible here — the fix and its test are correct and the only residual issue is a narrow secondary exit path — but it also contributed no signal.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.500519,
+  "numTurns": 7,
+  "durationMs": 44844,
+  "sessionId": "6671f571-1142-4cb5-b51c-a27862e0e9bd"
+}

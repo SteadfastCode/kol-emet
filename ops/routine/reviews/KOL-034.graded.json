@@ -1,0 +1,35 @@
+{
+  "item": "KOL-034",
+  "repo": "kol-emet",
+  "mergeSha": "63782a7e47ebd2d472371c721456dab4a510ed44",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:57:07.356Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The KOL-034 block in force at the parent commit (`git show 05287a8:FEATURES.md`, line 24) itself says \"Tag every filed item `[needs-human]`\", the diff copies that block verbatim as required, and `[needs-human]` is the tag every pre-existing `## Proposed` item uses (KOL-014/016/017/018/019) — no `[proposed]` tag exists anywhere in the repo or its tooling, so the \"confusion or incorrect handling\" scenario is not real (all seven filed items were subsequently promoted and shipped)."
+    }
+  ],
+  "missed": [],
+  "summary": "The single finding is a spec-wording artifact rather than a defect; the audit itself checks out — every code reference (app.js:72 hardcoded cookie domain, normalizeTitle's pre-trim article strip, the missing passkey-dup check, session-only /auth/me, setMobileTab, absent client tags API, similarity.test.js:71-78 quirk test) is accurate at the parent commit, ids KOL-035..042 are next-free, and the renewal date 2026-09-24 is the run date (2026-09-17) plus seven.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 1.1262329999999998,
+  "numTurns": 23,
+  "durationMs": 136528,
+  "sessionId": "47021368-c634-4d15-a212-9f3c75a6f70a"
+}

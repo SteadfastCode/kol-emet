@@ -1,0 +1,38 @@
+{
+  "item": "KOL-041",
+  "repo": "kol-emet",
+  "mergeSha": "541497c316ff5808ccdfcd12c900593d447d1e6b",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-21T18:18:40.245Z",
+  "gradedAtUtc": "2026-09-21T18:45:02.461Z",
+  "independent": [
+    {
+      "file": "client/src/components/EntityEditor.vue",
+      "line": 301,
+      "severity": "low",
+      "summary": "activeSuggestion is never reset when the tags input loses focus (@blur only clears tagsFocused), so leaving the field with an arrow-key-highlighted option and returning to it reopens the list with that stale option still active and aria-activedescendant pointing at it; a subsequent Enter inserts a tag the user never re-selected."
+    }
+  ],
+  "grades": [],
+  "missed": [
+    1
+  ],
+  "summary": "The local model reported nothing, which is close to right — the change is well-formed (tests and build verified green here, /tags is proxied and workspace-scoped, Vue 3.5.32 supports useId) — but it missed the one real, if minor, state-reset bug on blur.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 1.1628655,
+  "numTurns": 20,
+  "durationMs": 177849,
+  "sessionId": "27a72993-0211-4363-9f83-6d22128b6879"
+}
