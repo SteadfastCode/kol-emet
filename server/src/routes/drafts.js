@@ -17,6 +17,7 @@ import {
   parseCompose, pruneKnownBlocks, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
   PRODUCER_VERSION as COMPOSE_PRODUCER_VERSION, MAX_COMPOSE_CHARS,
 } from '../lib/producers/dockerCompose.js';
+import { redactSecrets } from '../lib/producers/redactSecrets.js';
 
 const router = Router();
 
@@ -245,6 +246,14 @@ router.post('/', async (req, res) => {
  * POST /drafts' allowance check, generation lock or SSE — the draft is
  * complete by the time this responds, and arrives 'ready' for the same review
  * and apply routes a generated one goes through.
+ *
+ * Unlike a braindump, the client does NOT put this text in the textarea first:
+ * the person importing the file never sees or edits what is uploaded. So the
+ * credentials come out here, at the seam, before the text is hashed, parsed,
+ * stored or logged (lib/producers/redactSecrets.js). Everything below this
+ * point — source.text, every evidence quote, every log line — is the redacted
+ * file, because Draft has no TTL and the exporter carries source.text and the
+ * quotes out verbatim.
  */
 router.post('/compose', async (req, res) => {
   const { text, filename } = req.body ?? {};
@@ -258,10 +267,17 @@ router.post('/compose', async (req, res) => {
     return refuse(400, 'filename must be a string');
   }
   // Trimmed exactly as POST /drafts trims, so textHash means the same thing.
-  const source = text.trim();
-  if (source.length > MAX_COMPOSE_CHARS) {
-    return refuse(400, `The file is ${source.length.toLocaleString()} characters; the limit is ${MAX_COMPOSE_CHARS.toLocaleString()}.`);
+  const trimmed = text.trim();
+  // Measured against what the person sent, so the message names the size of
+  // the file they are looking at.
+  if (trimmed.length > MAX_COMPOSE_CHARS) {
+    return refuse(400, `The file is ${trimmed.length.toLocaleString()} characters; the limit is ${MAX_COMPOSE_CHARS.toLocaleString()}.`);
   }
+  // `source` is the redacted text from here down, and it is the only version
+  // of the file this process keeps. Redaction is deterministic and preserves
+  // line count, so the hash still identifies the import and a YAML error still
+  // names the line the person sees in their editor.
+  const { text: source, count: redactedCount } = redactSecrets(trimmed, { label: JSON.stringify(filename ?? 'docker-compose') });
   // Lines trimmed off the top, so a parse error names the line in the user's file.
   const lineOffset = (text.slice(0, text.length - text.trimStart().length).match(/\n/g) ?? []).length;
 
@@ -307,6 +323,7 @@ router.post('/compose', async (req, res) => {
         producerVersion: COMPOSE_PRODUCER_VERSION,
         text: source,
         textHash: hashText(source),
+        redactedCount,
       },
       grounding: {
         categories,
@@ -331,7 +348,8 @@ router.post('/compose', async (req, res) => {
     const entityItems = items.filter(i => i.kind === 'entity');
     log('light',
       `draft ${draft._id} created for workspace ${req.workspaceId} (source: POST /drafts/compose, file ${JSON.stringify(draft.title)}, ` +
-      `${source.length} chars): ${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
+      `${source.length} chars, ${redactedCount} credential${redactedCount === 1 ? '' : 's'} redacted): ` +
+      `${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
       `${items.length - entityItems.length} relationships, ${dropped} dropped (${dropReasons.length} reasons listed)`);
     for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
     for (const i of items) {

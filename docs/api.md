@@ -225,9 +225,29 @@ the finished draft in one response — no SSE, no allowance check, no generation
 is called. The draft then goes through the same decision and apply routes as a generated one.
 
 Recorded on the draft: `source.producer: 'docker-compose'`, `source.producerVersion: 'docker-compose@1'`,
-`source.textHash` computed exactly as `POST /drafts` computes it (SHA-256 of the trimmed text),
-`grounding.categories` from the workspace's entity types, and `route.strategy: 'deterministic'`.
-`filename`, when given, becomes the draft's title.
+`source.textHash` computed exactly as `POST /drafts` computes it (SHA-256 of the trimmed text, **after
+redaction** — see below), `grounding.categories` from the workspace's entity types, and
+`route.strategy: 'deterministic'`. `filename`, when given, becomes the draft's title.
+
+**Credentials are stripped before the file is stored** ([`redactSecrets.js`](../server/src/lib/producers/redactSecrets.js)).
+Unlike a braindump, the client sends a compose file without ever putting it in the textarea, so nobody
+reviews what is uploaded — and Draft has no TTL, the JSONL export carries `source.text` and every
+evidence quote out verbatim, and `verbose` logging prints quotes. So the redaction happens once, at the
+seam: everything below it — `source.text`, `textHash`, every `input.evidence.quote`, every log line —
+is the redacted file, and the raw one is never written anywhere. `source.redactedCount` says how many
+values were removed.
+
+| Rule | Example | Becomes |
+|------|---------|---------|
+| A key that names a credential (`*_PASSWORD`, `*_SECRET`, `*_TOKEN`, `*_API_KEY`, `*_PRIVATE_KEY`, …) | `POSTGRES_PASSWORD: hunter2` | `POSTGRES_PASSWORD: REDACTED` |
+| `KEY=value` inside one scalar — `environment`'s list form, a `command` flag, a connection string | `- MYSQL_ROOT_PASSWORD=hunter2` | `- MYSQL_ROOT_PASSWORD=REDACTED` |
+| A URL's userinfo, wherever it appears | `postgres://app:app@postgres:5432/app` | `postgres://REDACTED@postgres:5432/app` |
+| A value shaped like a credential whatever it is called: JWT, `sk-…`, `ghp_…`, `xox?-…`, `AKIA…`, `AIza…`, a PEM block | `SETTINGS: AKIAIOSFODNN7EXAMPLE` | `SETTINGS: REDACTED` |
+
+A key that names an **address** (`*_URL`, `*_URI`, `*_HOST`, `*_ENDPOINT`, `*_DSN`, …) keeps its value
+and loses only its userinfo: the host is what the producer turns into an edge, and it is not the secret.
+Redaction preserves the file's line count, so a YAML error still names the line the person sees in their
+editor, and evidence offsets are offsets into the text that was stored.
 
 | Compose | Proposed |
 |---------|----------|
@@ -248,7 +268,8 @@ near-miss is flagged `duplicate_candidate`, never merged. YAML `<<` merge keys a
 | 400 | `text` missing or longer than 60,000 characters; invalid YAML (`{ error, line }` — the message names the line in the file as sent); no top-level `services:` mapping; or the workspace lacks an entity type the file needs (`{ error, missingCategories }`) — no draft is created |
 
 `COMPOSE_LOG_LEVEL` = `off | light | normal | verbose` (default `light`) logs each draft created, refusals
-and drop reasons, and each proposed item.
+and drop reasons, and each proposed item. `REDACT_LOG_LEVEL`, same tiers, logs one line per file redacted,
+then the key and rule behind each redaction, then the line it landed on — never a redacted value.
 
 ### Decisions vs. apply
 

@@ -12,6 +12,9 @@
  *   - the draft records its producer (`docker-compose`, `docker-compose@1`), a
  *     textHash computed exactly as POST /drafts computes it, and the
  *     workspace's categories as its grounding;
+ *   - the credentials in the fixture — a password and a DSN's userinfo —
+ *     reach neither `source.text`, nor an evidence quote, nor the database,
+ *     while the host in that DSN still becomes the edge it is there for;
  *   - decide-clean + apply writes the services, data stores and external host
  *     with those categories, and the Depends on / Calls groups between them;
  *   - importing the same file again proposes updates to what the first import
@@ -46,6 +49,7 @@ import Entity from '../../src/models/Entity.js';
 import RelationshipGroup from '../../src/models/RelationshipGroup.js';
 import Draft from '../../src/models/Draft.js';
 import { MAX_ITEMS } from '../../src/lib/draftNormalizer.js';
+import { redactSecrets } from '../../src/lib/producers/redactSecrets.js';
 
 // Environment before src/app.js is imported, for the reasons in tenancy.test.js.
 process.env.NODE_ENV = 'test';
@@ -53,6 +57,7 @@ process.env.SESSION_SECRET = 'test-session-secret';
 delete process.env.BEARER_TOKEN;
 process.env.SEED_LOG_LEVEL ??= 'off';
 process.env.COMPOSE_LOG_LEVEL ??= 'off';
+process.env.REDACT_LOG_LEVEL ??= 'off';
 process.env.APPLY_LOG_LEVEL ??= 'off';
 
 const { createApp } = await import('../../src/app.js');
@@ -65,6 +70,14 @@ function log(level, msg) {
 
 const PASSWORD = 'correct-horse-battery-staple';
 const FIXTURE = readFileSync(fileURLToPath(new URL('../fixtures/docker-compose.yml', import.meta.url)), 'utf8');
+// The two credentials the fixture carries, asserted against by their literal
+// text: a leak is "this string is somewhere it should not be", not "the line
+// looks wrong".
+const SECRETS = ['hunter2-fixture-secret', 'app:app@'];
+// What the server stores: the file with those taken out, which is also what it
+// hashes. Computed here the way the route computes it rather than pasted, so
+// this test fails if redaction stops running, not if it changes.
+const REDACTED_FIXTURE = redactSecrets(FIXTURE.trim()).text;
 
 let app;
 let architect;   // software-architecture workspace
@@ -116,9 +129,10 @@ describe('POST /drafts/compose', () => {
     assert.equal(draft.title, 'docker-compose.yml');
     assert.equal(draft.source.producer, 'docker-compose');
     assert.equal(draft.source.producerVersion, 'docker-compose@1');
-    assert.equal(draft.source.text, FIXTURE.trim());
-    const expectedHash = `sha256:${crypto.createHash('sha256').update(FIXTURE.trim()).digest('hex')}`;
-    assert.equal(draft.source.textHash, expectedHash, 'textHash is computed as POST /drafts computes it');
+    assert.equal(draft.source.text, REDACTED_FIXTURE);
+    assert.notEqual(draft.source.text, FIXTURE.trim(), 'the file as sent is not what is stored');
+    const expectedHash = `sha256:${crypto.createHash('sha256').update(REDACTED_FIXTURE).digest('hex')}`;
+    assert.equal(draft.source.textHash, expectedHash, 'textHash is of the text that was stored');
     assert.deepEqual(draft.grounding.categories, ['Service', 'Data Store', 'API', 'Team', 'External Dependency']);
     assert.equal(draft.route.strategy, 'deterministic');
     assert.equal(draft.route.provider, null, 'no model was involved');
@@ -133,6 +147,31 @@ describe('POST /drafts/compose', () => {
     ]);
     assert.equal(draft.items.filter(i => i.kind === 'relationship').length, 7);
     assert.deepEqual(draft.counts, { ...draft.counts, proposed: 12, pending: 12, dropped: 0 });
+  });
+
+  test('the credentials in the file reach neither the draft nor the database', async () => {
+    // The client posts a docker-compose file without ever showing it in the
+    // textarea, so nobody reviewed what went up. Draft has no TTL and the
+    // exporter carries source.text and every evidence quote out verbatim, so
+    // anything stored here is stored for good.
+    const stored = await Draft.findById(draft._id).lean();
+    const everywhere = JSON.stringify({ response: draft, stored });
+    for (const secret of SECRETS) {
+      assert.ok(!everywhere.includes(secret), `${JSON.stringify(secret)} reached the draft`);
+    }
+    assert.equal(stored.source.redactedCount, 2, 'the password and the DSN userinfo, counted');
+    assert.match(stored.source.text, /postgres:\/\/REDACTED@postgres:5432\/app/, 'the host is not the secret');
+
+    // The evidence quote for the Calls edge is the DSN line — redacted, but
+    // still the line, at offsets that point into the text that was stored.
+    const calls = draft.items.find(i => i.kind === 'relationship' && i.proposed.label === 'Calls');
+    assert.equal(calls.input.evidence.quote, 'DATABASE_URL: postgres://REDACTED@postgres:5432/app');
+    assert.equal(
+      stored.source.text.slice(calls.input.evidence.charStart, calls.input.evidence.charEnd),
+      calls.input.evidence.quote,
+      'the offsets are offsets into the stored text',
+    );
+    log('light', `draft ${draft._id} stored ${stored.source.redactedCount} redactions (source: POST /drafts/compose)`);
   });
 
   test('decide-clean then apply lands the entities with those categories, and the groups between them', async () => {

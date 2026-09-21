@@ -112,6 +112,10 @@ export function exportDraft(draft, { pseudonym, includeRawOutput = false } = {})
       producerVersion: d.source?.producerVersion ?? null,
       text: d.source?.text ?? '',
       textHash: d.source?.textHash ?? null,
+      // Exported so a corpus record says how much of its input was a
+      // credential that was removed before storage, rather than presenting a
+      // REDACTED in the text as something the person wrote.
+      redactedCount: d.source?.redactedCount ?? 0,
     },
 
     // Exactly what the model was shown, so an example is reproducible.
@@ -260,6 +264,12 @@ function exportPayload(kind, payload, ref) {
  * export it would be the tripwire firing on the very data it exists to protect.
  *
  * Everything else — every reference field — is checked.
+ *
+ * These paths carry text OUT unpseudonymised, which is why a producer that
+ * ingests a file the person never reads redacts credentials before the draft
+ * is written (lib/producers/redactSecrets.js) rather than here: this list is
+ * the reason the capture has to be clean in the database, not just on the way
+ * out of it.
  */
 const VERBATIM_PATHS = [
   /^\$\.source\.text$/,
