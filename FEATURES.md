@@ -32,14 +32,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…**
-  Found by the grader of KOL-033 (medium, server/src/lib/producers/dockerCompose.js:325).
-  parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller
-  can post a 60,000-char compose file declaring thousands of services and get an unbounded draft;
-  worse, the near-miss scan is O(proposed entities x workspace roster) synchronous trigram work
-  (dockerCompose.js:363-374) and drafts.js re-runs the whole parse a second time when any item
-  matched, so one request can block the event loop for seconds and produce a draft no reviewer can
-  work through.
 - [ ] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…**
   Found by the grader of KOL-033 (medium, server/src/routes/drafts.js:307). The whole compose file
   is stored verbatim in source.text and each credential-bearing env line is stored as an evidence
@@ -81,6 +73,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…** (routine 2026-09-21, 8c3c994)
+  Found by the grader of KOL-033 (medium, server/src/lib/producers/dockerCompose.js:325).
+  parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller
+  can post a 60,000-char compose file declaring thousands of services and get an unbounded draft;
+  worse, the near-miss scan is O(proposed entities x workspace roster) synchronous trigram work
+  (dockerCompose.js:363-374) and drafts.js re-runs the whole parse a second time when any item
+  matched, so one request can block the event loop for seconds and produce a draft no reviewer can
+  work through.
 - [x] **(KOL-044) A non-string email silently skips the per-email counter, so the 10-per-window guessing budget col…** (routine 2026-09-21, 9d5059c)
   Found by the grader of KOL-035 (medium, server/src/routes/auth.js:124). A non-string `email`
   silently skips the per-email counter, so the 10-per-window guessing budget collapses to the

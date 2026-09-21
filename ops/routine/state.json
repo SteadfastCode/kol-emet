@@ -41,7 +41,7 @@
     "KOL-045": {
       "order": 3,
       "title": "parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-045",
