@@ -27,6 +27,13 @@
  * (64/256)^n for an n-byte id. That is under 2^-32 for the 16 bytes the spec
  * sets as the minimum.
  *
+ * Two forms per credential means two questions, not one. "Which account holds
+ * the credential this browser named?" is credentialIdQuery, and it is exact.
+ * "May this new id be stored at all?" is credentialConflictQuery, and it is
+ * wider: an authenticator picks its own raw bytes, so a new id can be the
+ * legacy encoding of an id someone else already holds. Asking the narrow
+ * question there left the duplicate check one-directional (KOL-043).
+ *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * PASSKEY_LOG_LEVEL = off | light | normal | verbose (default light). Account
  * ids only, never an email. Credential ids are public identifiers, not
@@ -82,7 +89,13 @@ export function findPasskey(passkeys, browserId) {
   return null;
 }
 
-/** A User filter for the account holding `browserId` in either stored form. `browserId` must be a non-empty string. */
+/**
+ * A User filter for the account holding `browserId` in either stored form.
+ * `browserId` must be a non-empty string. This is the sign-in lookup, and it is
+ * exact: those two values are the only stored forms that name the credential
+ * the browser called `browserId`. Asking whether a *new* id may be stored is a
+ * different and wider question — credentialConflictQuery below.
+ */
 export function credentialIdQuery(browserId) {
   return { 'passkeys.credentialID': { $in: [browserId, legacyEncoding(browserId)] } };
 }
@@ -105,6 +118,38 @@ export function browserCredentialId(stored) {
   if (typeof stored !== 'string') return stored;
   const decoded = Buffer.from(stored, 'base64url').toString('utf8');
   return BASE64URL.test(decoded) && legacyEncoding(decoded) === stored ? decoded : stored;
+}
+
+/**
+ * A User filter for every stored id that would collide with `credentialID` at
+ * sign-in: what registration's duplicate check has to ask, and a strict
+ * superset of what credentialIdQuery asks. `credentialID` must be a non-empty
+ * string.
+ *
+ * A sign-in for a browser id `b` matches the stored forms
+ * `{b, legacyEncoding(b)}`, so storing `credentialID` makes some `b` ambiguous
+ * exactly when both it and an already-stored value sit in that pair. Only two
+ * ids `b` put `credentialID` there: `credentialID` itself, and — when
+ * `credentialID` is a legacy encoding — the id it encodes. That is these three
+ * stored forms and no others; a longer chain of encodings cannot reach back.
+ *
+ * credentialIdQuery alone is one-directional and misses the third (KOL-043).
+ * An authenticator chooses its own raw credential-id bytes, and bytes equal to
+ * `utf8(victimId)` are reported by @simplewebauthn as the id
+ * `legacyEncoding(victimId)`. A victim holding `victimId` in the current form
+ * is not found by a query for that id's own two forms, so the copy gets stored
+ * — and the victim's next sign-in, which asks for
+ * `{victimId, legacyEncoding(victimId)}`, then matches both rows and may
+ * resolve to the attacker's. That is the denial of service KOL-036 exists to
+ * stop, reached from the side its query does not cover.
+ */
+export function credentialConflictQuery(credentialID) {
+  const encoded = legacyEncoding(credentialID);
+  // Equal unless `credentialID` is itself a legacy encoding, in which case it
+  // is the id a browser would name that credential by.
+  const decoded = browserCredentialId(credentialID);
+  const forms = decoded === credentialID ? [credentialID, encoded] : [credentialID, encoded, decoded];
+  return { 'passkeys.credentialID': { $in: forms } };
 }
 
 /** `allowCredentials` / `excludeCredentials` entries for `passkeys`, in the form the browser matches on. */

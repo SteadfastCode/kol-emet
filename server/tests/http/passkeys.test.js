@@ -26,6 +26,12 @@
  *     it is: on another account, on the caller's own, and on an account that
  *     stored it in the legacy form. Nothing is saved, and the account holding
  *     it keeps exactly what it had (KOL-036).
+ *   - And refused in the other direction too: an authenticator chooses its own
+ *     raw credential-id bytes, so bytes equal to `utf8(victimId)` are reported
+ *     as the id `legacyEncoding(victimId)` — a different string that names the
+ *     same row at sign-in. The duplicate check asked only about the new id's
+ *     own two forms, so that copy used to be stored and the victim's sign-in
+ *     could then resolve to the attacker's row (KOL-043).
  *   - Account deletion's passkey confirmation recognizes a legacy id too, and
  *     a real assertion deletes the account. This is the success path
  *     accountDeletion.test.js could not reach.
@@ -44,7 +50,9 @@
  * legacy sign-in test fails on the stored id; offer stored ids unconverted in
  * credentialDescriptors and the authenticator refuses the legacy challenges;
  * drop the User.exists() check in register/complete and every duplicate-id test
- * gets a 200 and a second account holding the same credential.
+ * gets a 200 and a second account holding the same credential; narrow it back
+ * to credentialIdQuery and the KOL-043 test gets a 200 and stores the crafted
+ * copy.
  * For Settings: answer with the stored passkeys instead of passkeySummary() and
  * the public-key checks fail; drop the `$nor` condition on the removal and the
  * passwordless test gets a 200; skip the flag update in recordUse and the
@@ -74,7 +82,7 @@ import request from 'supertest';
 import * as db from '../helpers/db.js';
 import { createSoftAuthenticator } from '../helpers/softAuthenticator.js';
 import User from '../../src/models/User.js';
-import { legacyEncoding } from '../../src/lib/passkeyIds.js';
+import { credentialIdQuery, legacyEncoding } from '../../src/lib/passkeyIds.js';
 
 // createApp() reads NODE_ENV when called, and src/routes/auth.js reads the
 // relying party at module load, so all of it is set before src/app.js is
@@ -343,6 +351,34 @@ describe('a credential id already registered is refused (KOL-036)', () => {
     assert.equal((await storedPasskeys(bob.userId)).length, 0, 'a refused registration must store nothing');
     assert.deepEqual((await storedPasskeys(alice.userId)).map(pk => pk.credentialID), [legacyEncoding(hers.id)],
       'the refusal must leave the legacy value alone: only a verified assertion rewrites it');
+  });
+
+  test('a crafted id whose raw bytes spell a registered one is refused too (KOL-043)', async () => {
+    const alice = await tenant('duplicate-reverse');
+    const bob = await tenant('duplicate-reverse-other');
+    const hers = device();
+    await addPasskey(alice, hers);
+
+    // An authenticator picks its own raw credential-id bytes. Bytes equal to
+    // utf8(hers.id) are a credential of its own, with a key of its own, that
+    // @simplewebauthn reports under the id legacyEncoding(hers.id) — the one
+    // string a sign-in for hers.id also matches. Nothing here is stored as
+    // legacy: alice holds the current form throughout.
+    const crafted = device({ id: legacyEncoding(hers.id) });
+    assert.equal(crafted.id, legacyEncoding(hers.id), 'the crafted authenticator must report the double-encoded id');
+    assert.notEqual(crafted.id, hers.id);
+
+    const res = await registerIgnoringExclusions(bob, crafted);
+    assert.equal(res.status, 409, `expected 409, got ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.error, ALREADY);
+    assert.equal((await storedPasskeys(bob.userId)).length, 0, 'a refused registration must store nothing');
+    assert.deepEqual((await storedPasskeys(alice.userId)).map(pk => pk.credentialID), [hers.id],
+      'and must leave the account that holds the credential untouched');
+
+    // The point of the refusal: exactly one account answers that sign-in.
+    assert.equal(await User.countDocuments(credentialIdQuery(hers.id)), 1,
+      'the sign-in lookup must have one account to find, not two');
+    assert.equal((await signIn(hers, alice.email)).res.status, 200, 'so the owner still signs in');
   });
 });
 

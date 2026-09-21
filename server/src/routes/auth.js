@@ -15,6 +15,7 @@ import { deleteAccount } from '../lib/accountDeleter.js';
 import { createAuthLimiter } from '../lib/attemptLimiter.js';
 import { clearSessionCookie } from '../lib/sessionCookie.js';
 import {
+  credentialConflictQuery,
   credentialDescriptors,
   credentialIdQuery,
   findPasskey,
@@ -269,8 +270,14 @@ router.post('/webauthn/register/complete', requireAuth, async (req, res) => {
   // choose from and pick whichever mongod returned first. The signature check
   // still decides who gets in, so that is a denial of service rather than a
   // takeover — but a denial of service against an account that did nothing.
-  // The query matches both stored forms (lib/passkeyIds.js), so a legacy
-  // double-encoded id blocks its correct form too.
+  // The query is credentialConflictQuery, not the sign-in lookup: it asks for
+  // every stored form that would make some browser id ambiguous, which is the
+  // new id, its legacy double-encoding, and — because an authenticator chooses
+  // its own raw bytes — the id it is itself the legacy encoding of. Asking only
+  // the first two was one-directional, and left this check open to the very
+  // attack above, run backwards: raw bytes equal to `utf8(victimId)` are
+  // reported as `legacyEncoding(victimId)`, which no longer matched a victim
+  // holding `victimId` in the current form (KOL-043).
   //
   // One answer whichever account holds it: telling the caller that the id is
   // theirs and not a stranger's would say who else has registered it. A browser
@@ -282,7 +289,7 @@ router.post('/webauthn/register/complete', requireAuth, async (req, res) => {
   // racing can still both pass this check. Closing that needs a unique index on
   // `passkeys.credentialID`, which is a change to the deployed database, so the
   // race stays a known gap (Decision Log, KOL-036).
-  if (await User.exists(credentialIdQuery(passkey.credentialID))) {
+  if (await User.exists(credentialConflictQuery(passkey.credentialID))) {
     logPasskey('light', `user ${user._id}: passkey refused, its credential id is already registered (source: ${REGISTER_SOURCE})`);
     logPasskey('verbose', `user ${user._id}: the refused credential is ${shortId(passkey.credentialID)}`);
     return res.status(409).json({ error: 'This passkey is already registered' });
