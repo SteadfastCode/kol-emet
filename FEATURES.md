@@ -32,15 +32,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…**
-  Found by the grader of KOL-033 (medium, server/src/routes/drafts.js:307). The whole compose file
-  is stored verbatim in source.text and each credential-bearing env line is stored as an evidence
-  quote (the fixture itself yields `DATABASE_URL: postgres://app:app@postgres:5432/app`), with no
-  redaction; Draft has no TTL by design, draftExporter explicitly allowlists $.source.text and
-  $.items[].input.evidence.quote as verbatim (unpseudonymized) export paths, and
-  COMPOSE_LOG_LEVEL=verbose prints the quote to server logs. Unlike a braindump the client
-  deliberately skips the textarea, so the user never sees or edits what is uploaded — and compose
-  files routinely carry POSTGRES_PASSWORD and API tokens.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
@@ -73,6 +64,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…** (routine 2026-09-21, c02515f)
+  Found by the grader of KOL-033 (medium, server/src/routes/drafts.js:307). The whole compose file
+  is stored verbatim in source.text and each credential-bearing env line is stored as an evidence
+  quote (the fixture itself yields `DATABASE_URL: postgres://app:app@postgres:5432/app`), with no
+  redaction; Draft has no TTL by design, draftExporter explicitly allowlists $.source.text and
+  $.items[].input.evidence.quote as verbatim (unpseudonymized) export paths, and
+  COMPOSE_LOG_LEVEL=verbose prints the quote to server logs. Unlike a braindump the client
+  deliberately skips the textarea, so the user never sees or edits what is uploaded — and compose
+  files routinely carry POSTGRES_PASSWORD and API tokens.
 - [x] **(KOL-045) parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller can…** (routine 2026-09-21, 8c3c994)
   Found by the grader of KOL-033 (medium, server/src/lib/producers/dockerCompose.js:325).
   parseCompose has no counterpart to normalizeDraft's MAX_ITEMS cap, so an authenticated caller

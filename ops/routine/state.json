@@ -41,7 +41,7 @@
     "KOL-046": {
       "order": 3,
       "title": "The whole compose file is stored verbatim in source.text and each credential-bearing env line is…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-046",
