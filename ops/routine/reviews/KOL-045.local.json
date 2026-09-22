@@ -1,0 +1,71 @@
+{
+  "item": "KOL-045",
+  "repo": "kol-emet",
+  "mergeSha": "8c3c994291d001a4923cba862d18cbb995b6d5b7",
+  "completedAtUtc": "2026-09-21T23:41:05.477Z",
+  "completeRunId": "2026-09-21T23:08:35.970Z",
+  "reviewRunId": "2026-09-22T07:02:39.843Z",
+  "reviewedAtUtc": "2026-09-22T07:06:46.024Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 22231,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/producers/dockerCompose.js",
+        "server/src/lib/similarity.js",
+        "server/src/routes/drafts.js",
+        "server/tests/http/composeDraft.test.js"
+      ],
+      "part": null,
+      "bytes": 13420,
+      "contextBytes": 0,
+      "promptTokens": 4020,
+      "completionTokens": 219,
+      "latencyMs": 21914,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/dockerCompose.test.js",
+        "server/tests/unit/similarity.test.js"
+      ],
+      "part": null,
+      "bytes": 8811,
+      "contextBytes": 0,
+      "promptTokens": 2956,
+      "completionTokens": 141,
+      "latencyMs": 15037,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 325,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "parseCompose lacks a counterpart to normalizeDraft's MAX_ITEMS cap, allowing an authenticated caller to post a large compose file that can block the event loop and produce an unbounded draft.",
+      "scenario": "An authenticated user posts a 60,000-character compose file declaring thousands of services. The server processes this request synchronously, performing a near-miss scan that is O(proposed entities x workspace roster) and re-parses the entire draft when any item matches an existing entity. This can block the event loop for seconds, resulting in a draft that no reviewer can work through.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "parseCompose lacks a counterpart to normalizeDraft's MAX_ITEMS cap"
+      }
+    }
+  ],
+  "summary": "parseCompose lacks a counterpart to normalizeDraft's MAX_ITEMS cap, allowing an authenticated caller to post a large compose file that can block the event loop and produce an unbounded draft. · parseCompose lacks a counterpart to normalizeDraft's MAX_ITEMS cap, allowing unbounded draft creation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 13949,
+    "completionTokens": 420
+  },
+  "latencyMs": 59550
+}

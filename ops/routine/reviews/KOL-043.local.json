@@ -1,0 +1,69 @@
+{
+  "item": "KOL-043",
+  "repo": "kol-emet",
+  "mergeSha": "db261664391d7f92980297fcb80a092856bc9637",
+  "completedAtUtc": "2026-09-21T23:15:39.239Z",
+  "completeRunId": "2026-09-21T23:08:35.970Z",
+  "reviewRunId": "2026-09-22T07:02:39.843Z",
+  "reviewedAtUtc": "2026-09-22T07:04:47.701Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 21948,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/passkeyIds.js",
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 13548,
+      "contextBytes": 0,
+      "promptTokens": 4129,
+      "completionTokens": 251,
+      "latencyMs": 22577,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/passkeys.test.js",
+        "server/tests/unit/passkeyIds.test.js"
+      ],
+      "part": null,
+      "bytes": 8400,
+      "contextBytes": 0,
+      "promptTokens": 2833,
+      "completionTokens": 236,
+      "latencyMs": 18281,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 285,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The duplicate check is one-directional across the two stored id forms, allowing a crafted authenticator to bypass the intended protection.",
+      "scenario": "An attacker crafts an authenticator with raw credential-id bytes equal to `utf8(victimId)`, which @simplewebauthn reports as `legacyEncoding(victimId)`. The victim holds `victimId` in the current form, so `User.exists` finds nothing and the copy is stored. During sign-in, `User.findOne(credentialIdQuery(victimId))` matches both rows due to the legacy encoding, leading to a denial of service for the victim.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not include `browserCredentialId(passkey.credentialID)` in the query's `$in`, allowing the crafted authenticator to bypass the intended protection."
+      }
+    }
+  ],
+  "summary": "The duplicate check in the registration process is one-directional across the two stored id forms, allowing a crafted authenticator to bypass the intended protection. · The change does not fully address the vulnerability described in KOL-043, as it only checks one direction of the duplicate id forms. This allows an attacker to bypass the intended protection by crafting an authenticator with specific raw credential-id bytes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 14024,
+    "completionTokens": 572
+  },
+  "latencyMs": 63807
+}
