@@ -1,4 +1,6 @@
 # Fixture for tests/unit/dockerCompose.test.js and tests/http/composeDraft.test.js.
+# The credentials here are the point, not an oversight: composeDraft.test.js asserts
+# neither of them reaches the draft (see lib/producers/redactSecrets.js).
 services:
   web:
     build: ./web
@@ -23,6 +25,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: hunter2-fixture-secret
     ports:
       - "5432:5432"
 

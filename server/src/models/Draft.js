@@ -113,8 +113,16 @@ const draftSchema = new mongoose.Schema({
   source: {
     producer:        { type: String, enum: ['braindump', 'docker-compose'], default: 'braindump' },
     producerVersion: { type: String, default: 'braindump@1' },
+    // Already redacted for a producer that ingests a file the person never
+    // reads — see lib/producers/redactSecrets.js. Nothing downstream scrubs
+    // this: a TTL-less corpus that the exporter carries out verbatim has to
+    // be clean on the way IN.
     text:            { type: String, default: '' },
     textHash:        { type: String, default: null },
+    // How many credentials were taken out of `text` before it was stored, so a
+    // draft can say so rather than leaving a REDACTED in the evidence
+    // unexplained. The values themselves are kept nowhere.
+    redactedCount:   { type: Number, default: 0 },
   },
 
   // Exactly what the model was shown, so a training example is reproducible.

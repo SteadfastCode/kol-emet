@@ -273,8 +273,10 @@ accommodate pre-tenancy rows. A new collection has none, so it fails closed from
   source: {
     producer:        'braindump' | 'docker-compose',
     producerVersion: String,      // 'braindump@1' | 'docker-compose@1'
-    text:            String,      // the input, verbatim
-    textHash:        String,      // 'sha256:…'
+    text:            String,      // the input; for a file the user never reads
+                                  //   (docker-compose), credentials already removed
+    textHash:        String,      // 'sha256:…' of `text` as stored
+    redactedCount:   Number,      // credentials taken out before storage
   },
 
   // Exactly what the model was shown, so a training example is reproducible.
