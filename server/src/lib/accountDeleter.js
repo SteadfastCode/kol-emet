@@ -66,6 +66,8 @@ import OpenQuestion from '../models/OpenQuestion.js';
 import Draft from '../models/Draft.js';
 import Conversation from '../models/Conversation.js';
 import ChangeLog from '../models/ChangeLog.js';
+import BridgeMessage from '../models/BridgeMessage.js';
+import BridgePresence from '../models/BridgePresence.js';
 
 /**
  * Every model whose documents carry workspaceId. A new one must be added here,
@@ -80,6 +82,8 @@ export const WORKSPACE_SCOPED_MODELS = [
   Draft,
   Conversation,
   ChangeLog,
+  BridgeMessage,
+  BridgePresence,
 ];
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };

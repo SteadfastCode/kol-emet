@@ -5,6 +5,14 @@ import { setMcpUser } from '../lib/mcpUserStore.js';
 const router = Router();
 
 const MCP_TOKEN = process.env.MCP_BEARER_TOKEN;
+// A client that discovers this origin's authorization server but wants the
+// Steadfast bridge (`/bridge/mcp`, routes/bridge.js) says so with an RFC 8707
+// `resource` parameter; the code remembers it and the token endpoint issues the
+// bridge's token instead. The bridge also has its own path-based issuer under
+// /bridge for clients that follow the 401's resource metadata — either path
+// ends with the right token.
+const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
+const isBridgeResource = (resource) => typeof resource === 'string' && /\/bridge\/mcp\/?$/.test(resource);
 
 // Short-lived auth codes: code -> { codeChallenge, redirectUri, state, expiresAt }
 const authCodes = new Map();
@@ -27,7 +35,7 @@ router.get('/.well-known/oauth-authorization-server', (req, res) => {
 // GET /authorize — show approval page
 router.get('/authorize', (req, res) => {
   console.log('[oauth] GET /authorize query:', req.query);
-  const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state } = req.query;
+  const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state, resource } = req.query;
 
   if (response_type !== 'code') {
     console.log('[oauth] bad response_type:', response_type);
@@ -71,6 +79,7 @@ router.get('/authorize', (req, res) => {
       <input type="hidden" name="redirect_uri" value="${escapeHtml(redirect_uri)}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(code_challenge)}">
       <input type="hidden" name="state" value="${escapeHtml(state ?? '')}">
+      <input type="hidden" name="resource" value="${escapeHtml(resource ?? '')}">
       <button type="submit">Allow</button>
     </form>
   </div></div>
@@ -81,7 +90,7 @@ router.get('/authorize', (req, res) => {
 // POST /authorize — issue code and redirect back
 router.post('/authorize', async (req, res) => {
   console.log('[oauth] POST /authorize body:', req.body);
-  const { redirect_uri, code_challenge, state } = req.body;
+  const { redirect_uri, code_challenge, state, resource } = req.body;
 
   // Associate the MCP connector with the currently logged-in user
   if (req.session?.userId) {
@@ -100,6 +109,7 @@ router.post('/authorize', async (req, res) => {
   authCodes.set(code, {
     codeChallenge: code_challenge,
     redirectUri: redirect_uri,
+    forBridge: isBridgeResource(resource),
     expiresAt: Date.now() + 5 * 60 * 1000,
   });
 
@@ -144,12 +154,17 @@ router.post('/oauth/token', (req, res) => {
   }
 
   authCodes.delete(code);
-  console.log('[oauth] token issued successfully');
+  if (stored.forBridge && !BRIDGE_TOKEN) {
+    console.log('[oauth] code was for the bridge but BRIDGE_TOKEN is not set');
+    return res.status(500).json({ error: 'server_misconfigured' });
+  }
+  console.log(`[oauth] token issued successfully (${stored.forBridge ? 'bridge' : 'mcp'})`);
 
   res.json({
-    access_token: MCP_TOKEN,
+    access_token: stored.forBridge ? BRIDGE_TOKEN : MCP_TOKEN,
     token_type: 'Bearer',
     expires_in: 315360000,
+    ...(stored.forBridge ? { scope: 'bridge' } : {}),
   });
 });
 

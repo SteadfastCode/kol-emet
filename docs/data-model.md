@@ -527,3 +527,44 @@ A single global document. Always upsert with `_id: 'global'` — never create a 
 `mcpUserId` is the account that MCP/AI writes are attributed to. It is set when a user authorizes the
 MCP connector from wiki settings; if it is unset, `requireActor` rejects MCP writes with a
 "re-authorize" error.
+
+## BridgeMessage
+
+Collection `bridgemessages`. One message across the Steadfast bridge (architecture.md). Its own
+collection with **no reference** to Entity, RelationshipGroup, OpenQuestion or ChangeLog: the bridge
+is an unrelated feature that lives in this server; operational chatter must not enter the knowledge
+graph or the fine-tune-ready changelog corpus.
+
+```js
+{
+  _id: ObjectId,
+  workspaceId: ObjectId|null,          // tenancy key; ownerGuard on Workspace
+  to: "box" | "chat",                  // which side reads it
+  session: string|null,                // target (to: box) or origin (to: chat) session name
+  kind: "message" | "command",
+  text: string,
+  command: { name: string|null, args: Mixed|null },   // kind: command only
+  replyTo: ObjectId|null,              // → BridgeMessage, same workspace only
+  status: "pending" | "delivered" | "acked",
+  deliveredAt: Date|null, ackedAt: Date|null,
+  createdAt: Date, updatedAt: Date     // TTL: 30 days on createdAt
+}
+```
+
+Indexes: `{ workspaceId, to, status, createdAt }` (the poll), TTL on `createdAt`.
+
+## BridgePresence
+
+Collection `bridgepresences`. What a host last announced about its Claude Code sessions, one document
+per `{ workspaceId, host }` (unique), replaced whole on each announcement.
+
+```js
+{
+  _id: ObjectId,
+  workspaceId: ObjectId|null,
+  host: string,
+  sessions: [{ name: string, uuid, repo, cwd, status, kind }],
+  announcedAt: Date,
+  createdAt: Date, updatedAt: Date
+}
+```

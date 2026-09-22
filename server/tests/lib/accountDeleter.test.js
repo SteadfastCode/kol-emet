@@ -40,6 +40,8 @@ import OpenQuestion from '../../src/models/OpenQuestion.js';
 import Draft from '../../src/models/Draft.js';
 import Conversation from '../../src/models/Conversation.js';
 import ChangeLog from '../../src/models/ChangeLog.js';
+import BridgeMessage from '../../src/models/BridgeMessage.js';
+import BridgePresence from '../../src/models/BridgePresence.js';
 
 process.env.ACCOUNT_DELETE_LOG_LEVEL ??= 'off';
 
@@ -74,6 +76,8 @@ async function seedTenant(label) {
     actorType: 'user',
     actorLabel: label,
   });
+  await BridgeMessage.create({ workspaceId, to: 'box', session: label, text: `${label} says hi` });
+  await BridgePresence.create({ workspaceId, host: `${label}-box`, sessions: [{ name: `${label}-1` }] });
 
   await UserMemory.create({ userId: user._id, fact: `${label} rides the night train` });
   await Conversation.create({ workspaceId: null, userId: user._id, provider: 'test', model: 'test' });
@@ -316,6 +320,8 @@ describe('workspace-scoped writes that race the deletion', () => {
       actorType: 'user',
       actorLabel: 'late',
     }),
+    BridgeMessage: (workspaceId) => ({ workspaceId, to: 'chat', text: 'late message' }),
+    BridgePresence: (workspaceId) => ({ workspaceId, host: 'late-host', sessions: [] }),
   };
 
   function lateDoc(model, a, b) {

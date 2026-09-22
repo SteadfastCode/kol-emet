@@ -116,6 +116,13 @@ Served as a Streamable-HTTP endpoint at `/mcp` with OAuth (not a stdio process).
 | `list_open_questions` | List open questions (filter by status) |
 | `add_relationship`, `add_member_to_relationship`, `update_group_label`, `remove_relationship`, `update_relationship_label`, `add_subgroup_to_relationship`, `remove_subgroup_from_relationship` | Relationship-group management |
 
+A second endpoint, `/bridge/mcp` (`routes/bridge.js`), is the **Steadfast bridge**: it relays
+messages between a claude.ai chat and Claude Code sessions on the steadfast-ai box. It is an
+unrelated feature that lives here because both ends already reach this server. Own token
+(`BRIDGE_TOKEN`, never `MCP_BEARER_TOKEN` — the box executes what it receives), own collections
+(`BridgeMessage`, `BridgePresence`) with no ties to entities or the changelog. Do not route bridge
+traffic through entity, open-question or changelog code. See docs/architecture.md.
+
 ## Frontend UX Requirements
 
 Match the `world_train_wiki.html` artifact UX: category pills, tag filtering, search bar, expandable entries, open question badges, dark mode preferred.

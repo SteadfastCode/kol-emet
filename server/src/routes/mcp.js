@@ -8,9 +8,7 @@ import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import OpenQuestion from '../models/OpenQuestion.js';
-import User from '../models/User.js';
-import { getMcpUser } from '../lib/mcpUserStore.js';
-import Workspace from '../models/Workspace.js';
+import { mcpWorkspaceId, resolveMcpActor } from '../lib/mcpWorkspace.js';
 import EntityType from '../models/EntityType.js';
 import { getCategories } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
@@ -18,30 +16,7 @@ import { openQuestionsIn, entriesIn, ownEntryIds } from '../lib/scopedPopulate.j
 
 const router = Router();
 
-// ─── Actor resolution ─────────────────────────────────────────────────────────
-
-async function resolveMcpActor() {
-  const userId = await getMcpUser();
-  if (!userId) return null;
-  const user = await User.findById(userId).select('email').lean();
-  if (!user) return null;
-  return { type: 'mcp', userId, label: `${user.email} via AI` };
-}
-
-/**
- * The workspace the MCP connector acts in — that of its associated user.
- *
- * Throws rather than returning null: every tool below scopes its queries on
- * the result, and a silent undefined would widen those queries to the whole
- * collection instead of narrowing them.
- */
-async function mcpWorkspaceId() {
-  const userId = await getMcpUser();
-  if (!userId) throw new Error('MCP connector not authorized — re-authorize in wiki settings');
-  const workspace = await Workspace.findOne({ 'members.userId': userId }).select('_id').lean();
-  if (!workspace) throw new Error('No workspace for the MCP-associated user');
-  return workspace._id;
-}
+// Actor and workspace resolution live in lib/mcpWorkspace.js, shared with /bridge/mcp.
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 

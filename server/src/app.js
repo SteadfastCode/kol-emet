@@ -25,6 +25,7 @@ import authRouter from './routes/auth.js';
 import templatesRouter from './routes/templates.js';
 import mcpRouter from './routes/mcp.js';
 import oauthRouter from './routes/oauth.js';
+import bridgeRouter from './routes/bridge.js';
 import eventsRouter from './routes/events.js';
 import changelogRouter from './routes/changelog.js';
 import relationshipGroupsRouter from './routes/relationshipGroups.js';
@@ -82,6 +83,9 @@ export function createApp({ sessionStore, authLimits } = {}) {
   }));
 
   app.use('/', oauthRouter);
+  // The Steadfast bridge: its own MCP endpoint (/bridge/mcp), token and OAuth
+  // issuer, mounted at root for the /.well-known discovery paths. See routes/bridge.js.
+  app.use('/', bridgeRouter);
   app.use('/auth', authRouter);
   // Unauthenticated: the signup form lists these before an account exists.
   app.use('/templates', templatesRouter);

@@ -85,6 +85,32 @@ MCP tools exposed (defined in [`routes/mcp.js`](../server/src/routes/mcp.js)):
 Tool descriptions instruct AI clients to use gender/role-specific member labels ("brother"/"sister",
 not "sibling") and to model relationships via these tools, not via blocks.
 
+### Steadfast bridge — `/bridge/mcp`
+A second, unrelated MCP endpoint that relays messages between a claude.ai chat and the Claude Code
+sessions on Daniel's steadfast-ai box (defined in [`routes/bridge.js`](../server/src/routes/bridge.js)).
+Neither end can reach the other — the box is tailnet-only, a chat has no filesystem — but both
+already reach this server, so it holds the mailbox. Its own collections (`BridgeMessage`,
+`BridgePresence`) reference nothing in the knowledge graph and write nothing to the changelog.
+
+Its own token, `BRIDGE_TOKEN`, on purpose: the box executes what it receives, so whoever can write a
+bridge message can run code there. `MCP_BEARER_TOKEN` guards wiki content and must never double as
+that credential. Unset → every request answers 503 in every environment (no dev-mode open door).
+Identity is shared: the bridge acts as `Settings.mcpUserId` and scopes to that workspace like `/mcp`.
+
+Claude.ai authorizes it with the same authorization-code + PKCE shape as the wiki connector, issuing
+`BRIDGE_TOKEN`, reachable two ways: a 401 names `/.well-known/oauth-protected-resource/bridge/mcp`,
+which points at the path-based issuer `/bridge` (own RFC 8414 document, `/bridge/authorize`,
+`/bridge/oauth/token`); or the origin's `/authorize` with `resource=…/bridge/mcp` (RFC 8707).
+
+| Tool | Purpose |
+|------|---------|
+| `bridge_send` | Send to `box` (a named session) or `chat`; `kind: command` carries a payload the box executes |
+| `bridge_poll` | One side's pending messages, marked delivered once; `wait_seconds` long-polls |
+| `bridge_ack` | Mark delivered messages handled |
+| `bridge_announce` | Box side: publish the host's live sessions (replaces the previous announcement) |
+| `bridge_status` | Every host's last announcement plus pending counts per side |
+| `bridge_history` | Recent messages both ways, oldest first, optionally for one session |
+
 ## Auth
 Session cookies (bcrypt, 12 rounds) for browsers plus WebAuthn passkeys; bearer token for MCP.
 Registration is open. Details in [api.md](api.md#authentication).

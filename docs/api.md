@@ -38,6 +38,7 @@ Mount points and their guards:
 | `/templates` | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
 | `/mcp` | self | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
 | `/` (oauth) | none | OAuth discovery/authorize/token for the MCP connector |
+| `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
 | `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace |
 | `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
