@@ -1,0 +1,29 @@
+{
+  "item": "KOL-028",
+  "repo": "kol-emet",
+  "mergeSha": "dd0488cf9328482e068895829e6395b393ce3381",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-22T04:07:45.580Z",
+  "gradedAtUtc": "2026-09-22T04:13:17.220Z",
+  "independent": [],
+  "grades": [],
+  "missed": [],
+  "summary": "The local model reported nothing, which matches my own cold review — the change is clean (free-string category params with a registry-backed list_entity_types, per-request chat enum, workspace-scoped queries, and tests that genuinely falsify the old behaviour), so reporting no findings was correct here, though it also demonstrates no detection ability.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 1.8464625000000003,
+  "numTurns": 26,
+  "durationMs": 210088,
+  "sessionId": "1fad19fc-0a3c-49e1-adae-37763cac0713"
+}

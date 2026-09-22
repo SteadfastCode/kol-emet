@@ -1,0 +1,70 @@
+{
+  "item": "KOL-027",
+  "repo": "kol-emet",
+  "mergeSha": "3e6d7ab41988a366ea5c1e34ad44b6f28408fee1",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-22T04:07:45.580Z",
+  "gradedAtUtc": "2026-09-22T04:18:22.014Z",
+  "independent": [
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 204,
+      "severity": "low",
+      "summary": "The rename has no optimistic-concurrency guard: `findOneAndUpdate` filters only on `_id`/`workspaceId`, and `from` comes from the pre-read `type.name`. Two concurrent renames of one type (A→B and A→C) both return 200; whichever cascade runs second finds no documents left on \"A\", so the type ends up named \"C\" while every entity and relationship type reads \"B\" — a name no type holds, leaving those entities unwritable (the validator refuses \"B\") with no error reported to either caller. Filtering the update on `{ name: from }` and 409-ing on a miss would close it."
+    },
+    {
+      "file": "server/src/routes/entityTypes.js",
+      "line": 96,
+      "severity": "low",
+      "summary": "`relabel` rewrites `Entity.category` with `updateMany`, bypassing `changeLogger`, so no `entity:updated` SSE event is broadcast to the workspace's `/events` subscribers: clients connected during a rename keep showing the old category indefinitely, while a client that reloads sees the new one. The sibling ChangeLog gap is disclosed in the Decision Log; the missing broadcast is not mentioned anywhere in the change."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "confirmed",
+      "reason": "Real: nothing pins the update to the old name, so two simultaneous renames of the same type both succeed and the second cascade matches nothing, stranding every entity on a name no type holds — the stated consequence is understated but it is the same defect."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "Untrue in this code — `relabel` is wrapped in try/catch at lines 216-223, which logs and returns a 500 naming the repair, and the partial-write window is explicitly documented in api.md and the Decision Log."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The described mechanism does not exist: `updateMany` rewriting many documents that share the old name is precisely the intended behaviour and cannot 'conflict' with itself, and line 178 is the name-clash block, not an updateMany."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "The new test does verify the cascade — it snapshots the ids on the old name, deep-equals them against the ids on the new name for entities and both relationship-type ends, and asserts `countDocuments` is 0 on the old name."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "The diff adds exactly that check — a describe block asserting a no-types workspace accepts a built-in category and rejects 'Vehicles' with a `category:`-prefixed error, plus a second test using a workspace with its own types."
+    }
+  ],
+  "missed": [
+    2
+  ],
+  "summary": "All five findings target the rename cascade, but four are false positives that contradict code or tests plainly visible in the diff (error handling, cascade assertions, the new registry test), and the one real finding — unguarded concurrent renames — is described only vaguely as a lost update rather than as stranded, unwritable entity categories.",
+  "counts": {
+    "findings": 5,
+    "confirmed": 1,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 2
+  },
+  "costUsd": 2.255963,
+  "numTurns": 20,
+  "durationMs": 304749,
+  "sessionId": "2b424dbb-27e7-432f-91f4-3508decff5cd"
+}

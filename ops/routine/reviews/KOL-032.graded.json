@@ -1,0 +1,29 @@
+{
+  "item": "KOL-032",
+  "repo": "kol-emet",
+  "mergeSha": "05679a63e6d57b580eaad2c9e06737a4b63ebe7b",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-22T04:07:45.580Z",
+  "gradedAtUtc": "2026-09-22T04:24:03.850Z",
+  "independent": [],
+  "grades": [],
+  "missed": [],
+  "summary": "The local model reported nothing, which matches my own cold read: every populate site listed in the item now routes through the scoped helpers (entities.js:58,69,127, changelog.js:52, openQuestions.js:15,26,101, mcp.js:149,163,253,296), the write-side strips/filters hold (stripTenancy drops open_questions/relationships, ownEntryIds filters entry_ids in POST/PUT /open-questions and add_open_question, zod strips unknown keys on the MCP entity tools), no todo tests remain in tenancy.test.js, and the new tests plant foreign ids by direct model write so they genuinely exercise the read side — so its empty report is correct but carries no evidence of actual verification.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 2.4287905000000003,
+  "numTurns": 30,
+  "durationMs": 341799,
+  "sessionId": "b17388c3-af70-4a71-8a8f-92a42f20800e"
+}

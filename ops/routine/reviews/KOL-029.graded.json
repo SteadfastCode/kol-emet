@@ -1,0 +1,44 @@
+{
+  "item": "KOL-029",
+  "repo": "kol-emet",
+  "mergeSha": "def7dab037a2c5c6404d95e5f512014848c1f58b",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-22T04:07:45.580Z",
+  "gradedAtUtc": "2026-09-22T04:09:47.097Z",
+  "independent": [
+    {
+      "file": "client/src/composables/useEntityTypes.js",
+      "line": 46,
+      "severity": "low",
+      "summary": "A workspace with an empty EntityType registry (one predating the registry, not yet backfilled) now gets an empty pill row and an empty category picker, so no entity can be created or filtered from the UI — while the server side still falls back to the built-in CATEGORIES (server/src/config/categories.js getCategories) for MCP/chat, so only the client loses the fallback. Documented in the composable, but it is a real functional regression for such workspaces."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The header pill never had a background: the old code passed `{bg, color}` straight into `:style`, and `bg` is not a CSS property so Vue dropped it — the new `catStyle` preserves exactly that rendering (and the diff says so), so nothing regressed here."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The single finding restates pre-existing, deliberately preserved behaviour as a bug and misses the one real (if documented) gap, the empty-registry client fallback; no genuine defect was identified.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 1.0897809999999999,
+  "numTurns": 17,
+  "durationMs": 118183,
+  "sessionId": "df408e05-855b-4cf1-a15c-4adf2ce8aa3f"
+}
