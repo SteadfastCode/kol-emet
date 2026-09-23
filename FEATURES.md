@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-39) Bridge error handling, logging and reconnect** [needs-human]
+- [ ] **(KOL-047) Bridge error handling, logging and reconnect** [needs-human]
   Filed after the chat side broke: `bridge_poll` returned repeated bare HTTP 400 "missing or invalid
   session ID" while `bridge_send` still worked, then send started failing the same way — the reply
   channel lost valid session context with no retry, no fallback and no visible logging. Three parts.
