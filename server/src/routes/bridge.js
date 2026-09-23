@@ -345,11 +345,13 @@ export function createBridgeServer() {
   // what these cannot hold — the item body, the diff, the review text, a live session.
 
   const ItemInput = z.object({
-    itemId: z.string(), title: z.string(), state: z.enum(ROUTINE_ITEM_STATES),
+    // Titles and blocked details are clipped on the box (routineFacts.js); the caps here are the backstop
+    // that keeps one runaway field from making a whole sync too large to accept.
+    itemId: z.string().max(64), title: z.string().max(500), state: z.enum(ROUTINE_ITEM_STATES),
     needsHuman: z.boolean().optional(), proposed: z.boolean().optional(), notBefore: z.string().nullable().optional(),
     dependsOn: z.array(z.string()).optional(), attempts: z.number().int().optional(),
     claimedAt: z.string().nullable().optional(), completedAt: z.string().nullable().optional(), mergeSha: z.string().nullable().optional(),
-    blockedAt: z.string().nullable().optional(), blockedDetail: z.string().nullable().optional(), acked: z.boolean().optional(), lastRunId: z.string().nullable().optional(),
+    blockedAt: z.string().nullable().optional(), blockedDetail: z.string().max(4000).nullable().optional(), acked: z.boolean().optional(), lastRunId: z.string().nullable().optional(),
     review: z.object({
       localFindings: z.number().int().nullable().optional(), localModel: z.string().nullable().optional(), reviewedAt: z.string().nullable().optional(),
       gradedAt: z.string().nullable().optional(), confirmed: z.number().int().nullable().optional(), falsePositive: z.number().int().nullable().optional(), duplicate: z.number().int().nullable().optional(),
