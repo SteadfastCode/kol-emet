@@ -239,7 +239,7 @@ export function createBridgeServer() {
 
   server.tool(
     'bridge_poll',
-    'Receive pending messages for one side, oldest first, and mark them delivered. wait_seconds long-polls: the call returns as soon as a message arrives or when the wait ends (max 25 s).',
+    'Receive pending messages for one side, oldest first, and mark them delivered. wait_seconds long-polls: the call returns as soon as a message arrives or when the wait ends (max 25 s). While the box compiles an answer it sends progress lines starting with ⏳ — relay those as heartbeats ("still working: reading the ledger…"), never as the answer, and poll again with wait_seconds until a reply without the marker arrives.',
     {
       for: SIDE.describe('Whose inbox: "box" or "chat"'),
       session: z.string().optional().describe('Only messages for this session name'),
