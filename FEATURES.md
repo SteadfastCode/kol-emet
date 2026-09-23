@@ -47,7 +47,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-048) SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…**
+- [x] **(KOL-048) SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…**
   Found by the grader of KOL-046 (medium, server/src/lib/producers/redactSecrets.js:73).
   SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word,
   so a key that glues the word onto a preceding letter run is not recognised by looksSecret —

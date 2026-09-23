@@ -58,18 +58,18 @@
     "KOL-048": {
       "order": 4,
       "title": "SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-048",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-23T08:37:39.805Z",
+      "runId": "2026-09-23T08:37:26.125Z",
       "lastFail": null
     },
     "KOL-013": {
