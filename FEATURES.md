@@ -8,6 +8,21 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
+- [ ] **(KOL-39) Bridge error handling, logging and reconnect** [needs-human]
+  Filed after the chat side broke: `bridge_poll` returned repeated bare HTTP 400 "missing or invalid
+  session ID" while `bridge_send` still worked, then send started failing the same way — the reply
+  channel lost valid session context with no retry, no fallback and no visible logging. Three parts.
+  (1) Structured server-side logging of every failed bridge request in `server/src/routes/bridge.js`
+  and `mcp.js`: one JSON record with tool name, caller, status, and why the session id was rejected —
+  never issued, expired, unknown to this process, stateless-server mismatch. (2) Graceful error
+  responses instead of bare 400s: a JSON-RPC error body with a machine-readable code and a sentence
+  the client can show, so the chat side can tell re-handshake-and-retry from your-token-is-wrong.
+  (3) Retry/reconnect on the channel in `orchestrator/lib/bridge.js`, and log each reconnect to
+  `bridge.jsonl` so a silent channel is visible afterwards. Note: the box-side client already got
+  part of (3) in steadfast-ai commit 4beeedb, and kol-emet e232b8d made `/bridge/mcp` stateless and
+  `/mcp` answer unknown sessions with 404 + JSON-RPC -32001; the remaining work is the structured
+  logging and the error-body shape across both endpoints.
+
 - [ ] **(KOL-012) GitHub Actions CI running both test suites and the client build** (needs KOL-003, KOL-010) [needs-human]
   Create `.github/workflows/ci.yml`: on push + pull_request, ubuntu-latest, Node 22 via `actions/setup-node` with yarn caching; job
   `server` = `yarn install --frozen-lockfile && yarn test` in `server/`; job `client` = the same plus `yarn build` in `client/`.
