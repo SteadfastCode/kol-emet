@@ -1,0 +1,44 @@
+{
+  "item": "KOL-045",
+  "repo": "kol-emet",
+  "mergeSha": "8c3c994291d001a4923cba862d18cbb995b6d5b7",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-23T07:11:13.296Z",
+  "gradedAtUtc": "2026-09-23T07:20:52.391Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/dockerCompose.js",
+      "line": 386,
+      "severity": "low",
+      "summary": "The item-cap truncation calls drop() once for the entire overflow, so counts.dropped is 1 regardless of how many entities/relationships were skipped; DraftReview.vue:49 then shows \"1 item wasn't usable and was left out\" for a 300-service file where 240 entities were dropped (the composeDraft test pins this as intended), which contradicts the change's own stated rule that the reason list may be capped but the count stays whole."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It restates the pre-change problem: in the merged code parseCompose imports MAX_ITEMS from draftNormalizer.js and enforces it in both the entity loop (dockerCompose.js:385) and the relationship loop (:454), the near-miss scan is now a once-built index via nearestTitle (:232, similarity.js:45), and drafts.js:301 replaced the second parse with pruneKnownBlocks — so the described failure cannot occur here."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The single finding is the item's own problem statement replayed against the commit that fixes it, with no evidence the reviewer read the merged file, so the review contributed nothing.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 1.3086659999999999,
+  "numTurns": 16,
+  "durationMs": 179805,
+  "sessionId": "b9c723a9-d417-48c8-aff2-408982b13bc2"
+}

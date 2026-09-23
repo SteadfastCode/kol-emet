@@ -1,0 +1,56 @@
+{
+  "item": "KOL-046",
+  "repo": "kol-emet",
+  "mergeSha": "c02515fcd003283f62c48663df57b1e9aa259273",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-23T07:11:13.296Z",
+  "gradedAtUtc": "2026-09-23T07:17:52.555Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 73,
+      "severity": "medium",
+      "summary": "SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so a key that glues the word onto a preceding letter run is not recognised by looksSecret — notably PGPASSWORD, the standard libpq variable. In map form (`PGPASSWORD: hunter2`, the shape of the fixture's own POSTGRES_PASSWORD) no rule fires — the key rule misses, INLINE_ASSIGN_RE needs `=`, URL_USERINFO_RE needs `://…@`, and no SECRET_SHAPE matches a plain password — so the value is stored verbatim in source.text, in the evidence quote, and in the TTL-less verbatim export. The same variable in list form (`- PGPASSWORD=hunter2`) IS redacted, because INLINE_ASSIGN_RE's prefix `[A-Za-z0-9_.-]*?` has no left boundary, so whether a credential leaks depends only on which compose syntax the file used."
+    },
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 87,
+      "severity": "low",
+      "summary": "INLINE_ASSIGN_RE's value group `[^\\s;&\"']+` stops at the first space or quote, and a sequence item has no key-rule backstop (the Pair visitor skips it; the Scalar visitor only runs inlineSpans), so a list-form credential containing a space is only partially redacted: `- POSTGRES_PASSWORD=my secret pw` becomes `- POSTGRES_PASSWORD=REDACTED secret pw`, and `- POSTGRES_PASSWORD=\"my secret\"` (plain scalar starting with the key, quotes literal) matches nothing at all and is kept whole. The map form of the same variable is redacted in full, so the tail leak is syntax-dependent."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The one concrete example given — `DATABASE_URL: postgres://app:app@postgres:5432/app` — is precisely the case URL_USERINFO_RE handles and that composeDraft.test.js and redactSecrets.test.js both pin (`postgres://REDACTED@postgres:5432/app`), so the stated failure scenario is untrue in this code; what remains is an unfalsifiable 'regexes may miss formats', and the cited path/line (redactSecrets.js:307 = applySpans) is not where any pattern lives."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The test file's `assertGone()` helper does exactly what the finding says is missing — asserts each literal secret string is absent from `out.text` — and it is applied in every leak case (secret keys, DSN, anchors, PEM, shapes, invalid YAML), plus composeDraft.test.js JSON-stringifies the whole stored draft and scans it for the fixture secrets."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "Both local findings are restatements of the generic worry 'a regex might miss something' with wrong line anchors and examples the code and tests demonstrably handle, and neither identifies an actual gap (the missing left word-boundary that lets `PGPASSWORD:` through, or the space-truncated inline value).",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2
+  },
+  "costUsd": 1.683247,
+  "numTurns": 15,
+  "durationMs": 259582,
+  "sessionId": "d6942b5a-03e9-4ded-b1ea-9f923d99962c"
+}

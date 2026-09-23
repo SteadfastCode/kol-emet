@@ -1,0 +1,35 @@
+{
+  "item": "KOL-044",
+  "repo": "kol-emet",
+  "mergeSha": "9d5059c8add6d4d009de0806f6c0df7ba6361fa7",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-23T07:11:13.296Z",
+  "gradedAtUtc": "2026-09-23T07:23:12.189Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "This restates the pre-fix bug that the merged diff closes: `POST /auth/login` (auth.js:147) now refuses any non-string email with a 400 via `usableEmail()` before `emailKey()`, the limiter or `User.findOne`, so no uncounted lookup or bcrypt compare is reachable — and auth.js:124 in the merged tree is the register route's workspace-failure cleanup, unrelated to the claim."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model produced no finding about the change under review — it merely re-described the vulnerability the diff fixes, pointing at a line number that no longer has anything to do with it.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0
+  },
+  "costUsd": 1.3216445,
+  "numTurns": 17,
+  "durationMs": 139768,
+  "sessionId": "8939dcdd-0420-4947-8966-ee7186662914"
+}

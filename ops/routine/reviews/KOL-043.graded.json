@@ -1,0 +1,44 @@
+{
+  "item": "KOL-043",
+  "repo": "kol-emet",
+  "mergeSha": "db261664391d7f92980297fcb80a092856bc9637",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-23T07:11:13.296Z",
+  "gradedAtUtc": "2026-09-23T07:24:18.974Z",
+  "independent": [
+    {
+      "file": "kol_emet_spec.md",
+      "line": 298,
+      "severity": "low",
+      "summary": "The KOL-043 Known-gap claims \"the crafted ids described here are equally visible to a unique index, so the eventual index closes both\", but a unique index on `passkeys.credentialID` compares exact stored strings: the crafted row stores `legacyEncoding(victimId)` while the victim holds `victimId`, two distinct strings, so the planned index would close the identical-id race and silently leave the KOL-043 race open — a future implementer following this note would ship an incomplete fix (closing it needs a normalized/derived index key, not a plain unique index)."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "That is the pre-fix state described by the item itself; the merged line 325 calls `User.exists(credentialConflictQuery(passkey.credentialID))`, whose `$in` includes `browserCredentialId(credentialID)` — the decoded victim id — so the crafted registration is refused (verified by the new test at passkeys.test.js:380 and the unit tests)."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model simply restated the item's own problem statement as a live defect without checking that the merged diff already fixes it, and found nothing real.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1
+  },
+  "costUsd": 0.6796770000000001,
+  "numTurns": 6,
+  "durationMs": 66755,
+  "sessionId": "4c6ef2cc-9e62-4295-a90f-d6aab9f59a59"
+}
