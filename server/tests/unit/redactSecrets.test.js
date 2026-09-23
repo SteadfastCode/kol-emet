@@ -27,6 +27,10 @@
  *   - the line-scanner fallback removed   -> the invalid-YAML test fails
  *   - INLINE_ASSIGN_RE's suffix group made greedy -> the not-a-credential test
  *                                            fails on TOKENIZER
+ *   - SECRET_WORD_GLUED given a left boundary -> the glued-key test fails
+ *                                            (PGPASSWORD leaks in map form)
+ *   - SECRET_WORD_BOUNDED's left boundary cut -> the looksSecret table fails
+ *                                            (CACHE_BYPASS reads as a secret)
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_REDACT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -99,6 +103,36 @@ describe('redactSecrets — credentials do not survive', () => {
     assert.equal(env.db.environment.JWT_SECRET, REDACTED);
     assert.equal(env.db.image, 'postgres:16', 'the image is not a credential');
     assert.deepEqual(env.worker.environment, [`MYSQL_ROOT_PASSWORD=${REDACTED}`, `GITHUB_TOKEN=${REDACTED}`]);
+  });
+
+  test('a credential word glued onto the key is still a credential, in map and list form', () => {
+    // PGPASSWORD is libpq's own variable, so it is what a postgres service is
+    // most likely to be handed — and `PG` runs straight into `PASSWORD` with no
+    // separator. The list form was always redacted (INLINE_ASSIGN_RE matches
+    // left-open); the map form was not, which made the leak a question of which
+    // compose syntax the file happened to use. Both forms here, same file.
+    const text = [
+      'services:',
+      '  db:',
+      '    image: postgres:16',
+      '    environment:',
+      '      PGPASSWORD: hunter2',
+      '      MYAPPTOKEN: abcdef0123456789',
+      '  worker:',
+      '    environment:',
+      '      - PGPASSWORD=hunter2',
+    ].join('\n');
+
+    const out = redact(text, 'glued keys');
+    assertGone(out, ['hunter2', 'abcdef0123456789'], 'glued keys');
+    assert.equal(out.count, 3);
+    assert.ok(parses(out.text), 'the redacted file is still YAML');
+
+    const services = parseDocument(out.text).toJS().services;
+    assert.equal(services.db.environment.PGPASSWORD, REDACTED, 'the map form is redacted too');
+    assert.equal(services.db.environment.MYAPPTOKEN, REDACTED);
+    assert.deepEqual(services.worker.environment, [`PGPASSWORD=${REDACTED}`]);
+    assert.equal(services.db.image, 'postgres:16', 'the image is not a credential');
   });
 
   test("a URL's userinfo goes and its host stays, so the producer still draws the edge", () => {
@@ -237,10 +271,19 @@ describe('redactSecrets — everything else is left alone', () => {
   });
 
   test('looksSecret separates an address key from a credential key', () => {
-    for (const key of ['POSTGRES_PASSWORD', 'jwt_secret', 'AWS_SECRET_ACCESS_KEY', 'api-key', 'AUTH', 'SSH_PRIVATE_KEY', 'DB_PASS']) {
+    // The glued cases (PGPASSWORD, MYAPPTOKEN, SSLCERTIFICATE) are the words
+    // that cannot be made innocent from the left; the innocents below are the
+    // reason the short words (pass, salt, cert, bearer) kept their boundary.
+    for (const key of [
+      'POSTGRES_PASSWORD', 'jwt_secret', 'AWS_SECRET_ACCESS_KEY', 'api-key', 'AUTH', 'SSH_PRIVATE_KEY', 'DB_PASS',
+      'PGPASSWORD', 'MYAPPTOKEN', 'SSLCERTIFICATE', 'appcredentials', 'HTTP_AUTHORIZATION', 'MYAPIKEY',
+    ]) {
       assert.ok(looksSecret(key), `${key} should be treated as a credential`);
     }
-    for (const key of ['DATABASE_URL', 'SENTRY_DSN', 'REDIS_HOST', 'AUTH_ENDPOINT', 'PARTITION_KEY', 'AUTHORS', 'TOKENIZER', 'image', '']) {
+    for (const key of [
+      'DATABASE_URL', 'SENTRY_DSN', 'REDIS_HOST', 'AUTH_ENDPOINT', 'PARTITION_KEY', 'AUTHORS', 'TOKENIZER', 'image', '',
+      'CACHE_BYPASS', 'BASALT', 'CONCERT', 'ENCOMPASS', 'forbearer', 'PGPASSFILE',
+    ]) {
       assert.ok(!looksSecret(key), `${key} should not be treated as a credential`);
     }
   });

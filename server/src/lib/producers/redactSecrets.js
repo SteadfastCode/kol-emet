@@ -63,14 +63,34 @@ function log(level, msg) {
 const ADDRESS_KEY_RE = /(url|uri|urls|endpoint|host|hostname|addr|address|server|origin|dsn)$/;
 
 /**
- * Keys whose value is a credential. Word-bounded on both sides so `AUTHORS`
- * and `TOKENIZER` are not credentials, while `MYSQL_ROOT_PASSWORD`,
- * `JWT_SECRET` and `AWS_SECRET_ACCESS_KEY` are. A bare `KEY` is deliberately
- * not here — `PARTITION_KEY` is a column name — so it is matched only behind a
- * word that makes it a credential.
+ * Credential words that mean the same thing however the key runs into them
+ * from the left, so they match glued onto a letter run: `PGPASSWORD` — libpq's
+ * own variable, and the one a postgres service is most likely to be handed —
+ * is a password, and so is `MYAPPTOKEN`. INLINE_ASSIGN_RE already matches this
+ * way, which is why the list form `- PGPASSWORD=hunter2` was redacted while
+ * the map form `PGPASSWORD: hunter2` was not; which compose syntax a file
+ * happens to use must not decide whether a credential leaks.
  */
-const SECRET_WORD_RE =
-  /(^|[^a-z])(pass|passwd|password|passphrase|pwd|secret|token|credential|credentials|salt|auth|authorization|bearer|apikey|cert|certificate)([^a-z]|$)/;
+const SECRET_WORD_GLUED =
+  'password|passwd|passphrase|secret|token|credentials?|authorization|apikey|certificate';
+
+/**
+ * Credential words short enough that letters to their left make an innocent
+ * word out of them — byPASS, baSALT, conCERT, forBEARER — so these keep the
+ * boundary on the left that the words above give up. A bare `KEY` is
+ * deliberately in neither list — `PARTITION_KEY` is a column name — so it is
+ * matched only behind a word that makes it a credential.
+ */
+const SECRET_WORD_BOUNDED = 'pass|pwd|salt|auth|bearer|cert';
+
+/**
+ * Keys whose value is a credential. Bounded on the right in both cases, so
+ * `AUTHORS` and `TOKENIZER` are not credentials while `MYSQL_ROOT_PASSWORD`,
+ * `JWT_SECRET` and `AWS_SECRET_ACCESS_KEY` are.
+ */
+const SECRET_WORD_RE = new RegExp(
+  `(?:(?:${SECRET_WORD_GLUED})|(?:^|[^a-z])(?:${SECRET_WORD_BOUNDED}))(?:[^a-z]|$)`,
+);
 const SECRET_KEY_SUFFIX_RE = /(api|access|secret|private|public|signing|encryption|license|client|app|ssh|gpg)[_.-]?keys?([^a-z]|$)/;
 
 /** A URL's userinfo — `user:pass@`, and also a bare `token@`, which is a credential too. */
