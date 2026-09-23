@@ -45,6 +45,8 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import BridgeMessage from '../models/BridgeMessage.js';
 import BridgePresence from '../models/BridgePresence.js';
+import RoutineRepo from '../models/RoutineRepo.js';
+import RoutineItem, { ROUTINE_ITEM_STATES } from '../models/RoutineItem.js';
 import { mcpWorkspaceId } from '../lib/mcpWorkspace.js';
 import { setMcpUser } from '../lib/mcpUserStore.js';
 
@@ -333,10 +335,153 @@ export function createBridgeServer() {
     }
   );
 
+
+  // ─── The routine knowledge base: facts the box syncs, answers the chat reads first ─────────────
+  //
+  // The box is the source of truth for what its hourly routine did; these collections are its
+  // cache here, replaced whole on each `bridge_sync_routine`. Nothing here is a Draft: a machine
+  // transcribing a machine's ledger is not a model's guess, so it applies directly (decided
+  // 2026-09-22). A chat should answer from bridge_kb_* when it can and use bridge_send only for
+  // what these cannot hold — the item body, the diff, the review text, a live session.
+
+  const ItemInput = z.object({
+    itemId: z.string(), title: z.string(), state: z.enum(ROUTINE_ITEM_STATES),
+    needsHuman: z.boolean().optional(), proposed: z.boolean().optional(), notBefore: z.string().nullable().optional(),
+    dependsOn: z.array(z.string()).optional(), attempts: z.number().int().optional(),
+    claimedAt: z.string().nullable().optional(), completedAt: z.string().nullable().optional(), mergeSha: z.string().nullable().optional(),
+    blockedAt: z.string().nullable().optional(), blockedDetail: z.string().nullable().optional(), acked: z.boolean().optional(), lastRunId: z.string().nullable().optional(),
+    review: z.object({
+      localFindings: z.number().int().nullable().optional(), localModel: z.string().nullable().optional(), reviewedAt: z.string().nullable().optional(),
+      gradedAt: z.string().nullable().optional(), confirmed: z.number().int().nullable().optional(), falsePositive: z.number().int().nullable().optional(), duplicate: z.number().int().nullable().optional(),
+    }).optional(),
+  });
+  const date = (v) => (v ? new Date(v) : null);
+  const itemView = (d) => ({
+    repo: d.repo, item: d.itemId, title: d.title, state: d.state, needs_human: d.needsHuman, proposed: d.proposed, not_before: d.notBefore,
+    depends_on: d.dependsOn, attempts: d.attempts, claimed_at: d.claimedAt, completed_at: d.completedAt, merge_sha: d.mergeSha,
+    blocked_at: d.blockedAt, blocked_detail: d.blockedDetail, acked: d.acked, last_run: d.lastRunId,
+    review: d.review?.reviewedAt || d.review?.localFindings != null ? {
+      local_findings: d.review.localFindings, local_model: d.review.localModel, reviewed_at: d.review.reviewedAt,
+      graded: Boolean(d.review.gradedAt), graded_at: d.review.gradedAt,
+      ...(d.review.gradedAt ? { confirmed: d.review.confirmed, false_positive: d.review.falsePositive, duplicate: d.review.duplicate } : {}),
+    } : null,
+    ...(d.missingSince ? { missing_since: d.missingSince } : {}),
+    synced_at: d.syncedAt,
+  });
+  const repoView = (r) => ({
+    repo: r.repo, github: r.github, host: r.host, synced_at: r.syncedAt, counts: r.counts,
+    last_completed: r.lastCompleted?.itemId ? r.lastCompleted : null, last_blocked: r.lastBlocked?.itemId ? r.lastBlocked : null,
+    last_fire: r.lastFire?.runId ? r.lastFire : null, backpressure: r.backpressure?.level ? r.backpressure : null,
+  });
+
+  server.tool(
+    'bridge_sync_routine',
+    'Box side only: replace one repository\'s routine facts — counts, last completed/blocked/fire, and every FEATURES.md item with its ledger and review status. Applied directly, no draft. Items absent from this sync are marked missing, not deleted.',
+    {
+      repo: z.string(), github: z.string().nullable().optional(), host: z.string().nullable().optional(), synced_at: z.string().describe('ISO time the box built these facts'),
+      facts_hash: z.string().nullable().optional(),
+      counts: z.record(z.number()).optional(),
+      last_completed: z.object({ itemId: z.string(), title: z.string().optional(), mergeSha: z.string().nullable().optional(), at: z.string().nullable().optional() }).nullable().optional(),
+      last_blocked: z.object({ itemId: z.string(), title: z.string().optional(), detail: z.string().nullable().optional(), at: z.string().nullable().optional() }).nullable().optional(),
+      last_fire: z.object({ runId: z.string(), decision: z.string().nullable().optional(), at: z.string().nullable().optional() }).nullable().optional(),
+      backpressure: z.object({ level: z.string(), count: z.number(), oldestDays: z.number() }).nullable().optional(),
+      items: z.array(ItemInput).max(2000),
+    },
+    async (a) => {
+      const workspaceId = await mcpWorkspaceId();
+      const syncedAt = new Date(a.synced_at);
+      if (Number.isNaN(syncedAt.getTime())) return failure(`synced_at is not a date: ${a.synced_at}`);
+      const repoDoc = {
+        github: a.github ?? null, host: a.host ?? null, syncedAt, factsHash: a.facts_hash ?? null, counts: a.counts ?? {},
+        lastCompleted: a.last_completed ? { ...a.last_completed, at: date(a.last_completed.at) } : {},
+        lastBlocked: a.last_blocked ? { ...a.last_blocked, at: date(a.last_blocked.at) } : {},
+        lastFire: a.last_fire ? { ...a.last_fire, at: date(a.last_fire.at) } : {},
+        backpressure: a.backpressure ?? {},
+      };
+      // findOne + save/create rather than upserts, so ownerGuard sees every insert (as bridge_announce).
+      let r = await RoutineRepo.findOne({ workspaceId, repo: a.repo });
+      if (r) { r.set(repoDoc); await r.save(); } else r = await RoutineRepo.create({ workspaceId, repo: a.repo, ...repoDoc });
+
+      const existing = new Map((await RoutineItem.find({ workspaceId, repo: a.repo })).map((d) => [d.itemId, d]));
+      let created = 0, updated = 0;
+      const seen = new Set();
+      for (const it of a.items) {
+        seen.add(it.itemId);
+        const fields = {
+          title: it.title, state: it.state, needsHuman: it.needsHuman ?? false, proposed: it.proposed ?? false, notBefore: it.notBefore ?? null,
+          dependsOn: it.dependsOn ?? [], attempts: it.attempts ?? 0, claimedAt: date(it.claimedAt), completedAt: date(it.completedAt), mergeSha: it.mergeSha ?? null,
+          blockedAt: date(it.blockedAt), blockedDetail: it.blockedDetail ?? null, acked: it.acked ?? false, lastRunId: it.lastRunId ?? null,
+          review: {
+            localFindings: it.review?.localFindings ?? null, localModel: it.review?.localModel ?? null, reviewedAt: date(it.review?.reviewedAt),
+            gradedAt: date(it.review?.gradedAt), confirmed: it.review?.confirmed ?? null, falsePositive: it.review?.falsePositive ?? null, duplicate: it.review?.duplicate ?? null,
+          },
+          missingSince: null, syncedAt,
+        };
+        const d = existing.get(it.itemId);
+        if (d) { d.set(fields); await d.save(); updated++; }
+        else { await RoutineItem.create({ workspaceId, repo: a.repo, itemId: it.itemId, ...fields }); created++; }
+      }
+      let missing = 0;
+      for (const [id, d] of existing) {
+        if (seen.has(id) || d.missingSince) continue;
+        d.missingSince = syncedAt; await d.save(); missing++;
+      }
+      log('normal', `synced ${a.repo}: ${created} new, ${updated} updated, ${missing} newly missing`);
+      return json({ repo: a.repo, created, updated, missing, total: seen.size, synced_at: syncedAt });
+    }
+  );
+
+  server.tool(
+    'bridge_kb_status',
+    'ANSWER FROM HERE FIRST. Where each repository\'s routine stands as the box last synced it: counts (pending, blocked, needs-human, proposed, unreviewed, ungraded…), the last completed and blocked items, the last fire. Use bridge_send only for what this cannot hold.',
+    { repo: z.string().optional().describe('One repository; default all') },
+    async ({ repo }) => {
+      const workspaceId = await mcpWorkspaceId();
+      const docs = await RoutineRepo.find({ workspaceId, ...(repo ? { repo } : {}) }).sort({ repo: 1 }).lean();
+      return json({ repos: docs.map(repoView), stale_after_minutes: 90 });
+    }
+  );
+
+  server.tool(
+    'bridge_kb_items',
+    'ANSWER FROM HERE FIRST. List routine items with filters — what is blocked, what waits on Daniel (needs_human / proposed), what is unreviewed (done but not acked) or ungraded (reviewed locally, not yet graded), or a keyword in the title. Newest activity first.',
+    {
+      repo: z.string().optional(), state: z.enum(ROUTINE_ITEM_STATES).optional(),
+      needs_human: z.boolean().optional(), proposed: z.boolean().optional(),
+      unreviewed: z.boolean().optional().describe('done and not acked'), ungraded: z.boolean().optional().describe('has a local review and no grade'),
+      q: z.string().optional().describe('substring of the title or id, case-insensitive'), limit: z.number().int().min(1).max(200).optional().describe('Default 50'),
+    },
+    async ({ repo, state, needs_human, proposed, unreviewed, ungraded, q, limit = 50 }) => {
+      const workspaceId = await mcpWorkspaceId();
+      const query = { workspaceId, missingSince: null };
+      if (repo) query.repo = repo;
+      if (state) query.state = state;
+      if (needs_human !== undefined) query.needsHuman = needs_human;
+      if (proposed !== undefined) query.proposed = proposed;
+      if (unreviewed) { query.state = 'done'; query.acked = false; }
+      if (ungraded) { query['review.reviewedAt'] = { $ne: null }; query['review.gradedAt'] = null; }
+      if (q) { const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); query.$or = [{ title: re }, { itemId: re }]; }
+      const docs = await RoutineItem.find(query).sort({ completedAt: -1, blockedAt: -1, claimedAt: -1, itemId: -1 }).limit(limit).lean();
+      return json({ count: docs.length, items: docs.map(itemView) });
+    }
+  );
+
+  server.tool(
+    'bridge_kb_item',
+    'ANSWER FROM HERE FIRST. One routine item: its state, merge sha, blocked detail, and review/grade counts. For the item body, the diff or the review text itself, ask the box with bridge_send.',
+    { repo: z.string(), item: z.string().describe('e.g. "SAI-038"') },
+    async ({ repo, item }) => {
+      const workspaceId = await mcpWorkspaceId();
+      const d = await RoutineItem.findOne({ workspaceId, repo, itemId: item }).lean();
+      if (!d) return failure(`no item ${item} in ${repo} (as of the last sync)`);
+      return json(itemView(d));
+    }
+  );
+
   return server;
 }
 
-export const BRIDGE_TOOLS = ['bridge_send', 'bridge_poll', 'bridge_ack', 'bridge_announce', 'bridge_status', 'bridge_history'];
+export const BRIDGE_TOOLS = ['bridge_send', 'bridge_poll', 'bridge_ack', 'bridge_announce', 'bridge_status', 'bridge_history', 'bridge_sync_routine', 'bridge_kb_status', 'bridge_kb_items', 'bridge_kb_item'];
 
 // ─── Transport ───────────────────────────────────────────────────────────────
 

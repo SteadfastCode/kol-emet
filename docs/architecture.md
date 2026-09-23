@@ -110,6 +110,17 @@ which points at the path-based issuer `/bridge` (own RFC 8414 document, `/bridge
 | `bridge_announce` | Box side: publish the host's live sessions (replaces the previous announcement) |
 | `bridge_status` | Every host's last announcement plus pending counts per side |
 | `bridge_history` | Recent messages both ways, oldest first, optionally for one session |
+| `bridge_sync_routine` | Box side: replace one repo's routine facts (counts, last completed/blocked/fire, every item's ledger + review status). Applied directly — no Draft |
+| `bridge_kb_status` | Chat side, answer from here first: where each repo's routine stands as last synced |
+| `bridge_kb_items` | Chat side: items filtered by state, needs-human, proposed, unreviewed, ungraded, or keyword |
+| `bridge_kb_item` | Chat side: one item's state, merge sha, blocked detail, review/grade counts |
+
+The `bridge_kb_*` tools read the **routine knowledge base** — `RoutineRepo` and `RoutineItem`, filled by
+the steadfast-ai box every few minutes from each repo's `ops/routine` ledger and review files. The box
+is the source of truth; this is its cache, so a chat answers "where does the routine stand" without a
+round trip to the box and reaches for `bridge_send` only for what the cache cannot hold (an item's
+body, a diff, review text, a live session). Nothing in it is a Draft: a machine transcribing a
+machine's ledger is not a model's guess, so it applies directly (decision log, 2026-09-22).
 
 ## Auth
 Session cookies (bcrypt, 12 rounds) for browsers plus WebAuthn passkeys; bearer token for MCP.

@@ -45,6 +45,7 @@ import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import BridgeMessage from '../../src/models/BridgeMessage.js';
 import BridgePresence from '../../src/models/BridgePresence.js';
+import RoutineItem from '../../src/models/RoutineItem.js';
 import { setMcpUser } from '../../src/lib/mcpUserStore.js';
 
 process.env.NODE_ENV = 'test';
@@ -66,7 +67,7 @@ const PASSWORD = 'correct-horse-battery-staple';
 const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
 
 /** The contract with the connector, per docs/architecture.md — a literal, so docs and code change together. */
-const DOCUMENTED_TOOLS = ['bridge_send', 'bridge_poll', 'bridge_ack', 'bridge_announce', 'bridge_status', 'bridge_history'];
+const DOCUMENTED_TOOLS = ['bridge_send', 'bridge_poll', 'bridge_ack', 'bridge_announce', 'bridge_status', 'bridge_history', 'bridge_sync_routine', 'bridge_kb_status', 'bridge_kb_items', 'bridge_kb_item'];
 
 let app, httpServer, base, bridgeUrl, bridge, alice, bob;
 
@@ -276,6 +277,84 @@ describe('presence', () => {
   });
 });
 
+describe('routine knowledge base', () => {
+  const T0 = '2026-09-22T12:00:00.000Z';
+  const facts = (over = {}) => ({
+    repo: 'steadfast-ai', github: 'SteadfastCode/steadfast-ai', host: 'steadfast-ai', synced_at: T0, facts_hash: 'h1',
+    counts: { pending: 2, blocked: 1, done: 2, unreviewed: 1, ungraded: 1, needsHuman: 1 },
+    last_completed: { itemId: 'SAI-038', title: 'Usage shows a caller its own tally', mergeSha: '0f02d89', at: '2026-09-18T14:19:00Z' },
+    last_blocked: { itemId: 'SAI-020', title: 'Old blocked', detail: 'no pwsh', at: '2026-09-15T00:00:00Z' },
+    last_fire: { runId: '2026-09-22T11:07:00.000Z', decision: 'gate-closed', at: '2026-09-22T11:07:30Z' },
+    backpressure: { level: 'ok', count: 1, oldestDays: 1.2 },
+    items: [
+      { itemId: 'SAI-038', title: 'Usage shows a caller its own tally', state: 'done', completedAt: '2026-09-18T14:19:00Z', mergeSha: '0f02d89', acked: true,
+        review: { localFindings: 2, localModel: 'qwen2.5-coder:14b', reviewedAt: '2026-09-19T03:10:00Z', gradedAt: '2026-09-22T05:11:00Z', confirmed: 0, falsePositive: 2, duplicate: 0 } },
+      { itemId: 'SAI-037', title: 'Earlier thing', state: 'done', completedAt: '2026-09-18T14:10:00Z', mergeSha: 'c0ecd43', acked: false,
+        review: { localFindings: 1, localModel: 'qwen2.5-coder:14b', reviewedAt: '2026-09-19T03:00:00Z' } },
+      { itemId: 'SAI-020', title: 'Old blocked', state: 'blocked', blockedAt: '2026-09-15T00:00:00Z', blockedDetail: 'no pwsh' },
+      { itemId: 'SAI-028', title: 'Orchestrator sends file contents', state: 'pending', needsHuman: true, dependsOn: ['SAI-027'] },
+      { itemId: 'SAI-043', title: 'Triage verdict', state: 'pending' },
+    ],
+    ...over,
+  });
+
+  test('sync creates, status summarizes, item detail reads back', async () => {
+    const r = parsed('bridge_sync_routine', await callTool('bridge_sync_routine', facts()));
+    assert.deepEqual({ created: r.created, updated: r.updated, missing: r.missing, total: r.total }, { created: 5, updated: 0, missing: 0, total: 5 });
+    const st = parsed('bridge_kb_status', await callTool('bridge_kb_status', { repo: 'steadfast-ai' }));
+    assert.equal(st.repos.length, 1);
+    assert.equal(st.repos[0].counts.ungraded, 1);
+    assert.equal(st.repos[0].last_completed.itemId, 'SAI-038');
+    assert.equal(st.repos[0].last_fire.decision, 'gate-closed');
+    const one = parsed('bridge_kb_item', await callTool('bridge_kb_item', { repo: 'steadfast-ai', item: 'SAI-038' }));
+    assert.equal(one.merge_sha, '0f02d89');
+    assert.equal(one.review.graded, true);
+    assert.equal(one.review.false_positive, 2);
+    const none = await callTool('bridge_kb_item', { repo: 'steadfast-ai', item: 'SAI-999' });
+    assert.equal(none.isError, true);
+  });
+
+  test('items: the filters Daniel actually asks by', async () => {
+    const q = async (args) => parsed('bridge_kb_items', await callTool('bridge_kb_items', { repo: 'steadfast-ai', ...args })).items.map((i) => i.item);
+    assert.deepEqual(await q({ state: 'blocked' }), ['SAI-020']);
+    assert.deepEqual(await q({ needs_human: true }), ['SAI-028']);
+    assert.deepEqual(await q({ unreviewed: true }), ['SAI-037'], 'done and not acked');
+    assert.deepEqual(await q({ ungraded: true }), ['SAI-037'], 'local review, no grade');
+    assert.deepEqual(await q({ q: 'tally' }), ['SAI-038']);
+    assert.deepEqual((await q({ state: 'done' })), ['SAI-038', 'SAI-037'], 'newest completion first');
+    const ungradedOnly = parsed('bridge_kb_items', await callTool('bridge_kb_items', { repo: 'steadfast-ai', ungraded: true })).items[0];
+    assert.equal(ungradedOnly.review.graded, false);
+    assert.equal(ungradedOnly.review.confirmed, undefined, 'no verdict fields before a grade exists');
+  });
+
+  test('re-sync updates in place, marks the vanished item missing, and hides it from lists', async () => {
+    const next = facts({ synced_at: '2026-09-22T13:00:00.000Z', items: facts().items.filter((i) => i.itemId !== 'SAI-043').map((i) => (i.itemId === 'SAI-037' ? { ...i, acked: true } : i)) });
+    const r = parsed('bridge_sync_routine', await callTool('bridge_sync_routine', next));
+    assert.deepEqual({ created: r.created, updated: r.updated, missing: r.missing }, { created: 0, updated: 4, missing: 1 });
+    assert.equal(await RoutineItem.countDocuments({ repo: 'steadfast-ai' }), 5, 'nothing deleted, nothing duplicated');
+    const gone = await RoutineItem.findOne({ repo: 'steadfast-ai', itemId: 'SAI-043' }).lean();
+    assert.equal(gone.missingSince.toISOString(), '2026-09-22T13:00:00.000Z');
+    const listed = parsed('bridge_kb_items', await callTool('bridge_kb_items', { repo: 'steadfast-ai' })).items.map((i) => i.item);
+    assert.ok(!listed.includes('SAI-043'));
+    assert.deepEqual(parsed('bridge_kb_items', await callTool('bridge_kb_items', { repo: 'steadfast-ai', unreviewed: true })).items, [], 'SAI-037 acked now');
+    const again = parsed('bridge_sync_routine', await callTool('bridge_sync_routine', next));
+    assert.equal(again.missing, 0, 'already-missing items are not re-marked');
+  });
+
+  test('a second repo lives beside the first; status lists both', async () => {
+    parsed('bridge_sync_routine', await callTool('bridge_sync_routine', facts({ repo: 'plumb', github: null, items: [{ itemId: 'PLB-001', title: 'x', state: 'pending' }], counts: { pending: 1 } })));
+    const st = parsed('bridge_kb_status', await callTool('bridge_kb_status'));
+    assert.deepEqual(st.repos.map((r) => r.repo), ['plumb', 'steadfast-ai']);
+  });
+
+  test('bad synced_at is refused before anything is written', async () => {
+    const before = await RoutineItem.countDocuments();
+    const r = await callTool('bridge_sync_routine', facts({ repo: 'nope', synced_at: 'yesterday-ish' }));
+    assert.equal(r.isError, true);
+    assert.equal(await RoutineItem.countDocuments(), before);
+  });
+});
+
 describe('tenancy', () => {
   test('switching the MCP user switches the whole mailbox', async () => {
     const aliceCount = await BridgeMessage.countDocuments({ workspaceId: alice.workspaceId });
@@ -284,6 +363,8 @@ describe('tenancy', () => {
     try {
       assert.deepEqual(parsed('bridge_status', await callTool('bridge_status')), { presence: [], pending: { box: 0, chat: 0 } });
       assert.equal(parsed('bridge_history', await callTool('bridge_history')).messages.length, 0);
+      assert.deepEqual(parsed('bridge_kb_status', await callTool('bridge_kb_status')).repos, [], 'alice\'s routine facts are invisible to bob');
+      assert.equal(parsed('bridge_kb_items', await callTool('bridge_kb_items')).count, 0);
       assert.equal(parsed('bridge_poll', await callTool('bridge_poll', { for: 'chat' })).messages.length, 0, 'alice\'s pending reply must not reach bob');
       const mine = parsed('bridge_send', await callTool('bridge_send', { to: 'box', text: 'bob here' }));
       assert.equal(String((await BridgeMessage.findById(mine.id).lean()).workspaceId), bob.workspaceId);

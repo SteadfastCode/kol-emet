@@ -68,6 +68,8 @@ import Conversation from '../models/Conversation.js';
 import ChangeLog from '../models/ChangeLog.js';
 import BridgeMessage from '../models/BridgeMessage.js';
 import BridgePresence from '../models/BridgePresence.js';
+import RoutineRepo from '../models/RoutineRepo.js';
+import RoutineItem from '../models/RoutineItem.js';
 
 /**
  * Every model whose documents carry workspaceId. A new one must be added here,
@@ -84,6 +86,8 @@ export const WORKSPACE_SCOPED_MODELS = [
   ChangeLog,
   BridgeMessage,
   BridgePresence,
+  RoutineRepo,
+  RoutineItem,
 ];
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };

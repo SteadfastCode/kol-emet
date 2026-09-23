@@ -42,6 +42,8 @@ import Conversation from '../../src/models/Conversation.js';
 import ChangeLog from '../../src/models/ChangeLog.js';
 import BridgeMessage from '../../src/models/BridgeMessage.js';
 import BridgePresence from '../../src/models/BridgePresence.js';
+import RoutineRepo from '../../src/models/RoutineRepo.js';
+import RoutineItem from '../../src/models/RoutineItem.js';
 
 process.env.ACCOUNT_DELETE_LOG_LEVEL ??= 'off';
 
@@ -78,6 +80,8 @@ async function seedTenant(label) {
   });
   await BridgeMessage.create({ workspaceId, to: 'box', session: label, text: `${label} says hi` });
   await BridgePresence.create({ workspaceId, host: `${label}-box`, sessions: [{ name: `${label}-1` }] });
+  await RoutineRepo.create({ workspaceId, repo: `${label}-repo`, syncedAt: new Date() });
+  await RoutineItem.create({ workspaceId, repo: `${label}-repo`, itemId: 'X-001', title: `${label} item`, state: 'pending', syncedAt: new Date() });
 
   await UserMemory.create({ userId: user._id, fact: `${label} rides the night train` });
   await Conversation.create({ workspaceId: null, userId: user._id, provider: 'test', model: 'test' });
@@ -322,6 +326,8 @@ describe('workspace-scoped writes that race the deletion', () => {
     }),
     BridgeMessage: (workspaceId) => ({ workspaceId, to: 'chat', text: 'late message' }),
     BridgePresence: (workspaceId) => ({ workspaceId, host: 'late-host', sessions: [] }),
+    RoutineRepo: (workspaceId) => ({ workspaceId, repo: 'late-repo', syncedAt: new Date() }),
+    RoutineItem: (workspaceId) => ({ workspaceId, repo: 'late-repo', itemId: 'L-001', title: 'late item', state: 'pending', syncedAt: new Date() }),
   };
 
   function lateDoc(model, a, b) {

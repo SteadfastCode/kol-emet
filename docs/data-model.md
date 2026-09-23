@@ -568,3 +568,41 @@ per `{ workspaceId, host }` (unique), replaced whole on each announcement.
   createdAt: Date, updatedAt: Date
 }
 ```
+
+## RoutineRepo
+
+Collection `routinerepos`. Where one repository's hourly routine stands, as the steadfast-ai box last
+synced it (`bridge_sync_routine`). One document per `{ workspaceId, repo }` (unique), replaced whole.
+Part of the bridge's own knowledge base — no reference to the entity graph; the box is the source of
+truth and this is its cache.
+
+```js
+{
+  _id: ObjectId, workspaceId: ObjectId|null,
+  repo: string, github: string|null, host: string|null,
+  syncedAt: Date, factsHash: string|null,          // the box skips a sync whose hash is unchanged
+  counts: { pending, needsHuman, proposed, blocked, claimed, done, unreviewed, localReviews, graded, ungraded },
+  lastCompleted: { itemId, title, mergeSha, at }, lastBlocked: { itemId, title, detail, at },
+  lastFire: { runId, decision, at }, backpressure: { level, count, oldestDays },
+  createdAt, updatedAt
+}
+```
+
+## RoutineItem
+
+Collection `routineitems`. One FEATURES.md item of one repository with what the ledger and review
+files say about it. Unique on `{ workspaceId, repo, itemId }`. Titles and ids only — the body, diff
+and review text stay on the box. An item that leaves FEATURES.md is marked `missingSince`, never
+deleted, and hidden from `bridge_kb_items`.
+
+```js
+{
+  _id: ObjectId, workspaceId: ObjectId|null,
+  repo: string, itemId: string, title: string,
+  state: "pending" | "claimed" | "blocked" | "done",
+  needsHuman: bool, proposed: bool, notBefore: string|null, dependsOn: string[], attempts: number,
+  claimedAt, completedAt, mergeSha, blockedAt, blockedDetail, acked: bool, lastRunId,
+  review: { localFindings, localModel, reviewedAt, gradedAt, confirmed, falsePositive, duplicate },
+  missingSince: Date|null, syncedAt: Date, createdAt, updatedAt
+}
+```
