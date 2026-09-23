@@ -596,6 +596,17 @@ describe('the auth gate under other startup configurations', () => {
   });
 });
 
+describe('session loss', () => {
+  test('an unknown session id answers 404 (re-initialize), not 400', async () => {
+    const res = await request(app).post('/mcp')
+      .set('Authorization', `Bearer ${MCP_TOKEN}`).set('Accept', 'application/json, text/event-stream')
+      .set('mcp-session-id', '00000000-dead-beef-0000-000000000000')
+      .send({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} });
+    assert.equal(res.status, 404, `${res.status} ${res.text}`);
+    assert.equal(res.body.error.code, -32001);
+  });
+});
+
 describe('tools/list', () => {
   test('advertises exactly the tools documented in docs/architecture.md', async () => {
     const { tools } = await mcp.listTools();

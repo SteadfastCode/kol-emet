@@ -624,6 +624,12 @@ router.post('/', async (req, res) => {
     return;
   }
 
+  if (sessionId) {
+    // Unknown session: 404 so the client re-initializes (MCP spec), instead of a 400 that stops it.
+    // Sessions are in memory and every deploy forgets them; see routes/bridge.js for the incident.
+    log('light', `unknown session ${String(sessionId).slice(0, 8)}… → 404 (source: not in this process's session map)`);
+    return res.status(404).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32001, message: 'Session not found — re-initialize' } });
+  }
   console.log('[mcp] rejected — no session and not an initialize request');
   res.status(400).json({ error: 'Bad request: missing or invalid session ID' });
 });

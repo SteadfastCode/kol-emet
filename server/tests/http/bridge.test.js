@@ -152,6 +152,40 @@ describe('gate', () => {
   });
 });
 
+describe('stateless transport: a deploy strands no one', () => {
+  const frame = { jsonrpc: '2.0', id: 7, method: 'tools/list', params: {} };
+  const post = () => request(app).post('/bridge/mcp').set('Authorization', `Bearer ${BRIDGE_TOKEN}`).set('Accept', 'application/json, text/event-stream');
+  test('initialize issues no session id', async () => {
+    const res = await post().send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 't', version: '0' } } });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.headers['mcp-session-id'], undefined);
+    assert.equal(res.body.result.serverInfo.name, 'steadfast-bridge');
+  });
+  test('a call with a stale or made-up session id is served anyway', async () => {
+    const res = await post().set('mcp-session-id', '00000000-dead-beef-0000-000000000000').send(frame);
+    assert.equal(res.status, 200, `${res.status} ${res.text}`);
+    assert.ok(res.body.result.tools.length >= 6);
+  });
+  test('a call with no session id and no prior initialize on this process is served', async () => {
+    const res = await post().send(frame);
+    assert.equal(res.status, 200, `${res.status} ${res.text}`);
+  });
+  test('DELETE is a harmless 204; GET is 405', async () => {
+    assert.equal((await request(app).delete('/bridge/mcp').set('Authorization', `Bearer ${BRIDGE_TOKEN}`).set('mcp-session-id', 'whatever')).status, 204);
+    assert.equal((await request(app).get('/bridge/mcp').set('Authorization', `Bearer ${BRIDGE_TOKEN}`)).status, 405);
+  });
+  test('the SDK client works across what would have been a lost session', async () => {
+    const c = await connectClient(BRIDGE_TOKEN);
+    try {
+      const r1 = await c.callTool({ name: 'bridge_status', arguments: {} });
+      assert.equal(Boolean(r1.isError), false);
+      // Nothing server-side to forget; a second call is just another request.
+      const r2 = await c.callTool({ name: 'bridge_status', arguments: {} });
+      assert.equal(Boolean(r2.isError), false);
+    } finally { await c.close(); }
+  });
+});
+
 describe('discovery and token issuance', () => {
   test('protected-resource metadata points at the path-based issuer', async () => {
     const res = await request(app).get('/.well-known/oauth-protected-resource/bridge/mcp');

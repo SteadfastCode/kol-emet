@@ -30,6 +30,8 @@
  *     still ends up with BRIDGE_TOKEN if it carried `resource=…/bridge/mcp`
  *     (RFC 8707), which `routes/oauth.js` now honours.
  *
+ * The endpoint is stateless (see the Transport section): a deploy strands no one.
+ *
  * The gate fails closed everywhere: with no BRIDGE_TOKEN every request answers
  * 503, in development too. `/mcp` stays open in dev so a local Claude Code
  * session needs no secret; there is no such use for an unauthenticated
@@ -41,7 +43,6 @@ import { randomUUID, createHash } from 'crypto';
 import mongoose from 'mongoose';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import BridgeMessage from '../models/BridgeMessage.js';
 import BridgePresence from '../models/BridgePresence.js';
@@ -485,39 +486,37 @@ export function createBridgeServer() {
 
 export const BRIDGE_TOOLS = ['bridge_send', 'bridge_poll', 'bridge_ack', 'bridge_announce', 'bridge_status', 'bridge_history', 'bridge_sync_routine', 'bridge_kb_status', 'bridge_kb_items', 'bridge_kb_item'];
 
-// ─── Transport ───────────────────────────────────────────────────────────────
-
-const sessions = new Map(); // sessionId -> StreamableHTTPServerTransport
+// ─── Transport (stateless) ───────────────────────────────────────────────────
+//
+// No sessions. Each POST gets a fresh McpServer on a fresh transport in the SDK's stateless mode
+// (sessionIdGenerator: undefined): no session id is issued, none is validated, and the pair is
+// closed when the response ends. /mcp keeps its in-memory session map; here that map was the
+// incident: sessions live in one process's memory, every Railway deploy empties it, and on
+// 2026-09-22 a claude.ai chat mid-conversation was stranded with "invalid session ID" until it gave
+// up. A stateless server has nothing to forget. The cost is one server construction per request —
+// tool registration is in-process and every tool hits the database anyway — which is nothing next
+// to a long-poll that holds the request for 25 s.
+//
+// A client that still sends an mcp-session-id (an old session, a stateful-minded SDK) is served all
+// the same; the header is ignored.
 
 router.post(MCP_PATH, async (req, res) => {
-  const sessionId = req.headers['mcp-session-id'];
-  if (sessionId && sessions.has(sessionId)) {
-    await sessions.get(sessionId).handleRequest(req, res, req.body);
-    return;
-  }
-  if (!sessionId && isInitializeRequest(req.body)) {
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      enableJsonResponse: true,
-      onsessioninitialized: (id) => { log('normal', `session initialized: ${id}`); sessions.set(id, transport); },
-    });
-    transport.onclose = () => { for (const [k, v] of sessions) if (v === transport) sessions.delete(k); };
-    const server = createBridgeServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  const server = createBridgeServer();
+  res.on('close', () => { transport.close().catch(() => {}); server.close().catch(() => {}); });
+  try {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
-    return;
+  } catch (err) {
+    log('light', `request failed: ${err.message}`);
+    if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32603, message: 'Internal error' } });
   }
-  res.status(400).json({ error: 'Bad request: missing or invalid session ID' });
 });
 
-// JSON response mode does not use a persistent GET SSE stream
-router.get(MCP_PATH, (req, res) => res.status(405).set('Allow', 'POST').send('Method Not Allowed'));
-
-router.delete(MCP_PATH, async (req, res) => {
-  const sessionId = req.headers['mcp-session-id'];
-  if (sessionId && sessions.has(sessionId)) { await sessions.get(sessionId).close(); sessions.delete(sessionId); }
-  res.status(204).send();
-});
+// Stateless: no standalone SSE stream to open, and nothing to delete — but a client closing what it
+// believes is a session must not see an error.
+router.get(MCP_PATH, (req, res) => res.status(405).set('Allow', 'POST, DELETE').send('Method Not Allowed'));
+router.delete(MCP_PATH, (req, res) => res.status(204).send());
 
 function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
