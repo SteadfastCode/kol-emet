@@ -47,17 +47,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-048) SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…**
-  Found by the grader of KOL-046 (medium, server/src/lib/producers/redactSecrets.js:73).
-  SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word,
-  so a key that glues the word onto a preceding letter run is not recognised by looksSecret —
-  notably PGPASSWORD, the standard libpq variable. In map form (`PGPASSWORD: hunter2`, the shape
-  of the fixture's own POSTGRES_PASSWORD) no rule fires — the key rule misses, INLINE_ASSIGN_RE
-  needs `=`, URL_USERINFO_RE needs `://…@`, and no SECRET_SHAPE matches a plain password — so the
-  value is stored verbatim in source.text, in the evidence quote, and in the TTL-less verbatim
-  export. The same variable in list form (`- PGPASSWORD=hunter2`) IS redacted, because
-  INLINE_ASSIGN_RE's prefix `[A-Za-z0-9_.-]*?` has no left boundary, so whether a credential leaks
-  depends only on which compose syntax the file used.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
@@ -90,6 +79,17 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-048) SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…** (routine 2026-09-23, 7452dd1)
+  Found by the grader of KOL-046 (medium, server/src/lib/producers/redactSecrets.js:73).
+  SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word,
+  so a key that glues the word onto a preceding letter run is not recognised by looksSecret —
+  notably PGPASSWORD, the standard libpq variable. In map form (`PGPASSWORD: hunter2`, the shape
+  of the fixture's own POSTGRES_PASSWORD) no rule fires — the key rule misses, INLINE_ASSIGN_RE
+  needs `=`, URL_USERINFO_RE needs `://…@`, and no SECRET_SHAPE matches a plain password — so the
+  value is stored verbatim in source.text, in the evidence quote, and in the TTL-less verbatim
+  export. The same variable in list form (`- PGPASSWORD=hunter2`) IS redacted, because
+  INLINE_ASSIGN_RE's prefix `[A-Za-z0-9_.-]*?` has no left boundary, so whether a credential leaks
+  depends only on which compose syntax the file used.
 - [x] **(KOL-046) The whole compose file is stored verbatim in source.text and each credential-bearing env line is…** (routine 2026-09-21, c02515f)
   Found by the grader of KOL-033 (medium, server/src/routes/drafts.js:307). The whole compose file
   is stored verbatim in source.text and each credential-bearing env line is stored as an evidence

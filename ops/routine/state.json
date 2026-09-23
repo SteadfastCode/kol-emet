@@ -58,7 +58,7 @@
     "KOL-048": {
       "order": 4,
       "title": "SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-048",
