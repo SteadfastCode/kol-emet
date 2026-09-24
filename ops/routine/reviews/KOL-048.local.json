@@ -1,0 +1,41 @@
+{
+  "item": "KOL-048",
+  "repo": "kol-emet",
+  "mergeSha": "7452dd1871bc51552972cb387241663da0550fcf",
+  "completedAtUtc": "2026-09-23T08:42:34.694Z",
+  "completeRunId": "2026-09-23T08:37:26.125Z",
+  "reviewRunId": "2026-09-24T07:01:29.611Z",
+  "reviewedAtUtc": "2026-09-24T07:02:12.245Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 6642,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/src/lib/producers/redactSecrets.js",
+        "server/tests/unit/redactSecrets.test.js"
+      ],
+      "part": null,
+      "bytes": 6642,
+      "contextBytes": 7591,
+      "promptTokens": 4457,
+      "completionTokens": 120,
+      "latencyMs": 27409,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": null,
+  "summary": "1 defect found.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 8876,
+    "completionTokens": 157
+  },
+  "latencyMs": 40781
+}
