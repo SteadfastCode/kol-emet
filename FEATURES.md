@@ -45,6 +45,22 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-055) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-01]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -74,6 +90,137 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+- [ ] **(KOL-049) Escape the caller's search string before compiling it as a regex** [proposed]
+  `GET /entities` (`server/src/routes/entities.js:49`), the MCP `search_entities` tool (`server/src/routes/mcp.js:115`) and the
+  chat assistant's copy of it (`server/src/routes/chat.js:192`) each do `new RegExp(q, 'i')` on a string the caller chose.
+  `server/src/routes/bridge.js:466` already escapes its own `q` with exactly the character class the other three need — they
+  never got it. Two consequences. A query holding regex punctuation is a crash rather than a search: `?q=C++ (v2)` throws a
+  SyntaxError inside the route's `try` and answers 500, and a model emitting the same string gets a tool error instead of
+  results. And a catastrophic pattern such as `(a+)+$` is matched against every entity's title, summary and block markdown in
+  the workspace, on the single event loop this multi-tenant API shares. Express 4's default extended query parser also hands
+  `?category[$ne]=Characters` into the filter as an operator object (workspace-scoped, so it selects the caller's own rows, not
+  another tenant's), and turns `?q=a&q=b` into an array that stringifies to `a,b`. Build `server/src/lib/searchFilter.js`:
+  `escapeRegex(s)` (one copy of the `bridge.js` class), `searchTerm(raw)` → a trimmed string, or null for anything that is not a
+  non-empty string, capped at 200 characters, and `keywordFilter(term)` returning the `$or` the three callers build by hand
+  today. All three use it, and `GET /entities` runs `category` and `tag` through `searchTerm` too, so a non-string is no filter
+  rather than a filter the caller wrote. Verify: `server/tests/unit/searchFilter.test.js` — punctuation matches literally, `.`
+  does not match everything, an object, an array and `''` all give null, a 500-character term is capped; a new
+  `server/tests/http/entitySearch.test.js` — `?q=(` is 200 and lists the entity whose summary holds `(`, and
+  `?category[$ne]=Characters` lists nothing; one case in `server/tests/http/mcp.test.js` where `search_entities` with
+  `q: 'C++ (v2)'` returns the match; `cd server && yarn test` green. Out of scope: a MongoDB text index and `$text` search (an
+  Atlas index change), searching block fields other than `data.markdown`, pagination on `GET /entities`.
+- [ ] **(KOL-050) Throttle account creation on POST /auth/register** [proposed]
+  Registration is open by design (CLAUDE.md) and `POST /auth/register` (`server/src/routes/auth.js:91`) has no limit of any
+  kind: every request runs a 12-round bcrypt hash, and every success creates a `User`, a `Workspace` and a full template seed —
+  38 relationship types plus starter content for Worldbuilding (`server/src/lib/workspaceSeeder.js`). One unauthenticated client
+  can fill the database and spend this API's CPU as fast as it can post. KOL-035 built the counters and left this out of scope
+  ("CAPTCHA or signup throttling"). Build: `createAuthLimiter` (`server/src/lib/attemptLimiter.js`) grows a fourth counter kind,
+  `signup`, keyed on `req.ip`, with its own limit and window — `perSignupIp`, default 10 per 60 minutes, from
+  `AUTH_LIMIT_MAX_SIGNUPS_PER_IP` and `AUTH_LIMIT_SIGNUP_WINDOW_MS` through `authLimitsFromEnv` and the `authLimits` option
+  `createApp` already threads. A separate window because sign-in's 15 minutes is the wrong unit for account creation. `pairs()`
+  gains `signup` in check order, and a neutral `record(keys, source)` counts alongside `recordFailure`, since what is counted
+  here is a success rather than a guess. The route asks `blocked` before the bcrypt hash, refuses with the shared
+  `TOO_MANY_ATTEMPTS` body and a `Retry-After`, and records one signup only once a user was created, so a 400 or a 409 costs the
+  caller nothing. Light logging names the route and the key kind, never an address. Document the variables in
+  `server/.env.example`, the 429 in the `POST /auth/register` row of `docs/api.md`, and add the Decision Log line in
+  `kol_emet_spec.md`. Verify: `server/tests/unit/attemptLimiter.test.js` — the signup counter has its own max and window, and an
+  injected clock unblocks it independently of the email counter; in `server/tests/http/auth.test.js`, an app built with
+  `authLimits: { perSignupIp: 2 }` registers twice, answers 429 with `Retry-After` on the third and creates no `User`, while a
+  400 (no password) and a 409 (duplicate email) leave the budget untouched; `cd server && yarn test` green. Out of scope:
+  CAPTCHA, email verification, counters shared across API instances (in-process, as KOL-035 recorded), and rate limits on
+  `/oauth/token` and `/drafts`.
+- [ ] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft** [proposed]
+  The roadmap's Phase 7 vertical ingestion names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built
+  docker-compose and put the rest out of scope. `Draft.source.producer` (`server/src/models/Draft.js:111`) is the enum seam and
+  its comment already names `openapi`. Build `server/src/lib/producers/openApi.js`: `parseOpenApi(text, { existingEntities })` →
+  `{ items, dropReasons }` in exactly the shape `normalizeDraft` emits, reusing what the compose producer established —
+  `MAX_ITEMS`, `normalizeTitle` dedup setting `op: 'update'` with `matchedBy: 'exact-normalized-title'`, `nearestTitle` near-miss
+  flags, `pruneKnownBlocks`, and `redactSecrets` at the route seam (a spec can carry an example key). Accept JSON and YAML (the
+  `yaml` dependency is already there), OpenAPI 3.x and swagger 2.0, refusing anything else with a 400 naming what it found.
+  Mapping, deterministic and with no model call: `info.title` → one entity of category Service, with attribute blocks for the API
+  version and the spec version and a text block from `info.description`; each `tags[]` entry — or the first path segment when a
+  spec declares no tags — → an entity of category API with an attribute block listing its operations (`GET /pets`, …), joined to
+  the service by an "Exposes" group (Provider/Endpoint); each `servers[].url` host that is not the service's own → one External
+  Dependency entity plus a "Depends on" group. Only local `#/components` `$ref`s are followed, one level deep; an unresolvable
+  ref is a drop reason, not a 400. Route `POST /drafts/openapi` in `server/src/routes/drafts.js` beside `/compose`: same body
+  (`{ text, filename? }`), same character cap, same 201 shape with `source.producer: 'openapi'` and
+  `producerVersion: 'openapi@1'`. Client: add `.json` in `client/src/lib/importFile.js` and move the producer choice from the
+  extension to the content — `openapi:`/`swagger:` at the top level wins over compose's `services:`, since both arrive as
+  `.yaml` — plus `createOpenApiDraft` in `client/src/api/drafts.js` and the routing in `BraindumpInput.vue`; `DraftReview.vue`
+  and the applier are untouched. Document the route in `docs/api.md` and add the Decision Log line. Verify:
+  `server/tests/unit/openApi.test.js` against a new `server/tests/fixtures/openapi.yaml` (two tags, three paths, two `servers`,
+  one `$ref`) asserting the categories, the Exposes and Depends-on groups, and that a second parse against existing entities of
+  the same titles yields updates; `server/tests/http/openApiDraft.test.js` registering with `template:
+  'software-architecture'`, posting the fixture, then `decide-clean` + `apply` landing the entities; a client test that a
+  `.yaml` holding `openapi: 3.1.0` goes to the new route while the compose fixture still goes to `/drafts/compose`;
+  `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: k8s, repo and DB-schema producers,
+  drift detection, LLM enrichment of the parsed graph, modelling request/response schemas (paths and tags only), and any change
+  to the review UI.
+- [ ] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed** [proposed]
+  Two halves of one gap. (1) `POST /auth/webauthn/register/begin` (`server/src/routes/auth.js:250`) calls
+  `generateRegistrationOptions` without `userID`, and @simplewebauthn 13 then generates a fresh random handle per registration
+  (`generateRegistrationOptions.js:128`) which is never stored. An account with two passkeys is therefore two unrelated WebAuthn
+  users: a password manager offering discoverable credentials lists the same account twice, and nothing on the server can name
+  the account to an authenticator. (2) The Decision Log's KOL-025 known gap — a passkey removed in Settings stays in its
+  authenticator, which keeps offering it and gets "Passkey not recognized". Build: `webauthnUserHandle` on
+  `server/src/models/User.js`, 32 random bytes base64url, written at create for a new account and lazily on the first
+  `register/begin` for an existing one, and passed as `userID` so every passkey on an account shares one handle.
+  `GET /auth/webauthn/passkeys` returns it and the configured `rpId` alongside the list — as sibling fields, leaving
+  `passkeySummary` the explicit field list it is, so no public key can leak in. In `client/src/components/PasskeySettings.vue`,
+  a successful remove calls `PublicKeyCredential.signalAllAcceptedCredentials({ rpId, userId, allAcceptedCredentialIds })` with
+  the ids still on the account; the passkey sign-in failure path in `client/src/api/auth.js` calls
+  `signalUnknownCredential({ rpId, credentialId })` when the server answers "not recognized". Both are feature-detected — an
+  absent API is a no-op, never an error the user sees — and both log at light naming the source ("Settings → Remove"), matching
+  the tiers `PasskeySettings.vue` already has. `rpId` comes from the route rather than `location.hostname`, because
+  `WEBAUTHN_RP_ID` is what the ceremonies used. Verify: `server/tests/http/passkeys.test.js` — the handle is created once and is
+  identical across two `register/begin` calls, the list route returns it with `rpId`, and no response carries `publicKey`;
+  `client/src/components/PasskeySettings.test.js` — removing a passkey calls `signalAllAcceptedCredentials` with the remaining
+  ids, and a jsdom without the API still removes the passkey and shows no error; `cd server && yarn test` and
+  `cd client && yarn test && yarn build` green. Out of scope: `signalCurrentUserDetails` (nothing renames an account yet);
+  passkeys registered before this keep their random per-credential handles, so a signal cannot reach them — they still sign in,
+  and the handle is used for new registrations only; the credential-id unique index (an Atlas change, KOL-036's known gap).
+- [ ] **(KOL-053) Workspace-wide tag rename, merge and delete** [proposed]
+  `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
+  comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
+  way to fix it short of opening every entity — the wishlist's "Bulk tag operations". Build, in `server/src/routes/tags.js`:
+  `PUT /tags/:tag` with body `{ to }` renames the tag on every entity in the caller's workspace, merging when `to` is already
+  present (`$addToSet` then `$pull`, so no entity ends up holding it twice) and answering `{ renamed: <count> }`, 404 when no
+  entity carries the tag, 400 for a blank or non-string `to`, and a no-op 200 for a rename to itself; `DELETE /tags/:tag`
+  removes it everywhere and answers `{ removed: <count> }`. Both take `requireActor` per route, the way the write routes in
+  `server/src/routes/entities.js` do (the mount gives them only `requireAuth` + `resolveWorkspace`), and both write one
+  `logUpdate` per changed entity (`server/src/lib/changeLogger.js`), which makes a bulk rename as reversible as a single edit and
+  broadcasts `entity:updated` so open clients follow. Bound it like KOL-045 bounded the compose import: past 200 affected
+  entities the route answers 413 naming the count rather than writing an unbounded batch of changelog entries. Client: a "Tags"
+  group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) listing the workspace's tags with their
+  entity counts and a rename and remove action each, calling new `renameTag`/`removeTag` in `client/src/api/tags.js`; the counts
+  come from the entities `useEntities` already holds, not a new route. Document both routes in `docs/api.md`. Verify:
+  `server/tests/http/tags.test.js` — a rename moves the tag on two of three entities and leaves the third alone; a merge leaves
+  exactly one copy; a delete removes it; each writes one `ChangeLog` entry per changed entity; a second workspace's
+  identically-named tag is untouched; a blank `to` is 400 and 201 entities is 413; a client test that the group renders the tags
+  with counts and calls the routes; `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: tag
+  colours or descriptions, renaming a tag from the entity editor, a tag index on `Entity` (an Atlas index change), and any
+  change to the existing tag pill row.
+- [ ] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one** [proposed]
+  `applyRelationship` (`server/src/lib/draftApplier.js:176`) always does `RelationshipGroup.create(...)`. Nothing looks for a
+  group that already holds those members under that label, so re-importing an unchanged docker-compose file — the ordinary case,
+  and the one `textHash` exists to recognise — adds a second "Depends on" group for every edge it found the first time, and each
+  entity's Relationships section shows the link twice. KOL-045's Decision Log entry records this as accepted and names the
+  reason: "recognising an existing group is drift detection, which is out of scope". It is the smallest piece of the roadmap's
+  continuous-sync work and the one that makes re-import safe. Build: match where the entities are already matched, not in the
+  write — a proposed relationship whose resolvable member set (order-insensitive, by resolved entity id) and label equal an
+  existing `RelationshipGroup` in the workspace becomes `op: 'update'` with `targetGroupId` and
+  `matchedBy: 'same-members-and-label'`, in `server/src/lib/draftNormalizer.js` and
+  `server/src/lib/producers/dockerCompose.js`; `targetGroupId` joins the relationship payload in
+  `server/src/lib/draftItemSchema.js`. `applyRelationship` then updates that group in place — `$set` on the matching member's
+  label and notes, never removing a member a human added — and returns its id. A member that only resolves at apply time (a
+  sibling `localKey`) is matched inside `applyRelationship` against the ids it has just resolved, so the check happens once,
+  wherever the ids become known. Verify: `server/tests/unit/draftNormalizer.test.js` and
+  `server/tests/unit/dockerCompose.test.js` — a second parse against a workspace already holding the group yields `op: 'update'`
+  carrying the group's id; `server/tests/http/composeDraft.test.js` — posting the fixture twice and applying both drafts leaves
+  exactly one group per edge and each entity's `relationships` array the same length, and a group a human has added a third
+  member to keeps that member; `cd server && yarn test` green. Out of scope: proposing the *removal* of a link that has
+  disappeared from the source (drift detection proper), deduplicating groups created before this item, `ChangeLog` entries for
+  relationship writes (the applier records none today), and open-question dedup.
 
 ## Blocked Items
 
