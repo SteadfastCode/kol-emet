@@ -29,7 +29,7 @@ registration, or removes a feature.
   Cache `~/.cache/mongodb-binaries` so `mongodb-memory-server` downloads once. Verify: `gh pr checks` on the routine's own PR shows
   both jobs green before merge. Out of scope: deploys, branch protection (a repo setting Daniel must flip — flag it in the PR).
   needs-human because `.github/**` is denylisted for automated runs (a run may never add or edit its own CI); Daniel adds this one.
-- [ ] **(KOL-042) Backlog audit: file new candidates under Proposed** [not-before: 2026-09-24]
+- [x] **(KOL-042) Backlog audit: file new candidates under Proposed** [not-before: 2026-09-24]
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
   the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
