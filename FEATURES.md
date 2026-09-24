@@ -29,21 +29,6 @@ registration, or removes a feature.
   Cache `~/.cache/mongodb-binaries` so `mongodb-memory-server` downloads once. Verify: `gh pr checks` on the routine's own PR shows
   both jobs green before merge. Out of scope: deploys, branch protection (a repo setting Daniel must flip — flag it in the PR).
   needs-human because `.github/**` is denylisted for automated runs (a run may never add or edit its own CI); Daniel adds this one.
-- [x] **(KOL-042) Backlog audit: file new candidates under Proposed** [not-before: 2026-09-24]
-  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
-  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
-  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
-  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
-  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
-  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
-  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
-  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
-  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
-  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
-  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
-  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
-  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
-  for `diff-policy`).
 
 - [ ] **(KOL-055) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-01]
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
@@ -226,6 +211,21 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-042) Backlog audit: file new candidates under Proposed** [not-before: 2026-09-24] (routine 2026-09-24, 373b3a7)
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
 - [x] **(KOL-048) SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word, so…** (routine 2026-09-23, 7452dd1)
   Found by the grader of KOL-046 (medium, server/src/lib/producers/redactSecrets.js:73).
   SECRET_WORD_RE requires a non-letter (or string start) immediately before the credential word,

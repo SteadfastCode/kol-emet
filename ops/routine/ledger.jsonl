@@ -157,3 +157,4 @@
 {"event":"complete","runId":"2026-09-23T08:37:26.125Z","item":"KOL-048","mergeSha":"7452dd1871bc51552972cb387241663da0550fcf","durationMin":5,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-09-23T08:42:34.694Z"}
 {"event":"local-review","item":"KOL-048","model":"qwen2.5-coder:14b","findings":0,"contextFiles":2,"promptVersion":"v4","mergeSha":"7452dd1871bc51552972cb387241663da0550fcf","runId":"2026-09-24T07:01:29.611Z","promptTokens":8876,"completionTokens":157,"latencyMs":40781,"chunkErrors":0,"atUtc":"2026-09-24T07:02:12.858Z"}
 {"event":"claim","runId":"2026-09-24T11:11:45.061Z","item":"KOL-042","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-09-24T11:11:59.703Z"}
+{"event":"complete","runId":"2026-09-24T11:11:45.061Z","item":"KOL-042","mergeSha":"373b3a7062bac10151818cfc8b2ceb765788056a","durationMin":12,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-09-24T11:24:19.281Z"}
