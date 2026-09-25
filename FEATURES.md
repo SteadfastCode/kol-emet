@@ -48,6 +48,19 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-056) The fix closes the map-vs-list asymmetry only in one direction.**
+  Found by the grader of KOL-048 (medium, server/src/lib/producers/redactSecrets.js:107). The fix
+  closes the map-vs-list asymmetry only in one direction. SECRET_WORD_BOUNDED adds
+  pass|pwd|salt|auth|bearer|cert (and SECRET_WORD_GLUED adds authorization|certificate) to the key
+  rule, but INLINE_ASSIGN_RE's word list is unchanged and contains none of pass, salt, auth,
+  bearer, cert, certificate or authorization. So `DB_PASS: hunter2` (a key the test itself asserts
+  is a credential) is redacted in map form while `- DB_PASS=hunter2` in a compose `environment`
+  list matches no rule — sequence items get no key rule, INLINE_ASSIGN_RE needs one of its own
+  words, no URL userinfo, no SECRET_SHAPE — and the password is stored verbatim in source.text,
+  the evidence quote and the TTL-less export. Same for `- AUTH=abc123`, `- SIGNING_SALT=...`, `-
+  HTTP_AUTHORIZATION=...`. The file's new comment states the invariant 'which compose syntax a
+  file happens to use must not decide whether a credential leaks', and that invariant still fails,
+  just with the two syntaxes swapped.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
