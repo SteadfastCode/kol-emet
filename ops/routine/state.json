@@ -58,7 +58,7 @@
     "KOL-056": {
       "order": 4,
       "title": "The fix closes the map-vs-list asymmetry only in one direction.",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-056",
