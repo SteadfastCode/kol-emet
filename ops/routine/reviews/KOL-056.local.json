@@ -1,0 +1,81 @@
+{
+  "item": "KOL-056",
+  "repo": "kol-emet",
+  "mergeSha": "a9276d92f4a065b62d770fcbe17091a6dfa4a859",
+  "completedAtUtc": "2026-09-25T06:14:09.118Z",
+  "completeRunId": "2026-09-25T06:07:38.903Z",
+  "reviewRunId": "2026-09-25T07:01:48.510Z",
+  "reviewedAtUtc": "2026-09-25T07:07:27.090Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 14449,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/producers/redactSecrets.js"
+      ],
+      "part": null,
+      "bytes": 9337,
+      "contextBytes": 0,
+      "promptTokens": 3126,
+      "completionTokens": 160,
+      "latencyMs": 16443,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/redactSecrets.test.js"
+      ],
+      "part": null,
+      "bytes": 5112,
+      "contextBytes": 9249,
+      "promptTokens": 4454,
+      "completionTokens": 206,
+      "latencyMs": 23084,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 270,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `looksSecret` function is not defined in the provided diff, causing a runtime error.",
+      "scenario": "When the `inlineSpans` function is called, it attempts to use `looksSecret(m[1])`, but since `looksSecret` is not defined in the diff, this will result in a ReferenceError at runtime.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The symbol `looksSecret` used but not defined in what you see exists elsewhere."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 107,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The fix closes the map-vs-list asymmetry only in one direction.",
+      "scenario": "`DB_PASS: hunter2` (a key the test itself asserts is a credential) is redacted in map form while `- DB_PASS=hunter2` in a compose `environment` list matches no rule — sequence items get no key rule, INLINE_ASSIGN_RE needs one of its own words, no URL userinfo, no SECRET_SHAPE — and the password is stored verbatim in source.text, the evidence quote and the TTL-less export.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle sequence items with key rules, leading to asymmetry."
+      }
+    }
+  ],
+  "triage": null,
+  "summary": "The provided diff introduces a new dependency on the `looksSecret` function without defining it, which will cause a runtime error. · The fix addresses an asymmetry issue between map and list forms in redacting secrets, but it only resolves the issue in one direction. The other direction still allows credentials to leak.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15157,
+    "completionTokens": 432
+  },
+  "latencyMs": 64435
+}
