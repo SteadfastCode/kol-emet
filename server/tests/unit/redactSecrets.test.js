@@ -25,8 +25,8 @@
  *                                            (alias with no anchor)
  *   - BLOCK_HEADER_RE never matching      -> the PEM test fails (invalid YAML)
  *   - the line-scanner fallback removed   -> the invalid-YAML test fails
- *   - INLINE_ASSIGN_RE's suffix group made greedy -> the not-a-credential test
- *                                            fails on TOKENIZER
+ *   - the inline rule given a word list of   -> the map-vs-list test fails
+ *     its own instead of looksSecret             (DB_PASS leaks in list form)
  *   - SECRET_WORD_GLUED given a left boundary -> the glued-key test fails
  *                                            (PGPASSWORD leaks in map form)
  *   - SECRET_WORD_BOUNDED's left boundary cut -> the looksSecret table fails
@@ -226,6 +226,62 @@ describe('redactSecrets — credentials do not survive', () => {
     assert.deepEqual(parseDocument(out.text).toJS().services.web.command, ['serve', `--password=${REDACTED}`, '--port=80']);
   });
 
+  test('a key is a credential in both compose syntaxes, or in neither', () => {
+    // The key rule and the inline rule once carried separate word lists, and
+    // drifted apart in both directions: PGPASSWORD leaked in map form while
+    // the list form caught it, and then DB_PASS, AUTH, SIGNING_SALT and
+    // HTTP_AUTHORIZATION leaked in list form once the key rule learned them.
+    // Either way the credential reached a collection with no TTL, an evidence
+    // quote and a verbatim export path. So the table, not the rule, is the
+    // invariant: the same file writes every key both ways, and which syntax
+    // it used must not change what comes out. The innocents are half of it —
+    // symmetry is trivial to get by redacting everything, and a redacted
+    // PARTITION_KEY costs the draft the architecture it exists to capture.
+    const CREDENTIALS = [
+      'DB_PASS', 'AUTH', 'SIGNING_SALT', 'HTTP_AUTHORIZATION', 'API_BEARER', 'SSLCERTIFICATE',
+      'PGPASSWORD', 'POSTGRES_PASSWORD', 'JWT_SECRET', 'MYAPIKEY', 'AWS_SECRET_ACCESS_KEY',
+    ];
+    const INNOCENTS = ['PARTITION_KEY', 'TOKENIZER', 'AUTHORS', 'DB_HOST', 'CACHE_BYPASS', 'PGPASSFILE'];
+    const mapValue = key => `map-value-of-${key}`;
+    const listValue = key => `list-value-of-${key}`;
+    const innocent = key => `plain-${key}`;
+
+    const text = [
+      'services:',
+      '  map_form:',
+      '    image: nginx',
+      '    environment:',
+      ...CREDENTIALS.map(key => `      ${key}: ${mapValue(key)}`),
+      ...INNOCENTS.map(key => `      ${key}: ${innocent(key)}`),
+      '  list_form:',
+      '    image: nginx',
+      '    environment:',
+      ...CREDENTIALS.map(key => `      - ${key}=${listValue(key)}`),
+      ...INNOCENTS.map(key => `      - ${key}=${innocent(key)}`),
+    ].join('\n');
+
+    const out = redact(text, 'map vs list');
+    assertGone(out, CREDENTIALS.flatMap(key => [mapValue(key), listValue(key)]), 'map vs list');
+    assert.ok(parses(out.text), 'the redacted file is still YAML');
+
+    const services = parseDocument(out.text).toJS().services;
+    for (const key of CREDENTIALS) {
+      assert.equal(services.map_form.environment[key], REDACTED, `${key} must lose its value in map form`);
+      assert.ok(
+        services.list_form.environment.includes(`${key}=${REDACTED}`),
+        `${key} must lose its value in list form too, or the leak is a question of syntax`,
+      );
+    }
+    for (const key of INNOCENTS) {
+      assert.equal(services.map_form.environment[key], innocent(key), `${key} is not a credential in map form`);
+      assert.ok(
+        services.list_form.environment.includes(`${key}=${innocent(key)}`),
+        `${key} is not a credential in list form either`,
+      );
+    }
+    assert.equal(out.count, CREDENTIALS.length * 2, 'one redaction per credential, per syntax');
+  });
+
   test('a file the parser rejects is still redacted, by the line scanner', () => {
     const text = [
       'services:',
@@ -233,13 +289,15 @@ describe('redactSecrets — credentials do not survive', () => {
       '    environment:',
       '      POSTGRES_PASSWORD: hunter2',
       '      DATABASE_URL: postgres://app:tr0ub4dor@postgres:5432/app',
+      '      - DB_PASS=c0rrecth0rse',
       '   ports: [80',
     ].join('\n');
 
     const out = redact(text, 'invalid yaml');
     assert.ok(!parses(text), 'the case is only meaningful if the input is genuinely broken');
     assert.equal(out.via, 'lines', 'the AST pass cannot run, so the line scanner does');
-    assertGone(out, ['hunter2', 'tr0ub4dor'], 'invalid yaml');
+    assertGone(out, ['hunter2', 'tr0ub4dor', 'c0rrecth0rse'], 'invalid yaml');
+    assert.match(out.text, /- DB_PASS=REDACTED/, 'the line scanner reads a list item too');
     assert.match(out.text, /postgres:\/\/REDACTED@postgres:5432\/app/, 'the host still survives');
   });
 });

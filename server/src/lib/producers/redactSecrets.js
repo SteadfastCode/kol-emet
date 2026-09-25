@@ -66,10 +66,11 @@ const ADDRESS_KEY_RE = /(url|uri|urls|endpoint|host|hostname|addr|address|server
  * Credential words that mean the same thing however the key runs into them
  * from the left, so they match glued onto a letter run: `PGPASSWORD` — libpq's
  * own variable, and the one a postgres service is most likely to be handed —
- * is a password, and so is `MYAPPTOKEN`. INLINE_ASSIGN_RE already matches this
- * way, which is why the list form `- PGPASSWORD=hunter2` was redacted while
- * the map form `PGPASSWORD: hunter2` was not; which compose syntax a file
- * happens to use must not decide whether a credential leaks.
+ * is a password, and so is `MYAPPTOKEN`. These words were added because the
+ * list form `- PGPASSWORD=hunter2` was redacted while the map form
+ * `PGPASSWORD: hunter2` was not; which compose syntax a file happens to use
+ * must not decide whether a credential leaks. This list, and the one below,
+ * are now the only words either syntax is judged by — see INLINE_ASSIGN_RE.
  */
 const SECRET_WORD_GLUED =
   'password|passwd|passphrase|secret|token|credentials?|authorization|apikey|certificate';
@@ -100,11 +101,21 @@ const URL_USERINFO_RE = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/@"'<>]+)@/gi;
  * `KEY=value` inside a single scalar. This is how compose's list form of
  * `environment` is written (`- POSTGRES_PASSWORD=hunter2`), and also how a
  * password reaches a `command:` (`--password=hunter2`) or an ODBC-style
- * connection string. The suffix group only spans separator-joined words, so
- * `TOKEN_FILE=` matches and `TOKENIZER=` does not.
+ * connection string.
+ *
+ * It matches every assignment, not only credential-looking ones: which of them
+ * is a credential is `looksSecret(key)`, the same predicate the map form's key
+ * rule asks — deliberately not a second word list. A list of its own is how
+ * this rule and the key rule drifted apart twice, once in each direction.
+ * `PGPASSWORD` leaked in map form while the list form caught it; then the key
+ * rule learned `pass`, `salt`, `auth`, `bearer`, `cert` and `authorization`
+ * and this one did not, so `DB_PASS: hunter2` was redacted while
+ * `- DB_PASS=hunter2` — the same credential, one service down — was stored
+ * verbatim, quoted as evidence and exported. With one list there is nothing
+ * left to drift: address keys (`DATABASE_URL=`) still fall out here exactly as
+ * they do there, keeping their host for the URL-userinfo rule to trim.
  */
-const INLINE_ASSIGN_RE =
-  /([A-Za-z0-9_.-]*?(?:password|passwd|passphrase|pwd|secret|token|credentials?|apikey|api[_.-]key|access[_.-]key|private[_.-]key|auth[_.-]?token)(?:[_.-][A-Za-z0-9]+)*)(\s*=\s*)([^\s;&"']+)/gi;
+const INLINE_ASSIGN_RE = /([A-Za-z0-9_.-]+)(\s*=\s*)([^\s;&"']+)/g;
 
 /**
  * Values that are a credential whatever they are called: a JWT, an OpenAI or
@@ -128,7 +139,9 @@ const PEM_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
 const BLOCK_HEADER_RE = /^[|>][-+]?\d*(\s+#.*)?$/;
 
 /**
- * Whether a key's value should be redacted whole.
+ * Whether a key names a credential. The one question both syntaxes ask: the
+ * key rule redacts the whole value under it, the inline rule redacts what
+ * follows its `=`, and neither keeps a word list the other does not share.
  * @param {string} key
  * @returns {boolean}
  */
@@ -269,6 +282,7 @@ function inlineSpans(raw, offset, under = null) {
     spans.push({ start, end: start + m[2].length, replacement: REDACTED, key: under ?? m[1].replace('://', ''), rule: 'url-userinfo' });
   }
   for (const m of raw.matchAll(INLINE_ASSIGN_RE)) {
+    if (!looksSecret(m[1])) continue;
     const start = offset + m.index + m[1].length + m[2].length;
     spans.push({ start, end: start + m[3].length, replacement: REDACTED, key: m[1], rule: 'inline-assign' });
   }
