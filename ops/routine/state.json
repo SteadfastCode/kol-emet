@@ -58,18 +58,18 @@
     "KOL-056": {
       "order": 4,
       "title": "The fix closes the map-vs-list asymmetry only in one direction.",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-056",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-09-25T06:07:48.721Z",
+      "runId": "2026-09-25T06:07:38.903Z",
       "lastFail": null
     },
     "KOL-013": {

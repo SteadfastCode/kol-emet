@@ -48,7 +48,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-056) The fix closes the map-vs-list asymmetry only in one direction.**
+- [x] **(KOL-056) The fix closes the map-vs-list asymmetry only in one direction.**
   Found by the grader of KOL-048 (medium, server/src/lib/producers/redactSecrets.js:107). The fix
   closes the map-vs-list asymmetry only in one direction. SECRET_WORD_BOUNDED adds
   pass|pwd|salt|auth|bearer|cert (and SECRET_WORD_GLUED adds authorization|certificate) to the key
