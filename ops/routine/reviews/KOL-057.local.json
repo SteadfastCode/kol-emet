@@ -1,0 +1,81 @@
+{
+  "item": "KOL-057",
+  "repo": "kol-emet",
+  "mergeSha": "20af6fb63b96ca97b11a307de9c27bec236637dd",
+  "completedAtUtc": "2026-09-26T06:03:58.725Z",
+  "completeRunId": "2026-09-26T05:57:39.280Z",
+  "reviewRunId": "2026-09-26T07:01:39.483Z",
+  "reviewedAtUtc": "2026-09-26T07:03:58.350Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 14588,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/producers/redactSecrets.js"
+      ],
+      "part": null,
+      "bytes": 10019,
+      "contextBytes": 0,
+      "promptTokens": 3264,
+      "completionTokens": 167,
+      "latencyMs": 15817,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/redactSecrets.test.js"
+      ],
+      "part": null,
+      "bytes": 4569,
+      "contextBytes": 9763,
+      "promptTokens": 4404,
+      "completionTokens": 235,
+      "latencyMs": 23086,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 123,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The regex `INLINE_ASSIGN_RE` now matches the entire value of nested assignments, causing inner secrets to be missed.",
+      "scenario": "Given an input like `- JAVA_OPTS=-Dspring.datasource.password=hunter2`, the new regex will match `JAVA_OPTS` and consider its entire value as non-secret because `JAVA_OPTS` itself is not a secret. As a result, `hunter2` remains unredacted.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The regex `INLINE_ASSIGN_RE` now matches the entire value of nested assignments, causing inner secrets to be missed."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 118,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Widening INLINE_ASSIGN_RE to `([A-Za-z0-9_.-]+)(\\s*= *)([^ ;&\"']+)` causes nested assignments to be incorrectly matched and redacted.",
+      "scenario": "When a value itself contains another assignment, such as `- JAVA_OPTS=-Dspring.datasource.password=hunter2`, the new regex matches the entire string from `JAVA_OPTS` to the end of the line. This results in the entire value being treated as a secret and redacted, rather than just the nested secret (`hunter2`). This is a regression compared to the previous behavior where only the nested secret was redacted.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The new regex matches the entire string from `JAVA_OPTS` to the end of the line, causing the entire value to be treated as a secret and redacted."
+      }
+    }
+  ],
+  "triage": null,
+  "summary": "The change introduces a regression where nested assignments are not properly scanned for secrets. · The change introduces a bug that causes nested assignments to be incorrectly matched and redacted, leading to data loss of non-secret parts of the value.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15374,
+    "completionTokens": 490
+  },
+  "latencyMs": 63872
+}
