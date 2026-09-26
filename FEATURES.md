@@ -48,7 +48,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-057) Widening INLINE_ASSIGN_RE to ([A-Za-z0-9_.-]+)(\s=\s)([^\s;&"']+) makes the leading non-secret ke…**
+- [x] **(KOL-057) Widening INLINE_ASSIGN_RE to ([A-Za-z0-9_.-]+)(\s=\s)([^\s;&"']+) makes the leading non-secret ke…**
   Found by the grader of KOL-056 (high, server/src/lib/producers/redactSecrets.js:118). Widening
   INLINE_ASSIGN_RE to `([A-Za-z0-9_.-]+)(\s*=\s*)([^\s;&"']+)` makes the leading non-secret key
   swallow the whole value, so an assignment nested inside another assignment's value is never
