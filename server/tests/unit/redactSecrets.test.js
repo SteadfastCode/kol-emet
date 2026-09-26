@@ -31,6 +31,9 @@
  *                                            (PGPASSWORD leaks in map form)
  *   - SECRET_WORD_BOUNDED's left boundary cut -> the looksSecret table fails
  *                                            (CACHE_BYPASS reads as a secret)
+ *   - the inline scan resuming past a value  -> the nested-assignment test
+ *     whose key was not a credential              fails (JAVA_OPTS' datasource
+ *                                                 password leaks in list form)
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_REDACT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -280,6 +283,70 @@ describe('redactSecrets — credentials do not survive', () => {
       );
     }
     assert.equal(out.count, CREDENTIALS.length * 2, 'one redaction per credential, per syntax');
+  });
+
+  test('an assignment nested in another assignment\u2019s value is a credential, in both syntaxes', () => {
+    // A value that is itself a `KEY=value` string is ordinary compose: a JVM is
+    // handed its datasource password through JAVA_OPTS, and a webhook URL
+    // carries its token in the query. The outer key names no credential \u2014
+    // JAVA_OPTS is not one, and WEBHOOK_URL is an address key \u2014 while the
+    // inline value class allows `=`, so the outer assignment matches across the
+    // whole value. A scan that resumed past that value would never look at what
+    // is nested in it: the map form redacts it (the key rule hands the value
+    // straight to the inline rule, with no leading `KEY=` in front of it), so
+    // skipping it in list form is the map-vs-list asymmetry again, one case
+    // narrower \u2014 and `hunter2` reaches source.text, an evidence quote and a
+    // TTL-less export.
+    const NESTED = [
+      { outer: 'JAVA_OPTS', prefix: '-Dspring.datasource.password=', secret: 'hunter2' },
+      { outer: 'WEBHOOK_URL', prefix: 'https://hooks.example.com/services/x?token=', secret: 'abc123xyz' },
+      { outer: 'FEED_URL', prefix: 'https://feeds.example.com/v1?api_key=', secret: 'k9sEcReT0001' },
+    ];
+    // The other half: a nested key that is not a credential keeps its value, or
+    // the fix is just "redact everything after the first `=`", which costs the
+    // draft the ports and paths it exists to capture.
+    const INNOCENT = [
+      { outer: 'JVM_OPTS', prefix: '-Dserver.port=', value: '8080' },
+      { outer: 'HEALTH_URL', prefix: 'https://api.example.com/health?timeout=', value: '30' },
+    ];
+
+    const text = [
+      'services:',
+      '  map_form:',
+      '    image: openjdk',
+      '    environment:',
+      ...NESTED.map(c => `      ${c.outer}: ${c.prefix}${c.secret}`),
+      ...INNOCENT.map(c => `      ${c.outer}: ${c.prefix}${c.value}`),
+      '  list_form:',
+      '    image: openjdk',
+      '    environment:',
+      ...NESTED.map(c => `      - ${c.outer}=${c.prefix}${c.secret}`),
+      ...INNOCENT.map(c => `      - ${c.outer}=${c.prefix}${c.value}`),
+    ].join('\n');
+
+    const out = redact(text, 'nested assignments');
+    assertGone(out, NESTED.map(c => c.secret), 'nested assignments');
+    assert.ok(parses(out.text), 'the redacted file is still YAML');
+
+    const services = parseDocument(out.text).toJS().services;
+    for (const { outer, prefix } of NESTED) {
+      assert.equal(
+        services.map_form.environment[outer], `${prefix}${REDACTED}`,
+        `${outer}: only the nested credential goes, so the rest of the value still means something`,
+      );
+      assert.ok(
+        services.list_form.environment.includes(`${outer}=${prefix}${REDACTED}`),
+        `${outer}: the nested credential must go in list form too, or the leak is a question of syntax`,
+      );
+    }
+    for (const { outer, prefix, value } of INNOCENT) {
+      assert.equal(services.map_form.environment[outer], `${prefix}${value}`, `${outer} holds no credential`);
+      assert.ok(
+        services.list_form.environment.includes(`${outer}=${prefix}${value}`),
+        `${outer} holds no credential in list form either`,
+      );
+    }
+    assert.equal(out.count, NESTED.length * 2, 'one redaction per nested credential, per syntax');
   });
 
   test('a file the parser rejects is still redacted, by the line scanner', () => {
