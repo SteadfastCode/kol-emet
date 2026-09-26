@@ -58,7 +58,7 @@
     "KOL-057": {
       "order": 4,
       "title": "Widening INLINE_ASSIGN_RE to ([A-Za-z0-9_.-]+)(\\s=\\s)([^\\s;&\"']+) makes the leading non-secret ke…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-057",

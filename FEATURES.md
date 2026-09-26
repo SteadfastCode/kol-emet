@@ -48,19 +48,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-057) Widening INLINE_ASSIGN_RE to ([A-Za-z0-9_.-]+)(\s=\s)([^\s;&"']+) makes the leading non-secret ke…**
-  Found by the grader of KOL-056 (high, server/src/lib/producers/redactSecrets.js:118). Widening
-  INLINE_ASSIGN_RE to `([A-Za-z0-9_.-]+)(\s*=\s*)([^\s;&"']+)` makes the leading non-secret key
-  swallow the whole value, so an assignment nested inside another assignment's value is never
-  scanned: `- JAVA_OPTS=-Dspring.datasource.password=hunter2` and `-
-  WEBHOOK_URL=https://h/x?token=abc123` (or `?api_key=...`) now match once with key
-  `JAVA_OPTS`/`WEBHOOK_URL`, fail looksSecret, and are skipped — matchAll resumes past the value,
-  so `password=hunter2`/`token=abc123` is stored verbatim in source.text, quoted as evidence and
-  exported. The old lazy-prefix regex caught both (it could start matching mid-token), and the map
-  form still catches both (`JAVA_OPTS: -Dspring...password=hunter2` redacts, because inlineSpans
-  sees the value without a leading `KEY=`), so this is both a regression and the same map-vs-list
-  asymmetry the change claims to have eliminated, in a narrower case the new table test does not
-  exercise.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
@@ -224,6 +211,19 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-057) Widening INLINE_ASSIGN_RE to ([A-Za-z0-9_.-]+)(\s=\s)([^\s;&"']+) makes the leading non-secret ke…** (routine 2026-09-26, 20af6fb)
+  Found by the grader of KOL-056 (high, server/src/lib/producers/redactSecrets.js:118). Widening
+  INLINE_ASSIGN_RE to `([A-Za-z0-9_.-]+)(\s*=\s*)([^\s;&"']+)` makes the leading non-secret key
+  swallow the whole value, so an assignment nested inside another assignment's value is never
+  scanned: `- JAVA_OPTS=-Dspring.datasource.password=hunter2` and `-
+  WEBHOOK_URL=https://h/x?token=abc123` (or `?api_key=...`) now match once with key
+  `JAVA_OPTS`/`WEBHOOK_URL`, fail looksSecret, and are skipped — matchAll resumes past the value,
+  so `password=hunter2`/`token=abc123` is stored verbatim in source.text, quoted as evidence and
+  exported. The old lazy-prefix regex caught both (it could start matching mid-token), and the map
+  form still catches both (`JAVA_OPTS: -Dspring...password=hunter2` redacts, because inlineSpans
+  sees the value without a leading `KEY=`), so this is both a regression and the same map-vs-list
+  asymmetry the change claims to have eliminated, in a narrower case the new table test does not
+  exercise.
 - [x] **(KOL-056) The fix closes the map-vs-list asymmetry only in one direction.** (routine 2026-09-25, a9276d9)
   Found by the grader of KOL-048 (medium, server/src/lib/producers/redactSecrets.js:107). The fix
   closes the map-vs-list asymmetry only in one direction. SECRET_WORD_BOUNDED adds
