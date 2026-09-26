@@ -1,0 +1,43 @@
+{
+  "item": "KOL-042",
+  "repo": "kol-emet",
+  "mergeSha": "373b3a7062bac10151818cfc8b2ceb765788056a",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-26T04:09:54.505Z",
+  "gradedAtUtc": "2026-09-26T04:16:31.023Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The KOL-055 block is the mandated weekly renewal copy with a fresh id (048 was the prior max) and a correct `[not-before: 2026-10-01]` = run date 2026-09-24 + 7; the original KOL-042 now sits under Completed Items, so no duplicate live item exists."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The diff is a backlog file, not an implementation, and the re-import duplication it describes is exactly what filed item KOL-054 proposes fixing (verified: `draftApplier.js` still does an unconditional `RelationshipGroup.create`)."
+    }
+  ],
+  "triageGrades": [],
+  "missed": [],
+  "summary": "Both findings are false positives from a reviewer that misread a backlog-only diff as code: one flags the renewal copy the item explicitly requires, the other demands an implementation from a proposal that the diff in fact files as KOL-054.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 0,
+    "triageCorrect": 0
+  },
+  "costUsd": 0.5881775,
+  "numTurns": 8,
+  "durationMs": 68759,
+  "sessionId": "26036a69-abfb-4783-8cbf-7f0a21f01b16"
+}

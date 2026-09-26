@@ -55,21 +55,21 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-056": {
+    "KOL-057": {
       "order": 4,
-      "title": "The fix closes the map-vs-list asymmetry only in one direction.",
-      "status": "done",
-      "attempts": 1,
+      "title": "Widening INLINE_ASSIGN_RE to ([A-Za-z0-9_.-]+)(\\s=\\s)([^\\s;&\"']+) makes the leading non-secret ke…",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-056",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-09-25T06:07:48.721Z",
-      "runId": "2026-09-25T06:07:38.903Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
     "KOL-013": {
@@ -280,6 +280,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-056": {
+      "order": null,
+      "title": "The fix closes the map-vs-list asymmetry only in one direction.",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-056",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-09-25T06:07:48.721Z",
+      "runId": "2026-09-25T06:07:38.903Z",
       "lastFail": null
     },
     "KOL-042": {
