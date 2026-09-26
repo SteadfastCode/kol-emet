@@ -114,6 +114,12 @@ const URL_USERINFO_RE = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s/@"'<>]+)@/gi;
  * verbatim, quoted as evidence and exported. With one list there is nothing
  * left to drift: address keys (`DATABASE_URL=`) still fall out here exactly as
  * they do there, keeping their host for the URL-userinfo rule to trim.
+ *
+ * The value class allows `=`, because one assignment's value routinely carries
+ * another: `JAVA_OPTS=-Dspring.datasource.password=hunter2`, or a webhook URL
+ * with `?token=` in its query. So the key that wins a match is not always the
+ * one the credential hangs off, and a match that `looksSecret` rejects must not
+ * take its value out of the scan with it — see the cursor in `inlineSpans`.
  */
 const INLINE_ASSIGN_RE = /([A-Za-z0-9_.-]+)(\s*=\s*)([^\s;&"']+)/g;
 
@@ -281,10 +287,24 @@ function inlineSpans(raw, offset, under = null) {
     const start = offset + m.index + m[1].length;
     spans.push({ start, end: start + m[2].length, replacement: REDACTED, key: under ?? m[1].replace('://', ''), rule: 'url-userinfo' });
   }
-  for (const m of raw.matchAll(INLINE_ASSIGN_RE)) {
-    if (!looksSecret(m[1])) continue;
-    const start = offset + m.index + m[1].length + m[2].length;
-    spans.push({ start, end: start + m[3].length, replacement: REDACTED, key: m[1], rule: 'inline-assign' });
+  // Walked with an explicit cursor rather than matchAll, because an assignment
+  // can sit inside another one's value and only the inner key names the
+  // credential. `JAVA_OPTS=-Dspring.datasource.password=hunter2` matches once,
+  // as JAVA_OPTS, and `WEBHOOK_URL=https://h/x?token=abc` matches once, as an
+  // address key: both are rejected, and matchAll would then resume past the
+  // whole value, leaving the password and the token unscanned and stored
+  // verbatim. Rejecting a match costs only its key and separator, so the value
+  // is scanned for what is nested in it; a redacted value is stepped over,
+  // since it is already gone. Either way the cursor moves forward.
+  const assignments = new RegExp(INLINE_ASSIGN_RE.source, INLINE_ASSIGN_RE.flags);
+  for (let m = assignments.exec(raw); m; m = assignments.exec(raw)) {
+    const start = m.index + m[1].length + m[2].length;
+    if (!looksSecret(m[1])) {
+      assignments.lastIndex = start;
+      continue;
+    }
+    spans.push({ start: offset + start, end: offset + start + m[3].length, replacement: REDACTED, key: m[1], rule: 'inline-assign' });
+    assignments.lastIndex = start + m[3].length;
   }
   for (const m of raw.matchAll(SECRET_SHAPE_RE)) {
     spans.push({ start: offset + m.index, end: offset + m.index + m[0].length, replacement: REDACTED, key: under ?? '(value)', rule: 'shape' });
