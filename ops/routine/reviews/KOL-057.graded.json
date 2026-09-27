@@ -1,0 +1,43 @@
+{
+  "item": "KOL-057",
+  "repo": "kol-emet",
+  "mergeSha": "20af6fb63b96ca97b11a307de9c27bec236637dd",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-09-27T04:08:54.577Z",
+  "gradedAtUtc": "2026-09-27T04:12:40.447Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It describes the pre-fix behaviour: the merged `inlineSpans` walks with an explicit cursor and, on a rejected key like `JAVA_OPTS`, rewinds `lastIndex` to the value start so the nested `-Dspring.datasource.password=hunter2` matches and `hunter2` is redacted (the new table test pins exactly this, list form included)."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The opposite claim is also untrue and contradicts finding 1 — `looksSecret('JAVA_OPTS')` is false, so its span is never pushed and only the inner `hunter2` is replaced, leaving `-Dspring.datasource.password=REDACTED`; the INNOCENT rows (`-Dserver.port=8080`, `?timeout=30`) confirm non-credential values survive intact."
+    }
+  ],
+  "triageGrades": [],
+  "missed": [],
+  "summary": "Both findings restate the KOL-056 defect this diff fixes rather than reviewing the merged code, and they assert mutually contradictory failure modes for the same line — no real defect was found, and I found none either.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 0,
+    "triageCorrect": 0
+  },
+  "costUsd": 1.2109245,
+  "numTurns": 9,
+  "durationMs": 223643,
+  "sessionId": "34862cf8-36d7-4e54-81e2-d5dd78c3581b"
+}
