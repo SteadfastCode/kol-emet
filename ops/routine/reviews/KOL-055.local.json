@@ -1,0 +1,155 @@
+{
+  "item": "KOL-055",
+  "repo": "kol-emet",
+  "mergeSha": "fe1498681d780cf327cde9fe82f8b8601a73da70",
+  "completedAtUtc": "2026-10-01T05:23:43.559Z",
+  "completeRunId": "2026-10-01T05:08:45.013Z",
+  "reviewRunId": "2026-10-01T07:00:48.307Z",
+  "reviewedAtUtc": "2026-10-01T07:03:59.158Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 19306,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 2017,
+      "contextBytes": 12025,
+      "promptTokens": 4452,
+      "completionTokens": 125,
+      "latencyMs": 17298,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 14009,
+      "contextBytes": 0,
+      "promptTokens": 4305,
+      "completionTokens": 439,
+      "latencyMs": 33537,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 0,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 3545,
+      "contextBytes": 10342,
+      "promptTokens": 4287,
+      "completionTokens": 125,
+      "latencyMs": 19217,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "FEATURES.md",
+      "line": 46,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Duplicate item with the same ID and description.",
+      "scenario": "The diff adds a new item with ID (KOL-064) that is identical to an existing item in the 'Workqueue Items' section. This duplication can lead to confusion and potential double execution of the same task.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff adds a new item with ID (KOL-064) that is identical to an existing item in the 'Workqueue Items' section."
+      }
+    },
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 27,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Rollback route does not handle deleted entities correctly.",
+      "scenario": "When a rollback is attempted for a deleted entity, the route should recreate the document with its original _id and snapshot's fields. However, the current implementation answers 404 when it cannot find the live entity.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The rollback route reads the live entity first and answers 404 when it is gone."
+      }
+    },
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 41,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Rollback route does not handle deleted entities correctly.",
+      "scenario": "When a rollback is attempted for a deleted entity, the route should recreate the document with its original _id and snapshot's fields. However, the current implementation answers 404 when it cannot find the live entity.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The rollback route reads the live entity first and answers 404 when it is gone."
+      }
+    },
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 139,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Delete operation does not provide a way to restore deleted entities.",
+      "scenario": "The delete operation removes the document and keeps the snapshot for the ChangeLog TTL's 30 days. However, there is no way to restore the entity from its snapshot once it is deleted.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The delete operation removes the document but does not provide a way to restore it from the snapshot."
+      }
+    },
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 41,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "GET /entities endpoint returns all entities' block content, causing performance issues.",
+      "scenario": "The GET /entities endpoint returns every entity in the workspace as a full hydrated Mongoose document, including blocks. This can cause significant performance issues for workspaces with a large number of entities.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code explicitly states that `GET /entities` returns every entity in the workspace as a full hydrated Mongoose document, including blocks."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 341,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The proposed feature (KOL-062) does not address the issue of streams outliving their session after account deletion.",
+      "scenario": "After a user deletes their account, the `/events` stream should be terminated immediately to prevent sensitive data from being sent to unauthorized users.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The proposed feature (KOL-062) does not address the issue of streams outliving their session after account deletion."
+      }
+    }
+  ],
+  "triage": null,
+  "summary": "Found 1 defect(s). · There are several high-severity issues related to entity management and rollback operations that need to be addressed. · One finding identified in FEATURES.md",
+  "errors": [],
+  "usage": {
+    "promptTokens": 38780,
+    "completionTokens": 927
+  },
+  "latencyMs": 121027
+}
