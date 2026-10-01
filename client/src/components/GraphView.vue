@@ -381,7 +381,9 @@ onMounted(async () => {
 
       for (let i = 0; i < members.length; i++) {
         for (let j = i + 1; j < members.length; j++) {
-          const key = [members[i], members[j]].sort().join(' ');
+          // NUL separates the pair, written as an escape so the file stays text:
+          // a raw NUL byte made grep treat all of GraphView.vue as binary (KOL-065).
+          const key = [members[i], members[j]].sort().join('\u0000');
           if (!edgeMap.has(key)) {
             edgeMap.set(key, {
               source: members[i],
