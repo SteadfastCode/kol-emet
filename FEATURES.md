@@ -49,7 +49,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-065) KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…**
+- [x] **(KOL-065) KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…**
   Found by the grader of KOL-055 (medium, FEATURES.md:338). KOL-063's premise is false in the code
   it cites: `client/src/components/GraphView.vue:319-325` already registers a global
   `window.addEventListener('keydown', onKey)` that closes the graph on Escape (removed at line

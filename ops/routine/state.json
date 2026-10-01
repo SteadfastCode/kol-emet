@@ -58,18 +58,18 @@
     "KOL-065": {
       "order": 4,
       "title": "KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-065",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-01T08:37:01.658Z",
+      "runId": "2026-10-01T08:14:51.804Z",
       "lastFail": null
     },
     "KOL-066": {
