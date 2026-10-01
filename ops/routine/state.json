@@ -58,7 +58,7 @@
     "KOL-066": {
       "order": 4,
       "title": "KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-066",

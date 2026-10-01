@@ -49,14 +49,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…**
-  Found by the grader of KOL-055 (medium, FEATURES.md:226). KOL-058's second layer would break a
-  working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST
-  /authorize` and `POST /oauth/token`, but the Steadfast bridge has its own form-encoded OAuth
-  endpoints (`server/src/routes/bridge.js:135` `POST ${ISSUER_PATH}/authorize` and `:153` `POST
-  ${ISSUER_PATH}/oauth/token`), which would then receive no parsed body and fail on destructuring
-  `req.body` — the item never mentions them, so a run that implements it as written kills the
-  bridge connector's code exchange.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
@@ -392,6 +384,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…** (routine 2026-10-01, 67fdb02)
+  Found by the grader of KOL-055 (medium, FEATURES.md:226). KOL-058's second layer would break a
+  working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST
+  /authorize` and `POST /oauth/token`, but the Steadfast bridge has its own form-encoded OAuth
+  endpoints (`server/src/routes/bridge.js:135` `POST ${ISSUER_PATH}/authorize` and `:153` `POST
+  ${ISSUER_PATH}/oauth/token`), which would then receive no parsed body and fail on destructuring
+  `req.body` — the item never mentions them, so a run that implements it as written kills the
+  bridge connector's code exchange.
 - [x] **(KOL-065) KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…** (routine 2026-10-01, bd6efb1)
   Found by the grader of KOL-055 (medium, FEATURES.md:338). KOL-063's premise is false in the code
   it cites: `client/src/components/GraphView.vue:319-325` already registers a global
