@@ -46,6 +46,22 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-064) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-08]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -206,6 +222,152 @@ registration, or removes a feature.
   member to keeps that member; `cd server && yarn test` green. Out of scope: proposing the *removal* of a link that has
   disappeared from the source (drift detection proper), deduplicating groups created before this item, `ChangeLog` entries for
   relationship writes (the applier records none today), and open-question dedup.
+- [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client** [proposed]
+  Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
+  with `sameSite: 'none'` (`server/src/lib/sessionCookie.js:114`) because the client and the API sit on sibling subdomains
+  — so a browser sends it on cross-site requests. CORS is not the gate it looks like: `server/src/app.js:69` mounts
+  `express.urlencoded({ extended: false })` globally, and a form-encoded POST is a *simple* request, sent with no preflight;
+  only the response is blocked, never the write. An attacker's page therefore reaches every cookie-authenticated POST with
+  the victim's session: `POST /entities` (`server/src/routes/entities.js:89`) creates content from
+  `title=&category=&summary=`, `POST /drafts` (`server/src/routes/drafts.js:104`) spends the victim's AI allowance from
+  `text=`, `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) and `POST /auth/logout`
+  (`server/src/routes/auth.js:191`) need no body at all, and `POST /authorize` (`server/src/routes/oauth.js:91`) re-points
+  `Settings.mcpUserId` at whoever is signed in. PUT and DELETE are preflighted and so already refused. Build
+  `server/src/middleware/originGuard.js`: for every unsafe method (POST, PUT, PATCH, DELETE) arriving as a *session*
+  caller, require `Origin` to equal `CLIENT_ORIGIN` or the request's own origin — the OAuth approval page posts to
+  `/authorize` from a page this API served — falling back to `Referer`'s origin when `Origin` is absent, and refuse
+  anything else with 403 `{ error: 'CROSS_ORIGIN_REQUEST' }`. A `Bearer` caller is exempt: MCP sends no cookie, so no
+  browser can ride it. Mount it in `createApp` directly after the session middleware and ahead of every router, so a route
+  added later cannot land outside it. Second layer, because the Origin check is one header: move `express.urlencoded` off
+  the app and onto the two OAuth routes that need it (`POST /authorize`, `POST /oauth/token`), so a cross-site simple POST
+  cannot form a body any other route will parse. Log at light when `CLIENT_ORIGIN` is unset in production, the way
+  `sessionCookie.js` logs a missing cookie domain — `cors()` then answers `Access-Control-Allow-Origin: *`, which no
+  browser will use with credentials. Tiered logging `ORIGIN_GUARD_LOG_LEVEL = off | light | normal | verbose` (default
+  light): light names every refusal with the method, the path, which header it read and the allowlist it compared against,
+  because a 403 nobody can explain is this change's failure mode. Document the variable in `server/.env.example`, the 403
+  in `docs/api.md`, and add the Decision Log line in `kol_emet_spec.md`. Verify:
+  `server/tests/unit/originGuard.test.js` — a matching origin, a foreign origin, a missing `Origin` with a matching
+  `Referer`, neither header, a safe method, and a bearer caller; `server/tests/http/originGuard.test.js` — `POST /entities`
+  with a valid session and `Origin: https://evil.test` is 403 and creates no entity, the same POST with the configured
+  origin is 201, a form-encoded `POST /entities` is not parsed into a write, and `POST /oauth/token` still accepts its
+  form body; `cd server && yarn test` green. Out of scope: a double-submit or synchronizer CSRF token (the Origin check is
+  the whole fix while every client is a browser on one known origin), `sameSite: 'lax'` (it would break the
+  cross-subdomain deployment), the `cors()` wildcard behaviour itself, and rate limiting.
+- [ ] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500** [proposed]
+  `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) replays `log.snapshot` through
+  `findOneAndUpdate` with `runValidators: true`, and `Entity.category` validates against the workspace's `EntityType`
+  registry (`server/src/lib/entityTypeRegistry.js`). Renaming a type cascades to everything that used it
+  (`relabel`, `server/src/routes/entityTypes.js:96`) but writes no `ChangeLog`, so every snapshot taken before the rename
+  still holds the old name — the Decision Log records this as a known gap on the rename entry. The restore then throws a
+  `ValidationError` that the route's catch turns into a 500 `{ error: '"Characters" is not an entity type in this
+  workspace' }`: a permanent, unfixable failure reported as a server fault, with no way for the user to get that version
+  back. Build, in the rollback route: before the write, check the snapshot's `category` with `isRegisteredCategory` and,
+  when it is gone, answer 409 `{ error, snapshotCategory, availableCategories }` naming the stale type — and accept an
+  explicit `{ category: '<a registered name>' }` in the body as the caller's decision, so the version can be restored
+  under the type that replaced it. `GET /entities/:id/history` marks each entry whose snapshot category is no longer
+  registered with `snapshotCategoryMissing: true`, from one registry read for the whole page rather than one per entry, so
+  the client can say which versions need a choice before the user clicks. In `client/src/components/EntityDetail.vue`'s
+  history list such an entry offers the workspace's types from `useEntityTypes` and sends the chosen one. Add the Decision
+  Log line recording that a rename deliberately does *not* rewrite snapshots: they are the audit trail, and editing
+  history to make a restore succeed is the wrong trade. Verify: `server/tests/http/rollback.test.js` — rename a type, then
+  a rollback to a pre-rename snapshot is 409 naming the old category and the workspace's types and changes nothing; the
+  same call with `{ category: '<new name>' }` is 200 and the entity holds the new name; a rollback needing no choice is
+  unchanged; history flags exactly the affected entries and no others; a deleted type behaves as a renamed one does; plus
+  a client test that the history row renders the picker; `cd server && yarn test` and `cd client && yarn test && yarn
+  build` green. Out of scope: writing `ChangeLog` entries for the rename cascade itself (one per entity, and a
+  `changeType` the model does not have), the same stale-name failure when applying an old draft item (`proposed` payloads
+  are training records and are deliberately not rewritten), and restoring a *deleted* entity (KOL-060 — if both are
+  promoted, this one first).
+- [ ] **(KOL-060) Restore a deleted entity from its snapshot** [proposed]
+  A delete is final today. `DELETE /entities/:id` (`server/src/routes/entities.js:139`) removes the document, `logDelete`
+  (`server/src/lib/changeLogger.js:92`) keeps the whole snapshot for the `ChangeLog` TTL's 30 days, and the delete
+  broadcast carries it, so a toast in another open tab can open a read-only `[DELETED]` panel
+  (`client/src/components/WikiLayout.vue:306`). But the rollback route reads the live entity first and answers 404 when it
+  is gone (`server/src/routes/changelog.js:41`), so that snapshot can be looked at and never put back — and once the toast
+  is dismissed nothing in the client can reach it, because the entity is no longer in the list and the history route is
+  keyed by an id the user no longer has. For a wiki whose history view is its whole safety net, an accidental delete is
+  unrecoverable while the data is still sitting in the database. Build: on a `deleted` log entry with no live entity, the
+  rollback route recreates the document with its original `_id` and the snapshot's fields under `req.workspaceId` — never
+  the snapshot's own `workspaceId`, which is null for snapshots predating tenancy and is the reason the current route
+  strips it — writes a `logCreate` attributed to the caller, and broadcasts `entity:created`; 409 when the id is live
+  again, so a restore never silently overwrites. And a way back in that outlives the toast: `GET /deleted` in
+  `server/src/routes/changelog.js` lists this workspace's `changeType: 'deleted'` entries newest first with
+  `entityTitle`, `createdAt`, `actorLabel` and the log id, capped at 50 and skipping ids that are live again; a "Recently
+  deleted" group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) lists them with a Restore
+  action calling the rollback route through a new `restoreEntity` in `client/src/api/entities.js`. Document both in
+  `docs/api.md`. Verify: `server/tests/http/restore.test.js` — delete an entity, restore it, and it is back at the same
+  `_id` with its blocks, tags and `open_questions`, with a `created` ChangeLog entry naming the actor; a second restore is
+  409; `GET /deleted` lists the entry and stops listing it once restored; another workspace's deleted entity is neither
+  listed nor restorable (404); a snapshot naming a type the registry no longer has is refused the way KOL-059 decides;
+  plus a client test that the Settings group lists and restores; `cd server && yarn test` and `cd client && yarn test &&
+  yarn build` green. Out of scope: rebuilding the relationship groups the delete pruned (their other members are gone and
+  re-deriving the edges is drift detection, not a restore — say so in the UI), a soft-delete/archive state on `Entity`
+  (the wishlist's own idea, and a different product shape), lifting the 30-day TTL (KOL-019), and bulk restore.
+- [ ] **(KOL-061) `GET /entities` stops shipping every entity's block content** [proposed]
+  `GET /entities` (`server/src/routes/entities.js:41`) returns every entity in the workspace as a full hydrated Mongoose
+  document, `blocks` and all, and the client asks for it unfiltered on load (`getEntities` in
+  `client/src/api/entities.js`, `loadEntities` in `client/src/composables/useEntities.js`). Nothing on the list path uses
+  `blocks`: the sidebar card, the virtual list and `useFilters` read `title`, `summary`, `category` and `tags` only, and
+  both the detail panel and the editor work from `GET /entities/:id`, which does its own `.lean()` read. So the single
+  request that decides how long a workspace takes to open carries the entire text of the wiki — megabytes per load, per
+  tab, per reconnect for a workspace of a few hundred real entities, and it is the first request every new tenant makes.
+  Build: the list route selects the fields the list needs (`title`, `category`, `summary`, `tags`, `open_questions`,
+  `relationships`, `createdAt`, `updatedAt`) and reads `.lean()`, matching the single-entity route; `?include=blocks`
+  returns the old shape, so a caller outside this repo is not cut off. The `?q=` filter is untouched: it matches
+  `blocks.data.markdown` in the *query*, which needs no projection. Measure the win in the test rather than asserting it
+  in a comment — one case compares the serialized length of the projected response against the `?include=blocks` one for
+  a fixture entity with a large markdown block. Document the parameter in the `GET /entities` row of `docs/api.md`.
+  Verify: a new `server/tests/http/entityList.test.js` — the default response carries no `blocks` key and keeps every
+  field the client reads, `?include=blocks` carries them, `?q=` still finds an entity by a word that appears only inside a
+  block, and a second workspace's entities stay absent; `client/src/components/WikiLayout.test.js` renders a list whose
+  entities have no `blocks` without error; `cd server && yarn test` and `cd client && yarn test && yarn build` green.
+  Out of scope: pagination and a total count on `GET /entities` (KOL-049 put it out of scope; it turns the response from
+  an array into an envelope and deserves its own item), making the client's search box ask the server — a real gap worth
+  filing separately, since `useFilters` searches titles, summaries and tags in the browser while the server's `?q=` reads
+  block markdown, so block text is not searchable in the UI at all — and the full-text index the wishlist wants (an Atlas
+  index change).
+- [ ] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number** [proposed]
+  `GET /events` (`server/src/routes/events.js`) authenticates once with `requireAuth` and then holds the response open
+  forever; `addClient` (`server/src/lib/broadcaster.js:20`) stores only `{ res, workspaceId }`. Two consequences for a
+  multi-tenant API. A stream outlives its session: after `POST /auth/logout`, or after the account is deleted, the socket
+  keeps receiving `entity:created`/`entity:updated` payloads, and those carry whole entity documents — so the browser on a
+  shared machine that "signed out" still has the workspace's content arriving. And there is no cap: a script holding one
+  valid session can open thousands of streams, each a held socket plus a write every 30 seconds in the keep-alive loop, on
+  the single process every tenant shares. Build: `addClient` also stores `userId` and `req.sessionID`, and the keep-alive
+  sweep — which already walks every client every 30 seconds — drops a connection whose session is no longer in the store,
+  through a resolver `createApp` passes in, so the broadcaster keeps no Mongo dependency and its existing unit test keeps
+  working. `POST /auth/logout` and `DELETE /auth/account` close that session's streams at once rather than waiting for the
+  sweep. A per-user cap, `EVENTS_MAX_STREAMS_PER_USER` (default 10), refuses a further connection with one SSE
+  `event: error` line and a close. Tiered logging `SSE_LOG_LEVEL = off | light | normal | verbose` (default light)
+  replaces the unconditional `console.log`s in `broadcaster.js`: light says *why* each connection ended — closed by the
+  client, session gone, over the cap — not only that the count changed. Document the variable in `server/.env.example`
+  and the behaviour in the `GET /events` row of `docs/api.md`, and add the Decision Log line. Verify:
+  `server/tests/unit/broadcaster.test.js` grows cases for the cap and for the sweep dropping a session the resolver no
+  longer knows; a new `server/tests/http/events.test.js` — two streams for one user both receive a broadcast, the
+  eleventh is refused, a stream stops receiving once its session is destroyed, and a second workspace's stream receives
+  nothing; `cd server && yarn test` green. Out of scope: moving the broadcaster off in-process state so it works across
+  API instances (the same limit KOL-035 recorded for the attempt counters), replacing SSE with WebSockets, and
+  reconnect/backoff in `client/src/composables/useEvents.js`.
+- [ ] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer** [proposed]
+  The client binds keys inside individual inputs — `EntityEditor.vue`'s tag combobox, `ChatPanel.vue`'s composer,
+  `GeneratorOverlay.vue`'s `@keydown.esc` — and nowhere globally: `grep -rn window.addEventListener client/src` finds
+  nothing. So the search box is reachable only with the mouse, and Escape closes the generator overlay but not the detail
+  panel, the graph, the chat panel or the Settings overlay, each of which has a ✕ button and nothing else
+  (`client/src/components/WikiLayout.vue`). The wishlist asks for exactly this, and it is the cheapest item on it. Build
+  `client/src/composables/useKeyboardShortcuts.js`: one `keydown` listener added `onMounted` and removed `onUnmounted`,
+  taking a map of key → named handler, with a single rule deciding whose key it is — a target that is an `input`,
+  `textarea`, `select` or `[contenteditable]` keeps every key except Escape, and a key held with `ctrl`, `meta` or `alt`
+  is never ours. `WikiLayout.vue` registers three: `/` focuses the sidebar search input, through a ref the sidebar exposes
+  with `defineExpose` rather than a DOM query, and prevents the character being typed; `Escape` closes the topmost layer
+  in one stated order — Settings, generator, graph, chat, then the detail panel — so repeated presses walk back out; `n`
+  opens the new-entity editor. Each binding is a named function, not an inline arrow, so the whole shortcut set reads in
+  one place and each is testable. Verify: `client/src/components/WikiLayout.test.js` — `/` on the document focuses the
+  search input and types no `/`; `/` while the search input already has focus types a `/`; `Escape` with both the chat and
+  the panel open closes the chat first and the panel on the second press; `n` opens the editor; a shortcut with `ctrl`
+  held does nothing; `Escape` inside a textarea still reaches the handler; and no handler fires after unmount.
+  `cd client && yarn test && yarn build` green; no server change. Out of scope: a `?` cheatsheet overlay,
+  user-configurable bindings, shortcuts inside the draft review UI, and anything that moves focus while the chat composer
+  has it.
 
 ## Blocked Items
 
