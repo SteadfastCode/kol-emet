@@ -1,0 +1,79 @@
+{
+  "item": "KOL-055",
+  "repo": "kol-emet",
+  "mergeSha": "fe1498681d780cf327cde9fe82f8b8601a73da70",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-01T07:07:22.582Z",
+  "gradedAtUtc": "2026-10-01T07:11:07.566Z",
+  "independent": [
+    {
+      "file": "FEATURES.md",
+      "line": 338,
+      "severity": "medium",
+      "summary": "KOL-063's premise is false in the code it cites: `client/src/components/GraphView.vue:319-325` already registers a global `window.addEventListener('keydown', onKey)` that closes the graph on Escape (removed at line 416), so both \"nowhere globally: `grep -rn window.addEventListener client/src` finds nothing\" and \"Escape closes the generator overlay but not ... the graph\" are untrue — and the proposed single ordered Escape handler (Settings → generator → graph → chat → panel) would fire alongside GraphView's own listener, so one Escape with the graph and chat both open closes both layers at once, the opposite of the \"repeated presses walk back out\" behaviour the item specifies."
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 226,
+      "severity": "medium",
+      "summary": "KOL-058's second layer would break a working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST /authorize` and `POST /oauth/token`, but the Steadfast bridge has its own form-encoded OAuth endpoints (`server/src/routes/bridge.js:135` `POST ${ISSUER_PATH}/authorize` and `:153` `POST ${ISSUER_PATH}/oauth/token`), which would then receive no parsed body and fail on destructuring `req.body` — the item never mentions them, so a run that implements it as written kills the bridge connector's code exchange."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "KOL-064 is the weekly renewal the item mandates — a copy of the block under the next free id (057 was the previous maximum), so no id is reused and no existing item carries KOL-064."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The 404-on-deleted-entity behaviour is pre-existing code untouched by this FEATURES.md-only diff, and it is exactly the gap the diff correctly files as KOL-060, so it is not a defect in the change."
+    },
+    {
+      "index": 3,
+      "verdict": "duplicate",
+      "reason": "Same claim as finding 2 (identical title and scenario, one line apart in the same route)."
+    },
+    {
+      "index": 4,
+      "verdict": "duplicate",
+      "reason": "Same defect as finding 2 — the missing restore path for deleted entities, viewed from the DELETE route instead of the rollback route."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "The unprojected list read is pre-existing code the diff does not touch, and the diff already files it accurately as KOL-061, so it is not a defect in this change."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "Untrue of the filed text: KOL-062 names account deletion explicitly and specifies that `DELETE /auth/account` (alongside `POST /auth/logout`) closes that session's streams immediately rather than waiting for the sweep."
+    }
+  ],
+  "triageGrades": [],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local review found no real defect: one finding misreads the mandated weekly renewal as a duplicate id, four restate pre-existing code the diff correctly files as proposals (two of them duplicates), one contradicts text present in the filed item, and it missed both substantive problems — KOL-063's false \"no global listener\" premise and KOL-058's urlencoded move that would break the bridge's OAuth.",
+  "counts": {
+    "findings": 6,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 2,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 0,
+    "triageCorrect": 0
+  },
+  "costUsd": 1.591098,
+  "numTurns": 27,
+  "durationMs": 222859,
+  "sessionId": "beae26b4-2bb7-4bbc-ab29-9f28e7437f15"
+}

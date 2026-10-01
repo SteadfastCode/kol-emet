@@ -49,6 +49,23 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-065) KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…**
+  Found by the grader of KOL-055 (medium, FEATURES.md:338). KOL-063's premise is false in the code
+  it cites: `client/src/components/GraphView.vue:319-325` already registers a global
+  `window.addEventListener('keydown', onKey)` that closes the graph on Escape (removed at line
+  416), so both "nowhere globally: `grep -rn window.addEventListener client/src` finds nothing"
+  and "Escape closes the generator overlay but not ... the graph" are untrue — and the proposed
+  single ordered Escape handler (Settings → generator → graph → chat → panel) would fire alongside
+  GraphView's own listener, so one Escape with the graph and chat both open closes both layers at
+  once, the opposite of the "repeated presses walk back out" behaviour the item specifies.
+- [ ] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…**
+  Found by the grader of KOL-055 (medium, FEATURES.md:226). KOL-058's second layer would break a
+  working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST
+  /authorize` and `POST /oauth/token`, but the Steadfast bridge has its own form-encoded OAuth
+  endpoints (`server/src/routes/bridge.js:135` `POST ${ISSUER_PATH}/authorize` and `:153` `POST
+  ${ISSUER_PATH}/oauth/token`), which would then receive no parsed body and fail on destructuring
+  `req.body` — the item never mentions them, so a run that implements it as written kills the
+  bridge connector's code exchange.
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
