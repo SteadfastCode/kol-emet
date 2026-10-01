@@ -58,7 +58,7 @@
     "KOL-065": {
       "order": 4,
       "title": "KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-065",

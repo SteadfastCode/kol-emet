@@ -49,15 +49,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-065) KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…**
-  Found by the grader of KOL-055 (medium, FEATURES.md:338). KOL-063's premise is false in the code
-  it cites: `client/src/components/GraphView.vue:319-325` already registers a global
-  `window.addEventListener('keydown', onKey)` that closes the graph on Escape (removed at line
-  416), so both "nowhere globally: `grep -rn window.addEventListener client/src` finds nothing"
-  and "Escape closes the generator overlay but not ... the graph" are untrue — and the proposed
-  single ordered Escape handler (Settings → generator → graph → chat → panel) would fire alongside
-  GraphView's own listener, so one Escape with the graph and chat both open closes both layers at
-  once, the opposite of the "repeated presses walk back out" behaviour the item specifies.
 - [ ] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…**
   Found by the grader of KOL-055 (medium, FEATURES.md:226). KOL-058's second layer would break a
   working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST
@@ -389,6 +380,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-065) KOL-063's premise is false in the code it cites: client/src/components/GraphView.vue:319-325 alre…** (routine 2026-10-01, bd6efb1)
+  Found by the grader of KOL-055 (medium, FEATURES.md:338). KOL-063's premise is false in the code
+  it cites: `client/src/components/GraphView.vue:319-325` already registers a global
+  `window.addEventListener('keydown', onKey)` that closes the graph on Escape (removed at line
+  416), so both "nowhere globally: `grep -rn window.addEventListener client/src` finds nothing"
+  and "Escape closes the generator overlay but not ... the graph" are untrue — and the proposed
+  single ordered Escape handler (Settings → generator → graph → chat → panel) would fire alongside
+  GraphView's own listener, so one Escape with the graph and chat both open closes both layers at
+  once, the opposite of the "repeated presses walk back out" behaviour the item specifies.
 - [x] **(KOL-055) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-01] (routine 2026-10-01, fe14986)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
