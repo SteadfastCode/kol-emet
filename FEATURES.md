@@ -49,7 +49,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…**
+- [x] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…**
   Found by the grader of KOL-055 (medium, FEATURES.md:226). KOL-058's second layer would break a
   working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST
   /authorize` and `POST /oauth/token`, but the Steadfast bridge has its own form-encoded OAuth
