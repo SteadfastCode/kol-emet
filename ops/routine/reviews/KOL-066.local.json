@@ -1,0 +1,53 @@
+{
+  "item": "KOL-066",
+  "repo": "kol-emet",
+  "mergeSha": "67fdb023da194315776b339144371c8c72c1f637",
+  "completedAtUtc": "2026-10-01T09:48:12.737Z",
+  "completeRunId": "2026-10-01T08:14:51.804Z",
+  "reviewRunId": "2026-10-02T07:02:32.059Z",
+  "reviewedAtUtc": "2026-10-02T07:08:25.576Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 6657,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": null,
+      "bytes": 6657,
+      "contextBytes": 8044,
+      "promptTokens": 4296,
+      "completionTokens": 371,
+      "latencyMs": 31424,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/bridge.js",
+      "line": 135,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "`express.urlencoded` middleware is missing for `POST ${ISSUER_PATH}/authorize`, causing `req.body` to be undefined.",
+      "scenario": "When a request is made to `POST ${ISSUER_PATH}/authorize` from the Steadfast bridge, the body of the request will not be parsed because `express.urlencoded` middleware is not applied. This results in `req.body` being undefined, leading to errors when destructuring or accessing properties on it.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff shows that express.urlencoded was moved off the app and onto only oauth.js's POST /authorize and POST /oauth/token routes, but not onto the Steadfast bridge's own issuer routes in bridge.js."
+      }
+    }
+  ],
+  "triage": null,
+  "summary": "The change introduces a bug by removing `express.urlencoded` middleware from global application usage and only applying it to specific OAuth routes. This omission affects the Steadfast bridge's form-encoded OAuth endpoints (`POST ${ISSUER_PATH}/authorize` and `POST ${ISSUER_PATH}/oauth/token`), causing their request bodies to remain unparsed, leading to errors.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 12894,
+    "completionTokens": 486
+  },
+  "latencyMs": 50487
+}

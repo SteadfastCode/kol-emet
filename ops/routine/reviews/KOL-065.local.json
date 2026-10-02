@@ -1,0 +1,41 @@
+{
+  "item": "KOL-065",
+  "repo": "kol-emet",
+  "mergeSha": "bd6efb1188c53ced9e50715b1c618a06d5b2f8be",
+  "completedAtUtc": "2026-10-01T09:06:41.466Z",
+  "completeRunId": "2026-10-01T08:14:51.804Z",
+  "reviewRunId": "2026-10-02T07:02:32.059Z",
+  "reviewedAtUtc": "2026-10-02T07:07:35.030Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v4",
+  "diffBytes": 6851,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md",
+        "client/src/components/GraphView.vue"
+      ],
+      "part": null,
+      "bytes": 6851,
+      "contextBytes": 7759,
+      "promptTokens": 4277,
+      "completionTokens": 157,
+      "latencyMs": 20158,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": null,
+  "summary": "The change introduces a new global keyboard shortcut handler but fails to correctly manage the removal of an existing one, potentially causing issues with event handling and resource management.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 8526,
+    "completionTokens": 200
+  },
+  "latencyMs": 34643
+}
