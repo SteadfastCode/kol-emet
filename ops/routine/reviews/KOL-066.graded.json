@@ -1,0 +1,38 @@
+{
+  "item": "KOL-066",
+  "repo": "kol-emet",
+  "mergeSha": "67fdb023da194315776b339144371c8c72c1f637",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-02T07:09:46.115Z",
+  "gradedAtUtc": "2026-10-02T07:18:51.934Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "In this tree `express.urlencoded` is still mounted globally (`server/src/app.js:69`) and KOL-058 is still an unimplemented `[proposed]` item, so `req.body` is parsed today at `bridge.js:135` — the model reported the hazard this docs-only edit exists to prevent as if it were a present defect, and also mis-describes the failure (with global `express.json()`, body-parser 1.x sets `req.body = {}`, yielding a 400 rather than an undefined destructure)."
+    }
+  ],
+  "triageGrades": [],
+  "missed": [],
+  "summary": "The single finding is a false positive that mistakes the spec text KOL-066 added (a warning about a future refactor) for existing broken code; the actual diff — which correctly names `/bridge/authorize` and `/bridge/oauth/token` at verified line numbers, the four form routes, the real `.type('form')` tests, and the missing `CLIENT_ORIGIN`/`Origin` in the http suite — holds up with no defects I could find.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 0,
+    "triageCorrect": 0
+  },
+  "costUsd": 0.517336,
+  "numTurns": 7,
+  "durationMs": 61185,
+  "sessionId": "f745f94a-db21-4311-ad81-88476d564e0d"
+}

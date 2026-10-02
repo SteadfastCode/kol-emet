@@ -1,0 +1,32 @@
+{
+  "item": "KOL-065",
+  "repo": "kol-emet",
+  "mergeSha": "bd6efb1188c53ced9e50715b1c618a06d5b2f8be",
+  "localPromptVersion": "v4",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-02T07:09:46.115Z",
+  "gradedAtUtc": "2026-10-02T07:20:05.220Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [],
+  "missed": [],
+  "summary": "No defects to find: the one-line `join('\\u0000')` change is byte-for-byte equivalent at runtime (the key is only ever used as a Map key, never split) and every corrected claim in FEATURES.md checks out (GraphView.vue:323 listener, :325 stash, :417-419 removal, the now-honest grep, BraindumpInput's autofocus, and WikiLayout's `closeSettings`/`onChatClose`), so the local model's empty report is the right answer here.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 0,
+    "triageCorrect": 0
+  },
+  "costUsd": 0.5661705,
+  "numTurns": 14,
+  "durationMs": 73256,
+  "sessionId": "5f2a4b68-8876-41b6-bb14-009f49dfb14c"
+}
