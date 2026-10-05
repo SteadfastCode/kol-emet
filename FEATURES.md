@@ -184,7 +184,7 @@ registration, or removes a feature.
   disappeared from the source (drift detection proper), deduplicating groups created before this item, `ChangeLog` entries for
   relationship writes (the applier records none today), and open-question dedup.
 
-- [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client** [proposed]
+- [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client**
   Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
   with `sameSite: 'none'` (`server/src/lib/sessionCookie.js:114`) because the client and the API sit on sibling subdomains
   — so a browser sends it on cross-site requests. CORS is not the gate it looks like: `server/src/app.js:69` mounts
@@ -327,7 +327,7 @@ registration, or removes a feature.
   API instances (the same limit KOL-035 recorded for the attempt counters), replacing SSE with WebSockets, and
   reconnect/backoff in `client/src/composables/useEvents.js`.
 
-- [ ] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer** [proposed]
+- [ ] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer**
   Most keys are bound inside individual inputs — `EntityEditor.vue`'s tag combobox, `ChatPanel.vue`'s composer, and
   `GeneratorOverlay.vue`'s root `@keydown.esc`, which fires only while focus is inside the overlay (so at the braindump
   stage, which autofocuses its textarea, but not once that unmounts). One global listener already exists:

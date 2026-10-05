@@ -195,3 +195,5 @@
 {"event":"note","text":"bridge queue.promote moved KOL-063 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-063","atUtc":"2026-10-05T22:36:03.001Z"}
 {"event":"note","text":"demoted KOL-058 back to Proposed: contradicted by a graded review finding","source":"manual","item":"KOL-058","atUtc":"2026-10-05T22:40:02.564Z"}
 {"event":"note","text":"demoted KOL-063 back to Proposed: contradicted by a graded review finding","source":"manual","item":"KOL-063","atUtc":"2026-10-05T22:40:02.565Z"}
+{"event":"note","text":"re-promoted KOL-058: the grader finding that parked it was already remediated in the spec","source":"manual","item":"KOL-058","atUtc":"2026-10-05T23:40:58.053Z"}
+{"event":"note","text":"re-promoted KOL-063: the grader finding that parked it was already remediated in the spec","source":"manual","item":"KOL-063","atUtc":"2026-10-05T23:40:58.053Z"}
