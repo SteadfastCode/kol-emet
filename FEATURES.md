@@ -254,6 +254,32 @@ registration, or removes a feature.
   are training records and are deliberately not rewritten), and restoring a *deleted* entity (KOL-060 — if both are
   promoted, this one first).
 
+- [ ] **(KOL-060) Restore a deleted entity from its snapshot**
+  A delete is final today. `DELETE /entities/:id` (`server/src/routes/entities.js:139`) removes the document, `logDelete`
+  (`server/src/lib/changeLogger.js:92`) keeps the whole snapshot for the `ChangeLog` TTL's 30 days, and the delete
+  broadcast carries it, so a toast in another open tab can open a read-only `[DELETED]` panel
+  (`client/src/components/WikiLayout.vue:306`). But the rollback route reads the live entity first and answers 404 when it
+  is gone (`server/src/routes/changelog.js:41`), so that snapshot can be looked at and never put back — and once the toast
+  is dismissed nothing in the client can reach it, because the entity is no longer in the list and the history route is
+  keyed by an id the user no longer has. For a wiki whose history view is its whole safety net, an accidental delete is
+  unrecoverable while the data is still sitting in the database. Build: on a `deleted` log entry with no live entity, the
+  rollback route recreates the document with its original `_id` and the snapshot's fields under `req.workspaceId` — never
+  the snapshot's own `workspaceId`, which is null for snapshots predating tenancy and is the reason the current route
+  strips it — writes a `logCreate` attributed to the caller, and broadcasts `entity:created`; 409 when the id is live
+  again, so a restore never silently overwrites. And a way back in that outlives the toast: `GET /deleted` in
+  `server/src/routes/changelog.js` lists this workspace's `changeType: 'deleted'` entries newest first with
+  `entityTitle`, `createdAt`, `actorLabel` and the log id, capped at 50 and skipping ids that are live again; a "Recently
+  deleted" group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) lists them with a Restore
+  action calling the rollback route through a new `restoreEntity` in `client/src/api/entities.js`. Document both in
+  `docs/api.md`. Verify: `server/tests/http/restore.test.js` — delete an entity, restore it, and it is back at the same
+  `_id` with its blocks, tags and `open_questions`, with a `created` ChangeLog entry naming the actor; a second restore is
+  409; `GET /deleted` lists the entry and stops listing it once restored; another workspace's deleted entity is neither
+  listed nor restorable (404); a snapshot naming a type the registry no longer has is refused the way KOL-059 decides;
+  plus a client test that the Settings group lists and restores; `cd server && yarn test` and `cd client && yarn test &&
+  yarn build` green. Out of scope: rebuilding the relationship groups the delete pruned (their other members are gone and
+  re-deriving the edges is drift detection, not a restore — say so in the UI), a soft-delete/archive state on `Entity`
+  (the wishlist's own idea, and a different product shape), lifting the 30-day TTL (KOL-019), and bulk restore.
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -283,31 +309,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-060) Restore a deleted entity from its snapshot** [proposed]
-  A delete is final today. `DELETE /entities/:id` (`server/src/routes/entities.js:139`) removes the document, `logDelete`
-  (`server/src/lib/changeLogger.js:92`) keeps the whole snapshot for the `ChangeLog` TTL's 30 days, and the delete
-  broadcast carries it, so a toast in another open tab can open a read-only `[DELETED]` panel
-  (`client/src/components/WikiLayout.vue:306`). But the rollback route reads the live entity first and answers 404 when it
-  is gone (`server/src/routes/changelog.js:41`), so that snapshot can be looked at and never put back — and once the toast
-  is dismissed nothing in the client can reach it, because the entity is no longer in the list and the history route is
-  keyed by an id the user no longer has. For a wiki whose history view is its whole safety net, an accidental delete is
-  unrecoverable while the data is still sitting in the database. Build: on a `deleted` log entry with no live entity, the
-  rollback route recreates the document with its original `_id` and the snapshot's fields under `req.workspaceId` — never
-  the snapshot's own `workspaceId`, which is null for snapshots predating tenancy and is the reason the current route
-  strips it — writes a `logCreate` attributed to the caller, and broadcasts `entity:created`; 409 when the id is live
-  again, so a restore never silently overwrites. And a way back in that outlives the toast: `GET /deleted` in
-  `server/src/routes/changelog.js` lists this workspace's `changeType: 'deleted'` entries newest first with
-  `entityTitle`, `createdAt`, `actorLabel` and the log id, capped at 50 and skipping ids that are live again; a "Recently
-  deleted" group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) lists them with a Restore
-  action calling the rollback route through a new `restoreEntity` in `client/src/api/entities.js`. Document both in
-  `docs/api.md`. Verify: `server/tests/http/restore.test.js` — delete an entity, restore it, and it is back at the same
-  `_id` with its blocks, tags and `open_questions`, with a `created` ChangeLog entry naming the actor; a second restore is
-  409; `GET /deleted` lists the entry and stops listing it once restored; another workspace's deleted entity is neither
-  listed nor restorable (404); a snapshot naming a type the registry no longer has is refused the way KOL-059 decides;
-  plus a client test that the Settings group lists and restores; `cd server && yarn test` and `cd client && yarn test &&
-  yarn build` green. Out of scope: rebuilding the relationship groups the delete pruned (their other members are gone and
-  re-deriving the edges is drift detection, not a restore — say so in the UI), a soft-delete/archive state on `Entity`
-  (the wishlist's own idea, and a different product shape), lifting the 30-day TTL (KOL-019), and bulk restore.
 - [ ] **(KOL-061) `GET /entities` stops shipping every entity's block content** [proposed]
   `GET /entities` (`server/src/routes/entities.js:41`) returns every entity in the workspace as a full hydrated Mongoose
   document, `blocks` and all, and the client asks for it unfiltered on load (`getEntities` in
