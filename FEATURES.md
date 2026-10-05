@@ -140,6 +140,28 @@ registration, or removes a feature.
   passkeys registered before this keep their random per-credential handles, so a signal cannot reach them — they still sign in,
   and the handle is used for new registrations only; the credential-id unique index (an Atlas change, KOL-036's known gap).
 
+- [ ] **(KOL-053) Workspace-wide tag rename, merge and delete**
+  `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
+  comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
+  way to fix it short of opening every entity — the wishlist's "Bulk tag operations". Build, in `server/src/routes/tags.js`:
+  `PUT /tags/:tag` with body `{ to }` renames the tag on every entity in the caller's workspace, merging when `to` is already
+  present (`$addToSet` then `$pull`, so no entity ends up holding it twice) and answering `{ renamed: <count> }`, 404 when no
+  entity carries the tag, 400 for a blank or non-string `to`, and a no-op 200 for a rename to itself; `DELETE /tags/:tag`
+  removes it everywhere and answers `{ removed: <count> }`. Both take `requireActor` per route, the way the write routes in
+  `server/src/routes/entities.js` do (the mount gives them only `requireAuth` + `resolveWorkspace`), and both write one
+  `logUpdate` per changed entity (`server/src/lib/changeLogger.js`), which makes a bulk rename as reversible as a single edit and
+  broadcasts `entity:updated` so open clients follow. Bound it like KOL-045 bounded the compose import: past 200 affected
+  entities the route answers 413 naming the count rather than writing an unbounded batch of changelog entries. Client: a "Tags"
+  group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) listing the workspace's tags with their
+  entity counts and a rename and remove action each, calling new `renameTag`/`removeTag` in `client/src/api/tags.js`; the counts
+  come from the entities `useEntities` already holds, not a new route. Document both routes in `docs/api.md`. Verify:
+  `server/tests/http/tags.test.js` — a rename moves the tag on two of three entities and leaves the third alone; a merge leaves
+  exactly one copy; a delete removes it; each writes one `ChangeLog` entry per changed entity; a second workspace's
+  identically-named tag is untouched; a blank `to` is 400 and 201 entities is 413; a client test that the group renders the tags
+  with counts and calls the routes; `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: tag
+  colours or descriptions, renaming a tag from the entity editor, a tag index on `Entity` (an Atlas index change), and any
+  change to the existing tag pill row.
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -169,27 +191,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-053) Workspace-wide tag rename, merge and delete** [proposed]
-  `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
-  comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
-  way to fix it short of opening every entity — the wishlist's "Bulk tag operations". Build, in `server/src/routes/tags.js`:
-  `PUT /tags/:tag` with body `{ to }` renames the tag on every entity in the caller's workspace, merging when `to` is already
-  present (`$addToSet` then `$pull`, so no entity ends up holding it twice) and answering `{ renamed: <count> }`, 404 when no
-  entity carries the tag, 400 for a blank or non-string `to`, and a no-op 200 for a rename to itself; `DELETE /tags/:tag`
-  removes it everywhere and answers `{ removed: <count> }`. Both take `requireActor` per route, the way the write routes in
-  `server/src/routes/entities.js` do (the mount gives them only `requireAuth` + `resolveWorkspace`), and both write one
-  `logUpdate` per changed entity (`server/src/lib/changeLogger.js`), which makes a bulk rename as reversible as a single edit and
-  broadcasts `entity:updated` so open clients follow. Bound it like KOL-045 bounded the compose import: past 200 affected
-  entities the route answers 413 naming the count rather than writing an unbounded batch of changelog entries. Client: a "Tags"
-  group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) listing the workspace's tags with their
-  entity counts and a rename and remove action each, calling new `renameTag`/`removeTag` in `client/src/api/tags.js`; the counts
-  come from the entities `useEntities` already holds, not a new route. Document both routes in `docs/api.md`. Verify:
-  `server/tests/http/tags.test.js` — a rename moves the tag on two of three entities and leaves the third alone; a merge leaves
-  exactly one copy; a delete removes it; each writes one `ChangeLog` entry per changed entity; a second workspace's
-  identically-named tag is untouched; a blank `to` is 400 and 201 entities is 413; a client test that the group renders the tags
-  with counts and calls the routes; `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: tag
-  colours or descriptions, renaming a tag from the entity editor, a tag index on `Entity` (an Atlas index change), and any
-  change to the existing tag pill row.
 - [ ] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one** [proposed]
   `applyRelationship` (`server/src/lib/draftApplier.js:176`) always does `RelationshipGroup.create(...)`. Nothing looks for a
   group that already holds those members under that label, so re-importing an unchanged docker-compose file — the ordinary case,
