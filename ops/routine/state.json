@@ -242,8 +242,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-013": {
+    "KOL-063": {
       "order": 15,
+      "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-013": {
+      "order": 16,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -264,7 +281,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 16,
+      "order": 17,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -281,7 +298,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 17,
+      "order": 18,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -300,7 +317,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 18,
+      "order": 19,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -317,7 +334,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 19,
+      "order": 20,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -334,7 +351,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 20,
+      "order": 21,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -343,23 +360,6 @@
       "dependsOn": [],
       "needsHuman": true,
       "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
-    "KOL-063": {
-      "order": 21,
-      "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": true,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
