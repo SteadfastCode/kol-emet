@@ -228,6 +228,32 @@ registration, or removes a feature.
   token (the Origin check is the whole fix while every client is a browser on one known origin), `sameSite: 'lax'` (it
   would break the cross-subdomain deployment), the `cors()` wildcard behaviour itself, and rate limiting.
 
+- [ ] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500**
+  `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) replays `log.snapshot` through
+  `findOneAndUpdate` with `runValidators: true`, and `Entity.category` validates against the workspace's `EntityType`
+  registry (`server/src/lib/entityTypeRegistry.js`). Renaming a type cascades to everything that used it
+  (`relabel`, `server/src/routes/entityTypes.js:96`) but writes no `ChangeLog`, so every snapshot taken before the rename
+  still holds the old name — the Decision Log records this as a known gap on the rename entry. The restore then throws a
+  `ValidationError` that the route's catch turns into a 500 `{ error: '"Characters" is not an entity type in this
+  workspace' }`: a permanent, unfixable failure reported as a server fault, with no way for the user to get that version
+  back. Build, in the rollback route: before the write, check the snapshot's `category` with `isRegisteredCategory` and,
+  when it is gone, answer 409 `{ error, snapshotCategory, availableCategories }` naming the stale type — and accept an
+  explicit `{ category: '<a registered name>' }` in the body as the caller's decision, so the version can be restored
+  under the type that replaced it. `GET /entities/:id/history` marks each entry whose snapshot category is no longer
+  registered with `snapshotCategoryMissing: true`, from one registry read for the whole page rather than one per entry, so
+  the client can say which versions need a choice before the user clicks. In `client/src/components/EntityDetail.vue`'s
+  history list such an entry offers the workspace's types from `useEntityTypes` and sends the chosen one. Add the Decision
+  Log line recording that a rename deliberately does *not* rewrite snapshots: they are the audit trail, and editing
+  history to make a restore succeed is the wrong trade. Verify: `server/tests/http/rollback.test.js` — rename a type, then
+  a rollback to a pre-rename snapshot is 409 naming the old category and the workspace's types and changes nothing; the
+  same call with `{ category: '<new name>' }` is 200 and the entity holds the new name; a rollback needing no choice is
+  unchanged; history flags exactly the affected entries and no others; a deleted type behaves as a renamed one does; plus
+  a client test that the history row renders the picker; `cd server && yarn test` and `cd client && yarn test && yarn
+  build` green. Out of scope: writing `ChangeLog` entries for the rename cascade itself (one per entity, and a
+  `changeType` the model does not have), the same stale-name failure when applying an old draft item (`proposed` payloads
+  are training records and are deliberately not rewritten), and restoring a *deleted* entity (KOL-060 — if both are
+  promoted, this one first).
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -257,31 +283,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500** [proposed]
-  `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) replays `log.snapshot` through
-  `findOneAndUpdate` with `runValidators: true`, and `Entity.category` validates against the workspace's `EntityType`
-  registry (`server/src/lib/entityTypeRegistry.js`). Renaming a type cascades to everything that used it
-  (`relabel`, `server/src/routes/entityTypes.js:96`) but writes no `ChangeLog`, so every snapshot taken before the rename
-  still holds the old name — the Decision Log records this as a known gap on the rename entry. The restore then throws a
-  `ValidationError` that the route's catch turns into a 500 `{ error: '"Characters" is not an entity type in this
-  workspace' }`: a permanent, unfixable failure reported as a server fault, with no way for the user to get that version
-  back. Build, in the rollback route: before the write, check the snapshot's `category` with `isRegisteredCategory` and,
-  when it is gone, answer 409 `{ error, snapshotCategory, availableCategories }` naming the stale type — and accept an
-  explicit `{ category: '<a registered name>' }` in the body as the caller's decision, so the version can be restored
-  under the type that replaced it. `GET /entities/:id/history` marks each entry whose snapshot category is no longer
-  registered with `snapshotCategoryMissing: true`, from one registry read for the whole page rather than one per entry, so
-  the client can say which versions need a choice before the user clicks. In `client/src/components/EntityDetail.vue`'s
-  history list such an entry offers the workspace's types from `useEntityTypes` and sends the chosen one. Add the Decision
-  Log line recording that a rename deliberately does *not* rewrite snapshots: they are the audit trail, and editing
-  history to make a restore succeed is the wrong trade. Verify: `server/tests/http/rollback.test.js` — rename a type, then
-  a rollback to a pre-rename snapshot is 409 naming the old category and the workspace's types and changes nothing; the
-  same call with `{ category: '<new name>' }` is 200 and the entity holds the new name; a rollback needing no choice is
-  unchanged; history flags exactly the affected entries and no others; a deleted type behaves as a renamed one does; plus
-  a client test that the history row renders the picker; `cd server && yarn test` and `cd client && yarn test && yarn
-  build` green. Out of scope: writing `ChangeLog` entries for the rename cascade itself (one per entity, and a
-  `changeType` the model does not have), the same stale-name failure when applying an old draft item (`proposed` payloads
-  are training records and are deliberately not rewritten), and restoring a *deleted* entity (KOL-060 — if both are
-  promoted, this one first).
 - [ ] **(KOL-060) Restore a deleted entity from its snapshot** [proposed]
   A delete is final today. `DELETE /entities/:id` (`server/src/routes/entities.js:139`) removes the document, `logDelete`
   (`server/src/lib/changeLogger.js:92`) keeps the whole snapshot for the `ChangeLog` TTL's 30 days, and the delete
