@@ -184,36 +184,7 @@ registration, or removes a feature.
   disappeared from the source (drift detection proper), deduplicating groups created before this item, `ChangeLog` entries for
   relationship writes (the applier records none today), and open-question dedup.
 
-## Proposed
-
-- [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
-  `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
-  in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
-  green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
-- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
-  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
-  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
-  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
-  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
-  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
-- [ ] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) [needs-human]
-  The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
-  (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
-  raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
-  `server/scripts/try-generate.js` against Daniel's allowance.
-- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [needs-human]
-  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
-  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
-  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
-- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
-  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
-  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
-  `usageMeter` test.
-- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
-  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
-  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
-  Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client** [proposed]
+- [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client**
   Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
   with `sameSite: 'none'` (`server/src/lib/sessionCookie.js:114`) because the client and the API sit on sibling subdomains
   — so a browser sends it on cross-site requests. CORS is not the gate it looks like: `server/src/app.js:69` mounts
@@ -256,6 +227,36 @@ registration, or removes a feature.
   meeting the mass failure mid-run. `cd server && yarn test` green. Out of scope: a double-submit or synchronizer CSRF
   token (the Origin check is the whole fix while every client is a browser on one known origin), `sameSite: 'lax'` (it
   would break the cross-subdomain deployment), the `cors()` wildcard behaviour itself, and rate limiting.
+
+## Proposed
+
+- [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
+  `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
+  in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
+  green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
+- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
+  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
+  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
+  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
+  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
+  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
+- [ ] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) [needs-human]
+  The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
+  (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
+  raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
+  `server/scripts/try-generate.js` against Daniel's allowance.
+- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [needs-human]
+  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
+  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
+  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
+- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
+  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
+  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
+  `usageMeter` test.
+- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
+  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
+  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
+  Atlas index change is not something a migration script alone should decide.
 - [ ] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500** [proposed]
   `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) replays `log.snapshot` through
   `findOneAndUpdate` with `runValidators: true`, and `Entity.category` validates against the workspace's `EntityType`
