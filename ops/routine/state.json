@@ -55,21 +55,21 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-066": {
+    "KOL-049": {
       "order": 4,
-      "title": "KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…",
-      "status": "done",
-      "attempts": 1,
+      "title": "Escape the caller's search string before compiling it as a regex",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-066",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-01T09:21:22.425Z",
-      "runId": "2026-10-01T08:14:51.804Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
     "KOL-013": {
@@ -180,25 +180,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-049": {
-      "order": 11,
-      "title": "Escape the caller's search string before compiling it as a regex",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": true,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-050": {
-      "order": 12,
+      "order": 11,
       "title": "Throttle account creation on POST /auth/register",
       "status": "pending",
       "attempts": 0,
@@ -215,7 +198,7 @@
       "lastFail": null
     },
     "KOL-051": {
-      "order": 13,
+      "order": 12,
       "title": "Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft",
       "status": "pending",
       "attempts": 0,
@@ -232,7 +215,7 @@
       "lastFail": null
     },
     "KOL-052": {
-      "order": 14,
+      "order": 13,
       "title": "A stable WebAuthn user handle, and telling the authenticator when a passkey is removed",
       "status": "pending",
       "attempts": 0,
@@ -249,7 +232,7 @@
       "lastFail": null
     },
     "KOL-053": {
-      "order": 15,
+      "order": 14,
       "title": "Workspace-wide tag rename, merge and delete",
       "status": "pending",
       "attempts": 0,
@@ -266,7 +249,7 @@
       "lastFail": null
     },
     "KOL-054": {
-      "order": 16,
+      "order": 15,
       "title": "Re-proposing a relationship group updates it instead of stacking a second one",
       "status": "pending",
       "attempts": 0,
@@ -283,7 +266,7 @@
       "lastFail": null
     },
     "KOL-058": {
-      "order": 17,
+      "order": 16,
       "title": "Refuse a cookie-authenticated write whose Origin is not this deployment's client",
       "status": "pending",
       "attempts": 0,
@@ -300,7 +283,7 @@
       "lastFail": null
     },
     "KOL-059": {
-      "order": 18,
+      "order": 17,
       "title": "A rollback whose snapshot names a renamed entity type answers 409, not 500",
       "status": "pending",
       "attempts": 0,
@@ -317,7 +300,7 @@
       "lastFail": null
     },
     "KOL-060": {
-      "order": 19,
+      "order": 18,
       "title": "Restore a deleted entity from its snapshot",
       "status": "pending",
       "attempts": 0,
@@ -334,7 +317,7 @@
       "lastFail": null
     },
     "KOL-061": {
-      "order": 20,
+      "order": 19,
       "title": "`GET /entities` stops shipping every entity's block content",
       "status": "pending",
       "attempts": 0,
@@ -351,7 +334,7 @@
       "lastFail": null
     },
     "KOL-062": {
-      "order": 21,
+      "order": 20,
       "title": "An `/events` stream ends when its session does, and one tenant cannot open an unbounded number",
       "status": "pending",
       "attempts": 0,
@@ -368,7 +351,7 @@
       "lastFail": null
     },
     "KOL-063": {
-      "order": 22,
+      "order": 21,
       "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
       "status": "pending",
       "attempts": 0,
@@ -382,6 +365,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-066": {
+      "order": null,
+      "title": "KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-066",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-01T09:21:22.425Z",
+      "runId": "2026-10-01T08:14:51.804Z",
       "lastFail": null
     },
     "KOL-065": {
