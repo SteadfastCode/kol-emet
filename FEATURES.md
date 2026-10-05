@@ -304,6 +304,29 @@ registration, or removes a feature.
   block markdown, so block text is not searchable in the UI at all — and the full-text index the wishlist wants (an Atlas
   index change).
 
+- [ ] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number**
+  `GET /events` (`server/src/routes/events.js`) authenticates once with `requireAuth` and then holds the response open
+  forever; `addClient` (`server/src/lib/broadcaster.js:20`) stores only `{ res, workspaceId }`. Two consequences for a
+  multi-tenant API. A stream outlives its session: after `POST /auth/logout`, or after the account is deleted, the socket
+  keeps receiving `entity:created`/`entity:updated` payloads, and those carry whole entity documents — so the browser on a
+  shared machine that "signed out" still has the workspace's content arriving. And there is no cap: a script holding one
+  valid session can open thousands of streams, each a held socket plus a write every 30 seconds in the keep-alive loop, on
+  the single process every tenant shares. Build: `addClient` also stores `userId` and `req.sessionID`, and the keep-alive
+  sweep — which already walks every client every 30 seconds — drops a connection whose session is no longer in the store,
+  through a resolver `createApp` passes in, so the broadcaster keeps no Mongo dependency and its existing unit test keeps
+  working. `POST /auth/logout` and `DELETE /auth/account` close that session's streams at once rather than waiting for the
+  sweep. A per-user cap, `EVENTS_MAX_STREAMS_PER_USER` (default 10), refuses a further connection with one SSE
+  `event: error` line and a close. Tiered logging `SSE_LOG_LEVEL = off | light | normal | verbose` (default light)
+  replaces the unconditional `console.log`s in `broadcaster.js`: light says *why* each connection ended — closed by the
+  client, session gone, over the cap — not only that the count changed. Document the variable in `server/.env.example`
+  and the behaviour in the `GET /events` row of `docs/api.md`, and add the Decision Log line. Verify:
+  `server/tests/unit/broadcaster.test.js` grows cases for the cap and for the sweep dropping a session the resolver no
+  longer knows; a new `server/tests/http/events.test.js` — two streams for one user both receive a broadcast, the
+  eleventh is refused, a stream stops receiving once its session is destroyed, and a second workspace's stream receives
+  nothing; `cd server && yarn test` green. Out of scope: moving the broadcaster off in-process state so it works across
+  API instances (the same limit KOL-035 recorded for the attempt counters), replacing SSE with WebSockets, and
+  reconnect/backoff in `client/src/composables/useEvents.js`.
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -333,28 +356,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number** [proposed]
-  `GET /events` (`server/src/routes/events.js`) authenticates once with `requireAuth` and then holds the response open
-  forever; `addClient` (`server/src/lib/broadcaster.js:20`) stores only `{ res, workspaceId }`. Two consequences for a
-  multi-tenant API. A stream outlives its session: after `POST /auth/logout`, or after the account is deleted, the socket
-  keeps receiving `entity:created`/`entity:updated` payloads, and those carry whole entity documents — so the browser on a
-  shared machine that "signed out" still has the workspace's content arriving. And there is no cap: a script holding one
-  valid session can open thousands of streams, each a held socket plus a write every 30 seconds in the keep-alive loop, on
-  the single process every tenant shares. Build: `addClient` also stores `userId` and `req.sessionID`, and the keep-alive
-  sweep — which already walks every client every 30 seconds — drops a connection whose session is no longer in the store,
-  through a resolver `createApp` passes in, so the broadcaster keeps no Mongo dependency and its existing unit test keeps
-  working. `POST /auth/logout` and `DELETE /auth/account` close that session's streams at once rather than waiting for the
-  sweep. A per-user cap, `EVENTS_MAX_STREAMS_PER_USER` (default 10), refuses a further connection with one SSE
-  `event: error` line and a close. Tiered logging `SSE_LOG_LEVEL = off | light | normal | verbose` (default light)
-  replaces the unconditional `console.log`s in `broadcaster.js`: light says *why* each connection ended — closed by the
-  client, session gone, over the cap — not only that the count changed. Document the variable in `server/.env.example`
-  and the behaviour in the `GET /events` row of `docs/api.md`, and add the Decision Log line. Verify:
-  `server/tests/unit/broadcaster.test.js` grows cases for the cap and for the sweep dropping a session the resolver no
-  longer knows; a new `server/tests/http/events.test.js` — two streams for one user both receive a broadcast, the
-  eleventh is refused, a stream stops receiving once its session is destroyed, and a second workspace's stream receives
-  nothing; `cd server && yarn test` green. Out of scope: moving the broadcaster off in-process state so it works across
-  API instances (the same limit KOL-035 recorded for the attempt counters), replacing SSE with WebSockets, and
-  reconnect/backoff in `client/src/composables/useEvents.js`.
 - [ ] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer** [proposed]
   Most keys are bound inside individual inputs — `EntityEditor.vue`'s tag combobox, `ChatPanel.vue`'s composer, and
   `GeneratorOverlay.vue`'s root `@keydown.esc`, which fires only while focus is inside the overlay (so at the braindump
