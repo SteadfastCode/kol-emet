@@ -67,6 +67,27 @@ registration, or removes a feature.
   `q: 'C++ (v2)'` returns the match; `cd server && yarn test` green. Out of scope: a MongoDB text index and `$text` search (an
   Atlas index change), searching block fields other than `data.markdown`, pagination on `GET /entities`.
 
+- [ ] **(KOL-050) Throttle account creation on POST /auth/register**
+  Registration is open by design (CLAUDE.md) and `POST /auth/register` (`server/src/routes/auth.js:91`) has no limit of any
+  kind: every request runs a 12-round bcrypt hash, and every success creates a `User`, a `Workspace` and a full template seed —
+  38 relationship types plus starter content for Worldbuilding (`server/src/lib/workspaceSeeder.js`). One unauthenticated client
+  can fill the database and spend this API's CPU as fast as it can post. KOL-035 built the counters and left this out of scope
+  ("CAPTCHA or signup throttling"). Build: `createAuthLimiter` (`server/src/lib/attemptLimiter.js`) grows a fourth counter kind,
+  `signup`, keyed on `req.ip`, with its own limit and window — `perSignupIp`, default 10 per 60 minutes, from
+  `AUTH_LIMIT_MAX_SIGNUPS_PER_IP` and `AUTH_LIMIT_SIGNUP_WINDOW_MS` through `authLimitsFromEnv` and the `authLimits` option
+  `createApp` already threads. A separate window because sign-in's 15 minutes is the wrong unit for account creation. `pairs()`
+  gains `signup` in check order, and a neutral `record(keys, source)` counts alongside `recordFailure`, since what is counted
+  here is a success rather than a guess. The route asks `blocked` before the bcrypt hash, refuses with the shared
+  `TOO_MANY_ATTEMPTS` body and a `Retry-After`, and records one signup only once a user was created, so a 400 or a 409 costs the
+  caller nothing. Light logging names the route and the key kind, never an address. Document the variables in
+  `server/.env.example`, the 429 in the `POST /auth/register` row of `docs/api.md`, and add the Decision Log line in
+  `kol_emet_spec.md`. Verify: `server/tests/unit/attemptLimiter.test.js` — the signup counter has its own max and window, and an
+  injected clock unblocks it independently of the email counter; in `server/tests/http/auth.test.js`, an app built with
+  `authLimits: { perSignupIp: 2 }` registers twice, answers 429 with `Retry-After` on the third and creates no `User`, while a
+  400 (no password) and a 409 (duplicate email) leave the budget untouched; `cd server && yarn test` green. Out of scope:
+  CAPTCHA, email verification, counters shared across API instances (in-process, as KOL-035 recorded), and rate limits on
+  `/oauth/token` and `/drafts`.
+
 ## Proposed
 
 - [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
@@ -96,26 +117,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-050) Throttle account creation on POST /auth/register** [proposed]
-  Registration is open by design (CLAUDE.md) and `POST /auth/register` (`server/src/routes/auth.js:91`) has no limit of any
-  kind: every request runs a 12-round bcrypt hash, and every success creates a `User`, a `Workspace` and a full template seed —
-  38 relationship types plus starter content for Worldbuilding (`server/src/lib/workspaceSeeder.js`). One unauthenticated client
-  can fill the database and spend this API's CPU as fast as it can post. KOL-035 built the counters and left this out of scope
-  ("CAPTCHA or signup throttling"). Build: `createAuthLimiter` (`server/src/lib/attemptLimiter.js`) grows a fourth counter kind,
-  `signup`, keyed on `req.ip`, with its own limit and window — `perSignupIp`, default 10 per 60 minutes, from
-  `AUTH_LIMIT_MAX_SIGNUPS_PER_IP` and `AUTH_LIMIT_SIGNUP_WINDOW_MS` through `authLimitsFromEnv` and the `authLimits` option
-  `createApp` already threads. A separate window because sign-in's 15 minutes is the wrong unit for account creation. `pairs()`
-  gains `signup` in check order, and a neutral `record(keys, source)` counts alongside `recordFailure`, since what is counted
-  here is a success rather than a guess. The route asks `blocked` before the bcrypt hash, refuses with the shared
-  `TOO_MANY_ATTEMPTS` body and a `Retry-After`, and records one signup only once a user was created, so a 400 or a 409 costs the
-  caller nothing. Light logging names the route and the key kind, never an address. Document the variables in
-  `server/.env.example`, the 429 in the `POST /auth/register` row of `docs/api.md`, and add the Decision Log line in
-  `kol_emet_spec.md`. Verify: `server/tests/unit/attemptLimiter.test.js` — the signup counter has its own max and window, and an
-  injected clock unblocks it independently of the email counter; in `server/tests/http/auth.test.js`, an app built with
-  `authLimits: { perSignupIp: 2 }` registers twice, answers 429 with `Retry-After` on the third and creates no `User`, while a
-  400 (no password) and a 409 (duplicate email) leave the budget untouched; `cd server && yarn test` green. Out of scope:
-  CAPTCHA, email verification, counters shared across API instances (in-process, as KOL-035 recorded), and rate limits on
-  `/oauth/token` and `/drafts`.
 - [ ] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft** [proposed]
   The roadmap's Phase 7 vertical ingestion names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built
   docker-compose and put the rest out of scope. `Draft.source.producer` (`server/src/models/Draft.js:111`) is the enum seam and
