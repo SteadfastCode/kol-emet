@@ -197,3 +197,14 @@
 {"event":"note","text":"demoted KOL-063 back to Proposed: contradicted by a graded review finding","source":"manual","item":"KOL-063","atUtc":"2026-10-05T22:40:02.565Z"}
 {"event":"note","text":"re-promoted KOL-058: the grader finding that parked it was already remediated in the spec","source":"manual","item":"KOL-058","atUtc":"2026-10-05T23:40:58.053Z"}
 {"event":"note","text":"re-promoted KOL-063: the grader finding that parked it was already remediated in the spec","source":"manual","item":"KOL-063","atUtc":"2026-10-05T23:40:58.053Z"}
+{"event":"ack","items":["KOL-043"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.440Z"}
+{"event":"ack","items":["KOL-044"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-045"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-046"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-048"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-042"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-056"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-057"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-055"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-065"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
+{"event":"ack","items":["KOL-066"],"by":"daniel","source":"manual","atUtc":"2026-10-05T23:42:21.441Z"}
