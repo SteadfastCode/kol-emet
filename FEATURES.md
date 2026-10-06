@@ -49,33 +49,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft**
-  The roadmap's Phase 7 vertical ingestion names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built
-  docker-compose and put the rest out of scope. `Draft.source.producer` (`server/src/models/Draft.js:111`) is the enum seam and
-  its comment already names `openapi`. Build `server/src/lib/producers/openApi.js`: `parseOpenApi(text, { existingEntities })` →
-  `{ items, dropReasons }` in exactly the shape `normalizeDraft` emits, reusing what the compose producer established —
-  `MAX_ITEMS`, `normalizeTitle` dedup setting `op: 'update'` with `matchedBy: 'exact-normalized-title'`, `nearestTitle` near-miss
-  flags, `pruneKnownBlocks`, and `redactSecrets` at the route seam (a spec can carry an example key). Accept JSON and YAML (the
-  `yaml` dependency is already there), OpenAPI 3.x and swagger 2.0, refusing anything else with a 400 naming what it found.
-  Mapping, deterministic and with no model call: `info.title` → one entity of category Service, with attribute blocks for the API
-  version and the spec version and a text block from `info.description`; each `tags[]` entry — or the first path segment when a
-  spec declares no tags — → an entity of category API with an attribute block listing its operations (`GET /pets`, …), joined to
-  the service by an "Exposes" group (Provider/Endpoint); each `servers[].url` host that is not the service's own → one External
-  Dependency entity plus a "Depends on" group. Only local `#/components` `$ref`s are followed, one level deep; an unresolvable
-  ref is a drop reason, not a 400. Route `POST /drafts/openapi` in `server/src/routes/drafts.js` beside `/compose`: same body
-  (`{ text, filename? }`), same character cap, same 201 shape with `source.producer: 'openapi'` and
-  `producerVersion: 'openapi@1'`. Client: add `.json` in `client/src/lib/importFile.js` and move the producer choice from the
-  extension to the content — `openapi:`/`swagger:` at the top level wins over compose's `services:`, since both arrive as
-  `.yaml` — plus `createOpenApiDraft` in `client/src/api/drafts.js` and the routing in `BraindumpInput.vue`; `DraftReview.vue`
-  and the applier are untouched. Document the route in `docs/api.md` and add the Decision Log line. Verify:
-  `server/tests/unit/openApi.test.js` against a new `server/tests/fixtures/openapi.yaml` (two tags, three paths, two `servers`,
-  one `$ref`) asserting the categories, the Exposes and Depends-on groups, and that a second parse against existing entities of
-  the same titles yields updates; `server/tests/http/openApiDraft.test.js` registering with `template:
-  'software-architecture'`, posting the fixture, then `decide-clean` + `apply` landing the entities; a client test that a
-  `.yaml` holding `openapi: 3.1.0` goes to the new route while the compose fixture still goes to `/drafts/compose`;
-  `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: k8s, repo and DB-schema producers,
-  drift detection, LLM enrichment of the parsed graph, modelling request/response schemas (paths and tags only), and any change
-  to the review UI.
 
 - [ ] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed**
   Two halves of one gap. (1) `POST /auth/webauthn/register/begin` (`server/src/routes/auth.js:250`) calls
@@ -357,6 +330,33 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft** (routine 2026-10-06, b53462d)
+  The roadmap's Phase 7 vertical ingestion names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built
+  docker-compose and put the rest out of scope. `Draft.source.producer` (`server/src/models/Draft.js:111`) is the enum seam and
+  its comment already names `openapi`. Build `server/src/lib/producers/openApi.js`: `parseOpenApi(text, { existingEntities })` →
+  `{ items, dropReasons }` in exactly the shape `normalizeDraft` emits, reusing what the compose producer established —
+  `MAX_ITEMS`, `normalizeTitle` dedup setting `op: 'update'` with `matchedBy: 'exact-normalized-title'`, `nearestTitle` near-miss
+  flags, `pruneKnownBlocks`, and `redactSecrets` at the route seam (a spec can carry an example key). Accept JSON and YAML (the
+  `yaml` dependency is already there), OpenAPI 3.x and swagger 2.0, refusing anything else with a 400 naming what it found.
+  Mapping, deterministic and with no model call: `info.title` → one entity of category Service, with attribute blocks for the API
+  version and the spec version and a text block from `info.description`; each `tags[]` entry — or the first path segment when a
+  spec declares no tags — → an entity of category API with an attribute block listing its operations (`GET /pets`, …), joined to
+  the service by an "Exposes" group (Provider/Endpoint); each `servers[].url` host that is not the service's own → one External
+  Dependency entity plus a "Depends on" group. Only local `#/components` `$ref`s are followed, one level deep; an unresolvable
+  ref is a drop reason, not a 400. Route `POST /drafts/openapi` in `server/src/routes/drafts.js` beside `/compose`: same body
+  (`{ text, filename? }`), same character cap, same 201 shape with `source.producer: 'openapi'` and
+  `producerVersion: 'openapi@1'`. Client: add `.json` in `client/src/lib/importFile.js` and move the producer choice from the
+  extension to the content — `openapi:`/`swagger:` at the top level wins over compose's `services:`, since both arrive as
+  `.yaml` — plus `createOpenApiDraft` in `client/src/api/drafts.js` and the routing in `BraindumpInput.vue`; `DraftReview.vue`
+  and the applier are untouched. Document the route in `docs/api.md` and add the Decision Log line. Verify:
+  `server/tests/unit/openApi.test.js` against a new `server/tests/fixtures/openapi.yaml` (two tags, three paths, two `servers`,
+  one `$ref`) asserting the categories, the Exposes and Depends-on groups, and that a second parse against existing entities of
+  the same titles yields updates; `server/tests/http/openApiDraft.test.js` registering with `template:
+  'software-architecture'`, posting the fixture, then `decide-clean` + `apply` landing the entities; a client test that a
+  `.yaml` holding `openapi: 3.1.0` goes to the new route while the compose fixture still goes to `/drafts/compose`;
+  `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: k8s, repo and DB-schema producers,
+  drift detection, LLM enrichment of the parsed graph, modelling request/response schemas (paths and tags only), and any change
+  to the review UI.
 - [x] **(KOL-050) Throttle account creation on POST /auth/register** (routine 2026-10-05, c0a17bf)
   Registration is open by design (CLAUDE.md) and `POST /auth/register` (`server/src/routes/auth.js:91`) has no limit of any
   kind: every request runs a 12-round bcrypt hash, and every success creates a `User`, a `Workspace` and a full template seed —

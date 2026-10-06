@@ -58,7 +58,7 @@
     "KOL-051": {
       "order": 4,
       "title": "Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-051",
