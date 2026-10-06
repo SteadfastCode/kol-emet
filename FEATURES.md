@@ -47,7 +47,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-049) Escape the caller's search string before compiling it as a regex**
+- [x] **(KOL-049) Escape the caller's search string before compiling it as a regex**
   `GET /entities` (`server/src/routes/entities.js:49`), the MCP `search_entities` tool (`server/src/routes/mcp.js:115`) and the
   chat assistant's copy of it (`server/src/routes/chat.js:192`) each do `new RegExp(q, 'i')` on a string the caller chose.
   `server/src/routes/bridge.js:466` already escapes its own `q` with exactly the character class the other three need — they
