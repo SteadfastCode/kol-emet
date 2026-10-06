@@ -50,29 +50,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed**
-  Two halves of one gap. (1) `POST /auth/webauthn/register/begin` (`server/src/routes/auth.js:250`) calls
-  `generateRegistrationOptions` without `userID`, and @simplewebauthn 13 then generates a fresh random handle per registration
-  (`generateRegistrationOptions.js:128`) which is never stored. An account with two passkeys is therefore two unrelated WebAuthn
-  users: a password manager offering discoverable credentials lists the same account twice, and nothing on the server can name
-  the account to an authenticator. (2) The Decision Log's KOL-025 known gap — a passkey removed in Settings stays in its
-  authenticator, which keeps offering it and gets "Passkey not recognized". Build: `webauthnUserHandle` on
-  `server/src/models/User.js`, 32 random bytes base64url, written at create for a new account and lazily on the first
-  `register/begin` for an existing one, and passed as `userID` so every passkey on an account shares one handle.
-  `GET /auth/webauthn/passkeys` returns it and the configured `rpId` alongside the list — as sibling fields, leaving
-  `passkeySummary` the explicit field list it is, so no public key can leak in. In `client/src/components/PasskeySettings.vue`,
-  a successful remove calls `PublicKeyCredential.signalAllAcceptedCredentials({ rpId, userId, allAcceptedCredentialIds })` with
-  the ids still on the account; the passkey sign-in failure path in `client/src/api/auth.js` calls
-  `signalUnknownCredential({ rpId, credentialId })` when the server answers "not recognized". Both are feature-detected — an
-  absent API is a no-op, never an error the user sees — and both log at light naming the source ("Settings → Remove"), matching
-  the tiers `PasskeySettings.vue` already has. `rpId` comes from the route rather than `location.hostname`, because
-  `WEBAUTHN_RP_ID` is what the ceremonies used. Verify: `server/tests/http/passkeys.test.js` — the handle is created once and is
-  identical across two `register/begin` calls, the list route returns it with `rpId`, and no response carries `publicKey`;
-  `client/src/components/PasskeySettings.test.js` — removing a passkey calls `signalAllAcceptedCredentials` with the remaining
-  ids, and a jsdom without the API still removes the passkey and shows no error; `cd server && yarn test` and
-  `cd client && yarn test && yarn build` green. Out of scope: `signalCurrentUserDetails` (nothing renames an account yet);
-  passkeys registered before this keep their random per-credential handles, so a signal cannot reach them — they still sign in,
-  and the handle is used for new registrations only; the credential-id unique index (an Atlas change, KOL-036's known gap).
 
 - [ ] **(KOL-053) Workspace-wide tag rename, merge and delete**
   `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
@@ -330,6 +307,29 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed** (routine 2026-10-06, 6472f25)
+  Two halves of one gap. (1) `POST /auth/webauthn/register/begin` (`server/src/routes/auth.js:250`) calls
+  `generateRegistrationOptions` without `userID`, and @simplewebauthn 13 then generates a fresh random handle per registration
+  (`generateRegistrationOptions.js:128`) which is never stored. An account with two passkeys is therefore two unrelated WebAuthn
+  users: a password manager offering discoverable credentials lists the same account twice, and nothing on the server can name
+  the account to an authenticator. (2) The Decision Log's KOL-025 known gap — a passkey removed in Settings stays in its
+  authenticator, which keeps offering it and gets "Passkey not recognized". Build: `webauthnUserHandle` on
+  `server/src/models/User.js`, 32 random bytes base64url, written at create for a new account and lazily on the first
+  `register/begin` for an existing one, and passed as `userID` so every passkey on an account shares one handle.
+  `GET /auth/webauthn/passkeys` returns it and the configured `rpId` alongside the list — as sibling fields, leaving
+  `passkeySummary` the explicit field list it is, so no public key can leak in. In `client/src/components/PasskeySettings.vue`,
+  a successful remove calls `PublicKeyCredential.signalAllAcceptedCredentials({ rpId, userId, allAcceptedCredentialIds })` with
+  the ids still on the account; the passkey sign-in failure path in `client/src/api/auth.js` calls
+  `signalUnknownCredential({ rpId, credentialId })` when the server answers "not recognized". Both are feature-detected — an
+  absent API is a no-op, never an error the user sees — and both log at light naming the source ("Settings → Remove"), matching
+  the tiers `PasskeySettings.vue` already has. `rpId` comes from the route rather than `location.hostname`, because
+  `WEBAUTHN_RP_ID` is what the ceremonies used. Verify: `server/tests/http/passkeys.test.js` — the handle is created once and is
+  identical across two `register/begin` calls, the list route returns it with `rpId`, and no response carries `publicKey`;
+  `client/src/components/PasskeySettings.test.js` — removing a passkey calls `signalAllAcceptedCredentials` with the remaining
+  ids, and a jsdom without the API still removes the passkey and shows no error; `cd server && yarn test` and
+  `cd client && yarn test && yarn build` green. Out of scope: `signalCurrentUserDetails` (nothing renames an account yet);
+  passkeys registered before this keep their random per-credential handles, so a signal cannot reach them — they still sign in,
+  and the handle is used for new registrations only; the credential-id unique index (an Atlas change, KOL-036's known gap).
 - [x] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft** (routine 2026-10-06, b53462d)
   The roadmap's Phase 7 vertical ingestion names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built
   docker-compose and put the rest out of scope. `Draft.source.producer` (`server/src/models/Draft.js:111`) is the enum seam and

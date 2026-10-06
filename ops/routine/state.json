@@ -58,7 +58,7 @@
     "KOL-052": {
       "order": 4,
       "title": "A stable WebAuthn user handle, and telling the authenticator when a passkey is removed",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-052",
