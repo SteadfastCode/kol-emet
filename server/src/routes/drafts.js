@@ -17,6 +17,10 @@ import {
   parseCompose, pruneKnownBlocks, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
   PRODUCER_VERSION as COMPOSE_PRODUCER_VERSION, MAX_COMPOSE_CHARS,
 } from '../lib/producers/dockerCompose.js';
+import {
+  parseOpenApi, OpenApiParseError, PRODUCER as OPENAPI_PRODUCER,
+  PRODUCER_VERSION as OPENAPI_PRODUCER_VERSION, MAX_OPENAPI_CHARS,
+} from '../lib/producers/openApi.js';
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
 
 const router = Router();
@@ -35,14 +39,19 @@ const MIN_RUN_MICROS = Number(process.env.GENERATOR_MIN_RUN_MICROS ?? 15_000); /
 // those out, which costs no cron.
 const STALE_GENERATING_MS = 10 * 60 * 1000;
 
-// COMPOSE_LOG_LEVEL = off | light | normal | verbose (default light)
-//   light   — one line per compose draft created, naming the request, file and workspace
+// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL = off | light | normal | verbose (default light)
+//   light   — one line per draft created, naming the request, file and workspace
 //   normal  — light, plus every refused request and every drop reason
 //   verbose — normal, plus each proposed item
+//
+// One tier set per producer rather than one for both: a person debugging an
+// OpenAPI import should not have to read every compose line to find it.
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
-function log(level, msg) {
-  const active = LEVELS[process.env.COMPOSE_LOG_LEVEL] ?? LEVELS.light;
-  if (active >= LEVELS[level]) console.log(`[drafts:compose:${level}] ${msg}`);
+function producerLogger(envVar, prefix) {
+  return (level, msg) => {
+    const active = LEVELS[process.env[envVar]] ?? LEVELS.light;
+    if (active >= LEVELS[level]) console.log(`[${prefix}:${level}] ${msg}`);
+  };
 }
 
 /** The source fingerprint every producer stores, so identical input is recognisable across them. */
@@ -237,15 +246,15 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * POST /drafts/compose — a docker-compose file becomes a reviewable draft.
+ * The file producers' shared route: a structured file becomes a reviewable draft.
  *
  * Body { text, filename? }. The client reads the file in the browser, as it
  * does for a braindump import, so only the text ever reaches the server.
  *
- * Deterministic (lib/producers/dockerCompose.js): no model call, so none of
- * POST /drafts' allowance check, generation lock or SSE — the draft is
- * complete by the time this responds, and arrives 'ready' for the same review
- * and apply routes a generated one goes through.
+ * Deterministic (lib/producers/*.js): no model call, so none of POST /drafts'
+ * allowance check, generation lock or SSE — the draft is complete by the time
+ * this responds, and arrives 'ready' for the same review and apply routes a
+ * generated one goes through.
  *
  * Unlike a braindump, the client does NOT put this text in the textarea first:
  * the person importing the file never sees or edits what is uploaded. So the
@@ -253,116 +262,168 @@ router.post('/', async (req, res) => {
  * stored or logged (lib/producers/redactSecrets.js). Everything below this
  * point — source.text, every evidence quote, every log line — is the redacted
  * file, because Draft has no TTL and the exporter carries source.text and the
- * quotes out verbatim.
+ * quotes out verbatim. A compose file carries POSTGRES_PASSWORD; an OpenAPI
+ * document carries an example API key, which is the same problem.
+ *
+ * Written once for both producers rather than copied per producer: everything
+ * here except the parse call itself — the redaction seam, the hash, the
+ * block-pruning re-import pass, the category check, the draft row and its log
+ * tiers — is the contract a producer plugs into, and a second copy of it is a
+ * second place for the redaction to not happen.
+ *
+ * @param {object} spec
+ * @param {string} spec.route            for log lines and refusals only
+ * @param {string} spec.producer         Draft.source.producer
+ * @param {string} spec.producerVersion  Draft.source.producerVersion
+ * @param {Function} spec.parse          (text, { existingEntities, lineOffset }) => { items, dropReasons, dropped }
+ * @param {Function} spec.ParseError     the error class `parse` throws for an unreadable file -> 400
+ * @param {number} spec.maxChars         character cap on the uploaded text
+ * @param {string} spec.defaultTitle     the draft's title when no filename is given
+ * @param {string} spec.needs            names the import in the missing-types refusal
+ * @param {Function} spec.log            this producer's tiered logger
  */
-router.post('/compose', async (req, res) => {
-  const { text, filename } = req.body ?? {};
-  const refuse = (status, error, extra = {}) => {
-    log('normal', `refused POST /drafts/compose for workspace ${req.workspaceId} (file ${JSON.stringify(filename ?? null)}): ${status} ${error}`);
-    return res.status(status).json({ error, ...extra });
+function fileProducerRoute({ route, producer, producerVersion, parse, ParseError, maxChars, defaultTitle, needs, log }) {
+  return async (req, res) => {
+    const { text, filename } = req.body ?? {};
+    const refuse = (status, error, extra = {}) => {
+      log('normal', `refused POST ${route} for workspace ${req.workspaceId} (file ${JSON.stringify(filename ?? null)}): ${status} ${error}`);
+      return res.status(status).json({ error, ...extra });
+    };
+
+    if (typeof text !== 'string' || !text.trim()) return refuse(400, 'text is required');
+    if (filename !== undefined && filename !== null && typeof filename !== 'string') {
+      return refuse(400, 'filename must be a string');
+    }
+    // Trimmed exactly as POST /drafts trims, so textHash means the same thing.
+    const trimmed = text.trim();
+    // Measured against what the person sent, so the message names the size of
+    // the file they are looking at.
+    if (trimmed.length > maxChars) {
+      return refuse(400, `The file is ${trimmed.length.toLocaleString()} characters; the limit is ${maxChars.toLocaleString()}.`);
+    }
+    // `source` is the redacted text from here down, and it is the only version
+    // of the file this process keeps. Redaction is deterministic and preserves
+    // line count, so the hash still identifies the import and a parse error
+    // still names the line the person sees in their editor.
+    const { text: source, count: redactedCount } = redactSecrets(trimmed, { label: JSON.stringify(filename ?? defaultTitle) });
+    // Lines trimmed off the top, so a parse error names the line in the user's file.
+    const lineOffset = (text.slice(0, text.length - text.trimStart().length).match(/\n/g) ?? []).length;
+
+    try {
+      const started = Date.now();
+      const roster = await Entity.find({ workspaceId: req.workspaceId }).select('_id title updatedAt').lean();
+
+      const { items, dropReasons, dropped } = parse(source, { existingEntities: roster, lineOffset });
+
+      // Updates append blocks, so a re-import must see which attributes its
+      // targets already carry. Fetched for the matched entities alone rather than
+      // loading every entity's blocks up front, then pruned off the items already
+      // parsed. This used to re-run the parse against the enriched roster,
+      // which doubled the cost of every re-import — the parse and the
+      // near-miss scan over the whole workspace roster included — for a pass that
+      // only ever changes the `blocks` of items already identified as updates.
+      const targetIds = items.filter(i => i.targetEntityId).map(i => i.targetEntityId);
+      if (targetIds.length) {
+        const withBlocks = await Entity.find({ _id: { $in: targetIds }, workspaceId: req.workspaceId })
+          .select('_id blocks').lean();
+        pruneKnownBlocks(items, new Map(withBlocks.map(e => [String(e._id), e.blocks])));
+      }
+
+      // Checked here rather than left to apply, where every entity would fail
+      // one at a time on a type the workspace does not have.
+      const categories = await getCategories(req.workspaceId);
+      const missing = [...new Set(items.filter(i => i.kind === 'entity').map(i => i.proposed.category))]
+        .filter(c => !categories.includes(c));
+      if (missing.length) {
+        return refuse(400,
+          `This workspace has no ${missing.map(c => `"${c}"`).join(', ')} entity type${missing.length === 1 ? '' : 's'}, ` +
+          `which ${needs} needs. Add them, or import into a Software Architecture workspace.`,
+          { missingCategories: missing });
+      }
+
+      const draft = new Draft({
+        workspaceId: req.workspaceId,
+        createdBy: await resolveUserId(req),
+        title: (typeof filename === 'string' && filename.trim() ? filename.trim() : defaultTitle).slice(0, 60),
+        status: 'ready',
+        source: {
+          producer,
+          producerVersion,
+          text: source,
+          textHash: hashText(source),
+          redactedCount,
+        },
+        grounding: {
+          categories,
+          rosterCount: roster.length,
+          rosterTruncated: false,
+        },
+        route: { provider: null, model: null, strategy: 'deterministic' },
+        items,
+        diagnostics: {
+          // The `yaml` reader parses both producers' files, JSON included —
+          // JSON is YAML, which is what lets one path give both line numbers.
+          parsedVia: ['yaml'],
+          dropReasons,
+          passes: 1,
+          generationMs: Date.now() - started,
+        },
+        // `dropped`, not dropReasons.length: past MAX_DROP_REASONS the reasons
+        // are capped so the document stays reviewable, but the count is whole.
+        counts: { dropped },
+      });
+      draft.recountItems();
+      await draft.save();
+
+      const entityItems = items.filter(i => i.kind === 'entity');
+      log('light',
+        `draft ${draft._id} created for workspace ${req.workspaceId} (source: POST ${route}, file ${JSON.stringify(draft.title)}, ` +
+        `${source.length} chars, ${redactedCount} credential${redactedCount === 1 ? '' : 's'} redacted): ` +
+        `${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
+        `${items.length - entityItems.length} relationships, ${dropped} dropped (${dropReasons.length} reasons listed)`);
+      for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
+      for (const i of items) {
+        log('verbose', `draft ${draft._id} ${i.localKey} ${i.kind} ${i.op} ${JSON.stringify(i.proposed.title ?? i.proposed.label)} (line: ${JSON.stringify(i.input.evidence.quote)})`);
+      }
+
+      res.status(201).json(draft.toObject());
+    } catch (err) {
+      if (err instanceof ParseError) return refuse(400, err.message, { line: err.line });
+      console.error(`[drafts] ${producer} draft failed:`, err.message);
+      res.status(500).json({ error: err.message });
+    }
   };
+}
 
-  if (typeof text !== 'string' || !text.trim()) return refuse(400, 'text is required');
-  if (filename !== undefined && filename !== null && typeof filename !== 'string') {
-    return refuse(400, 'filename must be a string');
-  }
-  // Trimmed exactly as POST /drafts trims, so textHash means the same thing.
-  const trimmed = text.trim();
-  // Measured against what the person sent, so the message names the size of
-  // the file they are looking at.
-  if (trimmed.length > MAX_COMPOSE_CHARS) {
-    return refuse(400, `The file is ${trimmed.length.toLocaleString()} characters; the limit is ${MAX_COMPOSE_CHARS.toLocaleString()}.`);
-  }
-  // `source` is the redacted text from here down, and it is the only version
-  // of the file this process keeps. Redaction is deterministic and preserves
-  // line count, so the hash still identifies the import and a YAML error still
-  // names the line the person sees in their editor.
-  const { text: source, count: redactedCount } = redactSecrets(trimmed, { label: JSON.stringify(filename ?? 'docker-compose') });
-  // Lines trimmed off the top, so a parse error names the line in the user's file.
-  const lineOffset = (text.slice(0, text.length - text.trimStart().length).match(/\n/g) ?? []).length;
+/** POST /drafts/compose — a docker-compose file becomes a reviewable draft. */
+router.post('/compose', fileProducerRoute({
+  route: '/drafts/compose',
+  producer: COMPOSE_PRODUCER,
+  producerVersion: COMPOSE_PRODUCER_VERSION,
+  parse: parseCompose,
+  ParseError: ComposeParseError,
+  maxChars: MAX_COMPOSE_CHARS,
+  defaultTitle: 'docker-compose',
+  needs: 'a docker-compose import',
+  log: producerLogger('COMPOSE_LOG_LEVEL', 'drafts:compose'),
+}));
 
-  try {
-    const started = Date.now();
-    const roster = await Entity.find({ workspaceId: req.workspaceId }).select('_id title updatedAt').lean();
-
-    const { items, dropReasons, dropped } = parseCompose(source, { existingEntities: roster, lineOffset });
-
-    // Updates append blocks, so a re-import must see which attributes its
-    // targets already carry. Fetched for the matched entities alone rather than
-    // loading every entity's blocks up front, then pruned off the items already
-    // parsed. This used to re-run parseCompose against the enriched roster,
-    // which doubled the cost of every re-import — the YAML parse and the
-    // near-miss scan over the whole workspace roster included — for a pass that
-    // only ever changes the `blocks` of items already identified as updates.
-    const targetIds = items.filter(i => i.targetEntityId).map(i => i.targetEntityId);
-    if (targetIds.length) {
-      const withBlocks = await Entity.find({ _id: { $in: targetIds }, workspaceId: req.workspaceId })
-        .select('_id blocks').lean();
-      pruneKnownBlocks(items, new Map(withBlocks.map(e => [String(e._id), e.blocks])));
-    }
-
-    // Checked here rather than left to apply, where every entity would fail
-    // one at a time on a type the workspace does not have.
-    const categories = await getCategories(req.workspaceId);
-    const missing = [...new Set(items.filter(i => i.kind === 'entity').map(i => i.proposed.category))]
-      .filter(c => !categories.includes(c));
-    if (missing.length) {
-      return refuse(400,
-        `This workspace has no ${missing.map(c => `"${c}"`).join(', ')} entity type${missing.length === 1 ? '' : 's'}, ` +
-        'which a docker-compose import needs. Add them, or import into a Software Architecture workspace.',
-        { missingCategories: missing });
-    }
-
-    const draft = new Draft({
-      workspaceId: req.workspaceId,
-      createdBy: await resolveUserId(req),
-      title: (typeof filename === 'string' && filename.trim() ? filename.trim() : 'docker-compose').slice(0, 60),
-      status: 'ready',
-      source: {
-        producer: COMPOSE_PRODUCER,
-        producerVersion: COMPOSE_PRODUCER_VERSION,
-        text: source,
-        textHash: hashText(source),
-        redactedCount,
-      },
-      grounding: {
-        categories,
-        rosterCount: roster.length,
-        rosterTruncated: false,
-      },
-      route: { provider: null, model: null, strategy: 'deterministic' },
-      items,
-      diagnostics: {
-        parsedVia: ['yaml'],
-        dropReasons,
-        passes: 1,
-        generationMs: Date.now() - started,
-      },
-      // `dropped`, not dropReasons.length: past MAX_DROP_REASONS the reasons
-      // are capped so the document stays reviewable, but the count is whole.
-      counts: { dropped },
-    });
-    draft.recountItems();
-    await draft.save();
-
-    const entityItems = items.filter(i => i.kind === 'entity');
-    log('light',
-      `draft ${draft._id} created for workspace ${req.workspaceId} (source: POST /drafts/compose, file ${JSON.stringify(draft.title)}, ` +
-      `${source.length} chars, ${redactedCount} credential${redactedCount === 1 ? '' : 's'} redacted): ` +
-      `${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
-      `${items.length - entityItems.length} relationships, ${dropped} dropped (${dropReasons.length} reasons listed)`);
-    for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
-    for (const i of items) {
-      log('verbose', `draft ${draft._id} ${i.localKey} ${i.kind} ${i.op} ${JSON.stringify(i.proposed.title ?? i.proposed.label)} (line: ${JSON.stringify(i.input.evidence.quote)})`);
-    }
-
-    res.status(201).json(draft.toObject());
-  } catch (err) {
-    if (err instanceof ComposeParseError) return refuse(400, err.message, { line: err.line });
-    console.error('[drafts] compose draft failed:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+/**
+ * POST /drafts/openapi — an OpenAPI 3.x or Swagger 2.0 document, as JSON or
+ * YAML, becomes a reviewable draft: a Service for `info.title`, an API per tag
+ * and an External Dependency per server host that is not the service's own.
+ */
+router.post('/openapi', fileProducerRoute({
+  route: '/drafts/openapi',
+  producer: OPENAPI_PRODUCER,
+  producerVersion: OPENAPI_PRODUCER_VERSION,
+  parse: parseOpenApi,
+  ParseError: OpenApiParseError,
+  maxChars: MAX_OPENAPI_CHARS,
+  defaultTitle: 'openapi',
+  needs: 'an OpenAPI import',
+  log: producerLogger('OPENAPI_LOG_LEVEL', 'drafts:openapi'),
+}));
 
 // ─── Decision routes ─────────────────────────────────────────────────────────
 //

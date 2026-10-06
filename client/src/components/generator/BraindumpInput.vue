@@ -5,7 +5,8 @@
       <p>
         Paste or import rough notes — a character sketch, a session of worldbuilding, a chapter
         of background. Kol Emet reads them and proposes entities and relationships for you to
-        review. A docker-compose file becomes a draft of its services and what they depend on.
+        review. A docker-compose file or an OpenAPI document becomes a draft of its services,
+        APIs and what they depend on.
         <strong>Nothing is saved until you approve it.</strong>
       </p>
     </div>
@@ -22,7 +23,7 @@
         ref="ta"
         v-model="text"
         class="dump"
-        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx or docker-compose .yml file here."
+        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx, a docker-compose .yml or an OpenAPI .yml/.json file here."
         :disabled="busy || importing"
         @keydown.meta.enter="submit"
         @keydown.ctrl.enter="submit"
@@ -75,8 +76,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { extractAll, extractText, isComposeFile, ACCEPT_ATTR } from '../../lib/importFile.js';
-import { createComposeDraft } from '../../api/drafts.js';
+import { extractAll, extractText, isProducerFile, producerFor, ACCEPT_ATTR } from '../../lib/importFile.js';
+import { createComposeDraft, createOpenApiDraft } from '../../api/drafts.js';
 
 const props = defineProps({
   maxChars:  { type: Number, default: 25000 },
@@ -114,7 +115,7 @@ async function ingest(files) {
   const list = [...files];
   if (!list.length) return;
 
-  if (list.some(isComposeFile)) return ingestCompose(list);
+  if (list.some(isProducerFile)) return ingestStructured(list);
 
   importing.value = true;
   importingName.value = list.length === 1 ? list[0].name : `${list.length} files`;
@@ -136,15 +137,26 @@ async function ingest(files) {
   }
 }
 
+const PRODUCERS = {
+  compose: createComposeDraft,
+  openapi: createOpenApiDraft,
+};
+
 /**
- * A docker-compose file skips the textarea: its draft is built from the file's
- * structure, not generated from notes, so there is nothing to edit first and no
- * allowance spent. The finished draft goes straight to review.
+ * A docker-compose file or an OpenAPI document skips the textarea: its draft is
+ * built from the file's structure, not generated from notes, so there is
+ * nothing to edit first and no allowance spent. The finished draft goes
+ * straight to review.
+ *
+ * Which producer it goes to is decided by the file's content, not its
+ * extension — both arrive as `.yaml`, and an OpenAPI document arrives as
+ * `.json` as often as not. A file that is neither is refused here rather than
+ * posted hopefully, so the message can name both things it could have been.
  */
-async function ingestCompose(list) {
+async function ingestStructured(list) {
   importErrors.value = [];
   if (list.length > 1) {
-    importErrors.value = ['Import a docker-compose file on its own — it becomes a draft directly, not notes.'];
+    importErrors.value = ['Import a docker-compose or OpenAPI file on its own — it becomes a draft directly, not notes.'];
     if (picker.value) picker.value.value = '';
     return;
   }
@@ -152,8 +164,15 @@ async function ingestCompose(list) {
   importing.value = true;
   importingName.value = list[0].name;
   try {
-    const { name, text: yaml } = await extractText(list[0]);
-    const draft = await createComposeDraft({ text: yaml, filename: name });
+    const { name, text: source } = await extractText(list[0]);
+    const producer = producerFor(source);
+    if (!producer) {
+      throw new Error(
+        `"${name}" doesn't look like an OpenAPI document or a docker-compose file — ` +
+        'it needs a top-level `openapi:`, `swagger:` or `services:` key.'
+      );
+    }
+    const draft = await PRODUCERS[producer]({ text: source, filename: name });
     emit('drafted', draft);
   } catch (err) {
     importErrors.value = [err.message];
