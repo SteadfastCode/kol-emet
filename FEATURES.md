@@ -50,7 +50,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed**
+- [x] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed**
   Two halves of one gap. (1) `POST /auth/webauthn/register/begin` (`server/src/routes/auth.js:250`) calls
   `generateRegistrationOptions` without `userID`, and @simplewebauthn 13 then generates a fresh random handle per registration
   (`generateRegistrationOptions.js:128`) which is never stored. An account with two passkeys is therefore two unrelated WebAuthn
