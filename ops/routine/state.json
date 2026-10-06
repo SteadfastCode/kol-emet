@@ -55,42 +55,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-052": {
+    "KOL-053": {
       "order": 4,
-      "title": "A stable WebAuthn user handle, and telling the authenticator when a passkey is removed",
-      "status": "done",
+      "title": "Workspace-wide tag rename, merge and delete",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-052",
+      "branch": "routine/item/KOL-053",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-06T04:09:11.980Z",
-      "runId": "2026-10-06T03:10:29.997Z",
-      "lastFail": null
-    },
-    "KOL-053": {
-      "order": 5,
-      "title": "Workspace-wide tag rename, merge and delete",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-06T10:09:11.994Z",
+      "runId": "2026-10-06T10:08:47.754Z",
       "lastFail": null
     },
     "KOL-054": {
-      "order": 6,
+      "order": 5,
       "title": "Re-proposing a relationship group updates it instead of stacking a second one",
       "status": "pending",
       "attempts": 0,
@@ -107,7 +90,7 @@
       "lastFail": null
     },
     "KOL-058": {
-      "order": 7,
+      "order": 6,
       "title": "Refuse a cookie-authenticated write whose Origin is not this deployment's client",
       "status": "pending",
       "attempts": 0,
@@ -124,7 +107,7 @@
       "lastFail": null
     },
     "KOL-059": {
-      "order": 8,
+      "order": 7,
       "title": "A rollback whose snapshot names a renamed entity type answers 409, not 500",
       "status": "pending",
       "attempts": 0,
@@ -141,7 +124,7 @@
       "lastFail": null
     },
     "KOL-060": {
-      "order": 9,
+      "order": 8,
       "title": "Restore a deleted entity from its snapshot",
       "status": "pending",
       "attempts": 0,
@@ -158,7 +141,7 @@
       "lastFail": null
     },
     "KOL-061": {
-      "order": 10,
+      "order": 9,
       "title": "`GET /entities` stops shipping every entity's block content",
       "status": "pending",
       "attempts": 0,
@@ -175,7 +158,7 @@
       "lastFail": null
     },
     "KOL-062": {
-      "order": 11,
+      "order": 10,
       "title": "An `/events` stream ends when its session does, and one tenant cannot open an unbounded number",
       "status": "pending",
       "attempts": 0,
@@ -192,7 +175,7 @@
       "lastFail": null
     },
     "KOL-063": {
-      "order": 12,
+      "order": 11,
       "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
       "status": "pending",
       "attempts": 0,
@@ -209,7 +192,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 13,
+      "order": 12,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -230,7 +213,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 14,
+      "order": 13,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -247,7 +230,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 15,
+      "order": 14,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -266,7 +249,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 16,
+      "order": 15,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -283,7 +266,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 17,
+      "order": 16,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -300,7 +283,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 18,
+      "order": 17,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -314,6 +297,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-052": {
+      "order": null,
+      "title": "A stable WebAuthn user handle, and telling the authenticator when a passkey is removed",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-052",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-06T04:09:11.980Z",
+      "runId": "2026-10-06T03:10:29.997Z",
       "lastFail": null
     },
     "KOL-051": {
