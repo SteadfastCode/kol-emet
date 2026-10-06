@@ -58,7 +58,7 @@
     "KOL-050": {
       "order": 4,
       "title": "Throttle account creation on POST /auth/register",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-050",
