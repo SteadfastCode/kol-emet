@@ -46,9 +46,9 @@ import { sessionCookieOptions } from './lib/sessionCookie.js';
  * @param {object}  [options]
  * @param {object}  [options.sessionStore] express-session store. Defaults to the
  *   MongoStore the deployed app uses; supplied by tests to stay off the database.
- * @param {object}  [options.authLimits] sign-in throttle, `{ perEmail, perIp,
- *   perUser, windowMs }`; anything left out comes from AUTH_LIMIT_* in the
- *   environment (see lib/attemptLimiter.js).
+ * @param {object}  [options.authLimits] auth throttle, `{ perEmail, perIp,
+ *   perUser, perSignupIp, windowMs, signupWindowMs }`; anything left out comes
+ *   from AUTH_LIMIT_* in the environment (see lib/attemptLimiter.js).
  * @returns {import('express').Express}
  */
 export function createApp({ sessionStore, authLimits } = {}) {

@@ -148,10 +148,15 @@ async function submit() {
       ? 'An account with that email already exists.'
       : err.status === 401
       ? 'Invalid email or password.'
-      // The server throttles failed sign-ins (KOL-035). "Try again" is exactly
-      // the wrong advice here, so say what to do instead.
+      // The server throttles failed sign-ins (KOL-035) and account creation
+      // (KOL-050). "Try again" is exactly the wrong advice for either, so say
+      // what to do instead — and the two are not the same thing to say: a
+      // throttled signup is not the person's own failed attempt, and its
+      // window is an hour rather than fifteen minutes.
       : err.status === 429
-      ? 'Too many sign-in attempts. Wait a few minutes and try again.'
+      ? mode.value === 'register'
+        ? 'Too many accounts have been created from this network recently. Try again later.'
+        : 'Too many sign-in attempts. Wait a few minutes and try again.'
       : 'Something went wrong. Please try again.';
   } finally {
     loading.value = false;

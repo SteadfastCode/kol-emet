@@ -38,15 +38,20 @@ const ORIGIN  = process.env.WEBAUTHN_ORIGIN  ?? 'http://localhost:5173';
 const REGISTER_SOURCE = 'POST /auth/webauthn/register/complete';
 const LOGIN_SOURCE    = 'POST /auth/webauthn/login/complete';
 
-// ─── Failed sign-in throttling ────────────────────────────────────────────────
+// ─── Auth throttling ──────────────────────────────────────────────────────────
 // Three routes below guess-check a credential: the password login, the passkey
 // login, and the re-authentication that account deletion demands. Each asks the
 // limiter *before* doing that work — a blocked caller costs no bcrypt hash and
 // no signature verification — records a failure after one, and clears its own
-// key on success. Limits, keys and logging (AUTH_LIMIT_LOG_LEVEL): see
-// lib/attemptLimiter.js.
+// key on success.
+//
+// `POST /auth/register` is the fourth, and the odd one out: it has no credential
+// to guess at, so what it counts is a created account, keyed on the client
+// address under its own kind and its own hour-long window. Limits, keys and
+// logging (AUTH_LIMIT_LOG_LEVEL): see lib/attemptLimiter.js.
 
 const PASSWORD_LOGIN_SOURCE = 'POST /auth/login';
+const SIGNUP_SOURCE         = 'POST /auth/register';
 
 /**
  * The counters createApp built for this app (`app.locals.authLimiter`,
@@ -100,6 +105,14 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'Unknown template' });
   }
 
+  // Asked here: after the two refusals above, which cost no I/O and are what a
+  // malformed body gets whatever anyone's budget says, and before the duplicate
+  // lookup — so a blocked caller buys neither a database read, nor the bcrypt
+  // hash, nor the workspace and the whole template seed that follow it.
+  const signupKeys = { signup: req.ip };
+  const signupBlock = limiter(req).blocked(signupKeys, SIGNUP_SOURCE);
+  if (signupBlock) return limiter(req).refuse(res, signupBlock);
+
   // The stored form, not the raw body value: what is checked for a duplicate is
   // exactly what the schema would write, and the filter is a primitive string
   // rather than whatever the request sent (KOL-044).
@@ -108,6 +121,14 @@ router.post('/register', async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await User.create({ email, passwordHash });
+
+  // Counted once the account exists, which is what makes the 400s and the 409
+  // above free: a typo at the signup form is not a spent signup, and asking
+  // whether an address is taken cannot burn the budget of everyone else behind
+  // the same address. The workspace rollback below deliberately leaves this
+  // counted — by then the hash and two writes have been paid for, and that
+  // cost is the thing being bounded.
+  limiter(req).record(signupKeys, SIGNUP_SOURCE);
 
   // Every user needs a workspace immediately — resolveWorkspace fails closed
   // without one, so a user created here but left workspace-less could not read

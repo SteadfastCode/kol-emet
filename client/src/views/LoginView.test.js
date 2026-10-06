@@ -231,4 +231,24 @@ describe('LoginView throttled sign-in', () => {
 
     expect(wrapper.get('.login-error').text()).toBe('Invalid email or password.');
   });
+
+  /**
+   * `POST /auth/register` is throttled too (KOL-050), and the sign-in wording
+   * is wrong for it twice over: nothing the person did failed, and the window
+   * is an hour rather than the "few minutes" a blocked sign-in is told to wait.
+   * Goes red if the register branch is folded back into the sign-in message.
+   */
+  it('a 429 while creating an account does not blame the person for failed sign-ins', async () => {
+    getTemplates.mockResolvedValue([]);
+    register.mockRejectedValue(Object.assign(new Error('429'), { status: 429 }));
+    const wrapper = mount(LoginView);
+    await switchTo(wrapper, 'Create account');
+    await flushPromises();
+
+    await signIn(wrapper);
+
+    const shown = wrapper.get('.login-error').text();
+    expect(shown).not.toBe(THROTTLED);
+    expect(shown).toBe('Too many accounts have been created from this network recently. Try again later.');
+  });
 });

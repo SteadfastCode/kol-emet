@@ -28,8 +28,17 @@
  *   on every retry, quietly turning a 15-minute throttle into a permanent ban
  *   for any client that retries on a timer.
  *
+ *   **The signup counter runs on its own clock.** It is the one counter here
+ *   that counts a success rather than a guess (an account created by
+ *   `POST /auth/register`), and 15 minutes is the wrong unit for that, so it
+ *   has both its own max and its own window. Sharing either with the email
+ *   counter would be invisible in production until the hour a mass-signup run
+ *   walked straight through the gap — so it is asserted by stepping the clock
+ *   past the sign-in window and showing the signup key still blocked, and past
+ *   its own and showing it free.
+ *
  * The composite (`createAuthLimiter`) is covered for the parts the routes rely
- * on that the single counters cannot show: the three kinds are separate
+ * on that the single counters cannot show: the four kinds are separate
  * counters, `blocked` reports the first kind over its limit in a fixed order,
  * and `refuse` writes one byte-identical body with a Retry-After. The routes'
  * own use of it — which call sites check, count and clear — is asserted over
@@ -46,6 +55,10 @@
  *     fails on the count it reports afterwards.
  *   - Give refuse() a body that names the key → the enumeration test in
  *     tests/http/auth.test.js fails rather than this file.
+ *   - Build the signup counter with `windowMs` instead of `signupWindowMs`, or
+ *     with `perEmail` instead of `perSignupIp` → the signup tests fail.
+ *   - Drop `signup` from `pairs()` → `record({ signup })` counts nothing and
+ *     the signup tests fail on the block that never comes.
  *
  * Debug logging: AUTH_LIMIT_LOG_LEVEL=off|light|normal|verbose. Forced to
  * 'off' below — this file drives hundreds of failures on purpose and the
@@ -66,6 +79,7 @@ const {
 } = await import('../../src/lib/attemptLimiter.js');
 
 const WINDOW = 15 * 60 * 1000;
+const SIGNUP_WINDOW = 60 * 60 * 1000;
 
 /** A clock the tests move by hand: `clock.now()` is what the limiter reads. */
 function fakeClock(start = 1_700_000_000_000) {
@@ -186,29 +200,47 @@ describe('createAttemptLimiter: one fixed window', () => {
 
 describe('authLimitsFromEnv', () => {
   test('ships the documented defaults', () => {
-    assert.deepEqual(authLimitsFromEnv({}), { perEmail: 10, perIp: 100, windowMs: WINDOW });
-    assert.deepEqual({ ...AUTH_LIMIT_DEFAULTS }, { perEmail: 10, perIp: 100, windowMs: WINDOW });
+    const shipped = { perEmail: 10, perIp: 100, perSignupIp: 10, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW };
+    assert.deepEqual(authLimitsFromEnv({}), shipped);
+    assert.deepEqual({ ...AUTH_LIMIT_DEFAULTS }, shipped);
+    // Not the same number by accident: the signup window is its own unit, and
+    // a change that collapsed the two would make this fail rather than pass.
+    assert.notEqual(AUTH_LIMIT_DEFAULTS.signupWindowMs, AUTH_LIMIT_DEFAULTS.windowMs);
   });
 
   test('reads the AUTH_LIMIT_* overrides, and ignores ones that would break it', () => {
     assert.deepEqual(
-      authLimitsFromEnv({ AUTH_LIMIT_MAX_PER_EMAIL: '5', AUTH_LIMIT_MAX_PER_IP: '50', AUTH_LIMIT_WINDOW_MS: '60000' }),
-      { perEmail: 5, perIp: 50, windowMs: 60_000 },
+      authLimitsFromEnv({
+        AUTH_LIMIT_MAX_PER_EMAIL: '5',
+        AUTH_LIMIT_MAX_PER_IP: '50',
+        AUTH_LIMIT_MAX_SIGNUPS_PER_IP: '3',
+        AUTH_LIMIT_WINDOW_MS: '60000',
+        AUTH_LIMIT_SIGNUP_WINDOW_MS: '120000',
+      }),
+      { perEmail: 5, perIp: 50, perSignupIp: 3, windowMs: 60_000, signupWindowMs: 120_000 },
     );
     // A typo in the environment must not silently switch the throttle off.
     assert.deepEqual(
-      authLimitsFromEnv({ AUTH_LIMIT_MAX_PER_EMAIL: 'ten', AUTH_LIMIT_MAX_PER_IP: '0', AUTH_LIMIT_WINDOW_MS: '' }),
-      { perEmail: 10, perIp: 100, windowMs: WINDOW },
+      authLimitsFromEnv({
+        AUTH_LIMIT_MAX_PER_EMAIL: 'ten',
+        AUTH_LIMIT_MAX_PER_IP: '0',
+        AUTH_LIMIT_MAX_SIGNUPS_PER_IP: '-1',
+        AUTH_LIMIT_WINDOW_MS: '',
+        AUTH_LIMIT_SIGNUP_WINDOW_MS: 'an hour',
+      }),
+      { perEmail: 10, perIp: 100, perSignupIp: 10, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW },
     );
   });
 });
 
-describe('createAuthLimiter: the three counters the routes share', () => {
+describe('createAuthLimiter: the four counters the routes share', () => {
   test('email, ip and user are separate counters with their own limits', () => {
     const clock = fakeClock();
     const auth = createAuthLimiter({ perEmail: 2, perIp: 4, windowMs: WINDOW, now: clock.now });
 
-    assert.deepEqual(auth.limits, { perEmail: 2, perIp: 4, perUser: 2, windowMs: WINDOW });
+    assert.deepEqual(auth.limits, {
+      perEmail: 2, perIp: 4, perUser: 2, perSignupIp: 10, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW,
+    });
 
     auth.recordFailure({ email: 'a@example.test', ip: '10.0.0.1' }, 'test');
     auth.recordFailure({ email: 'a@example.test', ip: '10.0.0.1' }, 'test');
@@ -229,10 +261,11 @@ describe('createAuthLimiter: the three counters the routes share', () => {
   test('missing and empty keys are skipped rather than counted as one shared key', () => {
     const auth = createAuthLimiter({ perIp: 1, windowMs: WINDOW });
 
-    auth.recordFailure({ email: '', ip: undefined, user: null }, 'test');
+    auth.recordFailure({ email: '', ip: undefined, user: null, signup: '' }, 'test');
     assert.equal(auth.counters.email.size(), 0, 'an empty email is no key at all');
     assert.equal(auth.counters.ip.size(), 0);
     assert.equal(auth.counters.user.size(), 0);
+    assert.equal(auth.counters.signup.size(), 0);
     assert.equal(auth.blocked({ email: '', ip: undefined }, 'test'), null);
   });
 
@@ -267,6 +300,76 @@ describe('createAuthLimiter: the three counters the routes share', () => {
   test('perUser follows perEmail unless it is given its own limit', () => {
     assert.equal(createAuthLimiter({ perEmail: 3 }).limits.perUser, 3);
     assert.equal(createAuthLimiter({ perEmail: 3, perUser: 7 }).limits.perUser, 7);
+  });
+
+  // ── The signup counter (KOL-050) ───────────────────────────────────────────
+  // The one kind here that counts a success — an account `POST /auth/register`
+  // created. Two things make it a separate counter rather than a fourth key on
+  // the sign-in one, and both are asserted from the outside: its own max, and
+  // its own window.
+  test('signup has its own max, separate from the email and ip limits', () => {
+    const auth = createAuthLimiter({ perEmail: 1, perIp: 1, perSignupIp: 3, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW });
+
+    for (let i = 0; i < 3; i += 1) auth.record({ signup: '10.0.0.1' }, 'test');
+
+    assert.ok(auth.blocked({ signup: '10.0.0.1' }, 'test'), 'the 4th signup from one address is over the limit of 3');
+    assert.equal(auth.blocked({ ip: '10.0.0.1' }, 'test'), null, 'and none of it was counted against the sign-in ip limit of 1');
+    assert.equal(auth.blocked({ signup: '10.0.0.2' }, 'test'), null, 'another address keeps its own budget');
+  });
+
+  test('a failed sign-in does not spend a signup, and a signup does not spend a sign-in', () => {
+    const auth = createAuthLimiter({ perEmail: 1, perIp: 1, perSignupIp: 1, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW });
+
+    auth.recordFailure({ email: 'a@example.test', ip: '10.0.0.1' }, 'test');
+    assert.equal(auth.blocked({ signup: '10.0.0.1' }, 'test'), null, 'a wrong password at the login form must not stop anyone registering');
+
+    auth.record({ signup: '10.0.0.1' }, 'test');
+    assert.ok(auth.blocked({ signup: '10.0.0.1' }, 'test'), 'the signup budget of 1 is now spent');
+    assert.ok(auth.blocked({ ip: '10.0.0.1' }, 'test'), 'and the ip counter stands exactly where the failure left it');
+  });
+
+  test("the signup window ends on its own clock, not the sign-in one's", () => {
+    const clock = fakeClock();
+    const auth = createAuthLimiter({ perEmail: 1, perSignupIp: 1, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW, now: clock.now });
+
+    auth.recordFailure({ email: 'a@example.test' }, 'test');
+    auth.record({ signup: '10.0.0.1' }, 'test');
+
+    const block = auth.blocked({ signup: '10.0.0.1' }, 'test');
+    assert.ok(block, 'the second signup from that address is over the limit of 1');
+    assert.equal(block.kind, 'signup');
+    assert.equal(block.retryAfter, SIGNUP_WINDOW / 1000, 'the wait is the signup window, not the sign-in one');
+
+    clock.advance(WINDOW);
+    assert.equal(auth.blocked({ email: 'a@example.test' }, 'test'), null, 'the sign-in window has ended');
+    assert.ok(auth.blocked({ signup: '10.0.0.1' }, 'test'), 'the signup window is longer and has not');
+
+    clock.advance(SIGNUP_WINDOW - WINDOW - 1);
+    assert.ok(auth.blocked({ signup: '10.0.0.1' }, 'test'), 'one millisecond short of its own window, still blocked');
+
+    clock.advance(1);
+    assert.equal(auth.blocked({ signup: '10.0.0.1' }, 'test'), null, 'at its own boundary the address may register again');
+  });
+
+  // Same arithmetic, different words in the log: a signup is counted with
+  // `record` only so that nothing reading the log is told a successful signup
+  // was a "failure". If the two ever diverge in what they count, the route's
+  // budget stops matching the one the sign-in routes are tested against.
+  test('record() counts exactly like recordFailure, since only the log wording differs', () => {
+    const clock = fakeClock();
+    const built = () => createAuthLimiter({ perSignupIp: 2, signupWindowMs: SIGNUP_WINDOW, now: clock.now });
+    const counted = built();
+    const failed  = built();
+
+    for (let i = 0; i < 2; i += 1) {
+      counted.record({ signup: '10.0.0.1' }, 'test');
+      failed.recordFailure({ signup: '10.0.0.1' }, 'test');
+    }
+
+    assert.deepEqual(
+      counted.blocked({ signup: '10.0.0.1' }, 'test'),
+      failed.blocked({ signup: '10.0.0.1' }, 'test'),
+    );
   });
 
   test('a fresh limiter per call, so no two apps share counters', () => {
