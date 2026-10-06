@@ -58,10 +58,10 @@
     "KOL-054": {
       "order": 4,
       "title": "Re-proposing a relationship group updates it instead of stacking a second one",
-      "status": "claimed",
+      "status": "pending",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-054",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -69,8 +69,8 @@
       "coldReview": false,
       "notBefore": null,
       "claimedAtUtc": "2026-10-06T20:10:22.082Z",
-      "runId": "2026-10-06T20:09:55.643Z",
-      "lastFail": null
+      "runId": null,
+      "lastFail": "abandoned"
     },
     "KOL-058": {
       "order": 5,
