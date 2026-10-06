@@ -223,3 +223,4 @@
 {"event":"blocked","runId":"2026-10-06T15:08:28.721Z","item":"KOL-053","detail":"run failed (exit 1) (after 0 min)","final":true,"lastFail":"abandoned","atUtc":"2026-10-06T15:09:13.931Z"}
 {"event":"claim","runId":"2026-10-06T20:09:55.643Z","item":"KOL-054","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-10-06T20:10:22.082Z"}
 {"event":"blocked","runId":"2026-10-06T20:09:55.643Z","item":"KOL-054","detail":"run failed (exit 1) (after 0 min)","final":false,"lastFail":"abandoned","atUtc":"2026-10-06T20:10:26.177Z"}
+{"event":"reopen","items":["KOL-053","KOL-054"],"by":"daniel","reason":"the box Claude CLI was logged out (OAuth session expired 2026-10-06); these runs never reached the model","atUtc":"2026-10-06T22:01:33.441Z"}
