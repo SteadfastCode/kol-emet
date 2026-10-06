@@ -57,7 +57,7 @@ Mount points and their guards:
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/entities` | List. Query params: `category`, `tag`, `q` (case-insensitive regex over title/summary/blocks). Populates `open_questions`. |
+| GET | `/entities` | List. Query params: `category`, `tag`, `q` (case-insensitive **literal** substring over title/summary/block markdown — the term is regex-escaped, so punctuation searches instead of compiling). Each is trimmed, and ignored unless it is a non-empty string, so a repeated parameter or a bracketed operator (`?category[$ne]=X`) is no filter rather than one the caller wrote; `q` is capped at 200 characters. Populates `open_questions`. |
 | GET | `/entities/:id` | Single entity, with `relationships` resolved live from `RelationshipGroup` (not the back-reference). |
 | POST | `/entities` | Create. Validates block types; normalizes block `order`. 400 if `category` is not a type in the workspace's [registry](#entity-types). Ignores `workspaceId`, `open_questions` and `relationships` in the body (server-maintained). Logs to ChangeLog. |
 | PUT | `/entities/:id` | Replace/update. Same validation, ignored fields + ChangeLog. |

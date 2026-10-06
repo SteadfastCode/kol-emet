@@ -13,6 +13,7 @@ import EntityType from '../models/EntityType.js';
 import { getCategories } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
 import { openQuestionsIn, entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
+import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
 const router = Router();
 
@@ -109,16 +110,14 @@ function createMcpServer() {
     },
     async ({ q, tag, category }) => {
       const filter = { workspaceId: await mcpWorkspaceId() };
-      if (category) filter.category = category;
-      if (tag) filter.tags = tag;
-      if (q) {
-        const re = new RegExp(q, 'i');
-        filter.$or = [
-          { title: re },
-          { summary: re },
-          { blocks: { $elemMatch: { 'data.markdown': re } } },
-        ];
-      }
+      // Shared with GET /entities and the chat assistant's copy of this tool.
+      // searchTerm trims, caps and types each value; the keyword is escaped
+      // before it is compiled, so `C++ (v2)` searches instead of throwing a
+      // SyntaxError the model sees as a tool error. See lib/searchFilter.js.
+      const [term, categoryName, tagName] = [q, category, tag].map(searchTerm);
+      if (categoryName) filter.category = categoryName;
+      if (tagName) filter.tags = tagName;
+      if (term) Object.assign(filter, keywordFilter(term));
       const entities = await Entity.find(filter)
         .sort({ title: 1 })
         .populate(openQuestionsIn(filter.workspaceId));

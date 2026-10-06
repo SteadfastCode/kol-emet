@@ -209,9 +209,11 @@ let bob;
 const ALICE_ENTITY = { title: 'Alice Alpha', category: 'Characters', summary: 'Alice content, keyword: shibboleth.' };
 const ALICE_OTHER  = { title: 'Alice Beta',  category: 'Worlds',     summary: 'More alice content.' };
 const BOB_ENTITY   = { title: 'Bob Only',    category: 'Characters', summary: 'Bob content, keyword: shibboleth.' };
+// A title a bare `new RegExp(q, 'i')` cannot be asked for: see the search case below.
+const ALICE_PUNCT  = { title: 'Alice C++ (v2)', category: 'Characters', summary: 'A punctuated title.' };
 
 /** Ids of the fixture entities, filled in by before(). */
-const owned = { aliceEntityId: null, aliceOtherId: null, bobEntityId: null };
+const owned = { aliceEntityId: null, aliceOtherId: null, alicePunctId: null, bobEntityId: null };
 
 /**
  * Registers a user through the real endpoint and reads back the ids
@@ -321,6 +323,7 @@ before(async () => {
 
   owned.aliceEntityId = String((await createEntity(alice, ALICE_ENTITY))._id);
   owned.aliceOtherId  = String((await createEntity(alice, ALICE_OTHER))._id);
+  owned.alicePunctId  = String((await createEntity(alice, ALICE_PUNCT))._id);
   owned.bobEntityId   = String((await createEntity(bob,   BOB_ENTITY))._id);
 
   mcp = await connectClient(MCP_TOKEN, 'shared/authorized');
@@ -681,6 +684,17 @@ describe('workspace scoping', () => {
 
       assert.equal(entities.length, 1, `expected only alice's match, got: ${entities.map(e => e.title).join(', ')}`);
       assert.equal(entities[0].title, ALICE_ENTITY.title);
+    });
+
+    test('a punctuated keyword is searched for literally, not compiled as a pattern', async () => {
+      // `new RegExp('C++ (v2)', 'i')` throws a SyntaxError. Thrown inside a tool
+      // handler, the SDK answers isError: true, so the model got a tool failure
+      // where it had asked for an ordinary title. Now it is escaped first
+      // (src/lib/searchFilter.js) and the title matches itself.
+      const entities = parsed('search_entities', await callTool('search_entities', { q: 'C++ (v2)' }));
+
+      assert.deepEqual(entities.map(e => e.title), [ALICE_PUNCT.title], 'expected exactly the punctuated entity');
+      assert.equal(String(entities[0]._id), owned.alicePunctId);
     });
 
     test('get_entity reads alice\'s own entity', async () => {

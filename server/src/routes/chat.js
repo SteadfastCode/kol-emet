@@ -31,6 +31,7 @@ import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { getCategories } from '../config/categories.js';
 import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
 import { checkBudget, recordSpend } from '../lib/usageMeter.js';
+import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
 const router = Router();
 
@@ -186,16 +187,14 @@ async function executeTool(name, args, ctx = {}) {
 
   if (name === 'search_entities') {
     const filter = { workspaceId: ctx.workspaceId };
-    if (args.category) filter.category = args.category;
-    if (args.tag)      filter.tags = args.tag;
-    if (args.q) {
-      const re = new RegExp(args.q, 'i');
-      filter.$or = [
-        { title: re },
-        { summary: re },
-        { 'blocks.data.markdown': re },
-      ];
-    }
+    // Same helpers as the MCP tool this mirrors: the model chose these strings,
+    // so each is trimmed, capped and typed, and the keyword is escaped before
+    // it is compiled. An unescaped `C++ (v2)` threw a SyntaxError the model saw
+    // as a tool error rather than as its own results. See lib/searchFilter.js.
+    const [term, categoryName, tagName] = [args.q, args.category, args.tag].map(searchTerm);
+    if (categoryName) filter.category = categoryName;
+    if (tagName)      filter.tags = tagName;
+    if (term) Object.assign(filter, keywordFilter(term));
     const results = await Entity.find(filter)
       .sort({ title: 1 })
       .select('_id title category summary tags')
