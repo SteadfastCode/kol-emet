@@ -48,7 +48,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-050) Throttle account creation on POST /auth/register**
+- [x] **(KOL-050) Throttle account creation on POST /auth/register**
   Registration is open by design (CLAUDE.md) and `POST /auth/register` (`server/src/routes/auth.js:91`) has no limit of any
   kind: every request runs a 12-round bcrypt hash, and every success creates a `User`, a `Workspace` and a full template seed —
   38 relationship types plus starter content for Worldbuilding (`server/src/lib/workspaceSeeder.js`). One unauthenticated client
