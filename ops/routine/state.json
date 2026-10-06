@@ -58,7 +58,7 @@
     "KOL-049": {
       "order": 4,
       "title": "Escape the caller's search string before compiling it as a regex",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-049",

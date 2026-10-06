@@ -47,25 +47,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-049) Escape the caller's search string before compiling it as a regex**
-  `GET /entities` (`server/src/routes/entities.js:49`), the MCP `search_entities` tool (`server/src/routes/mcp.js:115`) and the
-  chat assistant's copy of it (`server/src/routes/chat.js:192`) each do `new RegExp(q, 'i')` on a string the caller chose.
-  `server/src/routes/bridge.js:466` already escapes its own `q` with exactly the character class the other three need — they
-  never got it. Two consequences. A query holding regex punctuation is a crash rather than a search: `?q=C++ (v2)` throws a
-  SyntaxError inside the route's `try` and answers 500, and a model emitting the same string gets a tool error instead of
-  results. And a catastrophic pattern such as `(a+)+$` is matched against every entity's title, summary and block markdown in
-  the workspace, on the single event loop this multi-tenant API shares. Express 4's default extended query parser also hands
-  `?category[$ne]=Characters` into the filter as an operator object (workspace-scoped, so it selects the caller's own rows, not
-  another tenant's), and turns `?q=a&q=b` into an array that stringifies to `a,b`. Build `server/src/lib/searchFilter.js`:
-  `escapeRegex(s)` (one copy of the `bridge.js` class), `searchTerm(raw)` → a trimmed string, or null for anything that is not a
-  non-empty string, capped at 200 characters, and `keywordFilter(term)` returning the `$or` the three callers build by hand
-  today. All three use it, and `GET /entities` runs `category` and `tag` through `searchTerm` too, so a non-string is no filter
-  rather than a filter the caller wrote. Verify: `server/tests/unit/searchFilter.test.js` — punctuation matches literally, `.`
-  does not match everything, an object, an array and `''` all give null, a 500-character term is capped; a new
-  `server/tests/http/entitySearch.test.js` — `?q=(` is 200 and lists the entity whose summary holds `(`, and
-  `?category[$ne]=Characters` lists nothing; one case in `server/tests/http/mcp.test.js` where `search_entities` with
-  `q: 'C++ (v2)'` returns the match; `cd server && yarn test` green. Out of scope: a MongoDB text index and `$text` search (an
-  Atlas index change), searching block fields other than `data.markdown`, pagination on `GET /entities`.
 
 - [ ] **(KOL-050) Throttle account creation on POST /auth/register**
   Registration is open by design (CLAUDE.md) and `POST /auth/register` (`server/src/routes/auth.js:91`) has no limit of any
@@ -396,6 +377,25 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-049) Escape the caller's search string before compiling it as a regex** (routine 2026-10-05, 3a2f161)
+  `GET /entities` (`server/src/routes/entities.js:49`), the MCP `search_entities` tool (`server/src/routes/mcp.js:115`) and the
+  chat assistant's copy of it (`server/src/routes/chat.js:192`) each do `new RegExp(q, 'i')` on a string the caller chose.
+  `server/src/routes/bridge.js:466` already escapes its own `q` with exactly the character class the other three need — they
+  never got it. Two consequences. A query holding regex punctuation is a crash rather than a search: `?q=C++ (v2)` throws a
+  SyntaxError inside the route's `try` and answers 500, and a model emitting the same string gets a tool error instead of
+  results. And a catastrophic pattern such as `(a+)+$` is matched against every entity's title, summary and block markdown in
+  the workspace, on the single event loop this multi-tenant API shares. Express 4's default extended query parser also hands
+  `?category[$ne]=Characters` into the filter as an operator object (workspace-scoped, so it selects the caller's own rows, not
+  another tenant's), and turns `?q=a&q=b` into an array that stringifies to `a,b`. Build `server/src/lib/searchFilter.js`:
+  `escapeRegex(s)` (one copy of the `bridge.js` class), `searchTerm(raw)` → a trimmed string, or null for anything that is not a
+  non-empty string, capped at 200 characters, and `keywordFilter(term)` returning the `$or` the three callers build by hand
+  today. All three use it, and `GET /entities` runs `category` and `tag` through `searchTerm` too, so a non-string is no filter
+  rather than a filter the caller wrote. Verify: `server/tests/unit/searchFilter.test.js` — punctuation matches literally, `.`
+  does not match everything, an object, an array and `''` all give null, a 500-character term is capped; a new
+  `server/tests/http/entitySearch.test.js` — `?q=(` is 200 and lists the entity whose summary holds `(`, and
+  `?category[$ne]=Characters` lists nothing; one case in `server/tests/http/mcp.test.js` where `search_entities` with
+  `q: 'C++ (v2)'` returns the match; `cd server && yarn test` green. Out of scope: a MongoDB text index and `$text` search (an
+  Atlas index change), searching block fields other than `data.markdown`, pagination on `GET /entities`.
 - [x] **(KOL-066) KOL-058's second layer would break a working feature: it moves express.urlencoded off the app ont…** (routine 2026-10-01, 67fdb02)
   Found by the grader of KOL-055 (medium, FEATURES.md:226). KOL-058's second layer would break a
   working feature: it moves `express.urlencoded` off the app onto only oauth.js's `POST
