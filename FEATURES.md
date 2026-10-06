@@ -51,7 +51,7 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-053) Workspace-wide tag rename, merge and delete**
+- [ ] **(KOL-053) Workspace-wide tag rename, merge and delete**
   `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
   comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
   way to fix it short of opening every entity — the wishlist's "Bulk tag operations". Build, in `server/src/routes/tags.js`:
