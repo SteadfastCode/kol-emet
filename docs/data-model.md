@@ -494,6 +494,7 @@ simultaneous runs would each pass the same budget check; this caps the overshoot
     createdAt:    Date,
     lastUsedAt:   Date,     // the last verified assertion (sign-in, or confirming an account deletion)
   }],
+  webauthnUserHandle: String,   // the account's WebAuthn `user.id`: 32 random bytes base64url, one per account
   createdAt:    Date,
   updatedAt:    Date,
 }
@@ -508,8 +509,20 @@ that legacy form, and the first successful sign-in with such a passkey rewrites 
 form ([`lib/passkeyIds.js`](../server/src/lib/passkeyIds.js)). Those older passkeys have no
 `deviceType` or `backedUp` until their next sign-in, which records both from the assertion's flags.
 
+`webauthnUserHandle` is the account's WebAuthn user handle, shared by every passkey on it, and it is
+what makes an account one WebAuthn user rather than one per registration: a password manager lists it
+once, and the server can name the account to an authenticator. Random rather than derived, because
+the spec says a user handle must contain nothing identifying. Written when the account is created
+(a `pre('validate')` hook on new documents — not a schema `default`, which mongoose would also apply
+on *hydration* and so hand out a handle nothing stored), and backfilled on the first
+`register/begin` for an account created before KOL-052. Those accounts' existing passkeys keep the
+per-registration random handles @simplewebauthn generated, which no signal can reach.
+
 Settings → Passkeys lists, adds and removes a user's passkeys (KOL-025). An account with no password
-keeps at least one: removing its last passkey is refused.
+keeps at least one: removing its last passkey is refused. A removal also tells the authenticator what
+the account still holds (`PublicKeyCredential.signalAllAcceptedCredentials`), and a sign-in refused as
+not recognized tells it to forget that credential (`signalUnknownCredential`), so a passkey removed
+here stops being offered — see [`client/src/api/passkeySignals.js`](../client/src/api/passkeySignals.js).
 
 ---
 

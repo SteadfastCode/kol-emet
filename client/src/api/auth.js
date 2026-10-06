@@ -1,4 +1,5 @@
 import { startRegistration, startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
+import { signalUnknownCredential } from './passkeySignals.js';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -45,8 +46,9 @@ export const passkeysSupported = () => browserSupportsWebAuthn();
 
 /**
  * Like req(), but a refusal keeps the server's message and, on a 409, the
- * workspaces that blocked it — account deletion shows both to the user, and
- * passkey management shows the message.
+ * workspaces that blocked it — account deletion shows both to the user,
+ * passkey management shows the message, and the passkey sign-in below tells
+ * one 401 from the other by it.
  */
 async function accountReq(path, options) {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -73,7 +75,11 @@ export async function deleteAccountWithPasskey(email) {
   return accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, passkey }) });
 }
 
-/** `{ passkeys, hasPassword }`: the signed-in user's passkeys, as Settings lists them. */
+/**
+ * `{ passkeys, hasPassword, userHandle, rpId }`: the signed-in user's passkeys
+ * as Settings lists them, plus what a Signal API call needs to name the
+ * account to an authenticator (see api/passkeySignals.js).
+ */
 export const listPasskeys = () =>
   accountReq('/auth/webauthn/passkeys', { method: 'GET' });
 
@@ -81,14 +87,35 @@ export const listPasskeys = () =>
 export const removePasskey = (credentialID) =>
   accountReq(`/auth/webauthn/passkeys/${encodeURIComponent(credentialID)}`, { method: 'DELETE' });
 
+// What POST /auth/webauthn/login/complete answers when no account holds the
+// credential, as opposed to the other 401 — an assertion that did not verify,
+// where the credential is real and signalling it unknown would wrongly take a
+// working passkey out of the authenticator. Pinned by a server test, since
+// matching on the message is what couples the two.
+const NOT_RECOGNIZED = 'Passkey not recognized';
+
+const LOGIN_SOURCE = 'POST /auth/webauthn/login/complete';
+
 export async function loginWithPasskey(email) {
   const options = await req('/auth/webauthn/login/begin', {
     method: 'POST',
     body: JSON.stringify({ email }),
   });
   const credential = await startAuthentication({ optionsJSON: options });
-  return req('/auth/webauthn/login/complete', {
-    method: 'POST',
-    body: JSON.stringify(credential),
-  });
+  try {
+    // accountReq, not req: this needs the server's message, below.
+    return await accountReq('/auth/webauthn/login/complete', {
+      method: 'POST',
+      body: JSON.stringify(credential),
+    });
+  } catch (err) {
+    // The authenticator offered a passkey the server does not have — removed
+    // in Settings on another device, or on an account since deleted. Tell it
+    // so, or it keeps offering it forever (KOL-052). `options.rpId` is the
+    // relying party the challenge was issued for, not this page's host.
+    if (err.status === 401 && err.message === NOT_RECOGNIZED) {
+      await signalUnknownCredential({ rpId: options.rpId, credentialId: credential.id }, LOGIN_SOURCE);
+    }
+    throw err;
+  }
 }

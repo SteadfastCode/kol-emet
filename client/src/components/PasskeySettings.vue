@@ -46,24 +46,20 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { listPasskeys, registerPasskey, removePasskey, passkeysSupported } from '../api/auth.js';
+import { logPasskey as log, signalAcceptedCredentials } from '../api/passkeySignals.js';
 
 // Tiered debug logging, for the phone a passkey misbehaves on. Set
 // localStorage.PASSKEY_LOG_LEVEL to off | light | normal | verbose (default
-// light). The server logs the same events on its own PASSKEY_LOG_LEVEL.
-//   light   — every passkey added or removed from here, and every failure,
-//             naming the action that did it
+// light). The switch and the tiers are shared with api/passkeySignals.js, and
+// the server logs the same events on its own PASSKEY_LOG_LEVEL.
+//   light   — every passkey added or removed from here, every signal sent for
+//             one, and every failure, naming the action that did it
 //   normal  — light, plus each list shown and where it came from
 //   verbose — normal, plus the first characters of the credential ids
-const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
-
-function log(level, msg) {
-  let setting = null;
-  try { setting = localStorage.getItem('PASSKEY_LOG_LEVEL'); } catch { /* storage blocked */ }
-  if ((LEVELS[setting] ?? LEVELS.light) >= LEVELS[level]) console.log(`[settings/passkeys:${level}] ${msg}`);
-}
 
 const passkeys     = ref([]);
 const hasPassword  = ref(true);
+const signalFor    = ref({ rpId: '', userHandle: null });   // what a Signal API call names this account by
 const loading      = ref(true);
 const loadError    = ref('');
 const error        = ref('');
@@ -92,6 +88,9 @@ function formatDate(value) {
 function show(list, source) {
   passkeys.value = list.passkeys;
   hasPassword.value = list.hasPassword;
+  // The relying party the ceremonies ran under and this account's WebAuthn
+  // user handle, both from the server rather than from location.hostname.
+  signalFor.value = { rpId: list.rpId ?? '', userHandle: list.userHandle ?? null };
   log('normal', `${list.passkeys.length} passkey(s), ${list.hasPassword ? 'with' : 'no'} password (source: ${source})`);
   log('verbose', `ids: ${list.passkeys.map(pk => `${pk.credentialID.slice(0, 8)}…`).join(', ') || 'none'}`);
 }
@@ -137,6 +136,15 @@ async function remove(pk) {
     show(await removePasskey(pk.credentialID), 'DELETE /auth/webauthn/passkeys/:credentialID');
     log('light', `passkey removed, ${kindOf(pk)} (source: Settings → Remove)`);
     confirmingId.value = null;
+    // The removed passkey is still in the authenticator that made it, which
+    // would keep offering it. Tell it what the account now holds — the ids the
+    // server just answered with, so the list is the one it agrees to
+    // (KOL-052). Best-effort: an absent API or a refused signal is a logged
+    // no-op, never an error about a removal that worked.
+    await signalAcceptedCredentials({
+      ...signalFor.value,
+      credentialIDs: passkeys.value.map(p => p.credentialID),
+    }, 'Settings → Remove');
   } catch (err) {
     log('light', `removing a passkey failed: ${err.status ?? err.message} (source: Settings → Remove)`);
     // 409 is the account's last way in and 404 one already gone, both in the server's words.

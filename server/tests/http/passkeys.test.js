@@ -35,6 +35,13 @@
  *   - Account deletion's passkey confirmation recognizes a legacy id too, and
  *     a real assertion deletes the account. This is the success path
  *     accountDeletion.test.js could not reach.
+ *   - The account's WebAuthn user handle (KOL-052). A new account has exactly
+ *     one, every register/begin ceremony carries it as `user.id`, and two
+ *     concurrent ones do not give the account two. An account registered
+ *     before it has none until its first register/begin, which is the only
+ *     thing that writes one. The list route answers it beside the relying
+ *     party the ceremonies ran under, which is what the client needs to signal
+ *     a removed passkey to its authenticator.
  *   - Settings (KOL-025). GET /auth/webauthn/passkeys lists the caller's own
  *     passkeys with what labels them, and no response carries a public key.
  *     DELETE removes only the caller's own, in either stored form, and refuses
@@ -53,6 +60,12 @@
  * gets a 200 and a second account holding the same credential; narrow it back
  * to credentialIdQuery and the KOL-043 test gets a 200 and stores the crafted
  * copy.
+ * For the user handle: drop `userID` from generateRegistrationOptions and two
+ * ceremonies answer two different `user.id`s; drop the schema default and a new
+ * account's first ceremony has to backfill one; make the backfill
+ * unconditional and the concurrent test stores two handles; answer the handle
+ * from inside passkeySummary rather than beside the list and the field-list
+ * check fails.
  * For Settings: answer with the stored passkeys instead of passkeySummary() and
  * the public-key checks fail; drop the `$nor` condition on the removal and the
  * passwordless test gets a 200; skip the flag update in recordUse and the
@@ -93,10 +106,11 @@ import { credentialIdQuery, legacyEncoding } from '../../src/lib/passkeyIds.js';
 // supertest won't return. The relying party is set outright, not defaulted,
 // because the software authenticator signs for exactly this origin.
 const ORIGIN = 'http://localhost:5173';
+const RP_ID = 'localhost';
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
 delete process.env.BEARER_TOKEN;
-process.env.WEBAUTHN_RP_ID = 'localhost';
+process.env.WEBAUTHN_RP_ID = RP_ID;
 process.env.WEBAUTHN_ORIGIN = ORIGIN;
 process.env.SEED_LOG_LEVEL ??= 'off';
 process.env.ACCOUNT_DELETE_LOG_LEVEL ??= 'off';
@@ -159,6 +173,18 @@ async function storedPasskeys(userId) {
   return passkeys;
 }
 
+/** `userId`'s stored WebAuthn user handle, or null when it has none. */
+async function storedHandle(userId) {
+  const doc = await User.findById(userId).select('webauthnUserHandle').lean();
+  return doc?.webauthnUserHandle ?? null;
+}
+
+/** Takes `userId`'s handle away, as a registration from before KOL-052 left it. */
+async function clearHandle(userId) {
+  await User.updateOne({ _id: userId }, { $unset: { webauthnUserHandle: 1 } });
+  log('light', `user ${userId}: WebAuthn user handle unset (source: this test, standing in for an account registered before KOL-052)`);
+}
+
 /** Puts `userId`'s first passkey back in the double-encoded form a pre-KOL-024 registration stored. */
 async function makeLegacy(userId, authenticator) {
   await User.updateOne({ _id: userId }, { $set: { 'passkeys.0.credentialID': legacyEncoding(authenticator.id) } });
@@ -177,6 +203,24 @@ async function signIn(authenticator, email) {
     .send(authenticator.assert(begin.body)));
   return { agent, options: begin.body, res };
 }
+
+const SUMMARY_FIELDS = ['backedUp', 'createdAt', 'credentialID', 'deviceType', 'lastUsedAt'];
+
+/**
+ * No response may carry a public key: not by name, and not as any field a
+ * summary does not list. `userHandle` and `rpId` are siblings of the list
+ * rather than fields on a summary (KOL-052), so this still holds over them.
+ */
+function assertNoPublicKey(res) {
+  assert.ok(!/publickey/i.test(res.text), `a response named a public key: ${res.text}`);
+  for (const pk of res.body?.passkeys ?? []) assert.deepEqual(Object.keys(pk).sort(), SUMMARY_FIELDS);
+}
+
+const list = async (t) =>
+  called('GET /auth/webauthn/passkeys', await t.agent.get('/auth/webauthn/passkeys'));
+const remove = async (t, id) =>
+  called(`DELETE /auth/webauthn/passkeys/${id}`, await t.agent.delete(`/auth/webauthn/passkeys/${encodeURIComponent(id)}`));
+const summary = (res) => res.body.passkeys.map(pk => [pk.credentialID, pk.deviceType, pk.backedUp, pk.lastUsedAt]);
 
 before(async () => {
   await db.connect();
@@ -429,21 +473,106 @@ describe('DELETE /auth/account confirmed with a passkey', () => {
   });
 });
 
+describe("the account's WebAuthn user handle (KOL-052)", () => {
+  /** The `user.id` a register/begin ceremony offers, which is the handle base64url-encoded. */
+  const beginHandle = async (agent) => {
+    const res = called('POST /auth/webauthn/register/begin', await agent.post('/auth/webauthn/register/begin'));
+    assert.equal(res.status, 200, `register/begin failed: ${res.status} ${JSON.stringify(res.body)}`);
+    return res.body.user?.id;
+  };
+
+  test('a new account has one handle, and every registration ceremony carries it', async () => {
+    const t = await tenant('handle-stable');
+
+    const handle = await storedHandle(t.userId);
+    assert.ok(handle, 'registration must give the account a handle of its own');
+    // 32 bytes base64url, and nothing identifying in it: not the id, not the email.
+    assert.match(handle, /^[A-Za-z0-9_-]{43}$/, `expected 32 random bytes base64url, got ${handle}`);
+    assert.equal(Buffer.from(handle, 'base64url').length, 32);
+    assert.ok(!handle.includes(t.userId) && !handle.includes(t.email));
+
+    const first = await beginHandle(t.agent);
+    const second = await beginHandle(t.agent);
+    assert.equal(first, handle, "the ceremony's user.id must be the stored handle");
+    assert.equal(second, first, 'two registrations on one account are one WebAuthn user, not two');
+    assert.equal(await storedHandle(t.userId), handle, 'and a ceremony must not rewrite it');
+
+    // Through two real registrations, which is the case the gap was about: a
+    // password manager listing one account twice.
+    await addPasskey(t, device({ synced: true }));
+    await addPasskey(t, device({ synced: false }));
+    assert.equal(await storedHandle(t.userId), handle);
+    assert.equal(await beginHandle(t.agent), handle);
+  });
+
+  test('two accounts never share a handle', async () => {
+    const a = await tenant('handle-distinct-a');
+    const b = await tenant('handle-distinct-b');
+    assert.notEqual(await storedHandle(a.userId), await storedHandle(b.userId));
+  });
+
+  test('an account registered before the handle gets one on its first register/begin, and only one', async () => {
+    const t = await tenant('handle-backfill');
+    await clearHandle(t.userId);
+
+    // Nothing to signal with until a ceremony needs one: the passkeys such an
+    // account already has carry @simplewebauthn's per-registration random
+    // handles, which no signal can reach.
+    const before = await list(t);
+    assert.equal(before.body.userHandle, null);
+    assert.equal(before.body.rpId, RP_ID);
+
+    // Two sessions for the one account, racing. The write is conditional on
+    // the field still being unset, so the loser must read the winner's handle
+    // rather than overwrite it.
+    const second = request.agent(app);
+    assert.equal((await second.post('/auth/login').send({ email: t.email, password: PASSWORD })).status, 200);
+    const [one, two] = await Promise.all([beginHandle(t.agent), beginHandle(second)]);
+
+    const handle = await storedHandle(t.userId);
+    assert.ok(handle, 'the first ceremony must create one');
+    assert.equal(one, handle);
+    assert.equal(two, handle, 'two concurrent ceremonies must not give the account two handles');
+    assert.equal((await list(t)).body.userHandle, handle);
+
+    // A passkey registered under the backfilled handle signs in as normal.
+    const authenticator = device({ synced: true });
+    await addPasskey(t, authenticator);
+    assert.equal((await signIn(authenticator, t.email)).res.status, 200);
+    assert.equal(await storedHandle(t.userId), handle);
+  });
+
+  test('listing a handle needs a session, and no answer carries a public key', async () => {
+    const t = await tenant('handle-session');
+    await addPasskey(t, device());
+    assertNoPublicKey(await list(t));
+    assert.equal((await request(app).get('/auth/webauthn/passkeys')).status, 401);
+  });
+
+  test('a sign-in the server does not recognize says so in the words the client signals on', async () => {
+    // client/src/api/auth.js calls signalUnknownCredential on exactly this
+    // 401, and never on the other one — where the credential is real and the
+    // assertion failed, so telling the authenticator to forget it would take a
+    // working passkey away. Matching on the message is what couples the two.
+    const t = await tenant('handle-unknown-credential');
+    const authenticator = device();
+    await addPasskey(t, authenticator);
+
+    const stranger = device();
+    const refused = await signIn(stranger);
+    assert.equal(refused.res.status, 401);
+    assert.deepEqual(refused.res.body, { error: 'Passkey not recognized' });
+
+    // The other 401: the credential is this account's, the assertion is not.
+    const impostor = device({ id: authenticator.id });
+    const failed = await signIn(impostor, t.email);
+    assert.equal(failed.res.status, 401);
+    assert.deepEqual(failed.res.body, { error: 'Passkey authentication failed' },
+      'a credential the server holds must not be reported as unrecognized');
+  });
+});
+
 describe('passkey management from Settings', () => {
-  const SUMMARY_FIELDS = ['backedUp', 'createdAt', 'credentialID', 'deviceType', 'lastUsedAt'];
-
-  /** No response may carry a public key: not by name, and not as any field a summary does not list. */
-  function assertNoPublicKey(res) {
-    assert.ok(!/publickey/i.test(res.text), `a response named a public key: ${res.text}`);
-    for (const pk of res.body?.passkeys ?? []) assert.deepEqual(Object.keys(pk).sort(), SUMMARY_FIELDS);
-  }
-
-  const list = async (t) =>
-    called('GET /auth/webauthn/passkeys', await t.agent.get('/auth/webauthn/passkeys'));
-  const remove = async (t, id) =>
-    called(`DELETE /auth/webauthn/passkeys/${id}`, await t.agent.delete(`/auth/webauthn/passkeys/${encodeURIComponent(id)}`));
-  const summary = (res) => res.body.passkeys.map(pk => [pk.credentialID, pk.deviceType, pk.backedUp, pk.lastUsedAt]);
-
   test("GET lists the caller's own passkeys with what labels them, and no public key", async () => {
     const a = await tenant('manage-list-a');
     const b = await tenant('manage-list-b');
@@ -461,8 +590,15 @@ describe('passkey management from Settings', () => {
       "only this account's passkeys, in the order they were added");
     assert.ok(!Number.isNaN(Date.parse(res.body.passkeys[0].createdAt)), 'createdAt must be a date');
 
-    const none = await list(await tenant('manage-list-none'));
-    assert.deepEqual(none.body, { passkeys: [], hasPassword: true });
+    assert.equal(res.body.userHandle, await storedHandle(a.userId),
+      'the list carries the account handle the client signals with');
+    assert.equal(res.body.rpId, RP_ID, 'and the relying party the ceremonies ran under');
+
+    const empty = await tenant('manage-list-none');
+    const none = await list(empty);
+    assert.deepEqual(none.body, {
+      passkeys: [], hasPassword: true, rpId: RP_ID, userHandle: await storedHandle(empty.userId),
+    });
   });
 
   test('both routes need a browser session: 401 without one, 403 for the bearer token', async () => {
@@ -523,8 +659,9 @@ describe('passkey management from Settings', () => {
     const res = await remove(a, mine.id);
     assert.equal(res.status, 200, `removal failed: ${res.status} ${JSON.stringify(res.body)}`);
     assertNoPublicKey(res);
-    assert.deepEqual(res.body, { passkeys: [], hasPassword: true },
-      'an account with a password may remove its only passkey');
+    assert.deepEqual(res.body, {
+      passkeys: [], hasPassword: true, rpId: RP_ID, userHandle: await storedHandle(a.userId),
+    }, 'an account with a password may remove its only passkey');
     assert.equal((await storedPasskeys(a.userId)).length, 0);
     assert.equal((await signIn(mine, a.email)).res.status, 401, 'a removed passkey must not sign in');
     assert.equal((await remove(a, mine.id)).status, 404, 'removing it again is a 404');

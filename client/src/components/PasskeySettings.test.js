@@ -3,6 +3,14 @@
  * api/auth.js mocked, so what is pinned here is the routes the group calls and what it does with
  * their answers. The one thing mocked is the WebAuthn prompt (@simplewebauthn/browser), since
  * jsdom has no authenticator. The server's own rules are in server/tests/http/passkeys.test.js.
+ *
+ * api/passkeySignals.js is real too, and so is its feature detection: jsdom has no
+ * `PublicKeyCredential`, so the signal tests below stub exactly the static method the removal
+ * calls and the no-API case is simply the default. What they defend (KOL-052): a removal tells the
+ * authenticator what the account still holds — every remaining id, since an authenticator may drop
+ * a credential the list does not name — using the relying party and user handle the *server*
+ * answered with, not this page's host; and a browser without the API, or one whose authenticator
+ * refuses, still removes the passkey and shows the user no error.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -23,6 +31,13 @@ const BOUND = {
   credentialID: 'Ym91bmQtcGFzc2tleQ', deviceType: 'singleDevice', backedUp: false,
   createdAt: '2026-09-02T10:00:00.000Z', lastUsedAt: null,
 };
+
+// What the list route answers beside the passkeys: the account's WebAuthn user handle and the
+// relying party its ceremonies ran under (WEBAUTHN_RP_ID, which need not be this page's host).
+const RP_ID = 'kol-emet.danielecker.dev';
+const USER_HANDLE = 'dXNlci1oYW5kbGUtMzItcmFuZG9tLWJ5dGVz';
+const listed = (passkeys, rest = {}) =>
+  ({ passkeys, hasPassword: true, rpId: RP_ID, userHandle: USER_HANDLE, ...rest });
 
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
@@ -48,6 +63,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
+
+/** Stubs `PublicKeyCredential.signalAllAcceptedCredentials` and answers the mock. */
+function stubSignalApi(impl = async () => {}) {
+  const signalAllAcceptedCredentials = vi.fn(impl);
+  vi.stubGlobal('PublicKeyCredential', { signalAllAcceptedCredentials });
+  return signalAllAcceptedCredentials;
+}
 
 async function mountLoaded(list) {
   routes['GET /auth/webauthn/passkeys'] = () => [200, list];
@@ -158,5 +180,68 @@ describe('PasskeySettings', () => {
     const wrapper = await mountLoaded({ passkeys: [SYNCED], hasPassword: false });
 
     expect(button(wrapper, 'Remove').element.disabled).toBe(true);
+  });
+
+  it('tells the authenticator what the account still holds, from the ids the server just answered', async () => {
+    const signal = stubSignalApi();
+    routes[`DELETE /auth/webauthn/passkeys/${BOUND.credentialID}`] = () => [200, listed([SYNCED])];
+    const wrapper = await mountLoaded(listed([SYNCED, BOUND]));
+
+    await button(wrapper, 'Remove', wrapper.findAll('.passkey-item')[1]).trigger('click');
+    await button(wrapper, 'Remove', wrapper.findAll('.passkey-item')[1]).trigger('click');
+    await flushPromises();
+
+    expect(signal).toHaveBeenCalledTimes(1);
+    expect(signal).toHaveBeenCalledWith({
+      rpId: RP_ID,
+      userId: USER_HANDLE,
+      allAcceptedCredentialIds: [SYNCED.credentialID],
+    });
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('signals nothing when nothing was removed, and nothing for an account with no handle', async () => {
+    const signal = stubSignalApi();
+    const refusal = 'This passkey is the only way to sign in to this account. Add another before removing it.';
+    routes[`DELETE /auth/webauthn/passkeys/${SYNCED.credentialID}`] = () => [409, { error: refusal }];
+    const refused = await mountLoaded(listed([SYNCED, BOUND], { hasPassword: false }));
+    await button(refused, 'Remove', refused.findAll('.passkey-item')[0]).trigger('click');
+    await button(refused, 'Remove', refused.findAll('.passkey-item')[0]).trigger('click');
+    await flushPromises();
+    expect(signal).not.toHaveBeenCalled();
+
+    // An account registered before KOL-052 has no handle, so there is no WebAuthn user to name;
+    // its passkeys carry per-registration random handles a signal could not reach anyway.
+    routes[`DELETE /auth/webauthn/passkeys/${BOUND.credentialID}`] = () =>
+      [200, listed([SYNCED], { userHandle: null })];
+    const legacy = await mountLoaded(listed([SYNCED, BOUND], { userHandle: null }));
+    await button(legacy, 'Remove', legacy.findAll('.passkey-item')[1]).trigger('click');
+    await button(legacy, 'Remove', legacy.findAll('.passkey-item')[1]).trigger('click');
+    await flushPromises();
+    expect(signal).not.toHaveBeenCalled();
+    expect(legacy.findAll('.passkey-item')).toHaveLength(1);
+  });
+
+  it('removes the passkey with no error when the browser has no Signal API, or it throws', async () => {
+    routes[`DELETE /auth/webauthn/passkeys/${BOUND.credentialID}`] = () => [200, listed([SYNCED])];
+    // jsdom has none, which is also most browsers today.
+    expect(window.PublicKeyCredential).toBeUndefined();
+
+    const bare = await mountLoaded(listed([SYNCED, BOUND]));
+    await button(bare, 'Remove', bare.findAll('.passkey-item')[1]).trigger('click');
+    await button(bare, 'Remove', bare.findAll('.passkey-item')[1]).trigger('click');
+    await flushPromises();
+    expect(bare.findAll('.passkey-item')).toHaveLength(1);
+    expect(bare.find('[role="alert"]').exists()).toBe(false);
+
+    // And a signal the authenticator refuses is not a failure of the removal that already landed.
+    const signal = stubSignalApi(async () => { throw new DOMException('nope', 'NotAllowedError'); });
+    const throwing = await mountLoaded(listed([SYNCED, BOUND]));
+    await button(throwing, 'Remove', throwing.findAll('.passkey-item')[1]).trigger('click');
+    await button(throwing, 'Remove', throwing.findAll('.passkey-item')[1]).trigger('click');
+    await flushPromises();
+    expect(signal).toHaveBeenCalledTimes(1);
+    expect(throwing.findAll('.passkey-item')).toHaveLength(1);
+    expect(throwing.find('[role="alert"]').exists()).toBe(false);
   });
 });
