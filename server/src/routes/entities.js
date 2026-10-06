@@ -5,6 +5,7 @@ import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { openQuestionsIn } from '../lib/scopedPopulate.js';
+import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
 const router = Router();
 
@@ -43,16 +44,16 @@ function stripTenancy(body) {
 router.get('/', async (req, res) => {
   try {
     const filter = { workspaceId: req.workspaceId };
-    if (req.query.category) filter.category = req.query.category;
-    if (req.query.tag) filter.tags = req.query.tag;
-    if (req.query.q) {
-      const re = new RegExp(req.query.q, 'i');
-      filter.$or = [
-        { title: re },
-        { summary: re },
-        { blocks: { $elemMatch: { 'data.markdown': re } } },
-      ];
-    }
+    // Every filter value goes through searchTerm: the extended query parser
+    // turns `?category[$ne]=Characters` into an object and `?q=a&q=b` into an
+    // array, and a non-string must be no filter rather than a filter the caller
+    // wrote. The keyword is escaped before it is compiled. See lib/searchFilter.js.
+    const category = searchTerm(req.query.category);
+    const tag = searchTerm(req.query.tag);
+    const q = searchTerm(req.query.q);
+    if (category) filter.category = category;
+    if (tag) filter.tags = tag;
+    if (q) Object.assign(filter, keywordFilter(q));
     const entities = await Entity.find(filter)
       .sort({ title: 1 })
       .populate(openQuestionsIn(req.workspaceId));
