@@ -1,5 +1,6 @@
 /**
- * Fixed-window failure counters for the sign-in routes.
+ * Fixed-window counters for the auth routes: failed sign-ins, and the one
+ * success anything here counts — a created account.
  *
  * Until this existed, `POST /auth/login` ran a bcrypt compare for every
  * request that carried an email and a password. A hash at cost 12 is deliberate
@@ -9,7 +10,7 @@
  * entry, and the enumeration note in tests/http/auth.test.js); this closes it.
  *
  * ─── What is counted ────────────────────────────────────────────────────────
- * **Failures only.** A successful sign-in costs nothing, and a request that is
+ * **On the sign-in routes, failures only.** A successful sign-in costs nothing, and a request that is
  * already blocked is refused *before* the credential check, so it never
  * increments either. That matters for the window to actually expire: counting
  * blocked attempts would turn a fixed window into an indefinite ban for anyone
@@ -28,14 +29,43 @@
  * re-authentication for account deletion already knows who is asking and is
  * keyed by the user id.
  *
+ * ─── The one thing counted here that is not a failure ───────────────────────
+ * `POST /auth/register` is keyed by `req.ip` under its own kind, `signup`, and
+ * what it counts is a **success**: an account that now exists. Registration is
+ * open by design (CLAUDE.md) and every success spends a bcrypt hash at cost 12
+ * and then writes a `User`, a `Workspace` and a whole template seed — 38
+ * relationship types plus starter content (lib/workspaceSeeder.js) — so
+ * unthrottled it let one unauthenticated client fill this database and spend
+ * this API's CPU as fast as it could post. Three consequences of counting the
+ * success and not the attempt:
+ *   - A 400 (no password, unknown template) and a 409 (address already taken)
+ *     cost the caller nothing. A typo at the signup form is not a spent
+ *     signup, and "is this address taken?" is not a way to burn the budget of
+ *     everyone else behind the same address.
+ *   - It is `record`, not `recordFailure`. Same counter and the same
+ *     arithmetic; only the log wording differs, because a line reading
+ *     "failure" about somebody who just signed up successfully would send
+ *     whoever is reading it the wrong way.
+ *   - **Its window is its own.** 15 minutes is the unit for a password guess,
+ *     where the job is to make a long run of tries slow. An hour is the unit
+ *     for account creation, where the job is a ceiling on how many tenants one
+ *     address can mint. So `signupWindowMs` is a separate setting (60 minutes)
+ *     and the signup counter runs on its own clock entirely: it can be blocked
+ *     while an email counter is free, and free while one is blocked.
+ * 10 per hour is deliberately loose, for the same reason the ip limit is: a
+ * team or a classroom signing up together is one address, and refusing the
+ * fourth of them would be the worse failure. It is a bound on scripted mass
+ * registration, not a queue for humans.
+ *
  * ─── Why in-process, and what that does not cover ───────────────────────────
  * The counters are a `Map` in this process. One API instance runs today, so
  * that is the whole story; the moment a second one does, each enforces the
  * limit separately and the effective ceiling multiplies by the instance count.
  * The fix then is a shared store (Redis, or a Mongo collection with a TTL
- * index) behind this same interface — the routes call `blocked`,
+ * index) behind this same interface — the routes call `blocked`, `record`,
  * `recordFailure` and `reset` and would not change. Also not covered here:
- * CAPTCHA, signup throttling, account lockout, and `/oauth/token`.
+ * CAPTCHA, email verification, account lockout, and rate limits on
+ * `/oauth/token` and `/drafts`.
  *
  * ─── Tiered debug logging ───────────────────────────────────────────────────
  * AUTH_LIMIT_LOG_LEVEL = off | light | normal | verbose (default light).
@@ -44,10 +74,10 @@
  * the defence. Only the *kind* of key ever appears for an email.
  *   light   — every block, with the key kind, the route that was refused, the
  *             count and how long the caller must wait
- *   normal  — light, plus every failure recorded and every counter reset, each
- *             naming the route it came from
- *   verbose — normal, plus ip and user-id key values (never an email) and the
- *             number of live counters
+ *   normal  — light, plus every failure and every signup recorded and every
+ *             counter reset, each naming the route it came from
+ *   verbose — normal, plus ip, signup and user-id key values (never an email)
+ *             and the number of live counters
  */
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
@@ -60,9 +90,11 @@ export function logAuthLimit(level, msg) {
 
 /** The defaults, as shipped. Overridable per app (createApp) and by env. */
 export const AUTH_LIMIT_DEFAULTS = Object.freeze({
-  perEmail: 10,
-  perIp:    100,
-  windowMs: 15 * 60 * 1000,
+  perEmail:       10,
+  perIp:          100,
+  perSignupIp:    10,
+  windowMs:       15 * 60 * 1000,
+  signupWindowMs: 60 * 60 * 1000,
 });
 
 /** The 429 body. One constant, so every route's refusal is byte-identical. */
@@ -78,9 +110,11 @@ function positiveInt(raw, fallback) {
 /** The shipped defaults with any AUTH_LIMIT_* overrides from the environment applied. */
 export function authLimitsFromEnv(env = process.env) {
   return {
-    perEmail: positiveInt(env.AUTH_LIMIT_MAX_PER_EMAIL, AUTH_LIMIT_DEFAULTS.perEmail),
-    perIp:    positiveInt(env.AUTH_LIMIT_MAX_PER_IP,    AUTH_LIMIT_DEFAULTS.perIp),
-    windowMs: positiveInt(env.AUTH_LIMIT_WINDOW_MS,     AUTH_LIMIT_DEFAULTS.windowMs),
+    perEmail:       positiveInt(env.AUTH_LIMIT_MAX_PER_EMAIL,      AUTH_LIMIT_DEFAULTS.perEmail),
+    perIp:          positiveInt(env.AUTH_LIMIT_MAX_PER_IP,         AUTH_LIMIT_DEFAULTS.perIp),
+    perSignupIp:    positiveInt(env.AUTH_LIMIT_MAX_SIGNUPS_PER_IP, AUTH_LIMIT_DEFAULTS.perSignupIp),
+    windowMs:       positiveInt(env.AUTH_LIMIT_WINDOW_MS,          AUTH_LIMIT_DEFAULTS.windowMs),
+    signupWindowMs: positiveInt(env.AUTH_LIMIT_SIGNUP_WINDOW_MS,   AUTH_LIMIT_DEFAULTS.signupWindowMs),
   };
 }
 
@@ -176,7 +210,7 @@ export function createAttemptLimiter({ max, windowMs, now = Date.now } = {}) {
 }
 
 /**
- * The three counters the auth routes share, plus the helpers they call.
+ * The four counters the auth routes share, plus the helpers they call.
  *
  * Built once per app in `createApp` so that every test app — and every future
  * second app in one process — starts with its own counters rather than
@@ -187,30 +221,43 @@ export function createAttemptLimiter({ max, windowMs, now = Date.now } = {}) {
  * order below is the order they are checked in.
  *
  * @param {object} [limits]
- * @param {number} [limits.perEmail] failed sign-ins per email per window
- * @param {number} [limits.perIp]    failed sign-ins per client address per window
- * @param {number} [limits.perUser]  failed re-authentications per account per window
- *                                   (defaults to perEmail — it is the same kind of guess)
- * @param {number} [limits.windowMs]
- * @param {function} [limits.now]    clock, for tests
+ * @param {number} [limits.perEmail]    failed sign-ins per email per window
+ * @param {number} [limits.perIp]       failed sign-ins per client address per window
+ * @param {number} [limits.perUser]     failed re-authentications per account per window
+ *                                      (defaults to perEmail — it is the same kind of guess)
+ * @param {number} [limits.perSignupIp] accounts created per client address per
+ *                                      *signup* window — a success, not a guess
+ * @param {number} [limits.windowMs]       the sign-in window
+ * @param {number} [limits.signupWindowMs] the signup window, deliberately separate
+ * @param {function} [limits.now]       clock, for tests
  */
 export function createAuthLimiter(limits = {}) {
   const env = authLimitsFromEnv();
-  const perEmail = limits.perEmail ?? env.perEmail;
-  const perIp    = limits.perIp    ?? env.perIp;
-  const perUser  = limits.perUser  ?? perEmail;
-  const windowMs = limits.windowMs ?? env.windowMs;
-  const now      = limits.now;
+  const perEmail    = limits.perEmail    ?? env.perEmail;
+  const perIp       = limits.perIp       ?? env.perIp;
+  const perUser     = limits.perUser     ?? perEmail;
+  const perSignupIp = limits.perSignupIp ?? env.perSignupIp;
+  const windowMs       = limits.windowMs       ?? env.windowMs;
+  const signupWindowMs = limits.signupWindowMs ?? env.signupWindowMs;
+  const now         = limits.now;
 
   const counters = {
     email: createAttemptLimiter({ max: perEmail, windowMs, now }),
     ip:    createAttemptLimiter({ max: perIp,    windowMs, now }),
     user:  createAttemptLimiter({ max: perUser,  windowMs, now }),
+    // The one counter on a different clock: an hour, not the sign-in window,
+    // and counting a created account rather than a wrong guess. See the header.
+    signup: createAttemptLimiter({ max: perSignupIp, windowMs: signupWindowMs, now }),
   };
 
-  /** [kind, key] for each named kind that has a usable value, in check order. */
+  /**
+   * [kind, key] for each named kind that has a usable value, in check order.
+   * `signup` is last because it is the newest, not because anything depends on
+   * it: `POST /auth/register` is the only route that passes it and it passes
+   * nothing else, so the `blocked` it gets back always names `signup`.
+   */
   function pairs(keys) {
-    return ['email', 'ip', 'user']
+    return ['email', 'ip', 'user', 'signup']
       .filter(kind => keys[kind] !== undefined && keys[kind] !== null && keys[kind] !== '')
       .map(kind => [kind, String(keys[kind])]);
   }
@@ -218,9 +265,32 @@ export function createAuthLimiter(limits = {}) {
   /** What may be logged for a key: an email address never is, not even hashed. */
   const shown = (kind, key) => (kind === 'email' ? 'an email key' : `${kind} ${key}`);
 
+  /**
+   * What a counter's number means, in words. Every kind but `signup` counts
+   * failures; a block that said "10 failures" about ten accounts somebody
+   * successfully created would read to whoever finds it as an attack, when it
+   * is a ceiling being reached by ordinary use.
+   */
+  const counted = (kind, n) => (kind === 'signup' ? `${n} recorded` : `${n} failures`);
+
+  /**
+   * Counts one event against every named key. The two public recorders differ
+   * only in the words that reach the log: `recordFailure` counts a guess that
+   * was wrong, `record` counts something that happened — today, one created
+   * account. Sharing the arithmetic is the point, so the signup counter cannot
+   * drift away from the ones the sign-in routes use.
+   */
+  function tally(keys, source, noun, subject) {
+    for (const [kind, key] of pairs(keys)) {
+      const count = counters[kind].fail(key);
+      logAuthLimit('normal', `${noun} ${count}/${counters[kind].max} for a ${kind} key (source: ${source})`);
+      logAuthLimit('verbose', `the ${subject} key was ${shown(kind, key)} (source: ${source})`);
+    }
+  }
+
   return {
     counters,
-    limits: { perEmail, perIp, perUser, windowMs },
+    limits: { perEmail, perIp, perUser, perSignupIp, windowMs, signupWindowMs },
 
     /**
      * The first key over its limit, as `{ kind, count, retryAfter }`, or null.
@@ -231,7 +301,7 @@ export function createAuthLimiter(limits = {}) {
       for (const [kind, key] of pairs(keys)) {
         const over = counters[kind].check(key);
         if (over) {
-          logAuthLimit('light', `blocked: ${kind} key over its limit of ${counters[kind].max} (source: ${source}), ${over.count} failures, retry after ${over.retryAfter}s`);
+          logAuthLimit('light', `blocked: ${kind} key over its limit of ${counters[kind].max} (source: ${source}), ${counted(kind, over.count)}, retry after ${over.retryAfter}s`);
           logAuthLimit('verbose', `the blocked key was ${shown(kind, key)}; ${counters[kind].size()} live ${kind} counters (source: ${source})`);
           return { kind, ...over };
         }
@@ -241,11 +311,17 @@ export function createAuthLimiter(limits = {}) {
 
     /** Records one failure against every named key. */
     recordFailure(keys, source) {
-      for (const [kind, key] of pairs(keys)) {
-        const count = counters[kind].fail(key);
-        logAuthLimit('normal', `failure ${count}/${counters[kind].max} for a ${kind} key (source: ${source})`);
-        logAuthLimit('verbose', `the failing key was ${shown(kind, key)} (source: ${source})`);
-      }
+      tally(keys, source, 'failure', 'failing');
+    },
+
+    /**
+     * Records one *neutral* event against every named key — a thing that
+     * happened rather than a guess that was wrong. `POST /auth/register` calls
+     * this for a signup, after the account exists, so a refused registration
+     * costs the caller nothing (see the header).
+     */
+    record(keys, source) {
+      tally(keys, source, 'recorded', 'counted');
     },
 
     /** Forgets every named key — what a successful sign-in does to its own email. */

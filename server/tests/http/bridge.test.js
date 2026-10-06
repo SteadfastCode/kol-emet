@@ -41,6 +41,9 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
 
 import * as db from '../helpers/db.js';
+// Registration is throttled per client address, and these suites register
+// their fixtures through the real endpoint from one address. See the helper.
+import { SUITE_AUTH_LIMITS } from '../helpers/suiteLimits.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import BridgeMessage from '../../src/models/BridgeMessage.js';
@@ -110,7 +113,7 @@ const codeFrom = (res) => {
 
 before(async () => {
   await db.connect();
-  app = createApp({ sessionStore: new session.MemoryStore() });
+  app = createApp({ sessionStore: new session.MemoryStore(), authLimits: SUITE_AUTH_LIMITS });
   httpServer = http.createServer(app);
   await new Promise((resolve, reject) => { httpServer.once('error', reject); httpServer.listen(0, '127.0.0.1', resolve); });
   base = `http://127.0.0.1:${httpServer.address().port}`;

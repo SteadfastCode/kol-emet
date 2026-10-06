@@ -43,6 +43,9 @@ import session from 'express-session';
 import request from 'supertest';
 
 import * as db from '../helpers/db.js';
+// Registration is throttled per client address, and these suites register
+// their fixtures through the real endpoint from one address. See the helper.
+import { SUITE_AUTH_LIMITS } from '../helpers/suiteLimits.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 
@@ -145,7 +148,7 @@ async function offeredCategories(who) {
 
 before(async () => {
   await db.connect();
-  app = createApp({ sessionStore: new session.MemoryStore() });
+  app = createApp({ sessionStore: new session.MemoryStore(), authLimits: SUITE_AUTH_LIMITS });
 
   provider = await startFakeProvider();
   process.env.STEADFAST_AI_BASE_URL = `http://127.0.0.1:${provider.address().port}/v1`;

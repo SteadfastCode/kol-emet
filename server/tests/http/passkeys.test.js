@@ -80,6 +80,9 @@ import session from 'express-session';
 import request from 'supertest';
 
 import * as db from '../helpers/db.js';
+// Registration is throttled per client address, and these suites register
+// their fixtures through the real endpoint from one address. See the helper.
+import { SUITE_AUTH_LIMITS } from '../helpers/suiteLimits.js';
 import { createSoftAuthenticator } from '../helpers/softAuthenticator.js';
 import User from '../../src/models/User.js';
 import { credentialIdQuery, legacyEncoding } from '../../src/lib/passkeyIds.js';
@@ -177,7 +180,7 @@ async function signIn(authenticator, email) {
 
 before(async () => {
   await db.connect();
-  app = createApp({ sessionStore: new session.MemoryStore() });
+  app = createApp({ sessionStore: new session.MemoryStore(), authLimits: SUITE_AUTH_LIMITS });
 });
 
 after(async () => { await db.disconnect(); });

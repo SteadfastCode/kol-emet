@@ -35,6 +35,15 @@
  *   session, because the signup form that lists them is shown before there is
  *   one.
  *
+ *   Registration is also the one unauthenticated route that writes. Open
+ *   registration is deliberate (CLAUDE.md), but each success is a bcrypt hash
+ *   at cost 12 plus a `User`, a `Workspace` and a whole template seed — so a
+ *   per-address ceiling is what stops one client filling the database as fast
+ *   as it can post. What has to be true of it is that only a *created account*
+ *   spends the budget: a mistyped form or an address that is already taken
+ *   must cost nothing, or anyone could burn the budget of everyone else behind
+ *   the same address without ever creating anything.
+ *
  *   Logout has to end the session on the server. Clearing the cookie only
  *   removes the browser's copy; a session left live in the store is still
  *   usable by anyone holding the value, which is the case logout exists for.
@@ -57,7 +66,10 @@
  * fails on the replayed cookie; clear it with `res.clearCookie('connect.sid')`
  * and no options and the attribute-match test fails; drop the `hasTemplate` check from
  * `POST /auth/register` and the unknown-template test fails on its 201; mount
- * `/templates` behind `requireAuth` and the listing test fails on its 401.
+ * `/templates` behind `requireAuth` and the listing test fails on its 401;
+ * delete the limiter check from `POST /auth/register` and the signup-throttling
+ * tests fail on a 201 where they expect a 429; move its `record` above the
+ * duplicate check and the budget test fails on the 409 it would then charge for.
  *
  * Not here: the WebAuthn ceremonies. `/auth/webauthn/*` is covered in
  * tests/http/passkeys.test.js, driven by a software authenticator
@@ -104,6 +116,9 @@ import session from 'express-session';
 import request from 'supertest';
 
 import * as db from '../helpers/db.js';
+// Registration is throttled per client address, and these suites register
+// their fixtures through the real endpoint from one address. See the helper.
+import { SUITE_AUTH_LIMITS } from '../helpers/suiteLimits.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 import RelationshipType from '../../src/models/RelationshipType.js';
@@ -215,7 +230,7 @@ before(async () => {
   // assertion about the unique index specifically — so wait for it to exist
   // rather than racing the first insert.
   await User.init();
-  app = createApp({ sessionStore: new session.MemoryStore() });
+  app = createApp({ sessionStore: new session.MemoryStore(), authLimits: SUITE_AUTH_LIMITS });
 });
 
 after(async () => { await db.disconnect(); });
@@ -695,8 +710,8 @@ describe('failed sign-in throttling', () => {
   let perIpApp;    // the passkey route is keyed by ip alone
 
   before(() => {
-    throttled = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perEmail: PER_EMAIL } });
-    perIpApp  = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perIp: 2 } });
+    throttled = createApp({ sessionStore: new session.MemoryStore(), authLimits: { ...SUITE_AUTH_LIMITS, perEmail: PER_EMAIL } });
+    perIpApp  = createApp({ sessionStore: new session.MemoryStore(), authLimits: { ...SUITE_AUTH_LIMITS, perIp: 2 } });
   });
 
   /** One wrong-password attempt against the given app. */
@@ -858,5 +873,92 @@ describe('failed sign-in throttling', () => {
       .post('/auth/login')
       .send({ email: uniqueEmail('throttle-shared-ip'), password: PASSWORD }));
     assert.equal(password.status, 429, 'the ip counter is shared across the sign-in routes');
+  });
+});
+
+// ─── Signup throttling (KOL-050) ──────────────────────────────────────────────
+// `POST /auth/register` has no credential to guess at, so what is counted is a
+// created account, keyed on the client address under the limiter's own `signup`
+// kind and its own hour-long window (src/lib/attemptLimiter.js). Small limits
+// again, and three apps rather than one, so each case starts from a known
+// budget instead of depending on what the case before it spent.
+//
+// Note that every other app in this file — and in every other suite under
+// tests/http — is built with `SUITE_AUTH_LIMITS` precisely so that the real
+// default of 10 per hour does not throttle the fixtures: see
+// tests/helpers/suiteLimits.js.
+describe('signup throttling', () => {
+  const PER_SIGNUP_IP = 2;
+  let signupApp;   // two accounts per address, then the block
+  let budgetApp;   // the same two, to show what does and does not spend them
+  let soloApp;     // one per address, to show sign-in is not throttled with it
+
+  before(() => {
+    signupApp = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perSignupIp: PER_SIGNUP_IP } });
+    budgetApp = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perSignupIp: PER_SIGNUP_IP } });
+    soloApp   = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perSignupIp: 1 } });
+  });
+
+  /** One registration against `on`, with exactly the body given. */
+  const signUp = (on, body) => request(on).post('/auth/register').send(body);
+
+  test('the signup after the limit is 429 with a Retry-After, and creates nothing', async () => {
+    for (let i = 1; i <= PER_SIGNUP_IP; i += 1) {
+      const res = called(`POST /auth/register (${i}/${PER_SIGNUP_IP})`, await signUp(signupApp, { email: uniqueEmail(`signup-inside-${i}`), password: PASSWORD }));
+      assert.equal(res.status, 201, `signup ${i} is inside the limit and must succeed`);
+    }
+
+    const refused = uniqueEmail('signup-over-the-limit');
+    const workspacesBefore = await Workspace.countDocuments({});
+    const res = called('POST /auth/register (over the limit)', await signUp(signupApp, { email: refused, password: PASSWORD }));
+
+    assert.equal(res.status, 429, 'the signup after the limit must be refused before the hash');
+    assert.deepEqual(res.body, { error: 'Too many attempts. Try again later.' }, 'the body every throttled auth route shares');
+    assert.match(res.headers['retry-after'] ?? '', /^[1-9]\d*$/, 'Retry-After must be whole seconds, and a real wait');
+    assert.ok(Number(res.headers['retry-after']) <= 60 * 60, 'and no longer than the signup window');
+
+    // The cost of a success is the whole reason for the limit, so a refusal
+    // that still wrote the user and seeded a workspace would be no limit.
+    assert.equal(await User.countDocuments({ email: refused }), 0, 'a throttled signup must not create a User');
+    assert.equal(await Workspace.countDocuments({}), workspacesBefore, 'nor a Workspace, nor the template seed inside it');
+    assert.equal(sessionCookie(res), null, 'and must not open a session');
+  });
+
+  test('a 400 and a 409 leave the signup budget untouched', async () => {
+    const taken = uniqueEmail('signup-budget-first');
+    assert.equal(called('POST /auth/register (1/2)', await signUp(budgetApp, { email: taken, password: PASSWORD })).status, 201);
+
+    // None of these three is a created account, and none of them costs the
+    // caller anything: the 400s are refused before any I/O and the 409 before
+    // the hash. So none of them may spend a signup.
+    assert.equal(called('POST /auth/register (no password)', await signUp(budgetApp, { email: uniqueEmail('signup-no-password') })).status, 400);
+    assert.equal(called('POST /auth/register (unknown template)', await signUp(budgetApp, { email: uniqueEmail('signup-bad-template'), password: PASSWORD, template: 'no-such-template' })).status, 400);
+    assert.equal(called('POST /auth/register (duplicate)', await signUp(budgetApp, { email: taken, password: PASSWORD })).status, 409);
+
+    assert.equal(
+      called('POST /auth/register (2/2)', await signUp(budgetApp, { email: uniqueEmail('signup-budget-second'), password: PASSWORD })).status, 201,
+      'the second of two still fits, so not one of the three refusals above was counted',
+    );
+    assert.equal(
+      called('POST /auth/register (3/2)', await signUp(budgetApp, { email: uniqueEmail('signup-budget-third'), password: PASSWORD })).status, 429,
+      'and the third is the block, so the budget really was two rather than unlimited',
+    );
+  });
+
+  test('an address over its signup limit can still sign in', async () => {
+    const email = uniqueEmail('signup-then-login');
+    assert.equal((await signUp(soloApp, { email, password: PASSWORD })).status, 201);
+    assert.equal(
+      called('POST /auth/register (2nd of one allowed)', await signUp(soloApp, { email: uniqueEmail('signup-solo-blocked'), password: PASSWORD })).status, 429,
+      'one per address, so the second is the block',
+    );
+
+    // Were registration counted on the sign-in `ip` counter instead of its own
+    // kind, filling the signup budget would lock every person behind that
+    // address out of the account they already have.
+    const ok = called('POST /auth/login (address over its signup limit)', await request(soloApp)
+      .post('/auth/login')
+      .send({ email, password: PASSWORD }));
+    assert.equal(ok.status, 200, 'the signup counter is its own kind, on its own clock');
   });
 });
