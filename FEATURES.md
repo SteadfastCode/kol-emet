@@ -49,7 +49,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft**
+- [x] **(KOL-051) Second vertical-ingestion producer: an OpenAPI document becomes a reviewable Draft**
   The roadmap's Phase 7 vertical ingestion names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built
   docker-compose and put the rest out of scope. `Draft.source.producer` (`server/src/models/Draft.js:111`) is the enum seam and
   its comment already names `openapi`. Build `server/src/lib/producers/openApi.js`: `parseOpenApi(text, { existingEntities })` →
