@@ -49,6 +49,8 @@
  *             and each listing
  */
 
+import { randomBytes } from 'node:crypto';
+
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
 export function logPasskey(level, msg) {
@@ -150,6 +152,44 @@ export function credentialConflictQuery(credentialID) {
   const decoded = browserCredentialId(credentialID);
   const forms = decoded === credentialID ? [credentialID, encoded] : [credentialID, encoded, decoded];
   return { 'passkeys.credentialID': { $in: forms } };
+}
+
+/**
+ * ─── The WebAuthn user handle ────────────────────────────────────────────────
+ * One handle per account, shared by every passkey on it: the `user.id` of a
+ * registration ceremony, stored as `User.webauthnUserHandle`.
+ *
+ * Until KOL-052, POST /auth/webauthn/register/begin passed no `userID`, and
+ * @simplewebauthn 13 then generates a fresh random one per registration
+ * (generateRegistrationOptions.js) which nothing here ever stored. So an
+ * account with two passkeys was two unrelated WebAuthn users: a password
+ * manager offering discoverable credentials listed the account twice, and
+ * nothing on the server could name the account to an authenticator — which is
+ * what the Signal API needs to say "this credential is gone" (KOL-025's known
+ * gap).
+ *
+ * 32 bytes, because the spec caps a user handle at 64 and says it must not
+ * contain anything identifying — so it is random, not derived from the `_id`
+ * or the email. Stored base64url, which is the form
+ * `generateRegistrationOptions` answers `user.id` in and the form the browser
+ * then hands back to `PublicKeyCredential.signal*`, so the stored string is
+ * the one the client signals with, byte for byte.
+ */
+
+const USER_HANDLE_BYTES = 32;
+
+/** A new account's handle. Also the schema default, so every account created has one (models/User.js). */
+export function newUserHandle() {
+  return randomBytes(USER_HANDLE_BYTES).toString('base64url');
+}
+
+/**
+ * The `userID` generateRegistrationOptions takes: bytes, not a string — it
+ * throws on a string outright, because its own base64url encoder would answer
+ * `''` for one.
+ */
+export function userHandleBytes(handle) {
+  return new Uint8Array(Buffer.from(handle, 'base64url'));
 }
 
 /** `allowCredentials` / `excludeCredentials` entries for `passkeys`, in the form the browser matches on. */

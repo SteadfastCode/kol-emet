@@ -21,10 +21,12 @@ import {
   findPasskey,
   logPasskey,
   migrateCredentialId,
+  newUserHandle,
   passkeyFromRegistration,
   passkeySummary,
   recordUse,
   shortId,
+  userHandleBytes,
   webAuthnCredential,
 } from '../lib/passkeyIds.js';
 
@@ -35,6 +37,7 @@ const RP_ID   = process.env.WEBAUTHN_RP_ID   ?? 'localhost';
 const ORIGIN  = process.env.WEBAUTHN_ORIGIN  ?? 'http://localhost:5173';
 
 // Named in every passkey log line (PASSKEY_LOG_LEVEL, see lib/passkeyIds.js).
+const REGISTER_BEGIN_SOURCE = 'POST /auth/webauthn/register/begin';
 const REGISTER_SOURCE = 'POST /auth/webauthn/register/complete';
 const LOGIN_SOURCE    = 'POST /auth/webauthn/login/complete';
 
@@ -267,14 +270,58 @@ router.get('/me', async (req, res) => {
   });
 });
 
+/**
+ * The account's WebAuthn user handle, created here if the account predates it
+ * (KOL-052). Null only when the account is gone.
+ *
+ * Every account created since carries one from the schema default, so this is
+ * the backfill for the ones registered before — written on the first
+ * registration that needs it rather than by a migration script, exactly as
+ * KOL-024's credential ids are. The write is conditional on the field still
+ * being unset, so two register/begin calls racing for the same account cannot
+ * give it two handles: the loser reads the winner's and discards its own,
+ * because a handle that changed between two registrations would be the very
+ * thing this exists to prevent.
+ */
+async function accountUserHandle(user) {
+  if (user.webauthnUserHandle) return user.webauthnUserHandle;
+
+  const handle = newUserHandle();
+  const claimed = await User.findOneAndUpdate(
+    { _id: user._id, webauthnUserHandle: { $in: [null, ''] } },
+    { $set: { webauthnUserHandle: handle } },
+    { new: true },
+  ).select('webauthnUserHandle').lean();
+  if (claimed) {
+    logPasskey('light', `user ${user._id}: WebAuthn user handle created, this account predates it (source: ${REGISTER_BEGIN_SOURCE})`);
+    return claimed.webauthnUserHandle;
+  }
+
+  const current = await User.findById(user._id).select('webauthnUserHandle').lean();
+  if (current?.webauthnUserHandle) {
+    logPasskey('light', `user ${user._id}: WebAuthn user handle already created by a concurrent registration, using that one (source: ${REGISTER_BEGIN_SOURCE})`);
+    return current.webauthnUserHandle;
+  }
+  logPasskey('light', `user ${user._id}: no WebAuthn user handle and the account is gone (source: ${REGISTER_BEGIN_SOURCE})`);
+  return null;
+}
+
 // POST /auth/webauthn/register/begin
 router.post('/webauthn/register/begin', requireAuth, async (req, res) => {
   const user = await User.findById(req.session.userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  // Passed as `userID`, so every passkey on this account is one WebAuthn user
+  // rather than one per registration. Without it @simplewebauthn generates a
+  // fresh random handle per ceremony and nothing stores it; see
+  // lib/passkeyIds.js.
+  const handle = await accountUserHandle(user);
+  if (!handle) return res.status(404).json({ error: 'User not found' });
+
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
+    userID: userHandleBytes(handle),
     userName: user.email,
     userDisplayName: user.email,
     attestationType: 'none',
@@ -477,10 +524,25 @@ function sessionUserId(req, res, source) {
   return null;
 }
 
-/** What both routes answer. `hasPassword` tells Settings whether the last passkey may go. */
+/**
+ * What both routes answer. `hasPassword` tells Settings whether the last passkey
+ * may go.
+ *
+ * `userHandle` and `rpId` are what the client needs to tell an authenticator
+ * that a passkey is gone (`PublicKeyCredential.signalAllAcceptedCredentials`,
+ * KOL-052) — the account's WebAuthn `user.id` and the relying party the
+ * ceremonies actually ran under, which is `WEBAUTHN_RP_ID` and not necessarily
+ * the host the client is loaded from. They are siblings of `passkeys` rather
+ * than fields on each summary: `passkeySummary` stays the explicit field list
+ * it is, so no public key can leak in. `userHandle` is null on an account
+ * registered before KOL-052 that has not since added a passkey — a signal has
+ * no user to name, so the client sends none.
+ */
 const passkeyList = (user) => ({
   passkeys: (user.passkeys ?? []).map(passkeySummary),
   hasPassword: Boolean(user.passwordHash),
+  userHandle: user.webauthnUserHandle ?? null,
+  rpId: RP_ID,
 });
 
 // GET /auth/webauthn/passkeys
@@ -488,7 +550,7 @@ router.get('/webauthn/passkeys', requireAuth, async (req, res) => {
   const userId = sessionUserId(req, res, LIST_SOURCE);
   if (!userId) return;
   try {
-    const user = await User.findById(userId).select('passwordHash passkeys').lean();
+    const user = await User.findById(userId).select('passwordHash passkeys webauthnUserHandle').lean();
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     logPasskey('verbose', `user ${userId}: ${user.passkeys?.length ?? 0} passkey(s) listed (source: ${LIST_SOURCE})`);
     res.json(passkeyList(user));
@@ -536,7 +598,7 @@ router.delete('/webauthn/passkeys/:credentialID', requireAuth, async (req, res) 
     logPasskey('light', `user ${userId}: passkey removed, ${found.passkey.deviceType ?? 'sync status unrecorded'}${found.passkey.backedUp ? ', backed up' : ''} (source: ${REMOVE_SOURCE})`);
     logPasskey('verbose', `user ${userId}: the removed passkey was credential ${shortId(found.passkey.credentialID)}`);
 
-    res.json(passkeyList(await User.findById(userId).select('passwordHash passkeys').lean()));
+    res.json(passkeyList(await User.findById(userId).select('passwordHash passkeys webauthnUserHandle').lean()));
   } catch (err) {
     logPasskey('light', `${REMOVE_SOURCE} failed for user ${userId}: ${err.message}`);
     res.status(500).json({ error: 'Could not remove the passkey' });
