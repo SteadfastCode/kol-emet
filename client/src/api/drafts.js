@@ -49,6 +49,15 @@ export const createComposeDraft = ({ text, filename }) =>
   req('/drafts/compose', { method: 'POST', body: JSON.stringify({ text, filename }) });
 
 /**
+ * The same, for an OpenAPI 3.x or Swagger 2.0 document as JSON or YAML:
+ * `info.title` becomes a Service, each tag an API, and each server host that is
+ * not the service's own an External Dependency. A document that is neither
+ * version is a 400 naming what it found instead.
+ */
+export const createOpenApiDraft = ({ text, filename }) =>
+  req('/drafts/openapi', { method: 'POST', body: JSON.stringify({ text, filename }) });
+
+/**
  * Start a generation, yielding progress events:
  *   { type: 'created', draftId }
  *   { type: 'stage',   stage, chunk?, of? }

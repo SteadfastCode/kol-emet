@@ -1,0 +1,52 @@
+# Fixture for tests/unit/openApi.test.js and tests/http/openApiDraft.test.js.
+#
+# Two declared tags, three paths (the last one a local $ref into
+# #/components/pathItems), and two servers — the second a host of its own, which
+# is what becomes an External Dependency. The example API key below is the
+# point, not an oversight: openApiDraft.test.js asserts it reaches neither the
+# draft nor the database (see lib/producers/redactSecrets.js).
+openapi: 3.1.0
+info:
+  title: Pet Store API
+  version: 2.4.0
+  description: |
+    Pets, their owners, and the vets who see them.
+
+    Read-mostly. Writes are rate limited per clinic.
+servers:
+  - url: https://api.petstore.example/v2
+    description: Production
+  - url: https://sandbox.partner.example/petstore
+    description: The partner's sandbox, which this API forwards bookings to
+tags:
+  - name: Pets
+    description: Everything about the animals themselves.
+  - name: Vets
+    description: Clinics and the people in them.
+paths:
+  /pets:
+    get:
+      tags: [Pets]
+      summary: List pets
+    post:
+      tags: [Pets]
+      summary: Add a pet
+  /pets/{petId}:
+    get:
+      tags: [Pets]
+      summary: Fetch one pet
+  /vets:
+    $ref: '#/components/pathItems/Vets'
+components:
+  pathItems:
+    Vets:
+      get:
+        tags: [Vets]
+        summary: List vets
+        parameters:
+          - name: api_key
+            in: header
+            required: false
+            schema:
+              type: string
+            example: sk-fixture-0000000000000000

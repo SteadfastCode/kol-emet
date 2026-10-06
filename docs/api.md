@@ -187,6 +187,7 @@ the graph. Nothing here writes to `entities` or `relationshipgroups` except `POS
 | GET | `/drafts/quota` | Remaining AI allowance for the workspace: `{ granted, spent, remaining, exhausted }` in micro-dollars plus display strings. |
 | POST | `/drafts` | Generate, streaming progress over **SSE**. Body: `{ text, provider?, roleStyle? }`. |
 | POST | `/drafts/compose` | Build a draft from a docker-compose file — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
+| POST | `/drafts/openapi` | Build a draft from an OpenAPI 3.x or Swagger 2.0 document (JSON or YAML) — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | GET | `/drafts/:id` | Full draft including `items` and the source text. |
 | PATCH | `/drafts/:id/items/:itemId` | Record one decision. Body: `{ decision: 'accepted' \| 'edited' \| 'rejected', payload?, note? }`. `payload` is required for `edited` and is validated against the same schema `POST /entities` accepts. |
 | POST | `/drafts/:id/items/:itemId/retarget` | Resolve a duplicate: `{ targetEntityId }` turns a create into an update against that entity; `null` reverts it to a create. Entity items only. |
@@ -271,6 +272,46 @@ near-miss is flagged `duplicate_candidate`, never merged. YAML `<<` merge keys a
 `COMPOSE_LOG_LEVEL` = `off | light | normal | verbose` (default `light`) logs each draft created, refusals
 and drop reasons, and each proposed item. `REDACT_LOG_LEVEL`, same tiers, logs one line per file redacted,
 then the key and rule behind each redaction, then the line it landed on — never a redacted value.
+
+### `POST /drafts/openapi`
+
+The second vertical-ingestion producer ([`server/src/lib/producers/openApi.js`](../server/src/lib/producers/openApi.js)),
+and the same route as `/drafts/compose` with a different parse: one request in, the finished draft
+out, no SSE, no allowance check, no generation lock, and the same decision and apply routes
+afterwards. Recorded on the draft: `source.producer: 'openapi'`, `source.producerVersion:
+'openapi@1'`, the same `source.textHash`, `grounding.categories`, and `route.strategy:
+'deterministic'`. **Credentials are stripped before the document is stored**, by the same
+`redactSecrets` pass and for the same reasons as a compose file — a spec routinely carries an
+example API key, and the client uploads it without ever showing it in the textarea.
+
+Accepts **JSON and YAML** (JSON is YAML, so one reader gives both line numbers), **OpenAPI 3.x** and
+**Swagger 2.0**. Anything else is a 400 naming the top-level keys it found instead.
+
+| OpenAPI | Proposed |
+|---------|----------|
+| `info.title` | One **Service**, with an `attribute` block for `info.version` (*API version*) and one for the spec version (*Spec version*, e.g. `OpenAPI 3.1.0`), plus a `text` block from `info.description`. Tag `openapi`. |
+| Each tag the document uses — its declared `tags[]` first, in order, then any tag an operation names; an operation that names none is grouped under its **first path segment**, so a document that declares no tags maps to one entity per path prefix | One **API** per tag, with an `attribute` block (*Operations*) listing `GET /pets, POST /pets, …` in document order, capped at 40 with `…and N more`. Joined to the service by an `Exposes` group — Provider, Endpoint |
+| Each `servers[].url` host that is not the service's own (the **first** server is where the API itself answers; loopback, `{template}` and relative URLs are ignored) | One **External Dependency** per host, plus a `Depends on` group — Dependent, Dependency |
+
+Only local `#/components/…` `$ref`s are followed, one level deep, and only where one can change the
+mapping — a path item. An unresolvable ref, an external ref and a ref to a ref are each a **drop
+reason**, not a 400: one broken reference should not cost a reviewer the rest of the document.
+Request and response schemas are not read at all.
+
+Titles are deduplicated against the workspace exactly as a compose draft's are: an exact
+normalized-title match becomes `op: 'update'` (`matchedBy: 'exact-normalized-title'`), and such an
+update leaves out any attribute **or text** block the entity already has, so re-importing an
+unchanged document neither stacks attributes nor appends `info.description` twice. A near-miss is
+flagged `duplicate_candidate`, never merged. YAML anchors and `<<` merge keys are followed.
+
+| Status | Meaning |
+|--------|---------|
+| 201 | The draft, `status: 'ready'` |
+| 400 | `text` missing or longer than 60,000 characters; invalid JSON or YAML (`{ error, line }`); no top-level `openapi:`/`swagger:` key (the message names what it found, and says so when the file looks like a compose file); a version other than 3.x or 2.0; no `info.title`; or the workspace lacks an entity type the document needs (`{ error, missingCategories }`) — no draft is created |
+
+`OPENAPI_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers
+`COMPOSE_LOG_LEVEL` has and a separate setting, so one producer's lines can be read without the
+other's.
 
 ### Decisions vs. apply
 

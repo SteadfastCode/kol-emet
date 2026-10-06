@@ -268,13 +268,13 @@ accommodate pre-tenancy rows. A new collection has none, so it fails closed from
   title:       String,     // first ~60 chars of the input, for the list view
   status: 'generating' | 'ready' | 'failed' | 'applied' | 'partially_applied' | 'discarded',
 
-  // The producer seam: drift / repo / openapi become new enum values here
+  // The producer seam: drift / repo / k8s become new enum values here
   // rather than new collections.
   source: {
-    producer:        'braindump' | 'docker-compose',
-    producerVersion: String,      // 'braindump@1' | 'docker-compose@1'
+    producer:        'braindump' | 'docker-compose' | 'openapi',
+    producerVersion: String,      // 'braindump@1' | 'docker-compose@1' | 'openapi@1'
     text:            String,      // the input; for a file the user never reads
-                                  //   (docker-compose), credentials already removed
+                                  //   (docker-compose, openapi), credentials already removed
     textHash:        String,      // 'sha256:…' of `text` as stored
     redactedCount:   Number,      // credentials taken out before storage
   },
