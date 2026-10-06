@@ -1,0 +1,172 @@
+{
+  "item": "KOL-049",
+  "repo": "kol-emet",
+  "mergeSha": "3a2f161cfe0cad9905048aad573c98a4d6f612a1",
+  "completedAtUtc": "2026-10-06T03:29:56.489Z",
+  "completeRunId": "2026-10-06T03:10:29.997Z",
+  "reviewRunId": "2026-10-06T07:00:57.613Z",
+  "reviewedAtUtc": "2026-10-06T07:05:46.672Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 39243,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/searchFilter.js"
+      ],
+      "part": null,
+      "bytes": 12885,
+      "contextBytes": 0,
+      "promptTokens": 4204,
+      "completionTokens": 153,
+      "latencyMs": 17960,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/chat.js",
+        "server/src/routes/entities.js",
+        "server/src/routes/mcp.js"
+      ],
+      "part": null,
+      "bytes": 5179,
+      "contextBytes": 7744,
+      "promptTokens": 4130,
+      "completionTokens": 317,
+      "latencyMs": 26991,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entitySearch.test.js"
+      ],
+      "part": null,
+      "bytes": 12284,
+      "contextBytes": 0,
+      "promptTokens": 4176,
+      "completionTokens": 128,
+      "latencyMs": 18912,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/mcp.test.js",
+        "server/tests/unit/searchFilter.test.js"
+      ],
+      "part": null,
+      "bytes": 8895,
+      "contextBytes": 4378,
+      "promptTokens": 4507,
+      "completionTokens": 134,
+      "latencyMs": 19899,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/chat.js",
+      "line": 187,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The `searchTerm` function is not defined in the provided diff.",
+      "scenario": "The code attempts to use `searchTerm`, but it is not imported or defined within the file, leading to a runtime error.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`searchTerm` is imported from '../lib/searchFilter.js' at line 31."
+      }
+    },
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 44,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The `searchTerm` function is not defined in the provided diff.",
+      "scenario": "The code attempts to use `searchTerm`, but it is not imported or defined within the file, leading to a runtime error.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`searchTerm` is imported from '../lib/searchFilter.js' at line 18."
+      }
+    },
+    {
+      "file": "server/src/routes/mcp.js",
+      "line": 110,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The `searchTerm` function is not defined in the provided diff.",
+      "scenario": "The code attempts to use `searchTerm`, but it is not imported or defined within the file, leading to a runtime error.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`searchTerm` is used without being defined or imported in the provided diff."
+      }
+    },
+    {
+      "file": "server/tests/http/entitySearch.test.js",
+      "line": 205,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the search term is escaped before compiling it as a regex.",
+      "scenario": "If an attacker provides a malicious search term, such as `?q=.*`, the regex compilation will succeed but match all entities, potentially exposing sensitive information.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the search term is escaped before compiling it as a regex."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One high-severity finding identified. · Three files attempt to use the `searchTerm` function, which is not defined or imported in the provided diff. This will lead to runtime errors. · One high-severity finding identified in the test file. · One high-severity finding identified in the `escapeRegex` function implementation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 58989,
+    "completionTokens": 1456
+  },
+  "latencyMs": 219952
+}
