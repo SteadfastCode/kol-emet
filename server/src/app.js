@@ -74,13 +74,32 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // genuinely take a form — the two OAuth issuers' /authorize and /oauth/token
   // — mount the parser themselves, next to their own routes.
 
+  // `??` short-circuits, so the Mongo-backed store is never constructed when
+  // a caller supplied its own.
+  const store = sessionStore ?? MongoStore.create({ mongoUrl: process.env.MONGO_URI });
+
+  // How an open `GET /events` stream asks whether the session it was
+  // authenticated by still exists (KOL-062). The broadcaster records a session
+  // id per connection and re-checks it on its 30-second keep-alive sweep;
+  // passing the lookup in from here is what keeps that module free of
+  // express-session and of Mongo — it holds nothing but sockets and ids.
+  //
+  // Rejects rather than answering false when the store errors: the sweep fails
+  // *open* on a rejection, so a database blip cannot be the thing that drops
+  // every live stream in the deployment. Only a store that answered, with
+  // nothing, ends a connection.
+  app.locals.sessionAlive = (sessionId) => new Promise((resolve, reject) => {
+    store.get(sessionId, (err, stored) => {
+      if (err) return reject(err);
+      resolve(Boolean(stored));
+    });
+  });
+
   app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    // `??` short-circuits, so the Mongo-backed store is never constructed when
-    // a caller supplied its own.
-    store: sessionStore ?? MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+    store,
     // Built here rather than written inline: the two routes that end a session
     // have to clear the cookie with these same attributes, and the domain is a
     // per-deployment setting (SESSION_COOKIE_DOMAIN) rather than this

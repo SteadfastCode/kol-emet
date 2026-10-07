@@ -31,6 +31,24 @@
  *   allowed to abort delivery to the clients queued behind it, and it must not
  *   be retried on every subsequent broadcast for the life of the process.
  *
+ *   The per-user cap (`EVENTS_MAX_STREAMS_PER_USER`, default 10, KOL-062). A
+ *   connection is a held socket plus a write every 30 seconds on the one
+ *   process every tenant shares, so one valid session must not be able to open
+ *   thousands. The cap is per *user* and never global: one tenant at its
+ *   ceiling cannot be allowed to refuse another tenant's first connection.
+ *
+ *   The keep-alive sweep's session check (KOL-062). `GET /events`
+ *   authenticates on connect and then holds the response open, so a stream
+ *   that outlives its session keeps pushing whole entity documents to a browser
+ *   that has signed out. The sweep asks an injected resolver whether each
+ *   connection's session is still in the store and closes the ones whose is
+ *   not. Injected, not imported, so this file can drive the behaviour with a
+ *   `Set` of live ids and the module keeps no store or Mongo dependency.
+ *
+ *   `closeStreamsForSession` / `closeStreamsForUser`: the same drop, now, for
+ *   the two routes that know a session has ended before the next sweep would
+ *   — `POST /auth/logout` and `DELETE /auth/account`.
+ *
  * Fake `res` objects rather than real sockets: the function reads exactly one
  * thing off `res` (`write`), and "the socket is gone" is trivially expressible
  * as a throwing method but genuinely awkward to arrange against a real server.
@@ -61,11 +79,21 @@
  *     eviction group fails (the broadcast throws out to the caller).
  *   - Change the `catch` to swallow without `clients.delete(...)` and the
  *     "not retried on the next broadcast" test fails.
+ *   - Count every open stream instead of the connecting user's own and the
+ *     "the cap is per user" test fails; drop the cap check entirely and the
+ *     refusal group fails.
+ *   - Have the sweep treat a thrown resolver as "session gone" and the
+ *     fail-open test fails; have it check connections with no session id and
+ *     the bearer test fails.
  *
- * Deliberately not covered: the keep-alive interval's own ping (it would cost
- * the suite 30 seconds of wall clock, or a fake-timer harness whose subject
- * would be the timer rather than the filter), and `usageMeter`'s database
- * paths, which are out of scope for this item.
+ * Deliberately not covered: the keep-alive interval's own *timer* (the sweep it
+ * runs is called directly here; asserting the 30-second tick would cost the
+ * suite 30 seconds of wall clock, or a fake-timer harness whose subject would
+ * be the timer rather than the sweep), and `usageMeter`'s database paths, which
+ * are out of scope for this item. The HTTP behaviour the cap and the sweep
+ * produce — a refused eleventh connection, a stream that stops receiving once
+ * its session is destroyed — is covered over real sockets in
+ * `tests/http/events.test.js`.
  *
  * Debug logging: `TEST_SSE_LOG_LEVEL=off|light|normal|verbose`, default
  * `light`. The broadcaster narrates every connect, disconnect and broadcast on
@@ -78,7 +106,16 @@
 import { describe, test, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { addClient, removeClient, broadcast } from '../../src/lib/broadcaster.js';
+import {
+  addClient,
+  removeClient,
+  broadcast,
+  sweepClients,
+  closeStreamsForSession,
+  closeStreamsForUser,
+  maxStreamsPerUser,
+  DEFAULT_MAX_STREAMS_PER_USER,
+} from '../../src/lib/broadcaster.js';
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -130,33 +167,109 @@ let wsCounter = 0;
 const uniqueWs = () => `ws-${(wsCounter += 1)}`;
 
 /**
- * Minimal `res` double recording only what `broadcast` uses.
+ * Minimal `res` double recording only what the broadcaster uses.
  * `throwOnWrite` models a socket the client has already closed: the write
  * attempt is still counted, so a test can tell "tried and failed" from
  * "never tried because it was evicted".
+ *
+ * `end()` is here because the server now closes streams of its own accord (the
+ * cap and the session sweep), and "was this socket closed?" is the assertion
+ * those cases turn on.
  */
 function fakeRes({ throwOnWrite = false } = {}) {
-  const res = { writes: [], attempts: 0 };
+  const res = { writes: [], attempts: 0, ended: false };
   res.write = (chunk) => {
     res.attempts += 1;
     if (throwOnWrite) throw new Error('EPIPE: socket already closed');
     res.writes.push(chunk);
     return true;
   };
+  res.end = () => { res.ended = true; };
   return res;
 }
 
-/** Registers a client with the broadcaster and returns its fake `res`. */
-function connect(clientId, workspaceId, opts) {
-  const res = fakeRes(opts);
-  addClient(clientId, res, workspaceId);
+/**
+ * Registers a client with the broadcaster and returns its fake `res`, with the
+ * `addClient` result on it as `res.added` — that result is how the route learns
+ * a connection was refused, so it is part of what these tests assert.
+ *
+ * `opts` carries both the double's own setting (`throwOnWrite`) and the
+ * registration fields (`userId`, `sessionId`, `sessionAlive`).
+ */
+function connect(clientId, workspaceId, opts = {}) {
+  const { throwOnWrite = false, ...registration } = opts;
+  const res = fakeRes({ throwOnWrite });
+  res.added = addClient(clientId, res, workspaceId, registration);
   connected.push(clientId);
-  log('normal', `connected ${clientId} to workspace ${workspaceId}`);
+  log('normal', `connected ${clientId} to workspace ${workspaceId}${registration.userId ? ` as user ${registration.userId}` : ''} — ${res.added.accepted ? 'accepted' : `refused (${res.added.reason})`}`);
   return res;
 }
 
 /** The parsed `data:` payloads a fake `res` received, in order. */
 const received = (res) => res.writes.map((chunk) => JSON.parse(chunk.match(/^data: (.*)$/m)[1]));
+
+/**
+ * Every frame a fake `res` received, as `{ event, data }`. Unlike `received()`
+ * this survives a keep-alive ping (`data: ping`, which is not JSON) and names
+ * the event, so the sweep's mixed traffic can be asserted on.
+ */
+const frames = (res) => res.writes.map((chunk) => {
+  if (chunk === 'data: ping\n\n') return { event: 'ping', data: null };
+  const event = chunk.match(/^event: (.*)$/m)?.[1] ?? null;
+  const data = chunk.match(/^data: (.*)$/m)?.[1] ?? null;
+  return { event, data: data === null ? null : JSON.parse(data) };
+});
+
+const pings = (res) => frames(res).filter((f) => f.event === 'ping').length;
+const errors = (res) => frames(res).filter((f) => f.event === 'error').map((f) => f.data);
+
+/**
+ * A stand-in for the resolver `createApp` injects: answers from a `Set` of
+ * live session ids and records every lookup, so a test can assert that a
+ * connection was *not* checked as well as that it was.
+ */
+function fakeSessions(live = []) {
+  const alive = new Set(live);
+  const asked = [];
+  return {
+    alive,
+    asked,
+    resolve: async (sessionId) => { asked.push(sessionId); return alive.has(sessionId); },
+  };
+}
+
+/**
+ * Runs `fn` with `EVENTS_MAX_STREAMS_PER_USER` set, restoring whatever was
+ * there (usually nothing) afterwards. The variable is read per call inside the
+ * subject, so this is enough — no module reload needed.
+ */
+async function withCap(value, fn) {
+  const restore = setCap(value);
+  try {
+    return await fn();
+  } finally {
+    restore();
+  }
+}
+
+/** `withCap` for a synchronous body — `finally` would fire too early otherwise. */
+function withCapSync(value, fn) {
+  const restore = setCap(value);
+  try {
+    return fn();
+  } finally {
+    restore();
+  }
+}
+
+function setCap(value) {
+  const before = process.env.EVENTS_MAX_STREAMS_PER_USER;
+  process.env.EVENTS_MAX_STREAMS_PER_USER = value;
+  return () => {
+    if (before === undefined) delete process.env.EVENTS_MAX_STREAMS_PER_USER;
+    else process.env.EVENTS_MAX_STREAMS_PER_USER = before;
+  };
+}
 
 describe('broadcast without a workspaceId', () => {
   // The whole point of the guard: an unscoped payload is dropped rather than
@@ -358,5 +471,253 @@ describe('broadcast eviction of dead clients', () => {
 
     assert.equal(one.attempts, 1);
     assert.equal(two.attempts, 1);
+  });
+});
+
+describe('the per-user stream cap', () => {
+  test('refuses the eleventh stream for one user, at the default limit', async () => {
+    // The shipped default, asserted through the real environment (nothing set)
+    // rather than a test-only limit: 10 is the number a deployment gets, and a
+    // suite that only ever exercised an injected 2 would not notice it change.
+    const workspaceId = uniqueWs();
+    const userId = 'user-at-the-cap';
+    const open = [];
+    for (let i = 0; i < DEFAULT_MAX_STREAMS_PER_USER; i += 1) {
+      open.push(connect(`tab-${i}`, workspaceId, { userId }));
+    }
+    assert.ok(open.every((res) => res.added.accepted), 'the first ten streams should all be accepted');
+
+    const refused = connect('tab-eleven', workspaceId, { userId });
+
+    assert.equal(refused.added.accepted, false, 'the eleventh stream was accepted');
+    assert.equal(refused.added.reason, 'over-cap');
+    assert.equal(refused.added.limit, DEFAULT_MAX_STREAMS_PER_USER);
+    // Refused means not registered, not merely reported: the route writes an
+    // error frame and closes, and nothing may be pushed to that socket after.
+    broadcast('entity:created', { _id: 'e1' }, { workspaceId });
+    assert.equal(refused.attempts, 0, 'a refused connection was written to');
+    assert.equal(open[0].writes.length, 1, 'an accepted connection missed the broadcast');
+  });
+
+  test('the cap is per user, not global', async () => {
+    // The failure this guards against is one tenant's script denying every
+    // other tenant their first live connection.
+    await withCap('2', () => {
+      const workspaceId = uniqueWs();
+      connect('greedy-1', workspaceId, { userId: 'greedy' });
+      connect('greedy-2', workspaceId, { userId: 'greedy' });
+      const greedyThird = connect('greedy-3', workspaceId, { userId: 'greedy' });
+      const other = connect('other-1', uniqueWs(), { userId: 'someone-else' });
+
+      assert.equal(greedyThird.added.accepted, false, 'the third stream for the capped user was accepted');
+      assert.equal(other.added.accepted, true, 'another user was refused because of someone else\'s streams');
+    });
+  });
+
+  test('a closed stream frees the slot', async () => {
+    await withCap('1', () => {
+      const workspaceId = uniqueWs();
+      connect('tab-a', workspaceId, { userId: 'u1' });
+      assert.equal(connect('tab-b', workspaceId, { userId: 'u1' }).added.accepted, false);
+
+      removeClient('tab-a');
+
+      assert.equal(connect('tab-c', workspaceId, { userId: 'u1' }).added.accepted, true,
+        'closing a stream did not free the user\'s slot — a reconnecting browser would be locked out');
+    });
+  });
+
+  test('connections with no user share one bucket', async () => {
+    // The BEARER_TOKEN path has no user to key on. Those connections share one
+    // credential, so they share one allowance rather than being unbounded.
+    await withCap('1', () => {
+      const workspaceId = uniqueWs();
+      const first = connect('bearer-1', workspaceId);
+      const second = connect('bearer-2', workspaceId);
+
+      assert.equal(first.added.accepted, true);
+      assert.equal(second.added.accepted, false, 'bearer connections were counted separately, so they are unbounded');
+    });
+  });
+
+  test('reports a refusal, naming the user and the limit', async () => {
+    // The light tier's job: a user whose eleventh tab goes quiet should be
+    // explainable from the log alone.
+    await withCap('1', () => {
+      const workspaceId = uniqueWs();
+      connect('tab-a', workspaceId, { userId: 'noisy' });
+      connect('tab-b', workspaceId, { userId: 'noisy' });
+
+      const line = captured.find((l) => /refused/.test(l) && /noisy/.test(l));
+      assert.ok(line, `expected a refusal line naming the user, got:\n${captured.join('\n')}`);
+      assert.match(line, /limit 1/);
+    });
+  });
+
+  test('a limit that is not a positive integer is the default', () => {
+    // `EVENTS_MAX_STREAMS_PER_USER=` in a half-filled .env must not parse as 0
+    // and refuse every stream the product has.
+    for (const bad of ['', '0', '-1', 'ten', '2.5']) {
+      const got = withCapSync(bad, () => maxStreamsPerUser());
+      assert.equal(got, DEFAULT_MAX_STREAMS_PER_USER, `EVENTS_MAX_STREAMS_PER_USER=${JSON.stringify(bad)} should fall back to the default`);
+    }
+    assert.equal(withCapSync('3', () => maxStreamsPerUser()), 3, 'a valid limit should be honoured');
+    assert.equal(maxStreamsPerUser(), DEFAULT_MAX_STREAMS_PER_USER, 'unset should be the default');
+  });
+});
+
+describe('the keep-alive sweep', () => {
+  test('closes a connection whose session the resolver no longer knows', async () => {
+    const workspaceId = uniqueWs();
+    const sessions = fakeSessions(['sid-live']);
+    const gone = connect('tab-gone', workspaceId, { userId: 'u1', sessionId: 'sid-gone', sessionAlive: sessions.resolve });
+    const live = connect('tab-live', workspaceId, { userId: 'u2', sessionId: 'sid-live', sessionAlive: sessions.resolve });
+
+    await sweepClients();
+
+    assert.deepEqual(errors(gone), [{ error: 'session-ended' }], 'the dropped stream was not told why');
+    assert.equal(gone.ended, true, 'the socket of a session-less stream was left open');
+    assert.equal(pings(gone), 0, 'a stream being dropped was also pinged');
+    assert.equal(pings(live), 1, 'a stream whose session is still there should have been pinged');
+
+    // The point of the whole exercise: no more entity documents.
+    broadcast('entity:updated', { _id: 'e1' }, { workspaceId });
+    assert.equal(errors(gone).length, 1, 'a dropped stream received a broadcast');
+    assert.equal(frames(live).filter((f) => f.event === 'entity:updated').length, 1);
+  });
+
+  test('reports why it dropped the connection', async () => {
+    const sessions = fakeSessions();
+    connect('tab-gone', uniqueWs(), { userId: 'u1', sessionId: 'sid-gone', sessionAlive: sessions.resolve });
+
+    await sweepClients();
+
+    const line = captured.find((l) => /tab-gone/.test(l) && /session/i.test(l));
+    assert.ok(line, `expected a line saying the session was gone, got:\n${captured.join('\n')}`);
+  });
+
+  test('a resolver that throws keeps the stream', async () => {
+    // Fail open. A Mongo blip must not be the thing that drops every live
+    // stream in the deployment; the next sweep asks again.
+    const workspaceId = uniqueWs();
+    const res = connect('tab-a', workspaceId, {
+      userId: 'u1',
+      sessionId: 'sid-1',
+      sessionAlive: async () => { throw new Error('connection reset by peer'); },
+    });
+
+    await sweepClients();
+
+    assert.equal(res.ended, false, 'a store error closed a live stream');
+    assert.equal(pings(res), 1);
+    broadcast('entity:updated', { _id: 'e1' }, { workspaceId });
+    assert.equal(frames(res).filter((f) => f.event === 'entity:updated').length, 1);
+    assert.ok(captured.find((l) => /session check failed/.test(l)), 'the failed lookup was not reported');
+  });
+
+  test('a connection with no session id is never checked', async () => {
+    // The BEARER_TOKEN path: `req.sessionID` exists but no session is stored,
+    // so checking one would drop the stream on the first sweep.
+    const sessions = fakeSessions();
+    const res = connect('tab-bearer', uniqueWs(), { sessionAlive: sessions.resolve });
+
+    await sweepClients();
+
+    assert.deepEqual(sessions.asked, [], 'a connection with no session id was looked up anyway');
+    assert.equal(res.ended, false, 'a bearer-authenticated stream was dropped');
+    assert.equal(pings(res), 1);
+  });
+
+  test('a connection with no resolver is pinged, not dropped', async () => {
+    // createApp always injects one; a caller that did not (a REPL, an older
+    // mount) must not have its streams quietly closed.
+    const res = connect('tab-a', uniqueWs(), { userId: 'u1', sessionId: 'sid-1' });
+
+    await sweepClients();
+
+    assert.equal(res.ended, false);
+    assert.equal(pings(res), 1);
+  });
+
+  test('one dropped connection does not stop the sweep reaching the rest', async () => {
+    const sessions = fakeSessions(['sid-live']);
+    const gone = connect('tab-gone', uniqueWs(), { userId: 'u1', sessionId: 'sid-gone', sessionAlive: sessions.resolve });
+    const dead = connect('tab-dead', uniqueWs(), { userId: 'u2', sessionId: 'sid-live', sessionAlive: sessions.resolve, throwOnWrite: true });
+    const live = connect('tab-live', uniqueWs(), { userId: 'u3', sessionId: 'sid-live', sessionAlive: sessions.resolve });
+
+    const result = await sweepClients();
+
+    assert.equal(gone.ended, true);
+    assert.equal(dead.attempts, 1, 'the dead socket should have been tried exactly once');
+    assert.equal(pings(live), 1, 'the client queued behind a dropped and a dead one was not pinged');
+    assert.deepEqual(result, { swept: 3, pinged: 1, dropped: 2 });
+  });
+
+  test('a dropped connection frees its user\'s slot', async () => {
+    await withCap('1', async () => {
+      const sessions = fakeSessions();
+      connect('tab-a', uniqueWs(), { userId: 'u1', sessionId: 'sid-gone', sessionAlive: sessions.resolve });
+
+      await sweepClients();
+
+      assert.equal(connect('tab-b', uniqueWs(), { userId: 'u1' }).added.accepted, true,
+        'a swept stream still counted against the cap');
+    });
+  });
+});
+
+describe('closing streams for a session or a user', () => {
+  test('closeStreamsForSession closes only that session\'s streams', async () => {
+    const workspaceId = uniqueWs();
+    const mine1 = connect('tab-1', workspaceId, { userId: 'u1', sessionId: 'sid-1' });
+    const mine2 = connect('tab-2', workspaceId, { userId: 'u1', sessionId: 'sid-1' });
+    // Same user, another browser: still signed in there, so it keeps its stream.
+    const other = connect('tab-3', workspaceId, { userId: 'u1', sessionId: 'sid-2' });
+
+    const closed = closeStreamsForSession('sid-1', 'POST /auth/logout');
+
+    assert.equal(closed, 2);
+    assert.equal(mine1.ended, true);
+    assert.equal(mine2.ended, true);
+    assert.deepEqual(errors(mine1), [{ error: 'session-ended' }]);
+    assert.equal(other.ended, false, 'another session of the same user was closed');
+
+    broadcast('entity:created', { _id: 'e1' }, { workspaceId });
+    assert.equal(errors(mine1).length, 1, 'a closed stream received a broadcast');
+    assert.equal(frames(other).filter((f) => f.event === 'entity:created').length, 1);
+  });
+
+  test('closeStreamsForUser closes every session that user has open', async () => {
+    const workspaceId = uniqueWs();
+    const one = connect('tab-1', workspaceId, { userId: 'u1', sessionId: 'sid-1' });
+    const two = connect('tab-2', workspaceId, { userId: 'u1', sessionId: 'sid-2' });
+    const someoneElse = connect('tab-3', workspaceId, { userId: 'u2', sessionId: 'sid-3' });
+
+    const closed = closeStreamsForUser('u1', 'DELETE /auth/account');
+
+    assert.equal(closed, 2, 'account deletion must reach the account\'s other browsers too');
+    assert.equal(one.ended, true);
+    assert.equal(two.ended, true);
+    assert.equal(someoneElse.ended, false, 'another user\'s stream was closed');
+  });
+
+  test('an id matching nothing, or a missing one, is a no-op', () => {
+    const res = connect('tab-1', uniqueWs(), { userId: 'u1', sessionId: 'sid-1' });
+
+    assert.equal(closeStreamsForSession('sid-nobody'), 0);
+    assert.equal(closeStreamsForSession(undefined), 0);
+    assert.equal(closeStreamsForUser(null), 0);
+    assert.equal(closeStreamsForUser('u-nobody'), 0);
+    assert.equal(res.ended, false, 'an unmatched close ended a live stream');
+  });
+
+  test('matches an ObjectId-shaped user id against its stored string form', () => {
+    // `req.actor.userId` is a string on one path and an ObjectId on another;
+    // the stored form is normalised, so the lookup has to be too.
+    const hex = '65f0000000000000000000bb';
+    const res = connect('tab-1', uniqueWs(), { userId: { toString: () => hex }, sessionId: 'sid-1' });
+
+    assert.equal(closeStreamsForUser(hex), 1);
+    assert.equal(res.ended, true);
   });
 });
