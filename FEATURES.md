@@ -55,7 +55,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-060) Restore a deleted entity from its snapshot**
+- [x] **(KOL-060) Restore a deleted entity from its snapshot**
   A delete is final today. `DELETE /entities/:id` (`server/src/routes/entities.js:139`) removes the document, `logDelete`
   (`server/src/lib/changeLogger.js:92`) keeps the whole snapshot for the `ChangeLog` TTL's 30 days, and the delete
   broadcast carries it, so a toast in another open tab can open a read-only `[DELETED]` panel
