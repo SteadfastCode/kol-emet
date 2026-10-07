@@ -316,13 +316,10 @@ function initGraph() {
     node.attr('transform', d => `translate(${d.x},${d.y})`);
   });
 
-  // ── Keyboard close ───────────────────────────────────────────────────────
-  function onKey(e) {
-    if (e.key === 'Escape') emit('close');
-  }
-  window.addEventListener('keydown', onKey);
-  // store cleanup ref on container so onBeforeUnmount can remove it
-  containerRef.value._keyListener = onKey;
+  // Escape is not bound here. The layout owns the app's one global keydown
+  // listener and closes the topmost layer with it (KOL-063) — a second global
+  // listener for the same key would close the graph *and* whatever is under it
+  // on a single press. The ✕ above still emits `close`, and so does the chain.
 
   // ── Resize ───────────────────────────────────────────────────────────────
   resizeObserver = new ResizeObserver(() => {
@@ -414,9 +411,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (simulation) simulation.stop();
   if (resizeObserver) resizeObserver.disconnect();
-  if (containerRef.value?._keyListener) {
-    window.removeEventListener('keydown', containerRef.value._keyListener);
-  }
 });
 </script>
 

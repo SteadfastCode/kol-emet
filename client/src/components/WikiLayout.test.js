@@ -10,19 +10,26 @@
  * EntitySidebar.test.js. Shallow: every child is a stub, and the composables that would reach the
  * network or open an EventSource are replaced.
  *
- * The last group is the exception — it mounts the list for real (sidebar, cards and all) over
+ * The last two groups are the exception — they mount the list for real (sidebar, cards and all) over
  * entities that carry no `blocks`, which is the shape `GET /entities` now sends (KOL-061). Nothing
  * on this path reads block content, and the group fails if something starts to. `useFilters` is
  * therefore the real composable throughout this file rather than a stub: it reaches no network, and
  * what it reads off an entity is part of what is pinned here.
  */
-import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { mount, shallowMount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { enableAutoUnmount, mount, shallowMount } from '@vue/test-utils';
 import WikiLayout from './WikiLayout.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import EntitySidebar from './EntitySidebar.vue';
+import EntityEditor from './EntityEditor.vue';
+import ChatPanel from './ChatPanel.vue';
+import GraphView from './GraphView.vue';
+
+// The layout now holds a window-level keydown listener (KOL-063), so a wrapper
+// left mounted keeps answering keys for the rest of the file. Unmount them all.
+enableAutoUnmount(afterEach);
 
 const { entities, loadEntities, selectEntity } = vi.hoisted(() => ({
   entities: [], loadEntities: vi.fn(), selectEntity: vi.fn(),
@@ -162,16 +169,16 @@ const VirtualListStub = {
   template: '<div><div v-for="(item, index) in items" :key="index"><slot :item="item" :index="index" /></div></div>',
 };
 
-const mountList = () => mount(WikiLayout, {
-  global: {
-    stubs: {
-      VirtualList: VirtualListStub,
-      EntityDetail: true, EntityEditor: true, ChatPanel: true, GraphView: true,
-      GeneratorOverlay: true, ToastNotification: true, AccountDeletion: true,
-      PasskeySettings: true, RecentlyDeleted: true, TagSettings: true,
-    },
-  },
-});
+// Everything but the sidebar and its list. The keyboard group below mounts the
+// same shell, for the same reason: the search input has to be the real one.
+const SHELL_STUBS = {
+  VirtualList: VirtualListStub,
+  EntityDetail: true, EntityEditor: true, ChatPanel: true, GraphView: true,
+  GeneratorOverlay: true, ToastNotification: true, AccountDeletion: true,
+  PasskeySettings: true, RecentlyDeleted: true, TagSettings: true,
+};
+
+const mountList = () => mount(WikiLayout, { global: { stubs: SHELL_STUBS } });
 
 const cards = (wrapper) => wrapper.findAll('.sidebar-card').map((c) => c.get('.card-title').text());
 
@@ -218,5 +225,136 @@ describe('WikiLayout list over entities that carry no blocks', () => {
     await wrapper.findAll('.sidebar-card')[0].trigger('click');
 
     expect(selectEntity).toHaveBeenCalledWith('e1');
+  });
+});
+
+/**
+ * The global shortcuts (KOL-063). Mounted for real down to the search input, because what `/` has
+ * to do is move focus into *that* element; the layers it closes are stubs, since what is pinned
+ * here is which one a press closes, not what any of them renders.
+ *
+ * `attachTo` matters: jsdom only moves focus to an element that is in the document.
+ *
+ * The listener is on `window`, so every press below is dispatched from the element that would
+ * really have focus — bubbling is how it gets there, and the element it came from is half of the
+ * rule about whose key it is.
+ */
+const mountShell = () => mount(WikiLayout, { attachTo: document.body, global: { stubs: SHELL_STUBS } });
+
+const press = (key, { from = document.body, ...modifiers } = {}) => {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers });
+  from.dispatchEvent(event);
+  return event;
+};
+
+describe('WikiLayout keyboard shortcuts', () => {
+  beforeEach(() => {
+    entities.length = 0;
+    entities.push(...BLOCKLESS.map((e) => ({ ...e })));
+  });
+
+  it('focuses the search input on `/`, and does not type the `/` into it', async () => {
+    const wrapper = mountShell();
+    const input = wrapper.get('.search-input').element;
+    expect(document.activeElement).not.toBe(input);
+
+    const event = press('/');
+    await wrapper.vm.$nextTick();
+
+    expect(document.activeElement).toBe(input);
+    // The press is ours, so the character it would have typed is swallowed.
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('leaves `/` alone once the search input has focus — it is a character there', async () => {
+    const wrapper = mountShell();
+    const input = wrapper.get('.search-input').element;
+    input.focus();
+
+    const event = press('/', { from: input });
+    await wrapper.vm.$nextTick();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('closes one layer per Escape, topmost first: graph, then chat, then the panel', async () => {
+    const wrapper = mountShell();
+    const sidebar = wrapper.findComponent(EntitySidebar);
+    sidebar.vm.$emit('select', 'e1', 'Boiler Room');
+    sidebar.vm.$emit('chat');
+    sidebar.vm.$emit('graph');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(GraphView).exists()).toBe(true);
+    expect(wrapper.findComponent(ChatPanel).props('open')).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+
+    press('Escape');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(GraphView).exists()).toBe(false);
+    expect(wrapper.findComponent(ChatPanel).props('open')).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+
+    press('Escape');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(ChatPanel).props('open')).toBe(false);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+
+    press('Escape');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.detail-panel').exists()).toBe(false);
+  });
+
+  it('reaches the Escape handler from inside a textarea — that is the way out of one', async () => {
+    const wrapper = mountShell();
+    wrapper.findComponent(EntitySidebar).vm.$emit('select', 'e1', 'Boiler Room');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+
+    const composer = document.createElement('textarea');
+    document.body.appendChild(composer);
+    composer.focus();
+    press('Escape', { from: composer });
+    await wrapper.vm.$nextTick();
+    composer.remove();
+
+    expect(wrapper.find('.detail-panel').exists()).toBe(false);
+  });
+
+  it('opens the new-entity editor on `n`', async () => {
+    const wrapper = mountShell();
+    expect(wrapper.findComponent(EntityEditor).exists()).toBe(false);
+
+    press('n');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.get('.panel-title').text()).toBe('New Entity');
+    expect(wrapper.findComponent(EntityEditor).exists()).toBe(true);
+  });
+
+  it('declines a shortcut held with a modifier — those belong to the browser', async () => {
+    const wrapper = mountShell();
+    const input = wrapper.get('.search-input').element;
+
+    const slash = press('/', { ctrlKey: true });
+    press('n', { ctrlKey: true });
+    await wrapper.vm.$nextTick();
+
+    expect(slash.defaultPrevented).toBe(false);
+    expect(document.activeElement).not.toBe(input);
+    expect(wrapper.findComponent(EntityEditor).exists()).toBe(false);
+  });
+
+  it('stops answering keys once the layout unmounts', async () => {
+    const wrapper = mountShell();
+    const input = wrapper.get('.search-input').element;
+    wrapper.unmount();
+
+    // `focusSearch` swallows the character before it goes looking for the input, so a `/` that
+    // comes back un-prevented is a `/` no handler saw.
+    const event = press('/');
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).not.toBe(input);
   });
 });
