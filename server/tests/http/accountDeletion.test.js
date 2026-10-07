@@ -52,6 +52,10 @@ import mongoose from 'mongoose';
 import session from 'express-session';
 import request from 'supertest';
 
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js),
+// so this suite names one below and its agents send a matching Origin.
+import { CLIENT_ORIGIN, originAgent } from '../helpers/origin.js';
+
 import * as db from '../helpers/db.js';
 // Registration is throttled per client address, and these suites register
 // their fixtures through the real endpoint from one address. See the helper.
@@ -68,6 +72,10 @@ import ChangeLog from '../../src/models/ChangeLog.js';
 // 'production': that arms secure/domain-scoped cookies supertest won't return.
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against;
+// originAgent() above sends it. See tests/helpers/origin.js.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 // Unset so every request here is a session request; the one test about the
 // bearer token sets it for itself and removes it again.
 delete process.env.BEARER_TOKEN;
@@ -133,7 +141,7 @@ function called(what, res) {
  */
 async function tenant(label) {
   const email = uniqueEmail(label);
-  const agent = request.agent(app);
+  const agent = originAgent(app);
   const res = await agent.post('/auth/register').send({ email, password: PASSWORD });
   assert.equal(res.status, 201, `POST /auth/register (${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
 
@@ -367,7 +375,7 @@ describe('DELETE /auth/account re-authentication is throttled', () => {
   test('a run of wrong passwords ends in 429, the account and the session survive, and a mistyped email costs nothing', async () => {
     const throttled = createApp({ sessionStore: new session.MemoryStore(), authLimits: { ...SUITE_AUTH_LIMITS, perUser: 2 } });
     const email = uniqueEmail('delete-throttle');
-    const agent = request.agent(throttled);
+    const agent = originAgent(throttled);
     assert.equal((await agent.post('/auth/register').send({ email, password: PASSWORD })).status, 201);
 
     // The typed email is the UI's confirmation, not a credential. Mistyping it
@@ -417,7 +425,7 @@ describe('GET /auth/me with a session the deletion could not reach', () => {
     const a = await tenant('second-browser');
 
     // The same account signed in twice, the way a laptop and a phone are.
-    const second = request.agent(app);
+    const second = originAgent(app);
     const login = called('POST /auth/login (second browser)', await second
       .post('/auth/login')
       .send({ email: a.email, password: PASSWORD }));

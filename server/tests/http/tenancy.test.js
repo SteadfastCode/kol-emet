@@ -53,6 +53,10 @@ import assert from 'node:assert/strict';
 import session from 'express-session';
 import request from 'supertest';
 
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js),
+// so this suite names one below and its agents send a matching Origin.
+import { CLIENT_ORIGIN, originAgent } from '../helpers/origin.js';
+
 import * as db from '../helpers/db.js';
 // Registration is throttled per client address, and these suites register
 // their fixtures through the real endpoint from one address. See the helper.
@@ -69,6 +73,10 @@ import OpenQuestion from '../../src/models/OpenQuestion.js';
 // session cookies, which supertest's agent would refuse to send back.
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against;
+// originAgent() above sends it. See tests/helpers/origin.js.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 // Unset on purpose. Every request in this file authenticates with a session
 // cookie; with no bearer token configured, a stray Authorization header cannot
 // resolve to the MCP user and quietly satisfy requireAuth.
@@ -107,7 +115,7 @@ const ALICE_QUESTION = 'Does the tenancy boundary hold?';
  * rather than on what it was asked to do.
  */
 async function registerUser(email) {
-  const agent = request.agent(app);
+  const agent = originAgent(app);
   const res = await agent.post('/auth/register').send({ email, password: PASSWORD });
   assert.equal(res.status, 201, `POST /auth/register (${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
 

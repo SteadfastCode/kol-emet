@@ -21,6 +21,25 @@ Two guards:
   label }`) for attribution on writes. A bearer write with no `Settings.mcpUserId` configured is
   rejected with a "re-authorize" error.
 
+A write that authenticates with the **session cookie** must also come from this deployment's own
+client. `originGuard` ([`middleware/originGuard.js`](../server/src/middleware/originGuard.js)) is
+mounted directly after the session middleware and ahead of every router, and on `POST`, `PUT`,
+`PATCH` and `DELETE` from a signed-in session it requires the request's `Origin` — or its `Referer`
+when `Origin` is absent — to be `CLIENT_ORIGIN` or this API's own origin (the OAuth approval pages
+post back to themselves). Anything else is **403 `{ "error": "CROSS_ORIGIN_REQUEST" }`**, before the
+route runs. A bearer caller is exempt: it sends a token and no cookie, so no browser can ride it.
+
+Why it exists: the session cookie is `sameSite: 'none'` in production, because the client and the API
+answer on sibling subdomains, so a browser attaches it to cross-site requests. CORS does not stop a
+*simple* request (a form POST, no custom headers) — it is sent with no preflight and only the
+*response* is withheld, so the write has already happened. The second layer is body parsing:
+`express.urlencoded` is mounted only on the four form-encoded [OAuth](#oauth-mcp-connector)
+endpoints, never on the app, so a cross-site simple POST cannot form a body any other route reads.
+Set `CLIENT_ORIGIN` on every deployment; unset, the allowlist is the API's own origin alone (and
+`cors()` is already answering `Access-Control-Allow-Origin: *`, which no browser uses with
+credentials). `ORIGIN_GUARD_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) names
+every refusal with the header it read and the allowlist it missed.
+
 Tenant scoping is a third middleware, `resolveWorkspace`
 ([`middleware/workspace.js`](../server/src/middleware/workspace.js)). It runs after `requireAuth` on
 every route that touches tenant content, resolves the acting user (the session user, or
@@ -379,8 +398,12 @@ authorization-code with PKCE):
 |--------|-------|-------------|
 | GET | `/.well-known/oauth-authorization-server` | Discovery document |
 | GET | `/authorize` | Approval page |
-| POST | `/authorize` | Approve → issue auth code |
-| POST | `/oauth/token` | Exchange code for token |
+| POST | `/authorize` | Approve → issue auth code. `application/x-www-form-urlencoded` (the approval page's form) |
+| POST | `/oauth/token` | Exchange code for token. `application/x-www-form-urlencoded` |
+
+These two and the bridge's own `POST /bridge/authorize` and `POST /bridge/oauth/token` are the only
+endpoints that parse a form body, and each mounts `express.urlencoded` itself — see the
+[origin guard](#authentication). Every other route takes JSON.
 
 ## MCP transport
 

@@ -120,6 +120,10 @@ import http from 'node:http';
 import express from 'express';
 import session from 'express-session';
 import request from 'supertest';
+
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js),
+// so this suite names one below and its agents send a matching Origin.
+import { CLIENT_ORIGIN, originAgent } from '../helpers/origin.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js';
@@ -146,6 +150,10 @@ import { setMcpUser } from '../../src/lib/mcpUserStore.js';
 // back when registering the two fixture accounts.
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against;
+// originAgent() above sends it. See tests/helpers/origin.js.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 // Load-bearing for this file: with no token the MCP router takes its "dev mode:
 // no token required" path and the auth group would pass trivially against an
 // open endpoint.
@@ -224,7 +232,7 @@ const owned = { aliceEntityId: null, aliceOtherId: null, alicePunctId: null, bob
  * rather than on what it was asked to do.
  */
 async function registerUser(email) {
-  const agent = request.agent(app);
+  const agent = originAgent(app);
   const res = await agent.post('/auth/register').send({ email, password: PASSWORD });
   assert.equal(res.status, 201, `POST /auth/register (${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
 

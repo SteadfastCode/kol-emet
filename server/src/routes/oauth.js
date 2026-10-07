@@ -1,8 +1,15 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { setMcpUser } from '../lib/mcpUserStore.js';
 
 const router = Router();
+
+// The form parser lives here rather than on the app (KOL-058): the two
+// endpoints below are the only ones in this router that take a form body, and an
+// app-wide express.urlencoded would let a cross-site simple POST form a body for
+// every other route too. Mounted per-route, so adding a route here does not
+// quietly widen it.
+const form = express.urlencoded({ extended: false });
 
 const MCP_TOKEN = process.env.MCP_BEARER_TOKEN;
 // A client that discovers this origin's authorization server but wants the
@@ -88,7 +95,7 @@ router.get('/authorize', (req, res) => {
 });
 
 // POST /authorize — issue code and redirect back
-router.post('/authorize', async (req, res) => {
+router.post('/authorize', form, async (req, res) => {
   console.log('[oauth] POST /authorize body:', req.body);
   const { redirect_uri, code_challenge, state, resource } = req.body;
 
@@ -122,7 +129,7 @@ router.post('/authorize', async (req, res) => {
 });
 
 // POST /oauth/token — exchange code for access token
-router.post('/oauth/token', (req, res) => {
+router.post('/oauth/token', form, (req, res) => {
   console.log('[oauth] POST /oauth/token body:', req.body);
   const { grant_type, code, code_verifier } = req.body;
 

@@ -126,6 +126,14 @@ machine's ledger is not a model's guess, so it applies directly (decision log, 2
 Session cookies (bcrypt, 12 rounds) for browsers plus WebAuthn passkeys; bearer token for MCP.
 Registration is open. Details in [api.md](api.md#authentication).
 
+The cookie is `sameSite: 'none'` in production (client and API are sibling subdomains), so a browser
+sends it cross-site and CORS alone never stopped a forged write. `middleware/originGuard.js` is
+mounted after the session middleware and ahead of every router: an unsafe method from a signed-in
+session must carry an `Origin` (or `Referer`) of `CLIENT_ORIGIN` or the API's own origin, else 403
+`CROSS_ORIGIN_REQUEST`. Bearer callers are exempt. As a second layer there is no app-wide
+`express.urlencoded`; the four form-encoded OAuth endpoints mount it themselves, the bridge's two
+inside the bridge router.
+
 ## Live sync
 `/events` is an SSE channel. On connect the server sends the client a `clientId`; clients tag their
 writes with `x-sse-client-id` so the broadcaster can echo changes to every *other* tab/device without

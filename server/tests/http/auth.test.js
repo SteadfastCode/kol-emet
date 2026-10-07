@@ -115,6 +115,10 @@ import assert from 'node:assert/strict';
 import session from 'express-session';
 import request from 'supertest';
 
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js),
+// so this suite names one below and its agents send a matching Origin.
+import { CLIENT_ORIGIN, originAgent } from '../helpers/origin.js';
+
 import * as db from '../helpers/db.js';
 // Registration is throttled per client address, and these suites register
 // their fixtures through the real endpoint from one address. See the helper.
@@ -131,6 +135,10 @@ import EntityType from '../../src/models/EntityType.js';
 // session cookies, which supertest's agent would refuse to send back.
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against;
+// originAgent() above sends it. See tests/helpers/origin.js.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 // Unset on purpose, and load-bearing for this file specifically: requireAuth
 // accepts `Authorization: Bearer <BEARER_TOKEN>` as an alternative to a
 // session. With a token configured, the "logout with no session is 401" case
@@ -238,7 +246,7 @@ after(async () => { await db.disconnect(); });
 describe('POST /auth/register', () => {
   test('creates the account, signs it in, and gives it one owner workspace with seeded content', async () => {
     const email = uniqueEmail('new-account');
-    const agent = request.agent(app);
+    const agent = originAgent(app);
     const { res, user, workspace } = await register(agent, email);
 
     assert.equal(res.status, 201, `registration failed: ${res.status} ${JSON.stringify(res.body)}`);
@@ -271,7 +279,7 @@ describe('POST /auth/register', () => {
 
   test('stores the email lowercased and trimmed', async () => {
     const email = uniqueEmail('Mixed-Case');
-    const { res, user } = await register(request.agent(app), `  ${email.toUpperCase()}  `);
+    const { res, user } = await register(originAgent(app), `  ${email.toUpperCase()}  `);
 
     assert.equal(res.status, 201);
     assert.ok(user, 'the account must be findable by its normalised address');
@@ -280,7 +288,7 @@ describe('POST /auth/register', () => {
 
   test('a duplicate email is 409 and creates no second account or workspace', async () => {
     const email = uniqueEmail('duplicate');
-    const first = await register(request.agent(app), email);
+    const first = await register(originAgent(app), email);
     assert.equal(first.res.status, 201);
 
     const second = await request(app).post('/auth/register').send({ email, password: PASSWORD });
@@ -297,7 +305,7 @@ describe('POST /auth/register', () => {
 
   test('a duplicate that differs only in casing is 409 too', async () => {
     const email = uniqueEmail('case-duplicate');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
     const second = await request(app)
       .post('/auth/register')
@@ -314,7 +322,7 @@ describe('POST /auth/register', () => {
 
   test('the unique index refuses a duplicate the route never sees', async () => {
     const email = uniqueEmail('index-backstop');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
     // Straight at the model, bypassing the route's findOne — this is the
     // guarantee that survives two concurrent signups (see the note at the top
@@ -367,7 +375,7 @@ describe('POST /auth/register', () => {
 describe('POST /auth/register with a template', () => {
   test('a named template is what the new workspace is seeded from', async () => {
     const email = uniqueEmail('architect');
-    const agent = request.agent(app);
+    const agent = originAgent(app);
     const res = called('POST /auth/register (template software-architecture)', await agent
       .post('/auth/register')
       .send({ email, password: PASSWORD, template: 'software-architecture' }));
@@ -419,9 +427,9 @@ describe('GET /templates', () => {
 describe('POST /auth/login', () => {
   test('signs in with the right password whatever the casing of the email', async () => {
     const email = uniqueEmail('login-casing');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
-    const agent = request.agent(app);
+    const agent = originAgent(app);
     const res = called('POST /auth/login (upper-cased email)', await agent
       .post('/auth/login')
       .send({ email: email.toUpperCase(), password: PASSWORD }));
@@ -434,7 +442,7 @@ describe('POST /auth/login', () => {
 
   test('a wrong password and an unknown email are byte-identical 401s', async () => {
     const known = uniqueEmail('enumeration');
-    assert.equal((await register(request.agent(app), known)).res.status, 201);
+    assert.equal((await register(originAgent(app), known)).res.status, 201);
 
     const wrongPassword = await request(app).post('/auth/login').send({ email: known, password: WRONG_PASSWORD });
     const unknownEmail  = await request(app).post('/auth/login').send({ email: uniqueEmail('never-registered'), password: PASSWORD });
@@ -486,12 +494,12 @@ describe('POST /auth/login', () => {
   // first, and the address was never typed.
   test('an email that is not a string is the same 400, before any lookup', async () => {
     const email = uniqueEmail('operator-object');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
     const missing = await request(app).post('/auth/login').send({ password: PASSWORD });
 
     for (const value of [{ $ne: null }, { $eq: email }, [email], 42, true]) {
-      const agent = request.agent(app);
+      const agent = originAgent(app);
       const res = called(`POST /auth/login (email ${JSON.stringify(value)})`, await agent
         .post('/auth/login')
         .send({ email: value, password: PASSWORD }));
@@ -512,7 +520,7 @@ describe('POST /auth/login', () => {
 
   test('a password that is not a string is refused before bcrypt is handed it', async () => {
     const email = uniqueEmail('operator-password');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
     // bcrypt.compare rejects on a non-string, and an async rejection in an
     // Express 4 handler answers nothing at all — the request hangs and the
@@ -528,7 +536,7 @@ describe('POST /auth/login', () => {
 
   test('a successful login rotates the session id', async () => {
     const email = uniqueEmail('fixation');
-    const agent = request.agent(app);
+    const agent = originAgent(app);
 
     const registered = await register(agent, email);
     assert.equal(registered.res.status, 201);
@@ -552,11 +560,11 @@ describe('POST /auth/login', () => {
 describe('GET /auth/me', () => {
   test('is 401 anonymous, 200 after login, and 401 again after logout', async () => {
     const email = uniqueEmail('me-lifecycle');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
     // A fresh agent, so the 401 below is a genuine anonymous request rather
     // than the registration session being reused.
-    const agent = request.agent(app);
+    const agent = originAgent(app);
 
     const anonymous = called('GET /auth/me (anonymous)', await agent.get('/auth/me'));
     assert.equal(anonymous.status, 401);
@@ -587,7 +595,7 @@ describe('GET /auth/me', () => {
   // and the first assertion fails; with a 401 and the last one does.
   test('a lookup that fails is 500 — neither a signed-in 200 nor a signed-out 401', async () => {
     const email = uniqueEmail('me-lookup-error');
-    const agent = request.agent(app);
+    const agent = originAgent(app);
     assert.equal((await register(agent, email)).res.status, 201);
     assert.equal((await agent.get('/auth/me')).status, 200, 'the session must start good');
 
@@ -614,9 +622,9 @@ describe('GET /auth/me', () => {
 describe('POST /auth/logout', () => {
   test('destroys the session server-side, not just the browser cookie', async () => {
     const email = uniqueEmail('logout-destroy');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
-    const agent = request.agent(app);
+    const agent = originAgent(app);
     const login = await agent.post('/auth/login').send({ email, password: PASSWORD });
     assert.equal(login.status, 200);
     const cookie = sessionCookie(login);
@@ -652,9 +660,9 @@ describe('POST /auth/logout', () => {
     // (NODE_ENV is 'test', and a domain-scoped cookie is one supertest's agent
     // would not send back); it is covered in tests/unit/sessionCookie.test.js.
     const email = uniqueEmail('logout-cookie-attributes');
-    assert.equal((await register(request.agent(app), email)).res.status, 201);
+    assert.equal((await register(originAgent(app), email)).res.status, 201);
 
-    const agent = request.agent(app);
+    const agent = originAgent(app);
     const login = await agent.post('/auth/login').send({ email, password: PASSWORD });
     assert.equal(login.status, 200);
     const issued = sessionCookieAttributes(login);
@@ -728,11 +736,11 @@ describe('failed sign-in throttling', () => {
 
   test('after the limit even the right password is refused, with a Retry-After', async () => {
     const email = uniqueEmail('throttle-lockout');
-    assert.equal((await register(request.agent(throttled), email)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), email)).res.status, 201);
 
     await exhaust(throttled, email);
 
-    const agent = request.agent(throttled);
+    const agent = originAgent(throttled);
     const res = called('POST /auth/login (right password, over the limit)', await agent
       .post('/auth/login')
       .send({ email, password: PASSWORD }));
@@ -747,7 +755,7 @@ describe('failed sign-in throttling', () => {
 
   test('a blocked unknown address and a blocked registered one are byte-identical', async () => {
     const known = uniqueEmail('throttle-known');
-    assert.equal((await register(request.agent(throttled), known)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), known)).res.status, 201);
     const unknown = uniqueEmail('throttle-never-registered');
 
     await exhaust(throttled, known);
@@ -777,8 +785,8 @@ describe('failed sign-in throttling', () => {
   test('the block is per address: everyone else still signs in normally', async () => {
     const blocked   = uniqueEmail('throttle-blocked');
     const bystander = uniqueEmail('throttle-bystander');
-    assert.equal((await register(request.agent(throttled), blocked)).res.status, 201);
-    assert.equal((await register(request.agent(throttled), bystander)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), blocked)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), bystander)).res.status, 201);
 
     await exhaust(throttled, blocked);
     assert.equal((await wrongPassword(throttled, blocked)).status, 429);
@@ -795,7 +803,7 @@ describe('failed sign-in throttling', () => {
 
   test('a successful sign-in clears the address, so a typo is not a lockout', async () => {
     const email = uniqueEmail('throttle-cleared');
-    assert.equal((await register(request.agent(throttled), email)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), email)).res.status, 201);
 
     for (let i = 0; i < PER_EMAIL - 1; i += 1) {
       assert.equal((await wrongPassword(throttled, email)).status, 401);
@@ -816,7 +824,7 @@ describe('failed sign-in throttling', () => {
 
   test('casing and surrounding space do not buy extra attempts', async () => {
     const email = uniqueEmail('throttle-casing');
-    assert.equal((await register(request.agent(throttled), email)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), email)).res.status, 201);
 
     await exhaust(throttled, email);
 
@@ -832,7 +840,7 @@ describe('failed sign-in throttling', () => {
   // exactly the input the counter works for.
   test('an address the counter cannot key on is refused, not quietly uncounted', async () => {
     const victim = uniqueEmail('throttle-operator');
-    assert.equal((await register(request.agent(throttled), victim)).res.status, 201);
+    assert.equal((await register(originAgent(throttled), victim)).res.status, 201);
 
     // Twice the per-email budget, every one of them naming the victim through
     // a value `emailKey()` answers '' for. Before the guard each was a plain

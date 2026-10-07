@@ -92,6 +92,10 @@ import assert from 'node:assert/strict';
 import session from 'express-session';
 import request from 'supertest';
 
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js),
+// so this suite names one below and its agents send a matching Origin.
+import { CLIENT_ORIGIN, originAgent } from '../helpers/origin.js';
+
 import * as db from '../helpers/db.js';
 // Registration is throttled per client address, and these suites register
 // their fixtures through the real endpoint from one address. See the helper.
@@ -109,6 +113,10 @@ const ORIGIN = 'http://localhost:5173';
 const RP_ID = 'localhost';
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against;
+// originAgent() above sends it. See tests/helpers/origin.js.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 delete process.env.BEARER_TOKEN;
 process.env.WEBAUTHN_RP_ID = RP_ID;
 process.env.WEBAUTHN_ORIGIN = ORIGIN;
@@ -147,7 +155,7 @@ const device = (opts) => createSoftAuthenticator({ origin: ORIGIN, ...opts });
 /** An account registered through the real endpoint, signed in on its own agent. */
 async function tenant(label) {
   const email = uniqueEmail(label);
-  const agent = request.agent(app);
+  const agent = originAgent(app);
   const res = await agent.post('/auth/register').send({ email, password: PASSWORD });
   assert.equal(res.status, 201, `POST /auth/register (${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
   const user = await User.findOne({ email }).select('_id').lean();
@@ -193,7 +201,7 @@ async function makeLegacy(userId, authenticator) {
 
 /** A passkey sign-in on a fresh agent: begin, with `email` when given, then complete with `authenticator`'s assertion. */
 async function signIn(authenticator, email) {
-  const agent = request.agent(app);
+  const agent = originAgent(app);
   const begin = called(`POST /auth/webauthn/login/begin (${email ? 'with email' : 'discoverable'})`, await agent
     .post('/auth/webauthn/login/begin')
     .send(email ? { email } : {}));
@@ -525,7 +533,7 @@ describe("the account's WebAuthn user handle (KOL-052)", () => {
     // Two sessions for the one account, racing. The write is conditional on
     // the field still being unset, so the loser must read the winner's handle
     // rather than overwrite it.
-    const second = request.agent(app);
+    const second = originAgent(app);
     assert.equal((await second.post('/auth/login').send({ email: t.email, password: PASSWORD })).status, 200);
     const [one, two] = await Promise.all([beginHandle(t.agent), beginHandle(second)]);
 
