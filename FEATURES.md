@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number**
+- [x] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number**
   `GET /events` (`server/src/routes/events.js`) authenticates once with `requireAuth` and then holds the response open
   forever; `addClient` (`server/src/lib/broadcaster.js:20`) stores only `{ res, workspaceId }`. Two consequences for a
   multi-tenant API. A stream outlives its session: after `POST /auth/logout`, or after the account is deleted, the socket
