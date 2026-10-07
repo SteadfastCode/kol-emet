@@ -9,34 +9,35 @@
  * the entity-type registry is loaded once on mount; what the sidebar does with it is pinned in
  * EntitySidebar.test.js. Shallow: every child is a stub, and the composables that would reach the
  * network or open an EventSource are replaced.
+ *
+ * The last group is the exception — it mounts the list for real (sidebar, cards and all) over
+ * entities that carry no `blocks`, which is the shape `GET /entities` now sends (KOL-061). Nothing
+ * on this path reads block content, and the group fails if something starts to. `useFilters` is
+ * therefore the real composable throughout this file rather than a stub: it reaches no network, and
+ * what it reads off an entity is part of what is pinned here.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { shallowMount } from '@vue/test-utils';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { mount, shallowMount } from '@vue/test-utils';
 import WikiLayout from './WikiLayout.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import EntitySidebar from './EntitySidebar.vue';
 
-const { entities, loadEntities } = vi.hoisted(() => ({ entities: [], loadEntities: vi.fn() }));
+const { entities, loadEntities, selectEntity } = vi.hoisted(() => ({
+  entities: [], loadEntities: vi.fn(), selectEntity: vi.fn(),
+}));
 vi.mock('../composables/useEntities.js', async () => {
   const { ref } = await import('vue');
   return {
     useEntities: () => ({
       entities: ref(entities), selectedEntity: ref(null), sidebarLoading: ref(false), detailLoading: ref(false),
-      loadEntities, selectEntity: vi.fn(), addEntity: vi.fn(), editEntity: vi.fn(), removeEntity: vi.fn(),
+      loadEntities, selectEntity, addEntity: vi.fn(), editEntity: vi.fn(), removeEntity: vi.fn(),
     }),
   };
 });
-vi.mock('../composables/useFilters.js', async () => {
-  const { ref } = await import('vue');
-  return {
-    useFilters: () => ({
-      searchQuery: ref(''), activeCat: ref(null), activeTag: ref(null), filtered: ref([]),
-      setCat: vi.fn(), setTag: vi.fn(), clearTag: vi.fn(), resetFilters: vi.fn(),
-    }),
-  };
-});
+// useFilters is deliberately NOT mocked: it reaches nothing, and the fields it reads off a listed
+// entity are the point of the list group below.
 vi.mock('../composables/useNavigation.js', async () => {
   const { ref } = await import('vue');
   return {
@@ -134,5 +135,88 @@ describe('WikiLayout settings', () => {
     group.vm.$emit('restored', 'ent-brakeman');
     await wrapper.vm.$nextTick();
     expect(loadEntities.mock.calls.length).toBe(beforeRestore + 1);
+  });
+});
+
+/**
+ * The list over the shape `GET /entities` sends: no `blocks` key at all (KOL-061). Everything but
+ * the list is stubbed, so what mounts for real is the sidebar, its cards and the real useFilters —
+ * the three places that read a listed entity. VirtualList is stubbed to render every item, as in
+ * EntitySidebar.test.js: jsdom has no layout, so the real one would window the list to nothing.
+ */
+const BLOCKLESS = [
+  {
+    _id: 'e1', title: 'Boiler Room', category: 'Worlds', summary: 'Where the pressure comes from.',
+    tags: ['engine'], open_questions: [], relationships: [],
+    createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z',
+  },
+  {
+    _id: 'e2', title: 'Alder Street', category: 'Worlds', summary: 'A stop on the northern line.',
+    tags: ['stations'], open_questions: [], relationships: [],
+    createdAt: '2026-10-03T00:00:00.000Z', updatedAt: '2026-10-04T00:00:00.000Z',
+  },
+];
+
+const VirtualListStub = {
+  props: ['items'],
+  template: '<div><div v-for="(item, index) in items" :key="index"><slot :item="item" :index="index" /></div></div>',
+};
+
+const mountList = () => mount(WikiLayout, {
+  global: {
+    stubs: {
+      VirtualList: VirtualListStub,
+      EntityDetail: true, EntityEditor: true, ChatPanel: true, GraphView: true,
+      GeneratorOverlay: true, ToastNotification: true, AccountDeletion: true,
+      PasskeySettings: true, RecentlyDeleted: true, TagSettings: true,
+    },
+  },
+});
+
+const cards = (wrapper) => wrapper.findAll('.sidebar-card').map((c) => c.get('.card-title').text());
+
+describe('WikiLayout list over entities that carry no blocks', () => {
+  beforeEach(() => {
+    entities.length = 0;
+    entities.push(...BLOCKLESS.map((e) => ({ ...e })));
+    selectEntity.mockClear();
+  });
+
+  it('renders a card per entity, title, category and summary and all', () => {
+    // Premise: the fixtures are the projected shape, not full documents.
+    expect(BLOCKLESS.some((e) => 'blocks' in e)).toBe(false);
+
+    const wrapper = mountList();
+
+    expect(cards(wrapper)).toEqual(['Boiler Room', 'Alder Street']);
+    const first = wrapper.findAll('.sidebar-card')[0];
+    expect(first.get('.card-summary').text()).toBe('Where the pressure comes from.');
+    expect(first.get('.entity-cat').text()).toBe('Worlds');
+  });
+
+  it('searches the list on summary text, with no block content to read', async () => {
+    const wrapper = mountList();
+
+    await wrapper.get('.search-input').setValue('northern');
+
+    expect(cards(wrapper)).toEqual(['Alder Street']);
+  });
+
+  it('filters the list by tag', async () => {
+    const wrapper = mountList();
+
+    wrapper.findComponent(EntitySidebar).vm.$emit('set-tag', 'engine');
+    await wrapper.vm.$nextTick();
+
+    expect(cards(wrapper)).toEqual(['Boiler Room']);
+  });
+
+  it('opening a card asks for the entity by id rather than reading the list row', async () => {
+    // Which is why the list needs no blocks: the detail panel re-reads through GET /entities/:id.
+    const wrapper = mountList();
+
+    await wrapper.findAll('.sidebar-card')[0].trigger('click');
+
+    expect(selectEntity).toHaveBeenCalledWith('e1');
   });
 });
