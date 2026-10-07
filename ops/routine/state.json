@@ -58,7 +58,7 @@
     "KOL-062": {
       "order": 4,
       "title": "An `/events` stream ends when its session does, and one tenant cannot open an unbounded number",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-062",
