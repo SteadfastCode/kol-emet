@@ -235,3 +235,4 @@
 {"event":"review-grade","item":"KOL-049","grader":"claude-opus-5","grades":{"findings":4,"confirmed":0,"falsePositive":4,"duplicate":0,"unverifiable":0,"missed":0,"independent":0,"triageChecked":6,"triageCorrect":6},"localPromptVersion":"v5","localModel":"qwen2.5-coder:14b","mergeSha":"3a2f161cfe0cad9905048aad573c98a4d6f612a1","runId":"2026-10-07T06:08:38.431Z","costUsd":1.4495185,"atUtc":"2026-10-07T06:11:45.951Z"}
 {"event":"claim","runId":"2026-10-07T10:12:59.366Z","item":"KOL-060","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-10-07T10:19:26.003Z"}
 {"event":"complete","runId":"2026-10-07T10:12:59.366Z","item":"KOL-060","mergeSha":"2fc69c86ad49794141b65b1742764443c141800e","durationMin":14,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-10-07T10:33:52.322Z"}
+{"event":"claim","runId":"2026-10-07T10:12:59.366Z","item":"KOL-061","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-10-07T10:35:07.644Z"}

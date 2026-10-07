@@ -56,7 +56,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-061) `GET /entities` stops shipping every entity's block content**
+- [x] **(KOL-061) `GET /entities` stops shipping every entity's block content**
   `GET /entities` (`server/src/routes/entities.js:41`) returns every entity in the workspace as a full hydrated Mongoose
   document, `blocks` and all, and the client asks for it unfiltered on load (`getEntities` in
   `client/src/api/entities.js`, `loadEntities` in `client/src/composables/useEntities.js`). Nothing on the list path uses
