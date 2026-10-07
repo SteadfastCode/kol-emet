@@ -30,9 +30,10 @@
       </div>
 
       <input
+        ref="searchInput"
         :value="searchQuery"
         class="search-input"
-        placeholder="Search entries…"
+        placeholder="Search entries… ( / )"
         @input="$emit('search', $event.target.value)"
       />
 
@@ -84,7 +85,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import VirtualList from './VirtualList.vue';
 import SidebarCard from './SidebarCard.vue';
 import { useEntityTypes } from '../composables/useEntityTypes.js';
@@ -111,6 +112,16 @@ const isFiltered = computed(() =>
 );
 
 defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate']);
+
+// The `/` shortcut lives in the layout (one global key listener for the app),
+// so it needs a way in here. Exposing the move rather than the element keeps
+// the input private, and keeps the layout out of the business of querying for
+// a DOM node it does not own.
+const searchInput = ref(null);
+function focusSearch() {
+  searchInput.value?.focus();
+}
+defineExpose({ focusSearch });
 </script>
 
 <style scoped>

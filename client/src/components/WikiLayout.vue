@@ -3,6 +3,7 @@
     <!-- Full-width list -->
     <div class="list-view">
       <EntitySidebar
+        ref="sidebarRef"
         :entities="filtered"
         :active-cat="activeCat"
         :active-tag="activeTag"
@@ -209,6 +210,7 @@ import { useNavigation } from '../composables/useNavigation.js';
 import { useEvents } from '../composables/useEvents.js';
 import { useToasts } from '../composables/useToasts.js';
 import { useEntityTypes } from '../composables/useEntityTypes.js';
+import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts.js';
 
 const EDITOR_ID = '__new_entity__';
 
@@ -397,6 +399,44 @@ async function onEntityDeleted(id) {
   await removeEntity(id);
   closePanel(id);
 }
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+// The whole set, in one place, each binding a named function. The composable
+// owns the only global keydown listener in the client and decides whose key a
+// press is (a focused text field keeps everything but Escape; ctrl/meta/alt is
+// never ours) — see useKeyboardShortcuts.js.
+
+const sidebarRef = ref(null);
+
+function focusSearch(event) {
+  // Without this the `/` lands in the field it just focused.
+  event.preventDefault();
+  sidebarRef.value?.focusSearch();
+}
+
+/**
+ * Escape walks back out of the layers, one press per layer, topmost first.
+ * The order below is the stacking order: settings and the generator sit over
+ * everything, the graph over the panels, the chat beside them, and the detail
+ * panel is the floor. Nothing open and the press does nothing.
+ */
+function closeTopLayer() {
+  if (settingsVisible.value) { closeSettings(); return; }
+  if (generatorOpen.value)   { generatorOpen.value = false; return; }
+  if (graphOpen.value)       { graphOpen.value = false; return; }
+  if (chatOpen.value)        { onChatClose(); return; }
+  if (activePanelId.value)   { closePanel(activePanelId.value); return; }
+}
+
+function openNewEntity() {
+  openEditor();
+}
+
+useKeyboardShortcuts({
+  '/': focusSearch,
+  Escape: closeTopLayer,
+  n: openNewEntity,
+});
 
 // ─── SSE change summary helpers ───────────────────────────────────────────────
 
