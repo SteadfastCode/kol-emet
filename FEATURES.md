@@ -8,27 +8,6 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [x] **(KOL-053) Workspace-wide tag rename, merge and delete**
-  `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
-  comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
-  way to fix it short of opening every entity — the wishlist's "Bulk tag operations". Build, in `server/src/routes/tags.js`:
-  `PUT /tags/:tag` with body `{ to }` renames the tag on every entity in the caller's workspace, merging when `to` is already
-  present (`$addToSet` then `$pull`, so no entity ends up holding it twice) and answering `{ renamed: <count> }`, 404 when no
-  entity carries the tag, 400 for a blank or non-string `to`, and a no-op 200 for a rename to itself; `DELETE /tags/:tag`
-  removes it everywhere and answers `{ removed: <count> }`. Both take `requireActor` per route, the way the write routes in
-  `server/src/routes/entities.js` do (the mount gives them only `requireAuth` + `resolveWorkspace`), and both write one
-  `logUpdate` per changed entity (`server/src/lib/changeLogger.js`), which makes a bulk rename as reversible as a single edit and
-  broadcasts `entity:updated` so open clients follow. Bound it like KOL-045 bounded the compose import: past 200 affected
-  entities the route answers 413 naming the count rather than writing an unbounded batch of changelog entries. Client: a "Tags"
-  group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) listing the workspace's tags with their
-  entity counts and a rename and remove action each, calling new `renameTag`/`removeTag` in `client/src/api/tags.js`; the counts
-  come from the entities `useEntities` already holds, not a new route. Document both routes in `docs/api.md`. Verify:
-  `server/tests/http/tags.test.js` — a rename moves the tag on two of three entities and leaves the third alone; a merge leaves
-  exactly one copy; a delete removes it; each writes one `ChangeLog` entry per changed entity; a second workspace's
-  identically-named tag is untouched; a blank `to` is 400 and 201 entities is 413; a client test that the group renders the tags
-  with counts and calls the routes; `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: tag
-  colours or descriptions, renaming a tag from the entity editor, a tag index on `Entity` (an Atlas index change), and any
-  change to the existing tag pill row.
 - [ ] **(KOL-047) Bridge error handling, logging and reconnect** [needs-human]
   Filed after the chat side broke: `bridge_poll` returned repeated bare HTTP 400 "missing or invalid
   session ID" while `bridge_send` still worked, then send started failing the same way — the reply
@@ -307,6 +286,27 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-053) Workspace-wide tag rename, merge and delete** (routine 2026-10-06, 00b46e4)
+  `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
+  comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
+  way to fix it short of opening every entity — the wishlist's "Bulk tag operations". Build, in `server/src/routes/tags.js`:
+  `PUT /tags/:tag` with body `{ to }` renames the tag on every entity in the caller's workspace, merging when `to` is already
+  present (`$addToSet` then `$pull`, so no entity ends up holding it twice) and answering `{ renamed: <count> }`, 404 when no
+  entity carries the tag, 400 for a blank or non-string `to`, and a no-op 200 for a rename to itself; `DELETE /tags/:tag`
+  removes it everywhere and answers `{ removed: <count> }`. Both take `requireActor` per route, the way the write routes in
+  `server/src/routes/entities.js` do (the mount gives them only `requireAuth` + `resolveWorkspace`), and both write one
+  `logUpdate` per changed entity (`server/src/lib/changeLogger.js`), which makes a bulk rename as reversible as a single edit and
+  broadcasts `entity:updated` so open clients follow. Bound it like KOL-045 bounded the compose import: past 200 affected
+  entities the route answers 413 naming the count rather than writing an unbounded batch of changelog entries. Client: a "Tags"
+  group in Settings (`client/src/components/WikiLayout.vue`, beside the Passkeys group) listing the workspace's tags with their
+  entity counts and a rename and remove action each, calling new `renameTag`/`removeTag` in `client/src/api/tags.js`; the counts
+  come from the entities `useEntities` already holds, not a new route. Document both routes in `docs/api.md`. Verify:
+  `server/tests/http/tags.test.js` — a rename moves the tag on two of three entities and leaves the third alone; a merge leaves
+  exactly one copy; a delete removes it; each writes one `ChangeLog` entry per changed entity; a second workspace's
+  identically-named tag is untouched; a blank `to` is 400 and 201 entities is 413; a client test that the group renders the tags
+  with counts and calls the routes; `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: tag
+  colours or descriptions, renaming a tag from the entity editor, a tag index on `Entity` (an Atlas index change), and any
+  change to the existing tag pill row.
 - [x] **(KOL-052) A stable WebAuthn user handle, and telling the authenticator when a passkey is removed** (routine 2026-10-06, 6472f25)
   Two halves of one gap. (1) `POST /auth/webauthn/register/begin` (`server/src/routes/auth.js:250`) calls
   `generateRegistrationOptions` without `userID`, and @simplewebauthn 13 then generates a fresh random handle per registration

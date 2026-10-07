@@ -4,7 +4,7 @@
     "KOL-053": {
       "order": 1,
       "title": "Workspace-wide tag rename, merge and delete",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-053",
