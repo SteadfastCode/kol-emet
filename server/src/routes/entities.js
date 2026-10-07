@@ -40,6 +40,28 @@ function stripTenancy(body) {
   return rest;
 }
 
+/**
+ * The fields `GET /entities` sends for a list — `blocks` deliberately absent.
+ *
+ * This is the first request a new workspace makes and the one every reload,
+ * second tab and SSE reconnect repeats, and nothing on the list path reads
+ * block content: the sidebar card shows a title, a category badge and a
+ * summary, `useFilters` searches titles, summaries and tags, and the detail
+ * panel and the editor both re-read the entity through `GET /entities/:id`
+ * (which does its own `.lean()` read). Sending every block of every entity
+ * here put the entire text of the wiki — megabytes for a workspace of a few
+ * hundred real entities — on the one request that decides how long a workspace
+ * takes to open, for nothing that gets rendered.
+ *
+ * `?include=blocks` asks for the old, unprojected shape, so a caller outside
+ * this repo is not cut off by the change.
+ *
+ * `?q=` is unaffected. Its third clause matches `blocks.data.markdown` in the
+ * *query* (lib/searchFilter.js), and a projection changes what comes back, not
+ * what is searched — `tests/http/entityList.test.js` pins that.
+ */
+const LIST_FIELDS = 'title category summary tags open_questions relationships createdAt updatedAt';
+
 // GET /entities
 router.get('/', async (req, res) => {
   try {
@@ -54,9 +76,19 @@ router.get('/', async (req, res) => {
     if (category) filter.category = category;
     if (tag) filter.tags = tag;
     if (q) Object.assign(filter, keywordFilter(q));
-    const entities = await Entity.find(filter)
-      .sort({ title: 1 })
-      .populate(openQuestionsIn(req.workspaceId));
+
+    // `include` is typed through searchTerm for the same reason the filters
+    // above are: an operator object or a repeated parameter must be no opt-in
+    // rather than one the caller never wrote. Comma-separated so a later
+    // projection opt-in joins it instead of adding a second parameter.
+    const include = (searchTerm(req.query.include) ?? '').split(',').map(part => part.trim());
+
+    const query = Entity.find(filter).sort({ title: 1 });
+    if (!include.includes('blocks')) query.select(LIST_FIELDS);
+
+    const entities = await query
+      .populate(openQuestionsIn(req.workspaceId))
+      .lean();
     res.json(entities);
   } catch (err) {
     res.status(500).json({ error: err.message });
