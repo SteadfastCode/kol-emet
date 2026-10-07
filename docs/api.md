@@ -65,7 +65,7 @@ Mount points and their guards:
 | `/entity-types` | `requireAuth` + `resolveWorkspace` | Gates the category names entities and relationship types can hold |
 | `/tags` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
 | `/open-questions` | `requireAuth` + `resolveWorkspace` | |
-| `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...` |
+| `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...`, and `/deleted` |
 | `/chat` | per-route | AI chat (SSE streaming). `GET /providers`: `requireAuth`; `POST /`: `requireAuth` + `resolveWorkspace` |
 | `/conversations` | `requireAuth` + `resolveWorkspace` | Saved AI conversations |
 | `/drafts` | `requireAuth` + `resolveWorkspace` | Generated drafts; `POST /:id/apply` uses `requireActor` |
@@ -163,7 +163,8 @@ different tag and is never touched. `:tag` is a URL path segment — percent-enc
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/entities/:id/history` | Recent changes for an entity (newest first, ≤50, ≤30 days; TTL). An entry whose `snapshot.category` names an entity type the workspace no longer has also carries `snapshotCategoryMissing: true` — see below |
-| POST | `/entities/:id/rollback/:logId` | Restore the entity from a log entry's snapshot (`requireActor`). Body `{ category? }` |
+| POST | `/entities/:id/rollback/:logId` | Restore the entity from a log entry's snapshot (`requireActor`). Body `{ category? }`. **200** with the entity for a live one; **201** when the entry is a `deleted` one and the entity had to be recreated — see below |
+| GET | `/deleted` | The deleted entities this workspace can still put back — see below |
 
 A snapshot records the category name as it was spelled then, and a type rename
 cascades to entities without writing a `ChangeLog` — so a snapshot can name a
@@ -182,6 +183,46 @@ type the workspace no longer has. The rollback checks before it writes:
 so a client can ask for the choice before the click, from one registry read for
 the whole page. The reasoning — in particular why a rename does *not* rewrite
 snapshots — is the KOL-059 Decision Log entry in `kol_emet_spec.md`.
+
+### Restoring a deleted entity
+
+`DELETE /entities/:id` removes the document, and `logDelete` keeps the whole
+thing in the `deleted` entry's snapshot for the `ChangeLog` TTL's 30 days. The
+same rollback route puts it back: on a **`deleted`** entry whose entity is gone
+it *recreates* the document rather than updating one.
+
+- **201** with the entity. It comes back at its original `_id` (so an open
+  question's `entry_ids`, a bookmarked URL and anything else holding that id
+  resolve again) with the snapshot's own fields — title, summary, category,
+  tags, blocks (block `_id`s included) and `open_questions`.
+- **The workspace is the caller's**, never the snapshot's: a snapshot taken
+  before tenancy carries `workspaceId: null`, and restoring that would orphan the
+  entity out of every workspace.
+- **`relationships` comes back empty.** The delete pruned the relationship groups
+  the entity was in, so the ids the snapshot holds name groups that are gone or
+  that no longer list it. Re-deriving those edges is drift detection, not a
+  restore; the UI says so.
+- **409** `{ error, entityId }` when that id is live again — a restore never
+  silently overwrites an entity. Roll that one back from its own history instead.
+- **409 / 400** for a stale snapshot category, exactly as a rollback above, and
+  the same `{ category }` resolves it.
+- `createdAt` is the restore's, not the original's; the original is still in the
+  snapshot. A `created` `ChangeLog` entry is written, attributed to the caller,
+  and `entity:created` is broadcast to the workspace's other tabs.
+- An **`updated`** entry is still **404** when the entity is gone: its snapshot is
+  one version of a live entity, not the delete's record of the whole document. A
+  deleted entity comes back through its own `deleted` entry.
+
+`GET /deleted` is the way back in that outlives the delete toast: this
+workspace's `deleted` entries, newest first, ≤50, as
+`{ _id (the log entry), entityId, entityTitle, category, actorLabel, actorType,
+createdAt }` — no snapshots, so a page of 50 does not carry 50 whole entities.
+An id that is live again is dropped (restoring over it is refused), as is an
+older entry for an id a newer one already covers. A row whose snapshot category
+is gone carries `snapshotCategoryMissing: true`, from one registry read for the
+page. The "Recently deleted" group in Settings
+(`client/src/components/RecentlyDeleted.vue`) is this list plus a Restore per
+row; the reasoning is the KOL-060 Decision Log entry in `kol_emet_spec.md`.
 
 ## Auth
 

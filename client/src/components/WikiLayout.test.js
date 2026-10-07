@@ -1,17 +1,20 @@
 /**
- * Where the Passkeys and Tags groups sit: in Settings, between Account and Delete account, and
- * mounted only while Settings shows, so their lists are fetched fresh on each open and never on
- * page load. What each group itself does is pinned in PasskeySettings.test.js and
- * TagSettings.test.js; what is asserted here is that Tags is handed the entity list the layout
- * already holds (its counts come from there, not from a route) and that a change refetches it. Also that the entity-type registry is
- * loaded once on mount; what the sidebar does with it is pinned in EntitySidebar.test.js. Shallow:
- * every child is a stub, and the composables that would reach the network or open an EventSource
- * are replaced.
+ * Where the Passkeys, Recently deleted and Tags groups sit: in Settings, between Account and Delete
+ * account, and mounted only while Settings shows, so their lists are fetched fresh on each open and
+ * never on page load. What each group itself does is pinned in PasskeySettings.test.js,
+ * RecentlyDeleted.test.js and TagSettings.test.js; what is asserted here is that Tags is handed the
+ * entity list the layout already holds (its counts come from there, not from a route) and that a
+ * change refetches it, and that a restore refetches it too — the restoring tab is excluded from its
+ * own entity:created broadcast, so nothing else would put the entity back in its sidebar. Also that
+ * the entity-type registry is loaded once on mount; what the sidebar does with it is pinned in
+ * EntitySidebar.test.js. Shallow: every child is a stub, and the composables that would reach the
+ * network or open an EventSource are replaced.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { shallowMount } from '@vue/test-utils';
 import WikiLayout from './WikiLayout.vue';
 import PasskeySettings from './PasskeySettings.vue';
+import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import EntitySidebar from './EntitySidebar.vue';
 
@@ -64,11 +67,11 @@ describe('WikiLayout entity types', () => {
 });
 
 describe('WikiLayout settings', () => {
-  it('has Passkeys and Tags groups between Account and Delete account', () => {
+  it('has Passkeys, Recently deleted and Tags groups between Account and Delete account', () => {
     const wrapper = shallowMount(WikiLayout);
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
-    expect(titles).toEqual(['Account', 'Passkeys', 'Tags', 'Delete account']);
+    expect(titles).toEqual(['Account', 'Passkeys', 'Recently deleted', 'Tags', 'Delete account']);
   });
 
   it('mounts the group only while Settings shows: the mobile tab, or the overlay from the sidebar', async () => {
@@ -115,5 +118,21 @@ describe('WikiLayout settings', () => {
     group.vm.$emit('changed');
     await wrapper.vm.$nextTick();
     expect(loadEntities.mock.calls.length).toBe(beforeChange + 1);
+  });
+
+  it('refetches the entity list when the Recently deleted group restores one', async () => {
+    loadEntities.mockClear();
+    const wrapper = shallowMount(WikiLayout);
+    expect(wrapper.findComponent(RecentlyDeleted).exists()).toBe(false);
+
+    await settingsTab(wrapper).trigger('click');
+    const group = wrapper.findComponent(RecentlyDeleted);
+    expect(group.exists()).toBe(true);
+
+    // One call is the mount's own load; the restore has to add another.
+    const beforeRestore = loadEntities.mock.calls.length;
+    group.vm.$emit('restored', 'ent-brakeman');
+    await wrapper.vm.$nextTick();
+    expect(loadEntities.mock.calls.length).toBe(beforeRestore + 1);
   });
 });

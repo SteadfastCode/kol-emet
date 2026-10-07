@@ -118,6 +118,13 @@
           <PasskeySettings v-if="settingsVisible" />
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">Recently deleted</div>
+          <!-- The way back to a deleted entity once its toast is gone (KOL-060): mounted only
+               while settings shows, so the list is fetched fresh on each open. The restored
+               entity arrives in every OTHER tab over SSE; this one refetches the list. -->
+          <RecentlyDeleted v-if="settingsVisible" @restored="onEntityRestored" />
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">Tags</div>
           <!-- Counts come from the entity list already loaded here, not a route of their own;
                a rename or removal touches many entities, so the list is refetched after one. -->
@@ -194,6 +201,7 @@ import GraphView from './GraphView.vue';
 import GeneratorOverlay from './generator/GeneratorOverlay.vue';
 import AccountDeletion from './AccountDeletion.vue';
 import PasskeySettings from './PasskeySettings.vue';
+import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
@@ -272,6 +280,15 @@ function openSettings() {
 function closeSettings() {
   settingsOpen.value = false;
   if (mobileTab.value === 'settings') mobileTab.value = activePanelId.value ? 'detail' : 'list';
+}
+
+/**
+ * A restore recreated an entity at its original id. The restoring tab is
+ * excluded from its own entity:created broadcast (X-SSE-Client-Id), so the
+ * sidebar it is looking at is the one that has to be refetched here.
+ */
+function onEntityRestored() {
+  loadEntities();
 }
 
 function onChatClose() {
