@@ -14,6 +14,7 @@ import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
 import { createAuthLimiter } from '../lib/attemptLimiter.js';
 import { clearSessionCookie } from '../lib/sessionCookie.js';
+import { closeStreamsForSession, closeStreamsForUser } from '../lib/broadcaster.js';
 import {
   credentialConflictQuery,
   credentialDescriptors,
@@ -220,6 +221,11 @@ router.post('/logout', requireAuth, (req, res) => {
   // including the 500 below: a logout the server could not complete should
   // still take the credential out of the browser.
   clearSessionCookie(req, res);
+  // A `GET /events` stream authenticates once and is then held open for hours,
+  // so signing out has to end it here: the broadcaster's keep-alive sweep would
+  // get to it within 30 seconds, and for 30 seconds a browser that has signed
+  // out would still be receiving this workspace's entity documents (KOL-062).
+  closeStreamsForSession(req.sessionID, 'POST /auth/logout');
   req.session.destroy((err) => {
     if (err) return res.status(500).json({ error: 'Session error' });
     res.json({ ok: true });
@@ -762,6 +768,14 @@ router.delete('/account', requireActor, async (req, res) => {
     logDeletion('light', `${DELETE_SOURCE} failed for user ${userId}: ${err.message}`);
     return res.status(500).json({ error: 'Account deletion failed part-way; it is safe to try again' });
   }
+
+  // Every live /events stream this account holds in this process, not only the
+  // one this request came from: the session store cannot be searched by user
+  // (see GET /auth/me above), so a deleted account's other browsers would keep
+  // receiving the workspace's entity documents until their sessions expired.
+  // Those sessions do outlive the account; their push channels need not.
+  const closedStreams = closeStreamsForUser(userId, DELETE_SOURCE);
+  if (closedStreams) logDeletion('light', `${DELETE_SOURCE}: closed ${closedStreams} live /events stream(s) for user ${userId} (source: lib/broadcaster.js)`);
 
   // Before destroy(), which takes req.session.cookie with it. Clearing with the
   // attributes the cookie was set with is what lets the browser match it: a

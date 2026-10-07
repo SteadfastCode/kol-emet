@@ -58,7 +58,7 @@ Mount points and their guards:
 | `/mcp` | self | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
 | `/` (oauth) | none | OAuth discovery/authorize/token for the MCP connector |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
-| `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace |
+| `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
 | `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
 | `/relationship-types` | `requireAuth` + `resolveWorkspace` | |
@@ -447,6 +447,27 @@ record is worse than a failure. The bulk equivalent is
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/events` | Server-Sent Events stream for live multi-client sync. On connect the server emits `client:id`; clients echo it back as the `x-sse-client-id` header on writes so the broadcaster can skip the originating tab. |
+
+A stream is bounded in both lifetime and number (KOL-062), because it is authenticated once and then
+held open while whole entity documents are pushed down it:
+
+- **It ends when its session does.** The connection records the session it was opened by, and the
+  30-second keep-alive sweep closes it once that session is no longer in the session store — expiry,
+  a logout elsewhere, a cleared store. `POST /auth/logout` and `DELETE /auth/account` close their
+  streams immediately rather than leaving up to 30 seconds of pushed content to a browser that has
+  signed out; account deletion closes **every** stream of that account in the process, since the
+  session store cannot be searched by user. A closed stream gets one `event: error` frame with
+  `{"error":"session-ended"}` before the socket ends. Connections authenticated with `BEARER_TOKEN`
+  have no stored session and are never swept for one.
+- **One user may hold at most `EVENTS_MAX_STREAMS_PER_USER` (default 10).** The next connection
+  answers `200` with one `event: error` frame, `{"error":"too-many-streams","limit":10}`, and closes
+  — not a status code, which an `EventSource` reports as an indistinguishable network error. It is
+  refused before any `client:id` is issued, and the streams already open are untouched. The cap is
+  per user; connections on the bearer token share one allowance. Both the cap and the sweep are
+  per API instance (in-process state, as with the auth counters).
+
+Logging is `SSE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`); the light tier names
+the reason every connection ended.
 
 ## OAuth (MCP connector)
 
