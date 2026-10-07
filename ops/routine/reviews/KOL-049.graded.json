@@ -1,0 +1,84 @@
+{
+  "item": "KOL-049",
+  "repo": "kol-emet",
+  "mergeSha": "3a2f161cfe0cad9905048aad573c98a4d6f612a1",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-07T06:08:38.431Z",
+  "gradedAtUtc": "2026-10-07T06:11:45.747Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`chat.js` line 34 of the same diff adds `import { searchTerm, keywordFilter } from '../lib/searchFilter.js'`, and the new `src/lib/searchFilter.js` exports it."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`entities.js` line 8 in the diff imports `searchTerm` and `keywordFilter` from the new `lib/searchFilter.js`."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "`mcp.js` line 16 in the diff imports both helpers from `lib/searchFilter.js`, which the same diff creates."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Escaping is implemented in `keywordFilter` (`new RegExp(escapeRegex(term),'i')`) and is asserted both in the unit test (`'.'` must not match `Iron Gate`, `C++ (v2)` matches literally) and over HTTP (`(a+)+$` returns nothing, `?q=(` returns only the bracketed rows), so `?q=.*` matches a literal `.*` rather than everything."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, or guard code changes; the new HTTP test only uses `/auth/register` as a fixture."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential or secret handling touched — only a test-local session secret and fixture password."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, usage-meter, or cost paths in the diff."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Read-path filter construction only; no deletes, writes, or migrations."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound third-party calls added or altered; the MCP/chat edits are local tool-handler query building."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, dependency, or deploy/config change — only source, tests, and docs."
+    }
+  ],
+  "missed": [],
+  "summary": "All four findings are false positives — three assert a helper is undefined when the same diff imports and defines it, and the fourth denies an escape that the diff implements and tests on both unit and HTTP levels; the review found nothing real in a change I also judged clean.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.4495185,
+  "numTurns": 24,
+  "durationMs": 185030,
+  "sessionId": "efad96af-c579-4872-aea1-150e6560d354"
+}
