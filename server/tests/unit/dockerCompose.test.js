@@ -19,6 +19,8 @@
  *   - hostToService lookup removed             -> DATABASE_URL becomes an External
  *                                                 Dependency "postgres" and the Calls test fails
  *   - existingByKey lookup removed             -> the re-import test fails (all creates)
+ *   - existingGroups ignored                   -> every re-import test below fails: each edge
+ *                                                 is proposed as a second group
  *   - evidenceAt returning the key's column    -> the evidence test fails
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
@@ -215,6 +217,111 @@ describe('re-importing against existing entities', () => {
     assert.equal(worker.op, 'create');
     assert.ok(worker.flags.includes('duplicate_candidate'));
     assert.equal(String(worker.duplicateOf), String(existing[0]._id));
+  });
+});
+
+/**
+ * The workspace a first import leaves behind: an entity per entity item, and a
+ * group per relationship item, with ids as Mongo would have assigned them.
+ *
+ * Built from the parse's own output rather than written out by hand so the
+ * fixture cannot drift from the producer — these ARE the rows the applier
+ * writes for these items.
+ */
+function graphAfter(items, { blocks = true } = {}) {
+  const idByLocal = new Map(entities(items).map(i => [i.localKey, new mongoose.Types.ObjectId()]));
+  const refOf = m => idByLocal.get(m.localKey) ?? m.refId;
+  return {
+    idByLocal,
+    existingEntities: entities(items).map(i => ({
+      _id: idByLocal.get(i.localKey),
+      title: i.proposed.title,
+      updatedAt: new Date('2026-09-01T00:00:00Z'),
+      ...(blocks ? { blocks: i.proposed.blocks } : {}),
+    })),
+    existingGroups: relationships(items).map(i => ({
+      _id: new mongoose.Types.ObjectId(),
+      label: i.proposed.label,
+      members: i.proposed.members.map(m => ({ refId: refOf(m), refModel: 'Entity', label: m.label })),
+    })),
+  };
+}
+
+describe('re-importing against existing relationship groups', () => {
+  const first = parseCompose(FIXTURE).items;
+
+  test('a first import, into a workspace with no groups, proposes every edge as a new link', () => {
+    for (const r of relationships(first)) {
+      assert.equal(r.op, 'create');
+      assert.equal(r.matchedBy, 'none');
+      assert.equal(r.proposed.targetGroupId, null);
+    }
+  });
+
+  test('a second parse proposes an update to the group each edge already has, by id', () => {
+    const { existingEntities, existingGroups, idByLocal } = graphAfter(first);
+    const { items } = parse(FIXTURE, { existingEntities, existingGroups }, 'fixture (entities and groups already imported)');
+
+    // label + the member ids, order-insensitive -> the group holding that edge.
+    const keyOf = (label, refIds) => `${label}|${refIds.map(String).sort().join(',')}`;
+    const groupByEdge = new Map(existingGroups.map(g => [keyOf(g.label, g.members.map(m => m.refId)), String(g._id)]));
+    // The second parse matched its own entity items, so a member's id is the
+    // one its sibling update targets.
+    const second = relationships(items);
+    assert.equal(second.length, relationships(first).length, 'the same edges are found');
+
+    const targetOf = new Map(entities(items).map(i => [i.localKey, String(i.targetEntityId)]));
+    for (const r of second) {
+      const refIds = r.proposed.members.map(m => targetOf.get(m.localKey));
+      assert.equal(r.op, 'update', `${r.proposed.label} ${refIds} should be an update`);
+      assert.equal(r.matchedBy, 'same-members-and-label');
+      assert.equal(
+        r.proposed.targetGroupId,
+        groupByEdge.get(keyOf(r.proposed.label, refIds)),
+        `${r.proposed.label} must target the group that already holds that edge`,
+      );
+    }
+    // Every group was claimed by exactly one proposal, so no two edges collapsed.
+    assert.equal(new Set(second.map(r => r.proposed.targetGroupId)).size, second.length);
+    // Unchanged file, unchanged graph: nothing new is proposed at all.
+    assert.ok(entities(items).every(i => i.op === 'update' && i.proposed.blocks.length === 0));
+    assert.deepEqual(idByLocal.size, entities(first).length);
+  });
+
+  test('a re-imported relationship still passes the validator an edited item must', () => {
+    const { existingEntities, existingGroups } = graphAfter(first);
+    const { items } = parse(FIXTURE, { existingEntities, existingGroups }, 'fixture (re-import, validating)');
+    for (const r of relationships(items)) {
+      const check = relationshipPayloadSchema.safeParse(r.proposed);
+      assert.ok(check.success, `${r.localKey} must pass the edit validator: ${JSON.stringify(check.error?.issues)}`);
+      assert.equal(check.data.targetGroupId, r.proposed.targetGroupId);
+    }
+  });
+
+  test('a group someone has added a third member to is still the match, and keeps its place', () => {
+    const { existingEntities, existingGroups } = graphAfter(first);
+    // A person widened one group by hand. It is still the group that holds
+    // that edge, so the edge must not be proposed a second time.
+    const widened = existingGroups[0];
+    const outsider = { refId: new mongoose.Types.ObjectId(), refModel: 'Entity', label: 'Noted by' };
+    widened.members = [...widened.members, outsider];
+
+    const { items } = parse(FIXTURE, { existingEntities, existingGroups }, 'fixture (one group widened by hand)');
+    const matched = relationships(items).filter(r => r.proposed.targetGroupId === String(widened._id));
+    assert.equal(matched.length, 1, 'exactly one proposal claims the widened group');
+    assert.equal(matched[0].op, 'update');
+    assert.equal(matched[0].proposed.members.length, 2, 'the proposal says nothing about the third member');
+    assert.ok(relationships(items).every(r => r.op === 'update'), 'no edge is proposed twice');
+  });
+
+  test('groups of a label this file never writes are left alone', () => {
+    const { existingEntities, existingGroups } = graphAfter(first);
+    const renamed = existingGroups.map(g => ({ ...g, label: 'Talks to' }));
+    const { items } = parse(FIXTURE, { existingEntities, existingGroups: renamed }, 'fixture (groups under another label)');
+    for (const r of relationships(items)) {
+      assert.equal(r.op, 'create');
+      assert.equal(r.proposed.targetGroupId, null);
+    }
   });
 });
 

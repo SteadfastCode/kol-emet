@@ -58,6 +58,13 @@ export const relationshipPayloadSchema = z.object({
   // Mirrors the <2-member rule the relationship routes already enforce, so an
   // edit cannot produce a group the applier would have to reject.
   members: z.array(memberSchema).min(2),
+  // The group this proposal was recognised as already being — set when the
+  // normalizer or a producer matched one (draftNormalizer.relationshipTarget),
+  // null when it is a new link. It travels WITH the members rather than beside
+  // them so an edit that re-points the members carries, or drops, the target in
+  // the same object; the applier re-scopes it to the workspace before writing,
+  // so an id edited in by hand cannot reach another tenant's group.
+  targetGroupId: z.string().nullable().optional().default(null),
 }).strict();
 
 export const openQuestionPayloadSchema = z.object({

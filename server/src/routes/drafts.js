@@ -12,6 +12,7 @@ import { makePseudonymizer, toJsonl } from '../lib/draftExporter.js';
 import { requireActor } from '../middleware/auth.js';
 import { broadcast } from '../lib/broadcaster.js';
 import Entity from '../models/Entity.js';
+import RelationshipGroup from '../models/RelationshipGroup.js';
 import { getCategories } from '../config/categories.js';
 import {
   parseCompose, pruneKnownBlocks, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
@@ -275,7 +276,7 @@ router.post('/', async (req, res) => {
  * @param {string} spec.route            for log lines and refusals only
  * @param {string} spec.producer         Draft.source.producer
  * @param {string} spec.producerVersion  Draft.source.producerVersion
- * @param {Function} spec.parse          (text, { existingEntities, lineOffset }) => { items, dropReasons, dropped }
+ * @param {Function} spec.parse          (text, { existingEntities, existingGroups, lineOffset }) => { items, dropReasons, dropped }
  * @param {Function} spec.ParseError     the error class `parse` throws for an unreadable file -> 400
  * @param {number} spec.maxChars         character cap on the uploaded text
  * @param {string} spec.defaultTitle     the draft's title when no filename is given
@@ -312,8 +313,13 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
     try {
       const started = Date.now();
       const roster = await Entity.find({ workspaceId: req.workspaceId }).select('_id title updatedAt').lean();
+      // The links the workspace already has, so re-importing an unchanged file
+      // proposes updates to them rather than a second copy of every edge. Only
+      // the label and the members' ids and roles are needed to recognise one.
+      const groups = await RelationshipGroup.find({ workspaceId: req.workspaceId })
+        .select('_id label members.refId members.refModel members.label').lean();
 
-      const { items, dropReasons, dropped } = parse(source, { existingEntities: roster, lineOffset });
+      const { items, dropReasons, dropped } = parse(source, { existingEntities: roster, existingGroups: groups, lineOffset });
 
       // Updates append blocks, so a re-import must see which attributes its
       // targets already carry. Fetched for the matched entities alone rather than
@@ -380,7 +386,10 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
         `draft ${draft._id} created for workspace ${req.workspaceId} (source: POST ${route}, file ${JSON.stringify(draft.title)}, ` +
         `${source.length} chars, ${redactedCount} credential${redactedCount === 1 ? '' : 's'} redacted): ` +
         `${entityItems.length} entities (${entityItems.filter(i => i.op === 'update').length} updates), ` +
-        `${items.length - entityItems.length} relationships, ${dropped} dropped (${dropReasons.length} reasons listed)`);
+        `${items.length - entityItems.length} relationships ` +
+        `(${items.filter(i => i.kind === 'relationship' && i.op === 'update').length} already in the graph, ` +
+        `matched against ${groups.length} existing group${groups.length === 1 ? '' : 's'}), ` +
+        `${dropped} dropped (${dropReasons.length} reasons listed)`);
       for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
       for (const i of items) {
         log('verbose', `draft ${draft._id} ${i.localKey} ${i.kind} ${i.op} ${JSON.stringify(i.proposed.title ?? i.proposed.label)} (line: ${JSON.stringify(i.input.evidence.quote)})`);

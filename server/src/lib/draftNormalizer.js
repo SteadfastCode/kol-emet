@@ -74,6 +74,110 @@ function coerceCategory(raw, categories) {
 }
 
 /**
+ * Recognises a proposed relationship that the workspace already holds.
+ *
+ * Re-importing an unchanged source file is the ordinary case — the one
+ * `source.textHash` exists to recognise — and until this existed every
+ * re-import created a SECOND group for every edge it had found the first time,
+ * so each entity's Relationships section showed the same link twice.
+ *
+ * The match is on the resolved member ids and the label, and deliberately not
+ * on member order or on the member ROLES: those are what a re-import is
+ * allowed to bring up to date. Three rules keep it from merging links that are
+ * not the same link:
+ *
+ *   - a group that HOLDS the proposed members matches, so a group a person has
+ *     since added a third member to is still recognised — the apply then
+ *     leaves that member alone. An exact member set outranks a superset, so a
+ *     3-member group never swallows the 2-member edge sitting beside it;
+ *   - role agreement breaks the remaining ties, so "web calls api" does not
+ *     match the group recording that api calls web;
+ *   - a group is claimed by at most one proposal, so two items of one draft
+ *     cannot collapse into a single group.
+ *
+ * Deciding it here, where the entities are already matched, rather than in the
+ * applier's write, is what lets the review UI say "updates a link you already
+ * have" before anyone clicks Apply.
+ *
+ * @param {object[]} existingGroups  [{ _id, label, members: [{ refId, label }] }]
+ * @returns {(label: string|null, members: object[]) => object|null} the group a
+ *   proposal matched, now claimed; `members` are [{ refId, label }] with every
+ *   refId resolved. Call it once per proposal.
+ */
+export function relationshipGroupMatcher(existingGroups = []) {
+  const candidates = (existingGroups ?? []).map(g => ({
+    group: g,
+    label: labelKey(g.label),
+    // refId -> the role label the group stores for that member.
+    roles: new Map((g.members ?? []).map(m => [String(m.refId), m.label ?? null])),
+    claimed: false,
+  }));
+
+  return function matchGroup(label, members) {
+    const wanted = (members ?? []).map(m => (m.refId == null ? null : String(m.refId)));
+    // The same floor the relationship routes enforce, and a member that
+    // appears twice is an ill-formed proposal rather than a match.
+    if (wanted.length < 2 || wanted.some(id => !id)) return null;
+    if (new Set(wanted).size !== wanted.length) return null;
+
+    const key = labelKey(label);
+    let best = null;
+    let bestRank = null;
+    for (const c of candidates) {
+      if (c.claimed || c.label !== key) continue;
+      if (wanted.some(id => !c.roles.has(id))) continue;
+      const agree = members.filter(m => c.roles.get(String(m.refId)) === (m.label ?? null)).length;
+      const rank = [wanted.length - c.roles.size, agree];   // 0 extra members first, then roles
+      if (!bestRank || outranks(rank, bestRank)) { best = c; bestRank = rank; }
+    }
+    if (!best) return null;
+    best.claimed = true;
+    return best.group;
+  };
+}
+
+/** Lexicographic, highest first. */
+function outranks(a, b) {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return false;
+}
+
+/**
+ * Group labels are compared case- and padding-insensitively, and an absent
+ * label is the empty one. Unlike a member role they are NOT otherwise
+ * normalised — they carry proper nouns ("Elias Marriage") — so "Depends on"
+ * and "depends on" are one label while "Depends on" and "Depended on" are two.
+ */
+const labelKey = label => String(label ?? '').trim().toLowerCase();
+
+/**
+ * The op / targeting fields for one proposed relationship.
+ *
+ * A member resolves here only if it points at an entity that already exists —
+ * directly (`refId`), or through a sibling item in this draft that is itself an
+ * update, whose target id is therefore already known. A member that will only
+ * exist once the draft is applied cannot be matched yet, so the whole proposal
+ * stays a create and `applyRelationship` runs the same check against the ids it
+ * resolves. The check happens once, wherever the ids become known.
+ *
+ * @param {Function} matchGroup       from relationshipGroupMatcher
+ * @param {string|null} label
+ * @param {object[]} members          draft members ({ localKey | refId, label })
+ * @param {Map<string, any>} localToTarget  localKey -> the entity id its item updates
+ */
+export function relationshipTarget(matchGroup, label, members, localToTarget) {
+  const NEW = { op: 'create', targetGroupId: null, matchedBy: 'none' };
+  const resolved = members.map(m => m.refId ?? localToTarget.get(m.localKey) ?? null);
+  if (resolved.some(id => !id)) return NEW;
+
+  const hit = matchGroup(label, members.map((m, i) => ({ refId: resolved[i], label: m.label ?? null })));
+  if (!hit) return NEW;
+  // Stored as a string: `proposed` is the frozen, JSON-shaped payload the edit
+  // validator checks and the exporter carries out, not a mongoose document.
+  return { op: 'update', targetGroupId: String(hit._id), matchedBy: 'same-members-and-label' };
+}
+
+/**
  * Builds a whitespace-collapsed copy of the source plus a map from each
  * collapsed offset back to the original one.
  *
@@ -145,11 +249,12 @@ function locateEvidence(quote, index, chunkIndex = 0) {
 /**
  * @param {object[]} rawEntities      parsed pass-1 output
  * @param {object[]} rawRelationships parsed pass-2 output
- * @param {object}   ctx  { categories, sourceText, existingEntities }
+ * @param {object}   ctx  { categories, sourceText, existingEntities, existingGroups }
  *                        existingEntities: [{_id, title, updatedAt}]
+ *                        existingGroups:   [{_id, label, members: [{refId, label}]}]
  */
 export function normalizeDraft(rawEntities, rawRelationships, ctx) {
-  const { categories, sourceText, existingEntities = [] } = ctx;
+  const { categories, sourceText, existingEntities = [], existingGroups = [] } = ctx;
   const items = [];
   const dropReasons = [];
 
@@ -158,6 +263,8 @@ export function normalizeDraft(rawEntities, rawRelationships, ctx) {
   const seenKeys = new Set();
   const keyToLocal = new Map();   // normalized title -> localKey (this run)
   const nameToLocal = new Map();  // exact emitted name -> localKey
+  const localToTarget = new Map();  // localKey -> the entity id an update item targets
+  const matchGroup = relationshipGroupMatcher(existingGroups);
 
   // ── entities ───────────────────────────────────────────────────────────────
   let e = 0;
@@ -224,6 +331,7 @@ export function normalizeDraft(rawEntities, rawRelationships, ctx) {
 
     keyToLocal.set(key, localKey);
     nameToLocal.set(v.title, localKey);
+    if (targetEntityId) localToTarget.set(localKey, targetEntityId);
 
     items.push({
       localKey,
@@ -291,13 +399,18 @@ export function normalizeDraft(rawEntities, rawRelationships, ctx) {
       continue;
     }
 
+    // Already in the graph? Then this is an update to that group, not a second
+    // copy of it (relationshipTarget, above).
+    const { op, targetGroupId, matchedBy } = relationshipTarget(matchGroup, v.label ?? null, members, localToTarget);
+
     items.push({
       localKey: `r${++r}`,
       seq: items.length,
       kind: 'relationship',
-      op: 'create',
+      op,
       input: { evidence: locateEvidence(v.quote, searchIndex), contextEntityIds: [] },
-      proposed: { label: v.label ?? null, members },
+      proposed: { label: v.label ?? null, members, targetGroupId },
+      matchedBy,
       dependsOn,
       flags,
     });

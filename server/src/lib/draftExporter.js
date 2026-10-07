@@ -244,6 +244,9 @@ function exportPayload(kind, payload, ref) {
         label: m.label ?? null,
         notes: m.notes ?? null,
       })),
+      // The group the proposal was recognised as already being, if any. Carried
+      // so a record saying `op: 'update'` also says what it was targeting.
+      targetGroupId: ref(p.targetGroupId, 'grp'),
     };
   }
 

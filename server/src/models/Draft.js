@@ -79,7 +79,10 @@ const itemSchema = new mongoose.Schema({
   // ── dedup / targeting ────────────────────────────────────────────────────
   targetEntityId: { type: ObjectId, ref: 'Entity', default: null },
   baseUpdatedAt:  { type: Date, default: null },
-  matchedBy:      { type: String, enum: ['exact-normalized-title', 'manual', 'none'], default: 'none' },
+  // 'same-members-and-label' is a relationship item recognised as a group the
+  // workspace already holds; the group's id lives in `proposed.targetGroupId`,
+  // with the members it was matched from.
+  matchedBy:      { type: String, enum: ['exact-normalized-title', 'same-members-and-label', 'manual', 'none'], default: 'none' },
   duplicateOf:    { type: ObjectId, ref: 'Entity', default: null },
   duplicateScore: { type: Number, default: null },
   dependsOn:      [{ type: String }],

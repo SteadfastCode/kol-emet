@@ -17,6 +17,7 @@ import { normalizeDraft } from './draftNormalizer.js';
 import { getCategories } from '../config/categories.js';
 import Entity from '../models/Entity.js';
 import RelationshipType from '../models/RelationshipType.js';
+import RelationshipGroup from '../models/RelationshipGroup.js';
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 function log(level, msg) {
@@ -218,8 +219,12 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
 
   // ── normalize ──────────────────────────────────────────────────────────────
   onStage({ stage: 'normalizing' });
+  // The links the workspace already has: a relationship the model re-describes
+  // becomes an update to the group holding it rather than a second copy.
+  const existingGroups = await RelationshipGroup.find({ workspaceId })
+    .select('_id label members.refId members.refModel members.label').lean();
   const { items, dropReasons } = normalizeDraft(rawEntities, rawRelationships, {
-    categories, sourceText: source, existingEntities,
+    categories, sourceText: source, existingEntities, existingGroups,
   });
   diag.dropReasons = dropReasons;
   diag.generationMs = Date.now() - started;

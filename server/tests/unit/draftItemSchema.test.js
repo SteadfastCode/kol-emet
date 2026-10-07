@@ -79,6 +79,9 @@ after(async () => { await db.disconnect(); });
 /** An existing entity's id as it arrives in an edit body: a string, not an ObjectId. */
 const EXISTING_ID = '65f0000000000000000000aa';
 
+/** An existing relationship group's id, likewise as a string. */
+const GROUP_ID = '65f0000000000000000000bb';
+
 /**
  * The smallest valid payload of each kind. Functions rather than constants so
  * every test gets its own copy and no fixture can carry a mutation into the next.
@@ -120,8 +123,25 @@ describe('validateItemPayload accepts a minimal payload', () => {
           { localKey: 'e1', refId: null, refModel: 'Entity', name: 'Iron Gate', label: null, notes: null },
           { localKey: null, refId: EXISTING_ID, refModel: 'Entity', name: 'The Conductor', label: null, notes: null },
         ],
+        // A proposal nobody matched against an existing group is a new link.
+        targetGroupId: null,
       },
     });
+  });
+
+  test('relationship: the group a re-import recognised travels in the payload', async () => {
+    // A producer that recognised this link as one the workspace already holds
+    // writes the group's id into `proposed`, and an edit round-trips it — so
+    // the strictness above must not reject the key the system itself writes.
+    const payload = { ...minimal.relationship(), targetGroupId: GROUP_ID };
+    const result = await validateItemPayload('relationship', payload, WORKSPACE_ID);
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.value.targetGroupId, GROUP_ID);
+  });
+
+  test('relationship: a targetGroupId that is not a string is rejected', async () => {
+    const error = await rejected('relationship', { ...minimal.relationship(), targetGroupId: { $ne: null } });
+    assert.match(error, /^targetGroupId: /, `the error should point at targetGroupId: ${error}`);
   });
 
   test('open_question: the question alone, with no linked entries', async () => {

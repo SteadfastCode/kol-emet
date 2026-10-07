@@ -7,7 +7,8 @@
  *  1. ORDER. Relationships reference entities by localKey, so entities must
  *     land first and the localKey -> ObjectId map is built as we go.
  *  2. APPEND, NEVER OVERWRITE. An update adds blocks and tags; it does not
- *     replace prose. A human's writing cannot be destroyed by an apply.
+ *     replace prose, and it never removes a relationship member someone added.
+ *     A human's writing cannot be destroyed by an apply.
  *  3. PARTIAL FAILURE IS NORMAL. One bad item must not roll back the rest.
  *     Each item records its own outcome, and the draft ends 'applied' or
  *     'partially_applied' accordingly.
@@ -19,12 +20,22 @@
  * same validation and audit trail as anything typed by hand.
  */
 
+import mongoose from 'mongoose';
+
 import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
+import { relationshipGroupMatcher } from './draftNormalizer.js';
 
-const LEVELS = { off: 0, light: 1, normal: 2 };
+// APPLY_LOG_LEVEL = off | light | normal | verbose (default light)
+//   light   — one line per draft, per item that failed or was blocked, and per
+//             relationship write, naming what that write was matched against
+//             rather than only what it produced
+//   normal  — light (every line this module logs today is light or verbose;
+//             the tier is kept so a new per-item line has somewhere to go)
+//   verbose — light, plus each member label or note an update actually changed
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 function log(level, msg) {
   const active = LEVELS[process.env.APPLY_LOG_LEVEL] ?? LEVELS.light;
   if (active >= LEVELS[level]) console.log(`[draftApplier:${level}] ${msg}`);
@@ -173,19 +184,100 @@ async function applyRelationship(item, ctx) {
     throw e;
   }
 
-  const group = await RelationshipGroup.create({
-    label: p.label ?? null,
-    members,
-    workspaceId: ctx.workspaceId,
-  });
+  // Is this link already in the graph? Re-importing an unchanged source file is
+  // the ordinary case, and a second "Depends on" group per edge would show the
+  // same link twice on every entity involved.
+  //
+  // Normally the answer is already known: the normalizer and the producers
+  // match where they match the entities, which is what lets the review UI say
+  // so before anyone applies. But a member that only resolves HERE — a sibling
+  // entity this same apply has just created — could not be matched back then,
+  // so the same check runs again over the ids now known. One rule, applied
+  // wherever the ids become known.
+  const { group, matchedBy } = await findOrCreateGroup(p, members, ctx);
 
   // Back-reference, scoped so a stray id cannot reach another workspace.
+  // Re-run on an update too: $addToSet is idempotent, and it repairs a
+  // back-reference that went missing.
   await Entity.updateMany(
     { _id: { $in: members.map(m => m.refId) }, workspaceId: ctx.workspaceId },
     { $addToSet: { relationships: group._id } }
   );
 
+  log('light',
+    `item ${item.localKey}: ${matchedBy === 'created' ? 'created' : 'updated'} group ${group._id} ` +
+    `${JSON.stringify(p.label ?? null)} over ${members.length} member(s) ` +
+    `(source: draft ${ctx.draftId} via ${ctx.producer}, matched by ${matchedBy})`);
+
   return { resultId: group._id, changeLogId: null };
+}
+
+/**
+ * The group this proposal is, creating it only if the workspace has none.
+ *
+ * @returns {Promise<{group: Document, matchedBy: string}>} `matchedBy` says
+ *   which of the three paths wrote: 'created', 'proposed-target' (the match the
+ *   draft already recorded) or 'resolved-members' (matched here, on ids that
+ *   only existed once the entities above had landed).
+ */
+async function findOrCreateGroup(p, members, ctx) {
+  let group = null;
+  let matchedBy = 'created';
+
+  // The match the draft recorded, re-scoped to the workspace: the id travels in
+  // a payload a human can edit, so it is never trusted as a bare id. A target
+  // that has since been deleted simply falls through to the search below.
+  const proposedTarget = p.targetGroupId ?? null;
+  if (proposedTarget && !ctx.usedGroups.has(String(proposedTarget))) {
+    if (!mongoose.isValidObjectId(proposedTarget)) throw new Error(`targetGroupId ${JSON.stringify(String(proposedTarget))} is not an id`);
+    group = await RelationshipGroup.findOne({ _id: proposedTarget, workspaceId: ctx.workspaceId });
+    if (group) matchedBy = 'proposed-target';
+  }
+
+  if (!group) {
+    // Only groups that hold every one of these members can match, so the
+    // index on members.refId does the work and the candidate list is small.
+    // Groups this apply has already written are excluded: one just created is
+    // not a group the workspace "already had", and one already updated must
+    // not be claimed by a second item.
+    const candidates = await RelationshipGroup.find({
+      workspaceId: ctx.workspaceId,
+      'members.refId': { $all: members.map(m => m.refId) },
+    }).lean();
+    const hit = relationshipGroupMatcher(candidates.filter(g => !ctx.usedGroups.has(String(g._id))))(p.label ?? null, members);
+    if (hit) {
+      group = await RelationshipGroup.findOne({ _id: hit._id, workspaceId: ctx.workspaceId });
+      if (group) matchedBy = 'resolved-members';
+    }
+  }
+
+  if (group) {
+    // $set on the members this proposal names, and nothing else: the source
+    // file is authoritative about the roles it describes, and silent about
+    // everyone else. A member someone added by hand keeps both its place and
+    // its label, and the group never shrinks.
+    for (const m of members) {
+      const held = group.members.find(x => String(x.refId) === String(m.refId) && x.refModel === m.refModel);
+      if (!held) continue;   // cannot happen under the match rule; a no-op if it ever does
+      for (const field of ['label', 'notes']) {
+        // An absent value says nothing rather than saying "clear it", so a role
+        // a person wrote survives a producer that emits none.
+        if (m[field] == null || held[field] === m[field]) continue;
+        log('verbose', `group ${group._id} member ${m.refId}: ${field} ${JSON.stringify(held[field])} -> ${JSON.stringify(m[field])}`);
+        held[field] = m[field];
+      }
+    }
+    await group.save();
+  } else {
+    group = await RelationshipGroup.create({
+      label: p.label ?? null,
+      members,
+      workspaceId: ctx.workspaceId,
+    });
+  }
+
+  ctx.usedGroups.add(String(group._id));
+  return { group, matchedBy };
 }
 
 async function applyOpenQuestion(item, ctx) {
@@ -241,6 +333,10 @@ export async function applyDraft(draft, { workspaceId, actor }) {
     draftId: draft._id,
     producer: draft.source?.producer ?? 'braindump',
     localKeys,
+    // Every group this apply has created or updated. Two items of one draft
+    // must not land on the same group, and a group created a moment ago is not
+    // one the workspace "already held".
+    usedGroups: new Set(),
   };
 
   let applied = 0, failed = 0, blocked = 0, skipped = 0;
