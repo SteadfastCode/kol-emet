@@ -56,29 +56,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-061) `GET /entities` stops shipping every entity's block content**
-  `GET /entities` (`server/src/routes/entities.js:41`) returns every entity in the workspace as a full hydrated Mongoose
-  document, `blocks` and all, and the client asks for it unfiltered on load (`getEntities` in
-  `client/src/api/entities.js`, `loadEntities` in `client/src/composables/useEntities.js`). Nothing on the list path uses
-  `blocks`: the sidebar card, the virtual list and `useFilters` read `title`, `summary`, `category` and `tags` only, and
-  both the detail panel and the editor work from `GET /entities/:id`, which does its own `.lean()` read. So the single
-  request that decides how long a workspace takes to open carries the entire text of the wiki — megabytes per load, per
-  tab, per reconnect for a workspace of a few hundred real entities, and it is the first request every new tenant makes.
-  Build: the list route selects the fields the list needs (`title`, `category`, `summary`, `tags`, `open_questions`,
-  `relationships`, `createdAt`, `updatedAt`) and reads `.lean()`, matching the single-entity route; `?include=blocks`
-  returns the old shape, so a caller outside this repo is not cut off. The `?q=` filter is untouched: it matches
-  `blocks.data.markdown` in the *query*, which needs no projection. Measure the win in the test rather than asserting it
-  in a comment — one case compares the serialized length of the projected response against the `?include=blocks` one for
-  a fixture entity with a large markdown block. Document the parameter in the `GET /entities` row of `docs/api.md`.
-  Verify: a new `server/tests/http/entityList.test.js` — the default response carries no `blocks` key and keeps every
-  field the client reads, `?include=blocks` carries them, `?q=` still finds an entity by a word that appears only inside a
-  block, and a second workspace's entities stay absent; `client/src/components/WikiLayout.test.js` renders a list whose
-  entities have no `blocks` without error; `cd server && yarn test` and `cd client && yarn test && yarn build` green.
-  Out of scope: pagination and a total count on `GET /entities` (KOL-049 put it out of scope; it turns the response from
-  an array into an envelope and deserves its own item), making the client's search box ask the server — a real gap worth
-  filing separately, since `useFilters` searches titles, summaries and tags in the browser while the server's `?q=` reads
-  block markdown, so block text is not searchable in the UI at all — and the full-text index the wishlist wants (an Atlas
-  index change).
 
 - [ ] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number**
   `GET /events` (`server/src/routes/events.js`) authenticates once with `requireAuth` and then holds the response open
@@ -172,6 +149,29 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-061) `GET /entities` stops shipping every entity's block content** (routine 2026-10-07, 38f84c8)
+  `GET /entities` (`server/src/routes/entities.js:41`) returns every entity in the workspace as a full hydrated Mongoose
+  document, `blocks` and all, and the client asks for it unfiltered on load (`getEntities` in
+  `client/src/api/entities.js`, `loadEntities` in `client/src/composables/useEntities.js`). Nothing on the list path uses
+  `blocks`: the sidebar card, the virtual list and `useFilters` read `title`, `summary`, `category` and `tags` only, and
+  both the detail panel and the editor work from `GET /entities/:id`, which does its own `.lean()` read. So the single
+  request that decides how long a workspace takes to open carries the entire text of the wiki — megabytes per load, per
+  tab, per reconnect for a workspace of a few hundred real entities, and it is the first request every new tenant makes.
+  Build: the list route selects the fields the list needs (`title`, `category`, `summary`, `tags`, `open_questions`,
+  `relationships`, `createdAt`, `updatedAt`) and reads `.lean()`, matching the single-entity route; `?include=blocks`
+  returns the old shape, so a caller outside this repo is not cut off. The `?q=` filter is untouched: it matches
+  `blocks.data.markdown` in the *query*, which needs no projection. Measure the win in the test rather than asserting it
+  in a comment — one case compares the serialized length of the projected response against the `?include=blocks` one for
+  a fixture entity with a large markdown block. Document the parameter in the `GET /entities` row of `docs/api.md`.
+  Verify: a new `server/tests/http/entityList.test.js` — the default response carries no `blocks` key and keeps every
+  field the client reads, `?include=blocks` carries them, `?q=` still finds an entity by a word that appears only inside a
+  block, and a second workspace's entities stay absent; `client/src/components/WikiLayout.test.js` renders a list whose
+  entities have no `blocks` without error; `cd server && yarn test` and `cd client && yarn test && yarn build` green.
+  Out of scope: pagination and a total count on `GET /entities` (KOL-049 put it out of scope; it turns the response from
+  an array into an envelope and deserves its own item), making the client's search box ask the server — a real gap worth
+  filing separately, since `useFilters` searches titles, summaries and tags in the browser while the server's `?q=` reads
+  block markdown, so block text is not searchable in the UI at all — and the full-text index the wishlist wants (an Atlas
+  index change).
 - [x] **(KOL-060) Restore a deleted entity from its snapshot** (routine 2026-10-07, 2fc69c8)
   A delete is final today. `DELETE /entities/:id` (`server/src/routes/entities.js:139`) removes the document, `logDelete`
   (`server/src/lib/changeLogger.js:92`) keeps the whole snapshot for the `ChangeLog` TTL's 30 days, and the delete

@@ -58,7 +58,7 @@
     "KOL-061": {
       "order": 4,
       "title": "`GET /entities` stops shipping every entity's block content",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-061",
