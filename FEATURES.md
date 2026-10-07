@@ -53,49 +53,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client**
-  Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
-  with `sameSite: 'none'` (`server/src/lib/sessionCookie.js:114`) because the client and the API sit on sibling subdomains
-  — so a browser sends it on cross-site requests. CORS is not the gate it looks like: `server/src/app.js:69` mounts
-  `express.urlencoded({ extended: false })` globally, and a form-encoded POST is a *simple* request, sent with no preflight;
-  only the response is blocked, never the write. An attacker's page therefore reaches every cookie-authenticated POST with
-  the victim's session: `POST /entities` (`server/src/routes/entities.js:89`) creates content from
-  `title=&category=&summary=`, `POST /drafts` (`server/src/routes/drafts.js:104`) spends the victim's AI allowance from
-  `text=`, `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) and `POST /auth/logout`
-  (`server/src/routes/auth.js:191`) need no body at all, and `POST /authorize` (`server/src/routes/oauth.js:91`) re-points
-  `Settings.mcpUserId` at whoever is signed in. PUT and DELETE are preflighted and so already refused. Build
-  `server/src/middleware/originGuard.js`: for every unsafe method (POST, PUT, PATCH, DELETE) arriving as a *session*
-  caller, require `Origin` to equal `CLIENT_ORIGIN` or the request's own origin — the two OAuth approval pages post to
-  `/authorize` and `/bridge/authorize` from pages this API served — falling back to `Referer`'s origin when `Origin` is
-  absent, and refuse anything else with 403 `{ error: 'CROSS_ORIGIN_REQUEST' }`. A `Bearer` caller is exempt: MCP sends
-  no cookie, so no browser can ride it. Mount it in `createApp` directly after the session middleware and ahead of every
-  router, so a route added later cannot land outside it. Second layer, because the Origin check is one header:
-  move `express.urlencoded` off the app and onto the *four* form-encoded routes that need it — `POST /authorize` and
-  `POST /oauth/token` (`server/src/routes/oauth.js:91,125`) and the Steadfast bridge's own issuer,
-  `POST /bridge/authorize` and `POST /bridge/oauth/token` (`server/src/routes/bridge.js:135,153`) — so a cross-site
-  simple POST cannot form a body any other route will parse. Four and not two: the bridge runs a second
-  authorization-code + PKCE flow for its own connector over the same form encoding, and with `express.json()` left
-  global an unparsed form POST arrives as `req.body = {}` rather than a throw, so the two bridge endpoints answer 400
-  `missing required parameters` and 400 `unsupported_grant_type` — both measured against this tree — and the bridge
-  connector's code exchange dies quietly. Mount the parser inside each router next to its own routes rather than in
-  `createApp`, so the bridge stays self-contained (its header, and docs/architecture.md). Log at light when
-  `CLIENT_ORIGIN` is unset in production, the way `sessionCookie.js` logs a missing cookie domain — `cors()` then
-  answers `Access-Control-Allow-Origin: *`, which no browser will use with credentials. Tiered logging
-  `ORIGIN_GUARD_LOG_LEVEL = off | light | normal | verbose` (default light): light names every refusal with the method,
-  the path, which header it read and the allowlist it compared against, because a 403 nobody can explain is this
-  change's failure mode. Document the variable in `server/.env.example`, the 403 in `docs/api.md`, and add the Decision
-  Log line in `kol_emet_spec.md`. Verify: `server/tests/unit/originGuard.test.js` — a matching origin, a foreign origin,
-  a missing `Origin` with a matching `Referer`, neither header, a safe method, and a bearer caller;
-  `server/tests/http/originGuard.test.js` — `POST /entities` with a valid session and `Origin: https://evil.test` is 403
-  and creates no entity, the same POST with the configured origin is 201, a form-encoded `POST /entities` is not parsed
-  into a write, and `POST /oauth/token` still accepts its form body; `server/tests/http/bridge.test.js` — the two
-  existing token-issuance tests drive both bridge endpoints with `.type('form')` and stay green, which is what catches a
-  parser left behind. And give the suite an origin as part of this item: no test under `server/tests/http` sends an
-  `Origin` and none sets `CLIENT_ORIGIN`, so every session-cookie POST in it is a 403 the moment the guard mounts — set
-  `CLIENT_ORIGIN` in each http test's env block and send a matching `Origin` (or a helper that does both) rather than
-  meeting the mass failure mid-run. `cd server && yarn test` green. Out of scope: a double-submit or synchronizer CSRF
-  token (the Origin check is the whole fix while every client is a browser on one known origin), `sameSite: 'lax'` (it
-  would break the cross-subdomain deployment), the `cors()` wildcard behaviour itself, and rate limiting.
 
 - [ ] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500**
   `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) replays `log.snapshot` through
@@ -265,6 +222,49 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client** (routine 2026-10-06, a2c1f66)
+  Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
+  with `sameSite: 'none'` (`server/src/lib/sessionCookie.js:114`) because the client and the API sit on sibling subdomains
+  — so a browser sends it on cross-site requests. CORS is not the gate it looks like: `server/src/app.js:69` mounts
+  `express.urlencoded({ extended: false })` globally, and a form-encoded POST is a *simple* request, sent with no preflight;
+  only the response is blocked, never the write. An attacker's page therefore reaches every cookie-authenticated POST with
+  the victim's session: `POST /entities` (`server/src/routes/entities.js:89`) creates content from
+  `title=&category=&summary=`, `POST /drafts` (`server/src/routes/drafts.js:104`) spends the victim's AI allowance from
+  `text=`, `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) and `POST /auth/logout`
+  (`server/src/routes/auth.js:191`) need no body at all, and `POST /authorize` (`server/src/routes/oauth.js:91`) re-points
+  `Settings.mcpUserId` at whoever is signed in. PUT and DELETE are preflighted and so already refused. Build
+  `server/src/middleware/originGuard.js`: for every unsafe method (POST, PUT, PATCH, DELETE) arriving as a *session*
+  caller, require `Origin` to equal `CLIENT_ORIGIN` or the request's own origin — the two OAuth approval pages post to
+  `/authorize` and `/bridge/authorize` from pages this API served — falling back to `Referer`'s origin when `Origin` is
+  absent, and refuse anything else with 403 `{ error: 'CROSS_ORIGIN_REQUEST' }`. A `Bearer` caller is exempt: MCP sends
+  no cookie, so no browser can ride it. Mount it in `createApp` directly after the session middleware and ahead of every
+  router, so a route added later cannot land outside it. Second layer, because the Origin check is one header:
+  move `express.urlencoded` off the app and onto the *four* form-encoded routes that need it — `POST /authorize` and
+  `POST /oauth/token` (`server/src/routes/oauth.js:91,125`) and the Steadfast bridge's own issuer,
+  `POST /bridge/authorize` and `POST /bridge/oauth/token` (`server/src/routes/bridge.js:135,153`) — so a cross-site
+  simple POST cannot form a body any other route will parse. Four and not two: the bridge runs a second
+  authorization-code + PKCE flow for its own connector over the same form encoding, and with `express.json()` left
+  global an unparsed form POST arrives as `req.body = {}` rather than a throw, so the two bridge endpoints answer 400
+  `missing required parameters` and 400 `unsupported_grant_type` — both measured against this tree — and the bridge
+  connector's code exchange dies quietly. Mount the parser inside each router next to its own routes rather than in
+  `createApp`, so the bridge stays self-contained (its header, and docs/architecture.md). Log at light when
+  `CLIENT_ORIGIN` is unset in production, the way `sessionCookie.js` logs a missing cookie domain — `cors()` then
+  answers `Access-Control-Allow-Origin: *`, which no browser will use with credentials. Tiered logging
+  `ORIGIN_GUARD_LOG_LEVEL = off | light | normal | verbose` (default light): light names every refusal with the method,
+  the path, which header it read and the allowlist it compared against, because a 403 nobody can explain is this
+  change's failure mode. Document the variable in `server/.env.example`, the 403 in `docs/api.md`, and add the Decision
+  Log line in `kol_emet_spec.md`. Verify: `server/tests/unit/originGuard.test.js` — a matching origin, a foreign origin,
+  a missing `Origin` with a matching `Referer`, neither header, a safe method, and a bearer caller;
+  `server/tests/http/originGuard.test.js` — `POST /entities` with a valid session and `Origin: https://evil.test` is 403
+  and creates no entity, the same POST with the configured origin is 201, a form-encoded `POST /entities` is not parsed
+  into a write, and `POST /oauth/token` still accepts its form body; `server/tests/http/bridge.test.js` — the two
+  existing token-issuance tests drive both bridge endpoints with `.type('form')` and stay green, which is what catches a
+  parser left behind. And give the suite an origin as part of this item: no test under `server/tests/http` sends an
+  `Origin` and none sets `CLIENT_ORIGIN`, so every session-cookie POST in it is a 403 the moment the guard mounts — set
+  `CLIENT_ORIGIN` in each http test's env block and send a matching `Origin` (or a helper that does both) rather than
+  meeting the mass failure mid-run. `cd server && yarn test` green. Out of scope: a double-submit or synchronizer CSRF
+  token (the Origin check is the whole fix while every client is a browser on one known origin), `sameSite: 'lax'` (it
+  would break the cross-subdomain deployment), the `cors()` wildcard behaviour itself, and rate limiting.
 - [x] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one** (routine 2026-10-06, ab01575)
   `applyRelationship` (`server/src/lib/draftApplier.js:176`) always does `RelationshipGroup.create(...)`. Nothing looks for a
   group that already holds those members under that label, so re-importing an unchanged docker-compose file — the ordinary case,

@@ -58,7 +58,7 @@
     "KOL-058": {
       "order": 4,
       "title": "Refuse a cookie-authenticated write whose Origin is not this deployment's client",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-058",
