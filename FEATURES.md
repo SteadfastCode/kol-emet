@@ -53,7 +53,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client**
+- [x] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client**
   Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
   with `sameSite: 'none'` (`server/src/lib/sessionCookie.js:114`) because the client and the API sit on sibling subdomains
   — so a browser sends it on cross-site requests. CORS is not the gate it looks like: `server/src/app.js:69` mounts
