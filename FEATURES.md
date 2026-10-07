@@ -58,40 +58,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer**
-  Most keys are bound inside individual inputs — `EntityEditor.vue`'s tag combobox, `ChatPanel.vue`'s composer, and
-  `GeneratorOverlay.vue`'s root `@keydown.esc`, which fires only while focus is inside the overlay (so at the braindump
-  stage, which autofocuses its textarea, but not once that unmounts). One global listener already exists:
-  `client/src/components/GraphView.vue:323` registers `window.addEventListener('keydown', onKey)` inside `initGraph`,
-  closing the graph on Escape, stashed on `containerRef.value._keyListener` at :325 and removed in `onBeforeUnmount` at
-  :417-419. (An earlier draft of this item said nothing was global, on a `grep -rn window.addEventListener client/src`
-  that found nothing: GraphView.vue carried a literal NUL byte, so grep took the whole file for binary and never showed
-  its matches. KOL-065 wrote that byte as `\u0000` instead, and the grep is honest again.) So the gap is narrower than
-  "nothing is global": the search box is reachable only with the mouse, and Escape does nothing for the detail panel, the
-  chat panel or the Settings overlay, each of which has a ✕ button and nothing else
-  (`client/src/components/WikiLayout.vue`) — while the graph already closes on it. The wishlist asks for exactly this, and
-  it is the cheapest item on it. Build `client/src/composables/useKeyboardShortcuts.js`: one `keydown` listener added
-  `onMounted` and removed `onUnmounted`, taking a map of key → named handler, with a single rule deciding whose key it is
-  — a target that is an `input`, `textarea`, `select` or `[contenteditable]` keeps every key except Escape, and a key held
-  with `ctrl`, `meta` or `alt` is never ours. `WikiLayout.vue` registers three: `/` focuses the sidebar search input,
-  through a ref the sidebar exposes with `defineExpose` rather than a DOM query, and prevents the character being typed;
-  `Escape` closes the topmost layer in one stated order — Settings (`closeSettings`), generator, graph, chat
-  (`onChatClose`), then the detail panel — so repeated presses walk back out; `n` opens the new-entity editor. Exactly one
-  global listener may own Escape, so GraphView's `onKey`, its `_keyListener` stash and its removal go and the layout's
-  chain sets `graphOpen = false` instead; leave both in place and a single press with the graph and the chat open closes
-  both layers at once, the opposite of walking back out. GraphView keeps emitting `close`, which its ✕ still does.
-  `GeneratorOverlay.vue`'s `@keydown.esc` stays — it is scoped to the overlay's own subtree rather than global, and it
-  closes the same layer the chain closes first, so a double call is a no-op. Each binding is a named function, not an
-  inline arrow, so the whole shortcut set reads in one place and each is testable. Verify:
-  `client/src/components/WikiLayout.test.js` — `/` on the document focuses the search input and types no `/`; `/` while
-  the search input already has focus types a `/`; `Escape` with the graph, the chat and the panel all open closes the
-  graph first, the chat on the second press and the panel on the third; `n` opens the editor; a shortcut with `ctrl`
-  held does nothing; `Escape` inside a textarea still reaches the handler; and no handler fires after unmount. That test
-  shallow-mounts, so GraphView is a stub and the listener deleted from it cannot regress there: pair it with
-  `grep -rn "window.addEventListener" client/src`, which must name the composable and nothing else.
-  `cd client && yarn test && yarn build` green; no server change. Out of scope: a `?` cheatsheet overlay,
-  user-configurable bindings, shortcuts inside the draft review UI, and anything that moves focus while the chat composer
-  has it.
 
 ## Proposed
 
@@ -127,6 +93,40 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer** (routine 2026-10-07, 2bc1c8a)
+  Most keys are bound inside individual inputs — `EntityEditor.vue`'s tag combobox, `ChatPanel.vue`'s composer, and
+  `GeneratorOverlay.vue`'s root `@keydown.esc`, which fires only while focus is inside the overlay (so at the braindump
+  stage, which autofocuses its textarea, but not once that unmounts). One global listener already exists:
+  `client/src/components/GraphView.vue:323` registers `window.addEventListener('keydown', onKey)` inside `initGraph`,
+  closing the graph on Escape, stashed on `containerRef.value._keyListener` at :325 and removed in `onBeforeUnmount` at
+  :417-419. (An earlier draft of this item said nothing was global, on a `grep -rn window.addEventListener client/src`
+  that found nothing: GraphView.vue carried a literal NUL byte, so grep took the whole file for binary and never showed
+  its matches. KOL-065 wrote that byte as `\u0000` instead, and the grep is honest again.) So the gap is narrower than
+  "nothing is global": the search box is reachable only with the mouse, and Escape does nothing for the detail panel, the
+  chat panel or the Settings overlay, each of which has a ✕ button and nothing else
+  (`client/src/components/WikiLayout.vue`) — while the graph already closes on it. The wishlist asks for exactly this, and
+  it is the cheapest item on it. Build `client/src/composables/useKeyboardShortcuts.js`: one `keydown` listener added
+  `onMounted` and removed `onUnmounted`, taking a map of key → named handler, with a single rule deciding whose key it is
+  — a target that is an `input`, `textarea`, `select` or `[contenteditable]` keeps every key except Escape, and a key held
+  with `ctrl`, `meta` or `alt` is never ours. `WikiLayout.vue` registers three: `/` focuses the sidebar search input,
+  through a ref the sidebar exposes with `defineExpose` rather than a DOM query, and prevents the character being typed;
+  `Escape` closes the topmost layer in one stated order — Settings (`closeSettings`), generator, graph, chat
+  (`onChatClose`), then the detail panel — so repeated presses walk back out; `n` opens the new-entity editor. Exactly one
+  global listener may own Escape, so GraphView's `onKey`, its `_keyListener` stash and its removal go and the layout's
+  chain sets `graphOpen = false` instead; leave both in place and a single press with the graph and the chat open closes
+  both layers at once, the opposite of walking back out. GraphView keeps emitting `close`, which its ✕ still does.
+  `GeneratorOverlay.vue`'s `@keydown.esc` stays — it is scoped to the overlay's own subtree rather than global, and it
+  closes the same layer the chain closes first, so a double call is a no-op. Each binding is a named function, not an
+  inline arrow, so the whole shortcut set reads in one place and each is testable. Verify:
+  `client/src/components/WikiLayout.test.js` — `/` on the document focuses the search input and types no `/`; `/` while
+  the search input already has focus types a `/`; `Escape` with the graph, the chat and the panel all open closes the
+  graph first, the chat on the second press and the panel on the third; `n` opens the editor; a shortcut with `ctrl`
+  held does nothing; `Escape` inside a textarea still reaches the handler; and no handler fires after unmount. That test
+  shallow-mounts, so GraphView is a stub and the listener deleted from it cannot regress there: pair it with
+  `grep -rn "window.addEventListener" client/src`, which must name the composable and nothing else.
+  `cd client && yarn test && yarn build` green; no server change. Out of scope: a `?` cheatsheet overlay,
+  user-configurable bindings, shortcuts inside the draft review UI, and anything that moves focus while the chat composer
+  has it.
 - [x] **(KOL-062) An `/events` stream ends when its session does, and one tenant cannot open an unbounded number** (routine 2026-10-07, 8e6698c)
   `GET /events` (`server/src/routes/events.js`) authenticates once with `requireAuth` and then holds the response open
   forever; `addClient` (`server/src/lib/broadcaster.js:20`) stores only `{ res, workspaceId }`. Two consequences for a

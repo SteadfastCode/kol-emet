@@ -58,7 +58,7 @@
     "KOL-063": {
       "order": 4,
       "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-063",
