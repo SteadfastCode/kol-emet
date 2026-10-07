@@ -58,7 +58,7 @@
     "KOL-060": {
       "order": 4,
       "title": "Restore a deleted entity from its snapshot",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-060",
