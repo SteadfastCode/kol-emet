@@ -55,42 +55,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-062": {
+    "KOL-063": {
       "order": 4,
-      "title": "An `/events` stream ends when its session does, and one tenant cannot open an unbounded number",
-      "status": "done",
+      "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-062",
+      "branch": "routine/item/KOL-063",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-07T10:47:16.233Z",
+      "claimedAtUtc": "2026-10-07T11:02:46.278Z",
       "runId": "2026-10-07T10:12:59.366Z",
       "lastFail": null
     },
-    "KOL-063": {
-      "order": 5,
-      "title": "Keyboard shortcuts: `/` to search, Escape to close the topmost layer",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-013": {
-      "order": 6,
+      "order": 5,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 8,
+      "order": 7,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +130,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 9,
+      "order": 8,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 10,
+      "order": 9,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +164,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 11,
+      "order": 10,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -195,6 +178,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-062": {
+      "order": null,
+      "title": "An `/events` stream ends when its session does, and one tenant cannot open an unbounded number",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-062",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-07T10:47:16.233Z",
+      "runId": "2026-10-07T10:12:59.366Z",
       "lastFail": null
     },
     "KOL-061": {

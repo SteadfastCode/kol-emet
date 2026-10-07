@@ -58,7 +58,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer**
+- [x] **(KOL-063) Keyboard shortcuts: `/` to search, Escape to close the topmost layer**
   Most keys are bound inside individual inputs — `EntityEditor.vue`'s tag combobox, `ChatPanel.vue`'s composer, and
   `GeneratorOverlay.vue`'s root `@keydown.esc`, which fires only while focus is inside the overlay (so at the braindump
   stage, which autofocuses its textarea, but not once that unmounts). One global listener already exists:
