@@ -117,6 +117,12 @@
           <!-- Mounted only while settings shows: fetched fresh on each open, never on page load. -->
           <PasskeySettings v-if="settingsVisible" />
         </div>
+        <div class="settings-group">
+          <div class="settings-group-title">Tags</div>
+          <!-- Counts come from the entity list already loaded here, not a route of their own;
+               a rename or removal touches many entities, so the list is refetched after one. -->
+          <TagSettings v-if="settingsVisible" :entities="entities" @changed="loadEntities" />
+        </div>
         <!-- Last on purpose: the irreversible action sits at the bottom of settings. -->
         <div class="settings-group">
           <div class="settings-group-title">Delete account</div>
@@ -188,6 +194,7 @@ import GraphView from './GraphView.vue';
 import GeneratorOverlay from './generator/GeneratorOverlay.vue';
 import AccountDeletion from './AccountDeletion.vue';
 import PasskeySettings from './PasskeySettings.vue';
+import TagSettings from './TagSettings.vue';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
