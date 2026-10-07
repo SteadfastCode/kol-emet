@@ -53,3 +53,25 @@ export const rollbackEntity = (id, logId, { category } = {}) =>
     method: 'POST',
     body: JSON.stringify(category ? { category } : {}),
   });
+
+/**
+ * The deleted entities this workspace can still put back (KOL-060) — newest
+ * first, ≤50, and only for as long as their snapshots live (the ChangeLog TTL's
+ * 30 days). Each is `{ _id (the log entry), entityId, entityTitle, category,
+ * actorLabel, actorType, createdAt }`, plus `snapshotCategoryMissing` when the
+ * type it was saved under is gone, as on a history entry. An id that is live
+ * again is not listed: restoring over it is refused.
+ */
+export const getDeletedEntities = () => req('/deleted');
+
+/**
+ * Puts a deleted entity back from its `deleted` log entry: the same route a
+ * rollback uses, which recreates the document at `entityId` when nothing is
+ * live there. 409 when that id is live again, or when the snapshot's entity
+ * type is gone and no `category` was named — `body.availableCategories` holds
+ * the ones to choose from, exactly as for a rollback.
+ *
+ * Its relationships are NOT rebuilt: the delete pruned the groups it was in.
+ */
+export const restoreEntity = (entityId, logId, { category } = {}) =>
+  rollbackEntity(entityId, logId, { category });
