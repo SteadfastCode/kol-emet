@@ -18,13 +18,18 @@
  * workspace delete its last type, so an emptied registry cannot reopen that
  * fallback.
  *
+ * `registeredCategories` is the same read without a name to check, for a
+ * caller that needs the whole list — the history route marks a page of change
+ * log entries against one read of it, and the rollback route puts it in a 409
+ * so the caller can see what is left to choose from.
+ *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * ENTITY_TYPE_LOG_LEVEL = off | light | normal | verbose (default light)
  *   off     — nothing
- *   light   — a write checked by the pre-registry fallback, and a write
+ *   light   — a read served by the pre-registry fallback, and a write
  *             refused for want of a workspace to check against
  *   normal  — light, plus every name refused because the workspace lacks it
- *   verbose — normal, plus every name accepted
+ *   verbose — normal, plus every name accepted, and every whole-list read
  */
 
 import EntityType from '../models/EntityType.js';
@@ -39,20 +44,32 @@ function log(level, msg) {
 }
 
 /**
+ * Every category name `workspaceId` accepts, in registry order — or the
+ * built-in `CATEGORIES` when the workspace has no types at all, which is the
+ * pre-registry fallback described above. One read; `source` says who asked.
+ *
+ * Callers that check many names (a page of change log entries) take this once
+ * rather than calling `isRegisteredCategory` per name.
+ */
+export async function registeredCategories(workspaceId, source) {
+  const names = (await EntityType.find({ workspaceId }).sort({ order: 1, name: 1 }).select('name').lean()).map(t => t.name);
+
+  if (!names.length) {
+    log('light', `workspace ${workspaceId} has no entity types, so the built-in categories stand in (source: ${source}; backfill with scripts/seed-entity-types.js)`);
+    return CATEGORIES;
+  }
+
+  log('verbose', `workspace ${workspaceId} accepts ${names.length} name(s): ${names.join(', ')} (source: ${source})`);
+  return names;
+}
+
+/**
  * Whether `name` names an entity type in `workspaceId`'s registry — exactly,
  * since that is how `Entity.category` stores it. `source` says who is asking,
  * for the log.
  */
 export async function isRegisteredCategory(workspaceId, name, source) {
-  const names = (await EntityType.find({ workspaceId }).select('name').lean()).map(t => t.name);
-
-  if (!names.length) {
-    const ok = CATEGORIES.includes(name);
-    log('light', `workspace ${workspaceId} has no entity types, so "${name}" was checked against the built-in categories: ${ok ? 'accepted' : 'refused'} (source: ${source}; backfill with scripts/seed-entity-types.js)`);
-    return ok;
-  }
-
-  const ok = names.includes(name);
+  const ok = (await registeredCategories(workspaceId, source)).includes(name);
   log(ok ? 'verbose' : 'normal', `"${name}" ${ok ? 'accepted' : 'refused — not a type'} in workspace ${workspaceId} (source: ${source})`);
   return ok;
 }

@@ -162,8 +162,26 @@ different tag and is never touched. `:tag` is a URL path segment — percent-enc
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/entities/:id/history` | Recent changes for an entity (≤30 days; TTL) |
-| POST | `/entities/:id/rollback/:logId` | Restore the entity from a log entry's snapshot (`requireActor`) |
+| GET | `/entities/:id/history` | Recent changes for an entity (newest first, ≤50, ≤30 days; TTL). An entry whose `snapshot.category` names an entity type the workspace no longer has also carries `snapshotCategoryMissing: true` — see below |
+| POST | `/entities/:id/rollback/:logId` | Restore the entity from a log entry's snapshot (`requireActor`). Body `{ category? }` |
+
+A snapshot records the category name as it was spelled then, and a type rename
+cascades to entities without writing a `ChangeLog` — so a snapshot can name a
+type the workspace no longer has. The rollback checks before it writes:
+
+- **409** `{ error, snapshotCategory, availableCategories }` when the snapshot's
+  category is not a type in the workspace (renamed or deleted since). Nothing is
+  written and no change is recorded; no retry of the same request will succeed.
+- **200** for that same request carrying `{ "category": "<one of
+  availableCategories>" }`. `category` is the only field of a snapshot a
+  rollback overrides — the caller's decision about which type to restore the
+  version under; everything else restores as recorded. A name the workspace
+  does not have is **400** `{ error, snapshotCategory, availableCategories }`.
+
+`GET .../history` marks the same condition with `snapshotCategoryMissing: true`
+so a client can ask for the choice before the click, from one registry read for
+the whole page. The reasoning — in particular why a rename does *not* rewrite
+snapshots — is the KOL-059 Decision Log entry in `kol_emet_spec.md`.
 
 ## Auth
 
