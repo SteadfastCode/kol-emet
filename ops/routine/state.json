@@ -4,18 +4,18 @@
     "KOL-053": {
       "order": 1,
       "title": "Workspace-wide tag rename, merge and delete",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-053",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-07T03:10:14.931Z",
+      "runId": "2026-10-07T03:10:01.491Z",
       "lastFail": null
     },
     "KOL-047": {
