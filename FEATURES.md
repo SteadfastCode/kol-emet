@@ -52,7 +52,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one**
+- [x] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one**
   `applyRelationship` (`server/src/lib/draftApplier.js:176`) always does `RelationshipGroup.create(...)`. Nothing looks for a
   group that already holds those members under that label, so re-importing an unchanged docker-compose file — the ordinary case,
   and the one `textHash` exists to recognise — adds a second "Depends on" group for every edge it found the first time, and each
