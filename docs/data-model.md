@@ -340,7 +340,7 @@ Each item carries the fine-tune triple as three **separately written** parts.
   // ── targeting / dedup ────────────────────────────────────────────────────
   targetEntityId: ObjectId | null,   // set when op is 'update'
   baseUpdatedAt:  Date | null,       // staleness baseline for the applier
-  matchedBy:      'exact-normalized-title' | 'manual' | 'none',
+  matchedBy:      'exact-normalized-title' | 'same-members-and-label' | 'manual' | 'none',
   duplicateOf:    ObjectId | null,   // fuzzy candidate; NEVER auto-merged
   duplicateScore: Number | null,
   dependsOn:      [String],          // localKeys this item needs applied first
@@ -360,6 +360,14 @@ The split between the human label and the system outcome is load-bearing: the de
 any request body containing a system key, so **an apply failure can never overwrite the record that a
 human said yes**. `accepted` is copied verbatim from `proposed` on a plain accept rather than left
 null, so the exporter stays a single-pass map even if the normalizer changes later.
+
+A **relationship** item is targeted from inside its payload instead: `proposed.targetGroupId` is the
+group it was recognised as already being (`matchedBy: 'same-members-and-label'`), or `null` for a new
+link. It travels with the members it was matched from, so an edit that re-points the members carries
+or drops the target in the same object. The match is on the resolved member ids and the label,
+ignoring order and roles; a group that *holds* those members matches, so a group someone has widened
+by hand is still recognised, and the applier `$set`s only the members the proposal names — it never
+removes one a person added. See `lib/draftNormalizer.js` (`relationshipGroupMatcher`).
 
 Proposed relationship members are stored in the `RelationshipGroup` **model** shape
 (`{ refId, refModel, label, notes }`), not the route's `{ entityId }` shape, because `refModel` is the

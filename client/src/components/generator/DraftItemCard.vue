@@ -7,8 +7,8 @@
 
       <span class="title">{{ title }}</span>
 
-      <span v-if="item.op === 'update'" class="op" title="Adds to an entity you already have">
-        adds to existing
+      <span v-if="item.op === 'update'" class="op" :title="updateTitle">
+        {{ updateLabel }}
       </span>
       <span v-if="item.applyState === 'applied'" class="op done">in your wiki</span>
     </div>
@@ -98,6 +98,18 @@ const evidence = computed(() => {
   const q = props.item.input?.evidence?.quote ?? '';
   return q.length > 180 ? `${q.slice(0, 180)}…` : q;
 });
+
+// A relationship can be an update too (a link the workspace already holds),
+// and "adds to an entity you already have" would be the wrong thing to say
+// about one: nothing is appended, the roles on that link are brought up to date.
+const updateLabel = computed(() =>
+  props.item.kind === 'relationship' ? 'updates existing link' : 'adds to existing'
+);
+const updateTitle = computed(() =>
+  props.item.kind === 'relationship'
+    ? 'Updates a link you already have, rather than adding a second one'
+    : 'Adds to an entity you already have'
+);
 
 const verdictLabel = computed(() => ({
   accepted: 'Keeping',

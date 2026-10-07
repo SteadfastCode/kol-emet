@@ -49,7 +49,7 @@
 
 import { parseDocument, LineCounter, visit, isAlias, isMap, isScalar, isSeq } from 'yaml';
 import { normalizeTitle, nearestTitle } from '../similarity.js';
-import { DUPLICATE_THRESHOLD, MAX_ITEMS } from '../draftNormalizer.js';
+import { DUPLICATE_THRESHOLD, MAX_ITEMS, relationshipGroupMatcher, relationshipTarget } from '../draftNormalizer.js';
 import { MAX_COMPOSE_CHARS, MAX_DROP_REASONS, withoutKnownBlocks } from './dockerCompose.js';
 
 export const PRODUCER = 'openapi';
@@ -98,13 +98,16 @@ export class OpenApiParseError extends Error {
  * @param {object} opts
  * @param {object[]} [opts.existingEntities]  [{ _id, title, updatedAt, blocks? }] — the
  *   workspace's graph. `blocks`, when present, lets an update skip attributes the entity has.
+ * @param {object[]} [opts.existingGroups]  [{ _id, label, members: [{ refId, label }] }] — the
+ *   workspace's relationship groups, so a re-import updates the links it created last time
+ *   rather than stacking a second copy of each (draftNormalizer.relationshipGroupMatcher)
  * @param {number} [opts.lineOffset]  added to every line number an error names, for a caller
  *   that trimmed leading blank lines off the file before passing it in
  * @returns {{ items: object[], dropReasons: string[], dropped: number }}  `dropped`
  *   counts every drop, the ones past MAX_DROP_REASONS that are not listed included
  * @throws {OpenApiParseError}
  */
-export function parseOpenApi(text, { existingEntities = [], lineOffset = 0 } = {}) {
+export function parseOpenApi(text, { existingEntities = [], existingGroups = [], lineOffset = 0 } = {}) {
   const source = String(text ?? '');
   const lines = new LineCounter();
   const doc = parseDocument(source, { lineCounter: lines, merge: true, prettyErrors: false });
@@ -449,6 +452,8 @@ export function parseOpenApi(text, { existingEntities = [], lineOffset = 0 } = {
   const items = [];
   const titleToLocal = new Map();   // exact title -> localKey
   const keyToLocal = new Map();     // normalized title -> localKey
+  const localToTarget = new Map();  // localKey -> the entity id an update item targets
+  const matchGroup = relationshipGroupMatcher(existingGroups);
   let e = 0;
 
   for (let i = 0; i < entities.length; i++) {
@@ -494,6 +499,7 @@ export function parseOpenApi(text, { existingEntities = [], lineOffset = 0 } = {
 
     keyToLocal.set(key, localKey);
     titleToLocal.set(ent.title, localKey);
+    if (targetEntityId) localToTarget.set(localKey, targetEntityId);
 
     items.push({
       localKey,
@@ -543,13 +549,18 @@ export function parseOpenApi(text, { existingEntities = [], lineOffset = 0 } = {
     }
     if (members.length < 2) continue;
 
+    // A link the workspace already holds is an update to that group, not a
+    // second copy of it — the whole point of re-running an import.
+    const { op, targetGroupId, matchedBy } = relationshipTarget(matchGroup, edge.label, members, localToTarget);
+
     items.push({
       localKey: `r${++r}`,
       seq: items.length,
       kind: 'relationship',
-      op: 'create',
+      op,
       input: { evidence: evidenceAt(edge.offset), contextEntityIds: [] },
-      proposed: { label: edge.label, members },
+      proposed: { label: edge.label, members, targetGroupId },
+      matchedBy,
       dependsOn,
       flags: [],
     });

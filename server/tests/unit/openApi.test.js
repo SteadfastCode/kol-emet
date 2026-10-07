@@ -222,6 +222,33 @@ describe('re-importing against existing entities', () => {
     ], 'the description must not be appended a second time');
   });
 
+  test('a second parse against the groups the first import created yields updates to them', () => {
+    // The same re-import problem the compose producer has, and the same fix:
+    // without it every re-import adds a second "Exposes" group per tag, and
+    // each API shows the link to its service twice. See
+    // draftNormalizer.relationshipGroupMatcher and tests/unit/dockerCompose.test.js.
+    const first = parse(FIXTURE, {}, 'fixture (first import)').items;
+    const ids = new Map(entities(first).map(i => [i.localKey, new mongoose.Types.ObjectId()]));
+    const existingEntities = entities(first).map(i => ({
+      _id: ids.get(i.localKey), title: i.proposed.title, updatedAt: new Date('2026-09-01T00:00:00Z'), blocks: i.proposed.blocks,
+    }));
+    const existingGroups = relationships(first).map(i => ({
+      _id: new mongoose.Types.ObjectId(),
+      label: i.proposed.label,
+      members: i.proposed.members.map(m => ({ refId: ids.get(m.localKey) ?? m.refId, refModel: 'Entity', label: m.label })),
+    }));
+
+    const { items } = parse(FIXTURE, { existingEntities, existingGroups }, 'fixture (entities and groups already imported)');
+    const second = relationships(items);
+    assert.equal(second.length, existingGroups.length, 'the same links are found');
+    for (const r of second) {
+      assert.equal(r.op, 'update', `${r.proposed.label} should be an update`);
+      assert.equal(r.matchedBy, 'same-members-and-label');
+      assert.ok(existingGroups.some(g => String(g._id) === r.proposed.targetGroupId), 'targets a group that exists');
+    }
+    assert.equal(new Set(second.map(r => r.proposed.targetGroupId)).size, second.length, 'one group per link');
+  });
+
   test('a near-miss title is flagged as a duplicate candidate, never merged', () => {
     const existing = [{ _id: new mongoose.Types.ObjectId(), title: 'Pet Store APIs', updatedAt: new Date() }];
     const { items } = parse(FIXTURE, { existingEntities: existing }, 'fixture (near-miss "Pet Store APIs")');

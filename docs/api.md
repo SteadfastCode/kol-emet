@@ -277,7 +277,11 @@ Every item's `input.evidence.quote` is the YAML line that produced it, with offs
 Titles are deduplicated against the workspace as a braindump's are: an exact normalized-title match
 becomes `op: 'update'` (`matchedBy: 'exact-normalized-title'`), and such an update leaves out any
 attribute block the entity already has, so re-importing an unchanged file does not stack copies. A
-near-miss is flagged `duplicate_candidate`, never merged. YAML `<<` merge keys and anchors are followed.
+near-miss is flagged `duplicate_candidate`, never merged. **Groups are deduplicated the same way**: an
+edge the workspace already holds under the same label becomes `op: 'update'`
+(`matchedBy: 'same-members-and-label'`) carrying `proposed.targetGroupId`, so a re-import brings the
+roles on that link up to date rather than adding a second copy of it. YAML `<<` merge keys and anchors
+are followed.
 
 | Status | Meaning |
 |--------|---------|
@@ -316,8 +320,11 @@ Request and response schemas are not read at all.
 Titles are deduplicated against the workspace exactly as a compose draft's are: an exact
 normalized-title match becomes `op: 'update'` (`matchedBy: 'exact-normalized-title'`), and such an
 update leaves out any attribute **or text** block the entity already has, so re-importing an
-unchanged document neither stacks attributes nor appends `info.description` twice. A near-miss is
-flagged `duplicate_candidate`, never merged. YAML anchors and `<<` merge keys are followed.
+unchanged document neither stacks attributes nor appends `info.description` twice. Groups are
+deduplicated as a compose draft's are, by member ids and label (`matchedBy:
+'same-members-and-label'`), so a re-import updates each `Exposes` and `Depends on` link rather than
+adding a second one. A near-miss is flagged `duplicate_candidate`, never merged. YAML anchors and
+`<<` merge keys are followed.
 
 | Status | Meaning |
 |--------|---------|

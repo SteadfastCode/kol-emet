@@ -18,7 +18,11 @@
  *   - decide-clean + apply writes the services, data stores and external host
  *     with those categories, and the Depends on / Calls groups between them;
  *   - importing the same file again proposes updates to what the first import
- *     created rather than a second copy;
+ *     created rather than a second copy — the entities AND the groups between
+ *     them, so applying a re-import twice over leaves one group per edge and
+ *     one back-reference per entity (KOL-054);
+ *   - a group someone has widened by hand survives a re-import with their
+ *     member intact;
  *   - a parse error is a 400 naming the line, a workspace without the types
  *     is a 400 naming them, and another tenant cannot read the draft;
  *   - a file declaring far more services than the item cap still yields one
@@ -121,6 +125,7 @@ after(async () => { await db.disconnect(); });
 describe('POST /drafts/compose', () => {
   let draft;
   let applied;
+  let reimport;
 
   test('turns the fixture into a ready draft recording its producer', async () => {
     const res = await postCompose(architect, { text: FIXTURE, filename: 'docker-compose.yml' });
@@ -238,6 +243,122 @@ describe('POST /drafts/compose', () => {
       assert.equal(String(item.targetEntityId), idByTitle.get(item.proposed.title));
       assert.deepEqual(item.proposed.blocks, [], `${item.proposed.title} already has every attribute this file gives it`);
     }
+  });
+
+  /**
+   * Every group joining the entities this file imported, as
+   * "label: Role:title → Role:title" with its id.
+   *
+   * Scoped to those entities rather than the whole workspace so a template's
+   * own sample content, if it ever grows any, cannot be counted as an edge of
+   * this file.
+   */
+  async function composeGraph() {
+    const ents = await Entity.find({ workspaceId: architect.workspaceId, tags: 'docker-compose' })
+      .select('_id title relationships').lean();
+    const titleOf = new Map(ents.map(e => [String(e._id), e.title]));
+    const groups = await RelationshipGroup.find({
+      workspaceId: architect.workspaceId,
+      'members.refId': { $in: ents.map(e => e._id) },
+    }).sort({ _id: 1 }).lean();
+    return {
+      groups: groups.map(g => ({
+        id: String(g._id),
+        described: `${g.label}: ${g.members.map(m => `${m.label}:${titleOf.get(String(m.refId)) ?? m.refId}`).join(' → ')}`,
+      })),
+      // How many links each entity's Relationships section would show.
+      backRefs: Object.fromEntries(ents.map(e => [e.title, e.relationships.length])),
+    };
+  }
+
+  /** decide-clean + apply, asserting every item landed. */
+  async function decideAndApply(id, expected) {
+    const decided = await architect.agent.post(`/drafts/${id}/decide-clean`);
+    assert.equal(decided.status, 200, JSON.stringify(decided.body));
+    assert.equal(decided.body.accepted, expected, JSON.stringify(decided.body));
+    assert.equal(decided.body.skippedFlagged, 0, 'a re-import of an unchanged file flags nothing');
+
+    const res = await architect.agent.post(`/drafts/${id}/apply`);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    log('light', `draft ${id} applied (source: POST /drafts/:id/apply as ${architect.email}): ${JSON.stringify(res.body)}`);
+    assert.deepEqual(
+      { applied: res.body.applied, failed: res.body.failed, blocked: res.body.blocked, status: res.body.status },
+      { applied: expected, failed: 0, blocked: 0, status: 'applied' },
+    );
+    return res.body;
+  }
+
+  test('the re-import proposes an update to each group the first import created, by id', async () => {
+    const res = await postCompose(architect, { text: FIXTURE });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    reimport = res.body;
+
+    const { groups } = await composeGraph();
+    const ids = new Set(groups.map(g => g.id));
+    const rels = reimport.items.filter(i => i.kind === 'relationship');
+    assert.equal(rels.length, 7);
+    for (const r of rels) {
+      assert.equal(r.op, 'update', `${r.proposed.label} should be an update`);
+      assert.equal(r.matchedBy, 'same-members-and-label');
+      assert.ok(ids.has(r.proposed.targetGroupId), `${r.proposed.label} must target a group that exists`);
+    }
+    assert.equal(new Set(rels.map(r => r.proposed.targetGroupId)).size, 7, 'one group per edge, each claimed once');
+  });
+
+  test('applying the re-import leaves exactly one group per edge, and the same back-references', async () => {
+    const before = await composeGraph();
+    assert.equal(before.groups.length, 7);
+
+    await decideAndApply(reimport._id, 12);
+
+    const after = await composeGraph();
+    // The same documents, not new ones beside them: ids included.
+    assert.deepEqual(after.groups, before.groups);
+    assert.deepEqual(after.backRefs, before.backRefs, "no entity's Relationships section grew");
+  });
+
+  test('a group someone widened by hand keeps their member, and the file still owns the roles it names', async () => {
+    const ents = await Entity.find({ workspaceId: architect.workspaceId, tags: 'docker-compose' })
+      .select('_id title').lean();
+    const idOf = Object.fromEntries(ents.map(e => [e.title, e._id]));
+    const widened = await RelationshipGroup.findOne({
+      workspaceId: architect.workspaceId,
+      label: 'Depends on',
+      'members.refId': { $all: [idOf.web, idOf.redis] },
+    });
+    assert.ok(widened, 'the web → redis Depends on group');
+
+    // A person edits the group: a third member of their own, and a role of
+    // their own on one of the two the file named.
+    widened.members.push({ refId: idOf['api.stripe.com'], refModel: 'Entity', label: 'Noted by', notes: 'added by hand' });
+    widened.members.find(m => String(m.refId) === String(idOf.redis)).label = 'Neighbour';
+    await widened.save();
+    log('light', `group ${widened._id} widened by hand (source: the test, standing in for a person)`);
+
+    const before = await composeGraph();
+    const third = await postCompose(architect, { text: FIXTURE });
+    assert.equal(third.status, 201, JSON.stringify(third.body));
+    const matched = third.body.items.filter(i => i.proposed.targetGroupId === String(widened._id));
+    assert.equal(matched.length, 1, 'the widened group is still the one edge it holds');
+    await decideAndApply(third.body._id, 12);
+
+    const after = await composeGraph();
+    assert.equal(after.groups.length, before.groups.length, 'still one group per edge');
+    assert.deepEqual(after.backRefs, before.backRefs);
+
+    const reread = await RelationshipGroup.findById(widened._id).lean();
+    assert.deepEqual(
+      reread.members.map(m => [String(m.refId), m.label, m.notes]),
+      [
+        [String(idOf.web), 'Dependent', null],
+        // Set back from 'Neighbour': the file is authoritative about the roles
+        // of the members it names.
+        [String(idOf.redis), 'Dependency', null],
+        // Untouched, and still in the place the person put it: an apply never
+        // removes or re-orders a member it was not told about.
+        [String(idOf['api.stripe.com']), 'Noted by', 'added by hand'],
+      ],
+    );
   });
 
   test('another workspace cannot read the draft', async () => {
