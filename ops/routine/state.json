@@ -58,7 +58,7 @@
     "KOL-059": {
       "order": 4,
       "title": "A rollback whose snapshot names a renamed entity type answers 409, not 500",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-059",
