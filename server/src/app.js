@@ -38,6 +38,7 @@ import './models/RelationshipType.js';
 import './models/EntityType.js';
 import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
+import { originGuard, logOriginGuardStartup } from './middleware/originGuard.js';
 import { resolveWorkspace } from './middleware/workspace.js';
 import { createAuthLimiter } from './lib/attemptLimiter.js';
 import { sessionCookieOptions } from './lib/sessionCookie.js';
@@ -66,7 +67,12 @@ export function createApp({ sessionStore, authLimits } = {}) {
     credentials: true,
   }));
   app.use(express.json());
-  app.use(express.urlencoded({ extended: false }));
+  // No app-wide express.urlencoded on purpose (KOL-058): a form-encoded POST is
+  // a CORS-*simple* request, so an attacker's page can send one cross-site with
+  // the victim's cookie and no preflight. With no form parser mounted here, such
+  // a request cannot form a body any route will read. The four endpoints that
+  // genuinely take a form — the two OAuth issuers' /authorize and /oauth/token
+  // — mount the parser themselves, next to their own routes.
 
   app.use(session({
     secret: process.env.SESSION_SECRET,
@@ -81,6 +87,14 @@ export function createApp({ sessionStore, authLimits } = {}) {
     // instance's. See lib/sessionCookie.js.
     cookie: sessionCookieOptions(process.env),
   }));
+
+  // A cookie-authenticated write has to come from this deployment's own client:
+  // the session cookie is sameSite:'none' in production, so a browser sends it
+  // cross-site, and CORS withholds only the response, never the write. After the
+  // session middleware because it reads req.session; ahead of every router below
+  // so a route added later cannot land outside it. See middleware/originGuard.js.
+  logOriginGuardStartup(process.env);
+  app.use(originGuard);
 
   app.use('/', oauthRouter);
   // The Steadfast bridge: its own MCP endpoint (/bridge/mcp), token and OAuth

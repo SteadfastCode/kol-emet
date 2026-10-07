@@ -16,11 +16,19 @@ import { createHash, randomBytes } from 'node:crypto';
 import session from 'express-session';
 import request from 'supertest';
 
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js).
+// Nothing here signs in, so no request needs an Origin — but the variable is set
+// below all the same, so a session-bearing test added here is not a surprise 403.
+import { CLIENT_ORIGIN } from '../helpers/origin.js';
+
 // The OAuth router reads MCP_BEARER_TOKEN once, at module load, so the
 // environment has to be in place before src/app.js is imported — hence the
 // dynamic import below rather than a static one at the top of the file.
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 process.env.MCP_BEARER_TOKEN = 'test-mcp-bearer-token';
 
 const { createApp } = await import('../../src/app.js');

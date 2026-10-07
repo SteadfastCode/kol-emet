@@ -38,7 +38,7 @@
  * remote-execution mailbox, so the bridge does not inherit that convenience.
  */
 
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import mongoose from 'mongoose';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -101,6 +101,12 @@ router.get(`/.well-known/oauth-authorization-server${ISSUER_PATH}`, (req, res) =
 
 const authCodes = new Map(); // code -> { codeChallenge, redirectUri, expiresAt }
 
+// This issuer parses its own form bodies (KOL-058). express.urlencoded used to
+// sit on the app, which made every route reachable by a cross-site simple POST;
+// it now sits only where a form is expected. Here rather than in createApp so
+// the bridge stays self-contained — see the header.
+const form = express.urlencoded({ extended: false });
+
 router.get(`${ISSUER_PATH}/authorize`, (req, res) => {
   const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state } = req.query;
   if (response_type !== 'code') return res.status(400).send('unsupported_response_type');
@@ -132,7 +138,7 @@ router.get(`${ISSUER_PATH}/authorize`, (req, res) => {
 </div></div></body></html>`);
 });
 
-router.post(`${ISSUER_PATH}/authorize`, async (req, res) => {
+router.post(`${ISSUER_PATH}/authorize`, form, async (req, res) => {
   const { redirect_uri, code_challenge, state } = req.body;
   if (!redirect_uri || !code_challenge) return res.status(400).send('missing required parameters');
   // Same identity as the wiki connector, on purpose (see the header).
@@ -150,7 +156,7 @@ router.post(`${ISSUER_PATH}/authorize`, async (req, res) => {
   res.redirect(url.toString());
 });
 
-router.post(`${ISSUER_PATH}/oauth/token`, (req, res) => {
+router.post(`${ISSUER_PATH}/oauth/token`, form, (req, res) => {
   const { grant_type, code, code_verifier } = req.body;
   if (grant_type !== 'authorization_code') return res.status(400).json({ error: 'unsupported_grant_type' });
   if (!BRIDGE_TOKEN) return res.status(500).json({ error: 'server_misconfigured' });

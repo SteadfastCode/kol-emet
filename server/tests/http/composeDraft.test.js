@@ -46,6 +46,10 @@ import { fileURLToPath } from 'node:url';
 import session from 'express-session';
 import request from 'supertest';
 
+// Every session write is checked against CLIENT_ORIGIN (src/middleware/originGuard.js),
+// so this suite names one below and its agents send a matching Origin.
+import { CLIENT_ORIGIN, originAgent } from '../helpers/origin.js';
+
 import * as db from '../helpers/db.js';
 // Registration is throttled per client address, and these suites register
 // their fixtures through the real endpoint from one address. See the helper.
@@ -61,6 +65,10 @@ import { redactSecrets } from '../../src/lib/producers/redactSecrets.js';
 // Environment before src/app.js is imported, for the reasons in tenancy.test.js.
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
+// The origin the guard compares a session write's Origin header against;
+// originAgent() above sends it. See tests/helpers/origin.js.
+process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
+process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 delete process.env.BEARER_TOKEN;
 process.env.SEED_LOG_LEVEL ??= 'off';
 process.env.COMPOSE_LOG_LEVEL ??= 'off';
@@ -91,7 +99,7 @@ let architect;   // software-architecture workspace
 let writer;      // default (worldbuilding) workspace
 
 async function registerUser(email, template) {
-  const agent = request.agent(app);
+  const agent = originAgent(app);
   const res = await agent.post('/auth/register').send({ email, password: PASSWORD, ...(template && { template }) });
   assert.equal(res.status, 201, `POST /auth/register (${email}) failed: ${res.status} ${JSON.stringify(res.body)}`);
   const user = await User.findOne({ email }).select('_id').lean();
