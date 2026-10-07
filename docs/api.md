@@ -44,7 +44,7 @@ Mount points and their guards:
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
 | `/relationship-types` | `requireAuth` + `resolveWorkspace` | |
 | `/entity-types` | `requireAuth` + `resolveWorkspace` | Gates the category names entities and relationship types can hold |
-| `/tags` | `requireAuth` + `resolveWorkspace` | |
+| `/tags` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
 | `/open-questions` | `requireAuth` + `resolveWorkspace` | |
 | `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...` |
 | `/chat` | per-route | AI chat (SSE streaming). `GET /providers`: `requireAuth`; `POST /`: `requireAuth` + `resolveWorkspace` |
@@ -110,9 +110,24 @@ A foreign or malformed id is 404.
 
 ## Tags
 
+A tag is a plain string in an entity's `tags` array; there is no tag document. These routes edit
+that string across the whole workspace.
+
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/tags` | All unique tags across entities |
+| PUT | `/tags/:tag` | Rename `:tag` to `to` on every entity in the workspace → `{ renamed, from, to }`. `to` is trimmed; a blank or non-string one is 400. Merges: an entity already carrying `to` keeps exactly one copy (`$addToSet` then `$pull`). A rename to itself is a 200 no-op (`renamed: 0`). 404 when no entity carries `:tag`. |
+| DELETE | `/tags/:tag` | Remove `:tag` from every entity in the workspace → `{ removed, tag }`. 404 when no entity carries it. |
+
+Both writes take `requireActor` and record **one `ChangeLog` entry per changed entity**, written
+before the response — so each entity rolls back individually through `/entities/:id/rollback/:logId`
+— and each entry broadcasts `entity:updated` on `/events`. That cost is bounded: an operation
+affecting more than **200** entities is refused with **413** and
+`{ error, affected, limit }`, naming the count, and writes nothing at all.
+
+Both are scoped to the caller's workspace, so an identically-named tag in another workspace is a
+different tag and is never touched. `:tag` is a URL path segment — percent-encode a tag containing
+`/`, `#` or `?`.
 
 ## Open questions
 
