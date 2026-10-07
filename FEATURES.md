@@ -54,7 +54,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500**
+- [x] **(KOL-059) A rollback whose snapshot names a renamed entity type answers 409, not 500**
   `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:27`) replays `log.snapshot` through
   `findOneAndUpdate` with `runValidators: true`, and `Entity.category` validates against the workspace's `EntityType`
   registry (`server/src/lib/entityTypeRegistry.js`). Renaming a type cascades to everything that used it
