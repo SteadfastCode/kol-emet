@@ -52,27 +52,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one**
-  `applyRelationship` (`server/src/lib/draftApplier.js:176`) always does `RelationshipGroup.create(...)`. Nothing looks for a
-  group that already holds those members under that label, so re-importing an unchanged docker-compose file — the ordinary case,
-  and the one `textHash` exists to recognise — adds a second "Depends on" group for every edge it found the first time, and each
-  entity's Relationships section shows the link twice. KOL-045's Decision Log entry records this as accepted and names the
-  reason: "recognising an existing group is drift detection, which is out of scope". It is the smallest piece of the roadmap's
-  continuous-sync work and the one that makes re-import safe. Build: match where the entities are already matched, not in the
-  write — a proposed relationship whose resolvable member set (order-insensitive, by resolved entity id) and label equal an
-  existing `RelationshipGroup` in the workspace becomes `op: 'update'` with `targetGroupId` and
-  `matchedBy: 'same-members-and-label'`, in `server/src/lib/draftNormalizer.js` and
-  `server/src/lib/producers/dockerCompose.js`; `targetGroupId` joins the relationship payload in
-  `server/src/lib/draftItemSchema.js`. `applyRelationship` then updates that group in place — `$set` on the matching member's
-  label and notes, never removing a member a human added — and returns its id. A member that only resolves at apply time (a
-  sibling `localKey`) is matched inside `applyRelationship` against the ids it has just resolved, so the check happens once,
-  wherever the ids become known. Verify: `server/tests/unit/draftNormalizer.test.js` and
-  `server/tests/unit/dockerCompose.test.js` — a second parse against a workspace already holding the group yields `op: 'update'`
-  carrying the group's id; `server/tests/http/composeDraft.test.js` — posting the fixture twice and applying both drafts leaves
-  exactly one group per edge and each entity's `relationships` array the same length, and a group a human has added a third
-  member to keeps that member; `cd server && yarn test` green. Out of scope: proposing the *removal* of a link that has
-  disappeared from the source (drift detection proper), deduplicating groups created before this item, `ChangeLog` entries for
-  relationship writes (the applier records none today), and open-question dedup.
 
 - [ ] **(KOL-058) Refuse a cookie-authenticated write whose Origin is not this deployment's client**
   Nothing in `server/src` checks `Origin` or carries a CSRF token, and production deliberately issues the session cookie
@@ -286,6 +265,27 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-054) Re-proposing a relationship group updates it instead of stacking a second one** (routine 2026-10-06, ab01575)
+  `applyRelationship` (`server/src/lib/draftApplier.js:176`) always does `RelationshipGroup.create(...)`. Nothing looks for a
+  group that already holds those members under that label, so re-importing an unchanged docker-compose file — the ordinary case,
+  and the one `textHash` exists to recognise — adds a second "Depends on" group for every edge it found the first time, and each
+  entity's Relationships section shows the link twice. KOL-045's Decision Log entry records this as accepted and names the
+  reason: "recognising an existing group is drift detection, which is out of scope". It is the smallest piece of the roadmap's
+  continuous-sync work and the one that makes re-import safe. Build: match where the entities are already matched, not in the
+  write — a proposed relationship whose resolvable member set (order-insensitive, by resolved entity id) and label equal an
+  existing `RelationshipGroup` in the workspace becomes `op: 'update'` with `targetGroupId` and
+  `matchedBy: 'same-members-and-label'`, in `server/src/lib/draftNormalizer.js` and
+  `server/src/lib/producers/dockerCompose.js`; `targetGroupId` joins the relationship payload in
+  `server/src/lib/draftItemSchema.js`. `applyRelationship` then updates that group in place — `$set` on the matching member's
+  label and notes, never removing a member a human added — and returns its id. A member that only resolves at apply time (a
+  sibling `localKey`) is matched inside `applyRelationship` against the ids it has just resolved, so the check happens once,
+  wherever the ids become known. Verify: `server/tests/unit/draftNormalizer.test.js` and
+  `server/tests/unit/dockerCompose.test.js` — a second parse against a workspace already holding the group yields `op: 'update'`
+  carrying the group's id; `server/tests/http/composeDraft.test.js` — posting the fixture twice and applying both drafts leaves
+  exactly one group per edge and each entity's `relationships` array the same length, and a group a human has added a third
+  member to keeps that member; `cd server && yarn test` green. Out of scope: proposing the *removal* of a link that has
+  disappeared from the source (drift detection proper), deduplicating groups created before this item, `ChangeLog` entries for
+  relationship writes (the applier records none today), and open-question dedup.
 - [x] **(KOL-053) Workspace-wide tag rename, merge and delete** (routine 2026-10-06, 00b46e4)
   `GET /tags` (`server/src/routes/tags.js`) is the entire tag surface: tags are editable one entity at a time in the editor's
   comma-separated field, and KOL-041 put bulk operations out of scope. A workspace holding `train`, `Train` and `trains` has no
