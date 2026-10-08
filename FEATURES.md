@@ -47,6 +47,22 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-073) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-15]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 
 
 
@@ -61,7 +77,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012)
+- [ ] **(KOL-013) Refresh dependencies against the 50 open Dependabot advisories** (needs KOL-004, KOL-010, KOL-012) [proposed]
   `yarn upgrade` within existing semver ranges in `server/` and `client/`; keep the `qs` 6.16.0 pin and express 4 (`_comment_qs_pin`
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
@@ -88,6 +104,181 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+- [ ] **(KOL-067) Pagination and a total count on `GET /entities`** [proposed]
+  `GET /entities` (`server/src/routes/entities.js:66`) returns every entity in the workspace, unbounded:
+  `Entity.find(filter).sort({ title: 1 })` with no `limit`, no `skip` and no cursor, and `loadEntities`
+  (`client/src/composables/useEntities.js:10`) calls it on page load and again after every create. KOL-061 took the block
+  content out of that response; the row count is still the whole workspace, and it is the first request every tenant
+  makes. At a few thousand entities the projected rows are still a megabyte of JSON serialized in one go on the single
+  event loop this multi-tenant API shares, so one tenant opening a large workspace stalls everybody else's requests.
+  KOL-049 and KOL-061 both put pagination out of scope, and KOL-061 said it "deserves its own item". Build: keyset
+  pagination on the sort the route already uses. `?limit=` (an integer 1–200, read through an integer counterpart to
+  `searchTerm` in `server/src/lib/searchFilter.js` so a bracketed operator or a repeated parameter is *no* limit rather
+  than one the caller never wrote) and `?after=` (the `title` and `_id` of the previous page's last row — titles are not
+  unique, so the filter is `{ $or: [{ title: { $gt: t } }, { title: t, _id: { $gt: id } }] }` and the sort becomes
+  `{ title: 1, _id: 1 }`; keyset and not `skip`, because `skip` on a growing collection drops and repeats rows between
+  pages). With `limit` present the response is an envelope `{ items, nextAfter: { title, _id } | null, total }`, `total`
+  from a `countDocuments` of the same filter; without it the response stays today's bare array, so the MCP tools, the
+  chat tool and any outside script keep working — the envelope is what KOL-061 called the breaking part, and making it
+  opt-in is what keeps this item from being one. Client side, `getEntities` (`client/src/api/entities.js:30`) gains a
+  paged variant and `loadEntities` appends page by page at `limit=200`, clearing `sidebarLoading` after the *first*
+  page so the sidebar paints immediately instead of waiting for the workspace. Tiered logging
+  `ENTITY_LIST_LOG_LEVEL = off | light | normal | verbose` (default light): light names each page's limit, cursor and
+  row count and the query string it came from, because a page boundary that drops or repeats a row leaves no other
+  trace. Files: `server/src/routes/entities.js`, `server/src/lib/searchFilter.js`, `client/src/api/entities.js`,
+  `client/src/composables/useEntities.js`, the `GET /entities` row of `docs/api.md`, and a Decision Log line in
+  `kol_emet_spec.md` for the envelope-only-when-asked shape. Verify: `server/tests/http/entityList.test.js` grows — no
+  `limit` returns the bare array unchanged; `?limit=2` returns the envelope with the first two rows by title and a
+  `total` for the whole filter; paging with `nextAfter` walks a fixture containing two entities with the *same* title
+  exactly once each; `?limit=0`, `?limit=abc`, `?limit=-1` and `?limit[$gt]=1` are each no limit and `?limit=9999` is
+  capped; `?q=` and `?category=` still filter and `total` counts the filtered set; a second workspace's rows never
+  appear on any page. Plus a `client/src/components/WikiLayout.test.js` case where a two-page load ends with every
+  entity listed. `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: making the
+  client's search box ask the server (KOL-068), a MongoDB text index (an Atlas index change), offset/`skip` paging, and
+  pagination for `/conversations`, `/drafts` and `GET /entities/:id/history`, which already cap at 50.
+- [ ] **(KOL-068) The search box asks the server, so block text is searchable in the UI** [proposed]
+  `useFilters` (`client/src/composables/useFilters.js:11`) filters the already-loaded list in the browser over `title`,
+  `summary` and `tags` only. The server's `?q=` (`keywordFilter`, `server/src/lib/searchFilter.js:85`) matches title,
+  summary **and** every block's `data.markdown`. So the one field a wiki keeps its content in is not searchable from the
+  UI at all: a word that appears only in a text block finds nothing in the sidebar while `GET /entities?q=<word>`
+  returns the entity. KOL-061 flagged this as "a real gap worth filing separately" when it stopped shipping `blocks` to
+  the list route — before that projection the browser at least *had* the text to search, so the projection made a
+  pre-existing gap permanent. Build: the search box queries the server; the category and tag pills stay local.
+  `useFilters` keeps `activeCat`/`activeTag` as in-browser filters but takes the searched set as an input rather than
+  searching it — with a non-empty `searchQuery`, `WikiLayout.vue:224` feeds it `GET /entities?q=<term>` (debounced
+  ~250 ms, newest response wins: an overtaken request must never replace a newer one, the guard
+  `client/src/composables/useEntityTypes.js` already implements) and with an empty one it falls back to the full loaded
+  list. Because a match can now be invisible, a row whose only hit was inside a block gets a "matched in text" line in
+  `client/src/components/EntitySidebar.vue`, so no result appears without a reason the reader can see. Tiered logging
+  `SEARCH_LOG_LEVEL = off | light | normal | verbose` (default light): light names each query, its source (a typed term,
+  a cleared box, a pill change), the row count, and every stale response discarded. Files:
+  `client/src/composables/useFilters.js`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/EntitySidebar.vue`, `client/src/api/entities.js`, and the `GET /entities` row of `docs/api.md`
+  if the server grows a `matchedIn` hint. Verify: a new `client/src/composables/useFilters.test.js` — an empty box
+  filters locally with no request, a typed term calls the API once after the debounce rather than once per keystroke, an
+  overtaken response is discarded, a failed request keeps the previous results and raises a toast instead of emptying
+  the sidebar, and a category pill still narrows a server result set. `client/src/components/EntitySidebar.test.js` — a
+  row that matched only in a block carries the "matched in text" line. `server/tests/http/entitySearch.test.js` — one
+  case pinning that `?q=` finds a word present only in block markdown, which is the behaviour the client now depends
+  on. `cd client && yarn test && yarn build` and `cd server && yarn test` green. Out of scope: a MongoDB text index or
+  `$text` ranking (an Atlas index change), fuzzy matching (`fuse.js` is a dependency in `client/package.json` and
+  imported nowhere in `client/src` — removing it belongs to KOL-013), server-side tag search (`?tag=` is exact-match by
+  design), and highlighting the matched span inside the block.
+- [ ] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text** [proposed]
+  Every `:id` route hands `req.params.id` straight to Mongoose: `GET/PUT/DELETE /entities/:id`
+  (`server/src/routes/entities.js:99,142,172`), `GET /entities/:id/history` and
+  `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:86,177`), all ten `/relationship-groups/:id…`
+  routes (`server/src/routes/relationshipGroups.js:81` onward), and the `:id` routes of `/open-questions`,
+  `/conversations` and `/drafts`. A caller sending anything that is not a 24-hex id — a slug, a truncated id, a
+  URL-encoded title, a stale link — gets a Mongoose `CastError` thrown inside the route's `try`, caught by
+  `catch (err) { res.status(500).json({ error: err.message }) }`, and answered **500** with
+  `Cast to ObjectId failed for value "…" (type string) at path "_id" for model "Entity"`. That is two defects in one: a
+  client error is reported as a server fault, so in whatever monitors this deployment a mistyped URL is
+  indistinguishable from a real outage; and the body is an internal error string naming the model and the driver's cast
+  path, which is not a shape a public API should return. `server/src/routes/entityTypes.js:111` already guards with
+  `mongoose.isValidObjectId`, so the work is making that the rule instead of one router's good habit. Build:
+  `server/src/middleware/objectId.js` exporting `objectIdParam(name)`, which answers
+  `400 { error: 'INVALID_ID', param }` when the named route parameter is not a valid ObjectId, registered per router
+  with `router.param('id', …)` (plus `logId`, `entityId` and `subGroupId` where they appear) so a route added to that
+  router later inherits the check rather than re-deriving it. 400 and not 404 on purpose: a well-formed id that belongs
+  to another tenant stays 404, so the API still never confirms another workspace's row exists, but a malformed id
+  cannot name anyone's row and so reveals nothing — it is simply a request the caller got wrong. Files:
+  `server/src/middleware/objectId.js` (new), the five routers above, and a line in `docs/api.md` stating that any `:id`
+  route answers 400 `INVALID_ID` for a malformed id. Verify: a new `server/tests/http/objectId.test.js` — `not-an-id`
+  in place of the id is 400 `INVALID_ID` and never 500 on each of the entity, history, rollback, relationship-group,
+  open-question, conversation and draft id routes; a well-formed id belonging to a second workspace is still 404; a
+  valid id still succeeds on every router touched; and no response body anywhere in the suite contains
+  `Cast to ObjectId`. `cd server && yarn test` green. Out of scope: reshaping the 34
+  `res.status(500).json({ error: err.message })` handlers into a fixed body plus a server-side log (the same leak in the
+  general case, and worth its own item), validating non-id parameters, and the MCP tools' id arguments, which come from
+  a model that read them from this API and already answer tool errors rather than HTTP statuses.
+- [ ] **(KOL-070) Canonical workspace export: `GET /export`** [proposed]
+  There is no way to get a workspace's graph out of the product. `server/src/lib/draftExporter.js` and
+  `server/scripts/export-drafts-jsonl.js` export *decision records* as JSONL training data, not content; the only other
+  reader of the whole graph is the client's own list route. For a product that charges for storing someone's work that
+  is two gaps at once: a user who wants to leave cannot take the graph with them, and the roadmap's Git-native track
+  names the missing piece exactly — "give the graph a canonical serializable form" is step one of the repo-resident
+  graph, and no Git connector can round-trip a form that does not exist. Build:
+  `server/src/lib/graphExporter.js` — a pure function from a `workspaceId` to one deterministic JSON document,
+  `{ version, exportedAt, workspace: { name }, entityTypes, relationshipTypes, entities, relationshipGroups,
+  openQuestions }`, with every collection sorted by a stable key (entities by `title` then `_id`, types by `order` then
+  `name`, groups by `_id`), every `ObjectId` stringified, and nothing else in it: no user, no session, no `aiBudget`, no
+  ChangeLog, no Draft. Deterministic because diffability is the point — the same graph exported twice must be
+  byte-identical, which is what a Git connector needs and what the test pins. Then `GET /export`
+  (`server/src/routes/export.js`, mounted behind `requireAuth` + `resolveWorkspace` in `server/src/app.js` like every
+  other tenant-content route) returning it with
+  `Content-Disposition: attachment; filename="<workspace>-<YYYY-MM-DD>.json"`, and an "Export workspace" row among the
+  Settings groups (`client/src/components/WikiLayout.vue:112`, beside "Recently deleted"). Tiered logging
+  `EXPORT_LOG_LEVEL = off | light | normal | verbose` (default light): light names the workspace, the per-collection
+  counts and the byte size, and the source (this route, or a later script), because an export that silently omits a
+  collection leaves a count as its only trace. Files: `server/src/lib/graphExporter.js` and
+  `server/src/routes/export.js` (both new), `server/src/app.js` (one mount), `client/src/components/WikiLayout.vue`, a
+  new `client/src/api/export.js`, a `## Export` section in `docs/api.md`, and a Decision Log line in `kol_emet_spec.md`
+  for the canonical form. Verify: a new `server/tests/unit/graphExporter.test.js` — a fixture workspace exports every
+  collection with the documented keys; two exports of the same data are byte-identical; ordering does not depend on
+  insertion order; ids are strings; and no `aiBudget`, `passwordHash`, `userId`, `email` or `workspaceId` key appears
+  anywhere in the output. A new `server/tests/http/export.test.js` — an authenticated caller gets their own graph and
+  nothing of a second workspace's, an unauthenticated call is 401, and the filename header is set. Plus a
+  `client/src/components/WikiLayout.test.js` case that the Settings row triggers the download. `cd server && yarn test`
+  and `cd client && yarn test && yarn build` green. Out of scope: the import side (`POST /import`, the wishlist's bulk
+  import — it needs an id-collision and merge policy and is its own item), the Git connector itself, YAML or Markdown
+  output, streaming for very large workspaces, and including ChangeLog history (KOL-019 has to settle whether history
+  is permanent first).
+- [ ] **(KOL-071) A workspace has a name its owner can see and change** [proposed]
+  `POST /auth/register` hard-codes `name: 'My Workspace'` (`server/src/routes/auth.js:143`) and nothing ever reads it
+  back: no route returns or changes a workspace name, and no component in `client/src` displays one. `Workspace` models
+  `members` with `owner | editor | viewer` roles from the start so sharing would not need a schema reshape
+  (`server/src/models/Workspace.js`), but `resolveWorkspace` (`server/src/middleware/workspace.js:30`) checks membership
+  only and no route anywhere checks a role. For a product whose next commercial step is collaborator invites, a
+  workspace that cannot be named, shown, or told apart from another is a gap in the shape of the product — and the role
+  check is the piece every later sharing route needs. Build: `GET /workspace` returns
+  `{ _id, name, role, createdAt }` for the caller's workspace, `role` read from their own `members` entry so the client
+  can hide what an editor or a viewer may not do; `PATCH /workspace` sets `name`, trimmed, 1–80 characters, 400 for
+  anything else, and only for an owner — 403 `{ error: 'NOT_WORKSPACE_OWNER' }` otherwise. The role check lives once, as
+  `requireWorkspaceRole('owner')` in `server/src/middleware/workspace.js` beside `resolveWorkspace`, because invites,
+  member removal and billing will each need exactly it. `POST /auth/register` accepts an optional `workspaceName` (same
+  validation; absent keeps today's default) and `client/src/views/LoginView.vue` offers it as an optional field with
+  `autocomplete="off"`, so a new user's first workspace is theirs rather than "My Workspace". A "Workspace" group in
+  Settings (`client/src/components/WikiLayout.vue:112`) shows the name with an inline rename for an owner and read-only
+  text for anyone else. Tiered logging `WORKSPACE_LOG_LEVEL = off | light | normal | verbose` (default light): light
+  names every rename with the old name, the new one and who asked, and every refusal with the role it read — the source
+  of the change, not just the new value. Files: `server/src/middleware/workspace.js`, `server/src/routes/workspace.js`
+  (new), `server/src/app.js`, `server/src/routes/auth.js`, `client/src/api/auth.js`, `client/src/views/LoginView.vue`,
+  `client/src/components/WikiLayout.vue`, and a `## Workspace` section in `docs/api.md`. Verify: a new
+  `server/tests/http/workspace.test.js` — `GET /workspace` returns the caller's own workspace with `role: 'owner'` and
+  never another user's; `PATCH` renames it; an empty, whitespace-only, non-string and 81-character name are each 400 and
+  change nothing; a member whose role is `editor` gets 403 and the name is unchanged; an unauthenticated call is 401;
+  registering with `workspaceName` uses it and registering without it keeps `My Workspace`. Plus a
+  `client/src/views/LoginView.test.js` case that the optional field posts through, and a
+  `client/src/components/WikiLayout.test.js` case that the Settings group shows the name and the rename calls the API.
+  `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: inviting or removing members,
+  more than one workspace per user (`resolveWorkspace` still takes the first membership, and choosing between several is
+  a product decision), enforcing `editor`/`viewer` on the content routes (every workspace has exactly one member today,
+  so there is nothing yet to enforce against), and billing.
+- [ ] **(KOL-072) A `?` cheatsheet for the keyboard shortcuts** [proposed]
+  KOL-063 shipped `/`, `Escape` and `n` through `client/src/composables/useKeyboardShortcuts.js` and listed "a `?`
+  cheatsheet overlay" in its own out-of-scope note; `docs/wishlist.md` carries the same open item ("a `?` cheatsheet and
+  user-configurable bindings are still open"). The three bindings are registered in one place
+  (`client/src/components/WikiLayout.vue:435`) and nothing in the UI names any of them, so a shortcut nobody can
+  discover is a shortcut nobody uses — and for a product people reach straight from a signup form, the first visit is
+  exactly when it has to be discoverable. Build: a new `client/src/components/ShortcutCheatsheet.vue` overlay listing
+  each binding as key + sentence, opened by `?` registered in the same binding map (so the single global listener still
+  owns every key, which is the invariant `useKeyboardShortcuts` exists to hold) and closed by `Escape` or a click
+  outside. `Escape` must close it *first*, ahead of Settings and the generator, so it joins `closeTopLayer`'s stated
+  order rather than taking a listener of its own. The list is derived from the binding map, not retyped beside it:
+  `useKeyboardShortcuts` takes `{ handler, label }` per key (or a parallel label map it validates) so a binding added
+  later cannot be missing from the sheet — that derivation is the reason this belongs next to the composable instead of
+  in a static template. A small `?` hint button beside the sidebar search opens the same overlay for anyone who would
+  never guess the key. Files: `client/src/composables/useKeyboardShortcuts.js`,
+  `client/src/components/ShortcutCheatsheet.vue` (new), `client/src/components/WikiLayout.vue`,
+  `client/src/components/EntitySidebar.vue`, and the Frontend — UX list in `docs/wishlist.md`. Verify:
+  `client/src/components/WikiLayout.test.js` — `?` opens the sheet and it lists every registered binding (asserted
+  against the map itself, so a new binding with no label fails the test); `Escape` closes the sheet and leaves an open
+  detail panel open; `?` typed into the search input types a `?` and opens nothing; the hint button opens it; and a
+  press reported as `event.key === '?'` with `shiftKey` true is not declined as a modifier press.
+  `cd client && yarn test && yarn build` green; no server change. Out of scope: user-configurable bindings
+  (`docs/wishlist.md` keeps them), shortcuts inside the draft review UI (KOL-063's own exclusion), a per-platform
+  `⌘`/`Ctrl` legend beyond plain text, and persisting a "don't show this again" preference.
 
 ## Blocked Items
 
