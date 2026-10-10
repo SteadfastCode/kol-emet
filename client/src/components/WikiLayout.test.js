@@ -72,6 +72,16 @@ vi.mock('../api/export.js', () => ({
   filenameFromDisposition: vi.fn(),
   FALLBACK_FILENAME: 'workspace-export.json',
 }));
+// The Workspace group reads GET /workspace on each Settings open and PATCHes a rename;
+// nothing in a test should fetch. What the module itself does is its own concern
+// (api/workspace.js).
+const { getWorkspace, renameWorkspace } = vi.hoisted(() => ({
+  getWorkspace: vi.fn(async () => ({ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
+  renameWorkspace: vi.fn(async (name) => ({ _id: 'w1', name, role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
+}));
+vi.mock('../api/workspace.js', () => ({
+  getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX: 80, default: getWorkspace,
+}));
 // useFilters is deliberately NOT mocked: it reaches nothing by itself — the layout hands it the
 // keyword request, which is the mocked `searchEntities` above — and the fields it reads off a
 // listed entity are the point of the list group below.
@@ -105,12 +115,12 @@ describe('WikiLayout entity types', () => {
 });
 
 describe('WikiLayout settings', () => {
-  it('has Passkeys, Recently deleted, Export workspace and Tags groups between Account and Delete account', () => {
+  it('opens with Workspace, then Account, and the rest between it and Delete account', () => {
     const wrapper = shallowMount(WikiLayout);
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
     expect(titles).toEqual([
-      'Account', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags', 'Delete account',
+      'Workspace', 'Account', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags', 'Delete account',
     ]);
   });
 
@@ -213,6 +223,102 @@ describe('WikiLayout settings', () => {
     expect(wrapper.get('.settings-error').text()).toBe('No workspace for this user');
     // And the row is usable again, so a transient failure is not a dead end.
     expect(exportRow(wrapper).attributes('disabled')).toBeUndefined();
+  });
+});
+
+/**
+ * The Workspace group (KOL-071): the name of the workspace this session is in, and a rename for
+ * its owner. The name is fetched when Settings opens, not on page load — it is shown nowhere else,
+ * and another session may have renamed it since — and the rename goes through the api module, whose
+ * own behaviour is its concern. `role` decides whether the field is there at all; the server
+ * refuses a non-owner's rename anyway (403 NOT_WORKSPACE_OWNER), which is the error case below.
+ *
+ * Goes red if the group stops reading the name, if the rename stops reaching the API, or if the
+ * field is rendered for a role that may not use it.
+ */
+describe('WikiLayout workspace group', () => {
+  const OWNED = { _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' };
+
+  beforeEach(() => {
+    getWorkspace.mockReset();
+    renameWorkspace.mockReset();
+    getWorkspace.mockResolvedValue({ ...OWNED });
+    renameWorkspace.mockImplementation(async (name) => ({ ...OWNED, name }));
+  });
+
+  const group = (wrapper) =>
+    wrapper.findAll('.mobile-settings-panel .settings-group')
+      .find((g) => g.get('.settings-group-title').text() === 'Workspace');
+
+  async function openSettings() {
+    const wrapper = shallowMount(WikiLayout);
+    expect(getWorkspace).not.toHaveBeenCalled();   // nothing is fetched on page load
+    await settingsTab(wrapper).trigger('click');
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('shows the workspace name, fetched when Settings opens', async () => {
+    const wrapper = await openSettings();
+
+    expect(getWorkspace).toHaveBeenCalledTimes(1);
+    // Every light-tier log line names what asked, so the source is part of the call.
+    expect(getWorkspace.mock.calls[0][0]).toMatchObject({ source: expect.stringContaining('Settings') });
+    expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+  });
+
+  it('an owner renames it: the typed name reaches the API and the group shows it', async () => {
+    const wrapper = await openSettings();
+
+    await group(wrapper).get('.workspace-input').setValue('The Signal Archive');
+    await group(wrapper).get('form.workspace-rename').trigger('submit');
+    await flushPromises();
+
+    expect(renameWorkspace).toHaveBeenCalledTimes(1);
+    expect(renameWorkspace.mock.calls[0][0]).toBe('The Signal Archive');
+    // The light tier names the source and the name being replaced, not just the new value.
+    expect(renameWorkspace.mock.calls[0][1]).toMatchObject({
+      source: expect.stringContaining('Settings'),
+      from: OWNED.name,
+    });
+    expect(group(wrapper).get('.workspace-name').text()).toBe('The Signal Archive');
+    expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+  });
+
+  it('trims the typed name, and does not send a rename to the name it already has', async () => {
+    const wrapper = await openSettings();
+
+    await group(wrapper).get('.workspace-input').setValue(`  ${OWNED.name}  `);
+    await group(wrapper).get('form.workspace-rename').trigger('submit');
+    await flushPromises();
+    expect(renameWorkspace).not.toHaveBeenCalled();
+
+    await group(wrapper).get('.workspace-input').setValue('  The Trimmed Archive  ');
+    await group(wrapper).get('form.workspace-rename').trigger('submit');
+    await flushPromises();
+    expect(renameWorkspace.mock.calls[0][0]).toBe('The Trimmed Archive');
+  });
+
+  it('a member who is not the owner reads the name, with no rename field', async () => {
+    getWorkspace.mockResolvedValue({ ...OWNED, role: 'editor' });
+    const wrapper = await openSettings();
+
+    expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    expect(group(wrapper).find('.workspace-rename').exists()).toBe(false);
+    expect(group(wrapper).get('.settings-note').text()).toContain('Only an owner can rename');
+  });
+
+  it('a refused rename says so in Settings', async () => {
+    renameWorkspace.mockRejectedValue(Object.assign(new Error('NOT_WORKSPACE_OWNER'), { status: 403 }));
+    const wrapper = await openSettings();
+
+    await group(wrapper).get('.workspace-input').setValue('Editor Was Here');
+    await group(wrapper).get('form.workspace-rename').trigger('submit');
+    await flushPromises();
+
+    expect(group(wrapper).get('.settings-error').text()).toBe('Only an owner can rename this workspace.');
+    // The name on screen is still the stored one, not the refused edit.
+    expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
   });
 });
 

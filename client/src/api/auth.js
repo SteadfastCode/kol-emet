@@ -20,9 +20,23 @@ async function req(path, options = {}) {
 export const getTemplates = () =>
   req('/templates');
 
-/** `template` is a key from getTemplates(); left out, the server seeds its default. */
-export const register = (email, password, template) =>
-  req('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, ...(template && { template }) }) });
+/**
+ * `template` is a key from getTemplates(); left out, the server seeds its
+ * default. `workspaceName` names the new workspace (KOL-071); left out, the
+ * server's default ("My Workspace") stands. Both are omitted from the body
+ * rather than sent empty: the server tells a missing field from an unusable
+ * one, and only the second is a 400.
+ */
+export const register = (email, password, template, workspaceName) =>
+  req('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      password,
+      ...(template && { template }),
+      ...(workspaceName && { workspaceName }),
+    }),
+  });
 
 export const login = (email, password) =>
   req('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });

@@ -110,6 +110,31 @@
     <div class="mobile-settings-panel">
       <div class="settings-inner">
         <button class="settings-close" title="Close" @click="closeSettings">✕</button>
+        <!-- First on purpose: which workspace this is, before anything done inside it (KOL-071). -->
+        <div class="settings-group">
+          <div class="settings-group-title">Workspace</div>
+          <p v-if="workspace" class="workspace-name">{{ workspace.name }}</p>
+          <!-- The rename is an owner's; everyone else reads the name above and is told why. -->
+          <form v-if="workspace?.role === 'owner'" class="workspace-rename" @submit.prevent="saveWorkspaceName">
+            <input
+              v-model="workspaceDraft"
+              class="workspace-input"
+              type="text"
+              name="workspace-name"
+              autocomplete="off"
+              aria-label="Workspace name"
+              :maxlength="WORKSPACE_NAME_MAX"
+              :disabled="workspaceSaving"
+            />
+            <button type="submit" class="btn-sm" :disabled="workspaceSaving || !workspaceRenameReady">
+              {{ workspaceSaving ? 'Saving…' : 'Rename' }}
+            </button>
+          </form>
+          <p v-else-if="workspace" class="settings-note">
+            Only an owner can rename this workspace. Your role here is {{ workspace.role }}.
+          </p>
+          <p v-if="workspaceError" class="settings-error" role="alert">{{ workspaceError }}</p>
+        </div>
         <div class="settings-group">
           <div class="settings-group-title">Account</div>
           <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
@@ -207,7 +232,7 @@
 </template>
 
 <script setup>
-import { ref, computed, provide, onMounted } from 'vue';
+import { ref, computed, provide, onMounted, watch } from 'vue';
 import EntitySidebar from './EntitySidebar.vue';
 import EntityDetail from './EntityDetail.vue';
 import EntityEditor from './EntityEditor.vue';
@@ -221,6 +246,7 @@ import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport } from '../api/export.js';
+import { getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -336,6 +362,65 @@ async function exportWorkspace() {
     exportError.value = err.message || 'Export failed';
   } finally {
     exporting.value = false;
+  }
+}
+
+/**
+ * The Workspace group (KOL-071): the name of the workspace this session is in,
+ * and a rename for its owner.
+ *
+ * Fetched on each Settings open rather than on page load — the name is only
+ * ever shown here, and another session may have renamed it since. `role` comes
+ * from the server's reading of this user's own membership, so the rename field
+ * is hidden for an editor or a viewer; the server refuses it for them anyway
+ * (403 NOT_WORKSPACE_OWNER), which is what the error branch below says.
+ */
+const workspace = ref(null);        // { _id, name, role, createdAt } from GET /workspace
+const workspaceDraft = ref('');     // the owner's edit in progress
+const workspaceSaving = ref(false);
+const workspaceError = ref('');
+
+const workspaceRenameReady = computed(() => {
+  const next = workspaceDraft.value.trim();
+  return !!next && next !== workspace.value?.name;
+});
+
+async function loadWorkspace() {
+  workspaceError.value = '';
+  try {
+    workspace.value = await getWorkspace({ source: 'Settings → Workspace' });
+    workspaceDraft.value = workspace.value.name;
+  } catch (err) {
+    workspaceError.value = 'Could not load this workspace’s name.';
+  }
+}
+
+watch(settingsVisible, (open) => { if (open) loadWorkspace(); });
+
+async function saveWorkspaceName() {
+  if (workspaceSaving.value || !workspaceRenameReady.value) return;
+  const from = workspace.value?.name;
+  workspaceSaving.value = true;
+  workspaceError.value = '';
+  try {
+    workspace.value = await renameWorkspace(workspaceDraft.value.trim(), {
+      source: 'Settings → Workspace',
+      from,
+    });
+    workspaceDraft.value = workspace.value.name;
+    addToast({
+      message: `Workspace renamed to ${workspace.value.name}`,
+      actorType: 'system',
+      actorLabel: 'Workspace',
+    });
+  } catch (err) {
+    workspaceError.value = err.status === 403
+      ? 'Only an owner can rename this workspace.'
+      : err.status === 400
+      ? `A workspace name has to be 1–${WORKSPACE_NAME_MAX} characters.`
+      : 'Could not rename this workspace.';
+  } finally {
+    workspaceSaving.value = false;
   }
 }
 
@@ -765,6 +850,33 @@ provide('openSnapshot', openSnapshot);
   line-height: 1.5;
   color: #666;
 }
+.workspace-name {
+  margin: 0;
+  font-size: 14px;
+  color: #ccc;
+}
+
+.workspace-rename {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.workspace-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #121212;
+  color: #e0e0e0;
+  font-family: inherit;
+}
+
+.workspace-input:focus { outline: none; border-color: #555; }
+.workspace-input:disabled { opacity: 0.5; }
+
 .settings-error {
   margin: 8px 0 0;
   font-size: 12px;

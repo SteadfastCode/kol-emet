@@ -11,7 +11,8 @@
  *   - password autocomplete pinned to 'current-password' (register mode never switches)
  *
  * The template picker suite below goes red when submit() stops passing the chosen key to
- * register() (both registration cases fail).
+ * register() (both registration cases fail), and the workspace-name suite at the bottom when the
+ * optional field stops reaching register() or starts being offered to a credential manager.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -147,7 +148,7 @@ describe('LoginView template picker', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
-    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', 'software-architecture');
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', 'software-architecture', undefined);
   });
 
   it('registers with worldbuilding when the choice is left alone', async () => {
@@ -156,7 +157,7 @@ describe('LoginView template picker', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
-    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', 'worldbuilding');
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', 'worldbuilding', undefined);
   });
 
   it('sits in the form, above the disclosure, and leaves the credential inputs alone', async () => {
@@ -186,7 +187,87 @@ describe('LoginView template picker', () => {
     await wrapper.get('form').trigger('submit');
     await flushPromises();
 
-    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined);
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined, undefined);
+  });
+});
+
+/**
+ * The optional workspace name (KOL-071): create-account mode offers it, sign-in mode does not, it
+ * is `autocomplete="off"` so no credential manager offers it as a username, and what it posts is
+ * the trimmed value — or nothing at all when it is left empty, which is what keeps the server's
+ * default name ("My Workspace") in place for a signup that does not care.
+ *
+ * Goes red if the field is dropped, if its autocomplete is loosened, or if submit() stops passing
+ * it to register().
+ */
+describe('LoginView workspace name', () => {
+  const FIELD = 'form input[name="workspace-name"]';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getTemplates.mockResolvedValue([]);
+    register.mockResolvedValue({ ok: true });
+  });
+
+  async function registerMode() {
+    const wrapper = mount(LoginView);
+    await switchTo(wrapper, 'Create account');
+    await flushPromises();
+    return wrapper;
+  }
+
+  async function fillCredentials(wrapper) {
+    await wrapper.get('form input[type="email"]').setValue('new@example.test');
+    await wrapper.get('form input[type="password"]').setValue('correct-horse-battery-staple');
+  }
+
+  it('sign-in mode does not offer it', () => {
+    expect(mount(LoginView).find(FIELD).exists()).toBe(false);
+  });
+
+  it('create-account mode offers it, optional and out of the credential manager', async () => {
+    const wrapper = await registerMode();
+    const field = wrapper.get(FIELD);
+
+    expect(field.attributes('autocomplete')).toBe('off');
+    expect(field.attributes('required')).toBeUndefined();
+    expect(field.attributes('maxlength')).toBe('80');
+  });
+
+  it('posts the typed name, trimmed', async () => {
+    const wrapper = await registerMode();
+    await fillCredentials(wrapper);
+    await wrapper.get(FIELD).setValue('  The Signal Archive  ');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined, 'The Signal Archive');
+  });
+
+  it('left empty, names no workspace at all', async () => {
+    const wrapper = await registerMode();
+    await fillCredentials(wrapper);
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined, undefined);
+  });
+
+  it('whitespace only is the same as empty', async () => {
+    const wrapper = await registerMode();
+    await fillCredentials(wrapper);
+    await wrapper.get(FIELD).setValue('    ');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledWith('new@example.test', 'correct-horse-battery-staple', undefined, undefined);
+  });
+
+  it('leaves the credential inputs alone', async () => {
+    const wrapper = await registerMode();
+
+    expect(autocomplete(wrapper, 'form input[type="email"]')).toBe('email');
+    expect(autocomplete(wrapper, 'form input[type="password"]')).toBe('new-password');
   });
 });
 
