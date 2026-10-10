@@ -28,7 +28,39 @@ async function req(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+/**
+ * Every entity in the workspace, in one unbounded response — the shape this
+ * route has always had, kept for the callers that want the whole graph at once
+ * (the graph view builds its node set from it). Prefer `getEntityPage` for
+ * anything a person is waiting on.
+ */
 export const getEntities = () => req('/entities');
+
+/** The page size `loadEntities` walks the workspace in; the server's own cap. */
+export const ENTITY_PAGE_SIZE = 200;
+
+/**
+ * One page of entities, ordered by title: the paged variant (KOL-067).
+ *
+ * `?limit=` is what opts into the envelope — `{ items, nextAfter, total }`
+ * instead of a bare array — so this function and `getEntities` above hit the
+ * same route and get different shapes on purpose. `after` is the previous
+ * page's `nextAfter` verbatim, sent back as the two fields it is made of;
+ * passing a cursor the server did not issue is a 400 rather than a silent
+ * first page.
+ *
+ * @param {{ limit?: number, after?: { title: string, _id: string }|null }} opts
+ * @returns {Promise<{ items: object[], nextAfter: { title: string, _id: string }|null, total: number }>}
+ */
+export const getEntityPage = ({ limit = ENTITY_PAGE_SIZE, after = null } = {}) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (after) {
+    params.set('after[title]', after.title);
+    params.set('after[_id]', after._id);
+  }
+  return req(`/entities?${params}`);
+};
+
 export const getEntity = (id) => req(`/entities/${id}`);
 export const createEntity = (data) => req('/entities', { method: 'POST', body: JSON.stringify(data) });
 export const updateEntity = (id, data) => req(`/entities/${id}`, { method: 'PUT', body: JSON.stringify(data) });

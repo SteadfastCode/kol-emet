@@ -1,13 +1,36 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { openQuestionsIn } from '../lib/scopedPopulate.js';
-import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
+import { searchTerm, keywordFilter, boundedInteger } from '../lib/searchFilter.js';
 
 const router = Router();
+
+/**
+ * ─── Tiered debug logging ───────────────────────────────────────────────────
+ * ENTITY_LIST_LOG_LEVEL = off | light | normal | verbose (default light)
+ *   off     — nothing
+ *   light   — every page of `GET /entities`: the limit and cursor it ran with,
+ *             how many rows came back, the total, the cursor it hands out next,
+ *             and the query string all of that was read from. A page boundary
+ *             that drops or repeats a row leaves no other trace — the client
+ *             concatenates pages and shows a list, so a missing entity looks
+ *             like a missing entity. Also every refused cursor.
+ *   normal  — light, plus the unpaged (bare array) reads, with their row count
+ *   verbose — normal, plus the first and last title on each page, which is
+ *             what a boundary bug is visible in
+ */
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  // Resolved per call, not at module load, so it can't depend on import order.
+  const active = LEVELS[process.env.ENTITY_LIST_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[entities:${level}] ${msg}`);
+}
 
 function validateBlocks(blocks) {
   if (!Array.isArray(blocks)) return 'blocks must be an array';
@@ -62,6 +85,66 @@ function stripTenancy(body) {
  */
 const LIST_FIELDS = 'title category summary tags open_questions relationships createdAt updatedAt';
 
+/**
+ * The page sizes this route will serve. Below the minimum is no page size at
+ * all (see `boundedInteger`); above the maximum is clamped to it.
+ *
+ * 200 is a page the client can render in one frame and a response that
+ * serializes in well under a millisecond, which is the whole point of the cap:
+ * the work this route does lands on the single event loop every tenant of this
+ * API shares, so an unbounded `JSON.stringify` of one workspace's entire row
+ * set is time nobody else's request can run in. A caller who wants the whole
+ * workspace still gets it — by asking for pages, not by asking for one.
+ */
+export const LIST_LIMIT_MIN = 1;
+export const LIST_LIMIT_MAX = 200;
+
+/**
+ * Reads `?after=` — the keyset cursor, the `title` and `_id` of the previous
+ * page's last row, exactly as that page's `nextAfter` handed it over. Sent as
+ * `?after[title]=…&after[_id]=…`, which the extended query parser (the one
+ * `searchTerm` exists to defend the filters against) delivers as the object the
+ * response shape already describes.
+ *
+ * Keyset and not `skip`: pages of a collection that is being written to while
+ * it is read are the common case here, and `skip` answers them wrongly — an
+ * entity created before page 2 shifts every later row forward one place, so a
+ * row that was page 2's first is served twice and the one the shift pushed past
+ * the boundary is never served at all. A cursor names a position in the sort
+ * rather than a count of rows, so an insert anywhere does not move it.
+ *
+ * Titles are not unique (nothing in the schema says they are, and "Chapter 1"
+ * in two workspaces' worth of real content says they are not), so `title`
+ * alone is not a position: the two rows sharing a title would straddle the
+ * boundary and one of them would be lost. The cursor therefore carries `_id`
+ * as the tie-break and the sort carries it too.
+ *
+ * A present-but-unusable cursor is refused rather than ignored. Dropping it
+ * would answer page 1 to a request for page 2 — and a client that pages until
+ * `nextAfter` is null would then never stop, since page 1 always has a next.
+ * Loud and once is better than silent and forever. (An empty `?after=` is the
+ * exception: that is a client that built a query string around a value it does
+ * not have, which is no cursor.)
+ *
+ * @returns {{ after: {title: string, _id: string}|null } | { error: string }}
+ */
+function listCursor(raw) {
+  if (raw === undefined || raw === '') return { after: null };
+
+  const error = {
+    error: "after must be the previous page's nextAfter, as after[title]=<title>&after[_id]=<id>",
+  };
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return error;
+
+  // Not through `searchTerm`: a cursor's title has to be the row's title
+  // byte for byte, and trimming or capping it would move the boundary.
+  const { title, _id: id } = raw;
+  if (typeof title !== 'string' || !title) return error;
+  if (typeof id !== 'string' || !mongoose.isValidObjectId(id)) return error;
+
+  return { after: { title, _id: id } };
+}
+
 // GET /entities
 router.get('/', async (req, res) => {
   try {
@@ -83,13 +166,71 @@ router.get('/', async (req, res) => {
     // projection opt-in joins it instead of adding a second parameter.
     const include = (searchTerm(req.query.include) ?? '').split(',').map(part => part.trim());
 
-    const query = Entity.find(filter).sort({ title: 1 });
-    if (!include.includes('blocks')) query.select(LIST_FIELDS);
+    // `?limit=` goes through searchFilter's integer counterpart for the reason
+    // the filters go through `searchTerm`: `?limit[$gt]=1` arrives as an object
+    // and `?limit=1&limit=2` as an array, and either one reaching `.limit()`
+    // is a 500 rather than a page. Absent, unusable, or below the minimum all
+    // mean *no limit* — today's unpaged bare array, unchanged.
+    const limit = boundedInteger(req.query.limit, { min: LIST_LIMIT_MIN, max: LIST_LIMIT_MAX });
 
-    const entities = await query
+    const source = req.originalUrl.includes('?') ? `?${req.originalUrl.split('?').slice(1).join('?')}` : '(no query string)';
+    const cursor = listCursor(req.query.after);
+    if (cursor.error) {
+      log('light', `refused 400 — ${cursor.error} (source: ${source}, after=${JSON.stringify(req.query.after)})`);
+      return res.status(400).json({ error: cursor.error });
+    }
+    const after = cursor.after;
+
+    // The cursor clause goes under `$and` rather than beside the filter's own
+    // keys, because `?q=` has already put an `$or` there (keywordFilter) and an
+    // object has one `$or`: assigning a second would silently drop whichever
+    // was written first — the keyword clause, or the page boundary.
+    const pageFilter = after
+      ? {
+        ...filter,
+        $and: [
+          ...(filter.$and ?? []),
+          { $or: [{ title: { $gt: after.title } }, { title: after.title, _id: { $gt: after._id } }] },
+        ],
+      }
+      : filter;
+
+    // `_id` joins the sort unconditionally: it is the cursor's tie-break, and
+    // an unpaged read is no worse for having a defined order among equal
+    // titles instead of whatever order the storage engine happened to answer.
+    const query = Entity.find(pageFilter).sort({ title: 1, _id: 1 });
+    if (!include.includes('blocks')) query.select(LIST_FIELDS);
+    // One row past the page. Whether a next page exists is then a fact about
+    // what came back, rather than something inferred from `total` — which
+    // counts the unpaged filter and can change between the two queries.
+    if (limit) query.limit(limit + 1);
+
+    const rows = await query
       .populate(openQuestionsIn(req.workspaceId))
       .lean();
-    res.json(entities);
+
+    // No `limit` is no envelope: the response stays the bare array it has
+    // always been, so the MCP tools, the chat tool, the graph view and any
+    // script outside this repo are untouched by this change. The envelope —
+    // the breaking part — is what asking for a page opts into.
+    if (!limit) {
+      log('normal', `unpaged list → ${rows.length} row(s), bare array (source: ${source})`);
+      return res.json(rows);
+    }
+
+    const items = rows.slice(0, limit);
+    const last = items[items.length - 1];
+    const nextAfter = rows.length > limit && last ? { title: last.title, _id: String(last._id) } : null;
+    // `filter`, not `pageFilter`: the total is the size of the set being paged
+    // through, which is what a "page 2 of 7" is counted against. Counting the
+    // rows after the cursor instead would shrink it with every page.
+    const total = await Entity.countDocuments(filter);
+
+    const describe = (c) => (c ? `${JSON.stringify(c.title)}/${c._id}` : '(none)');
+    log('light', `page → limit ${limit}, after ${describe(after)}, ${items.length} row(s) of ${total} total, next ${describe(nextAfter)} (source: ${source})`);
+    log('verbose', `page titles: ${items.length ? `${JSON.stringify(items[0].title)} … ${JSON.stringify(last.title)}` : '(empty)'}`);
+
+    res.json({ items, nextAfter, total });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
