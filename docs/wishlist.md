@@ -3,7 +3,8 @@
 Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 
 ## Frontend — UX
-- ✅ Keyboard shortcuts (`/` to focus search, `Esc` to close the topmost layer, `n` for a new entity) — shipped 2026-10-07 (KOL-063); a `?` cheatsheet and user-configurable bindings are still open
+- ✅ Keyboard shortcuts (`/` to focus search, `Esc` to close the topmost layer, `n` for a new entity) — shipped 2026-10-07 (KOL-063)
+- ✅ `?` cheatsheet overlay for the shortcuts, derived from the binding map — shipped 2026-10-10 (KOL-072); user-configurable bindings are still open
 - Mobile-optimized layout
 - Drag-to-reorder blocks in EntryDetail (currently only in EntryEditor)
 - Resize handle on the list/panel split boundary
