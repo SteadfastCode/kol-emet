@@ -23,8 +23,13 @@ import {
   PRODUCER_VERSION as OPENAPI_PRODUCER_VERSION, MAX_OPENAPI_CHARS,
 } from '../lib/producers/openApi.js';
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
+import { objectIdParam } from '../middleware/objectId.js';
 
 const router = Router();
+
+// A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
+// Registered here rather than per handler so a later route inherits it.
+router.param('id', objectIdParam('id'));
 
 /**
  * Minimum budget required to START a run, in micro-dollars.

@@ -7,8 +7,13 @@ import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { openQuestionsIn } from '../lib/scopedPopulate.js';
 import { searchTerm, keywordFilter, boundedInteger } from '../lib/searchFilter.js';
+import { objectIdParam } from '../middleware/objectId.js';
 
 const router = Router();
+
+// A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
+// Registered here rather than per handler so a later route inherits it.
+router.param('id', objectIdParam('id'));
 
 /**
  * ─── Tiered debug logging ───────────────────────────────────────────────────

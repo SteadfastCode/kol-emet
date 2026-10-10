@@ -2,8 +2,13 @@ import { Router } from 'express';
 import OpenQuestion from '../models/OpenQuestion.js';
 import Entity from '../models/Entity.js';
 import { entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
+import { objectIdParam } from '../middleware/objectId.js';
 
 const router = Router();
+
+// A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
+// Registered here rather than per handler so a later route inherits it.
+router.param('id', objectIdParam('id'));
 
 // GET /open-questions — all questions, optional ?status=open|resolved
 router.get('/', async (req, res) => {
