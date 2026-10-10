@@ -70,6 +70,22 @@ Mount points and their guards:
 | `/conversations` | `requireAuth` + `resolveWorkspace` | Saved AI conversations |
 | `/drafts` | `requireAuth` + `resolveWorkspace` | Generated drafts; `POST /:id/apply` uses `requireActor` |
 
+## Route parameters
+
+Any route taking an id in its path — `:id`, and the `:logId`, `:entityId` and `:subGroupId` beside it
+— answers **400 `{ "error": "INVALID_ID", "param": "<name>" }`** when that parameter is not a valid
+24-hex ObjectId, before the route runs. The check is
+[`middleware/objectId.js`](../server/src/middleware/objectId.js), registered with `router.param` on
+`/entities`, the changelog routes, `/relationship-groups`, `/open-questions`, `/conversations` and
+`/drafts`.
+
+400 and not 404 on purpose: a **well-formed** id belonging to another workspace stays 404 (see
+[Entities](#entities)), so the API never confirms another tenant's row exists, while a malformed id
+cannot name anyone's row and so reveals nothing by being refused — it is simply a request the caller
+got wrong. Previously these reached Mongoose and came back as 500 carrying the driver's own cast
+message. `OBJECT_ID_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) names every
+refusal with the parameter, the URL and the mount it came from.
+
 ---
 
 ## Entities

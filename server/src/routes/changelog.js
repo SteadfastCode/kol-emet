@@ -68,8 +68,14 @@ import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
 import { openQuestionsIn } from '../lib/scopedPopulate.js';
 import { registeredCategories } from '../lib/entityTypeRegistry.js';
+import { objectIdParam } from '../middleware/objectId.js';
 
 const router = Router({ mergeParams: true });
+
+// A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
+// Registered here rather than per handler so a later route inherits it.
+router.param('id', objectIdParam('id'));
+router.param('logId', objectIdParam('logId'));
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 

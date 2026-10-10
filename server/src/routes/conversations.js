@@ -2,8 +2,13 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import Conversation from '../models/Conversation.js';
 import { PROVIDERS, makeClient } from '../lib/aiProviders.js';
+import { objectIdParam } from '../middleware/objectId.js';
 
 const router = Router();
+
+// A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
+// Registered here rather than per handler so a later route inherits it.
+router.param('id', objectIdParam('id'));
 
 // All routes require a session user (not bearer-token / MCP).
 function sessionUserId(req, res) {

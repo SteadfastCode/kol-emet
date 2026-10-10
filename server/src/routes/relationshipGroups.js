@@ -2,8 +2,15 @@ import { Router } from 'express';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import Entity from '../models/Entity.js';
 import { requireActor } from '../middleware/auth.js';
+import { objectIdParam } from '../middleware/objectId.js';
 
 const router = Router();
+
+// A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
+// Registered here rather than per handler so a later route inherits it.
+router.param('id', objectIdParam('id'));
+router.param('entityId', objectIdParam('entityId'));
+router.param('subGroupId', objectIdParam('subGroupId'));
 
 // ─── Population helper ────────────────────────────────────────────────────────
 
