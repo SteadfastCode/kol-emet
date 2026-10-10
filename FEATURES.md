@@ -53,7 +53,7 @@ registration, or removes a feature.
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
-- [ ] **(KOL-067) Pagination and a total count on `GET /entities`**
+- [x] **(KOL-067) Pagination and a total count on `GET /entities`**
   `GET /entities` (`server/src/routes/entities.js:66`) returns every entity in the workspace, unbounded:
   `Entity.find(filter).sort({ title: 1 })` with no `limit`, no `skip` and no cursor, and `loadEntities`
   (`client/src/composables/useEntities.js:10`) calls it on page load and again after every create. KOL-061 took the block

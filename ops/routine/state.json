@@ -79,18 +79,18 @@
     "KOL-067": {
       "order": 5,
       "title": "Pagination and a total count on `GET /entities`",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-067",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-10T14:13:00.524Z",
+      "runId": "2026-10-10T14:08:28.940Z",
       "lastFail": null
     },
     "KOL-068": {
