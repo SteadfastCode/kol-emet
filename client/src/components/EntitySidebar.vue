@@ -29,13 +29,25 @@
         </div>
       </div>
 
-      <input
-        ref="searchInput"
-        :value="searchQuery"
-        class="search-input"
-        placeholder="Search entries… ( / )"
-        @input="$emit('search', $event.target.value)"
-      />
+      <div class="search-row">
+        <input
+          ref="searchInput"
+          :value="searchQuery"
+          class="search-input"
+          placeholder="Search entries… ( / )"
+          @input="$emit('search', $event.target.value)"
+        />
+        <!-- The `?` key opens the same sheet, but a key you have to guess is a key nobody
+             presses — so the sheet has a button too, beside the one shortcut the UI already
+             names (KOL-072). -->
+        <button
+          class="btn-sm shortcut-hint"
+          type="button"
+          title="Keyboard shortcuts ( ? )"
+          aria-label="Keyboard shortcuts"
+          @click="$emit('shortcuts')"
+        >?</button>
+      </div>
 
       <div class="cat-pills">
         <span
@@ -124,7 +136,7 @@ const isFiltered = computed(() =>
   (props.activeCat && props.activeCat !== 'All')
 );
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate', 'shortcuts']);
 
 // The `/` shortcut lives in the layout (one global key listener for the app),
 // so it needs a way in here. Exposing the move rather than the element keeps
@@ -173,8 +185,23 @@ defineExpose({ focusSearch });
   gap: 6px;
 }
 
+/* The search box and the shortcut hint share the row; the box takes what is left. */
+.search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.shortcut-hint {
+  flex: 0 0 auto;
+  width: 30px;
+  padding: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .search-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 8px 12px;
   font-size: 13px;
   border-radius: 8px;

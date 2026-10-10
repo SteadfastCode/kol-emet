@@ -24,6 +24,7 @@
         @chat="chatOpen = !chatOpen"
         @graph="graphOpen = !graphOpen"
         @generate="generatorOpen = true"
+        @shortcuts="showShortcuts"
       />
     </div>
 
@@ -105,6 +106,16 @@
     />
 
     <ChatPanel :open="chatOpen" @close="onChatClose" />
+
+    <!-- The `?` cheatsheet (KOL-072). Over every other layer, because it is the layer you open
+         to find out how to get out of them; Escape closes it first for the same reason. -->
+    <Transition name="sheet-fade">
+      <ShortcutCheatsheet
+        v-if="cheatsheetOpen"
+        :shortcuts="shortcuts"
+        @close="cheatsheetOpen = false"
+      />
+    </Transition>
 
     <!-- Settings: a tab on mobile portrait; elsewhere an overlay opened from the sidebar -->
     <div class="mobile-settings-panel">
@@ -240,6 +251,7 @@ import ToastNotification from './ToastNotification.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
 import GeneratorOverlay from './generator/GeneratorOverlay.vue';
+import ShortcutCheatsheet from './ShortcutCheatsheet.vue';
 import AccountDeletion from './AccountDeletion.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
@@ -305,6 +317,7 @@ const activePanelId = ref(null);
 const chatOpen = ref(false);
 const graphOpen = ref(false);
 const generatorOpen = ref(false);
+const cheatsheetOpen = ref(false);
 const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
 
 // The settings overlay. On mobile portrait, settings is the 'settings' tab
@@ -547,11 +560,16 @@ function focusSearch(event) {
 
 /**
  * Escape walks back out of the layers, one press per layer, topmost first.
- * The order below is the stacking order: settings and the generator sit over
- * everything, the graph over the panels, the chat beside them, and the detail
+ * The order below is the stacking order: the cheatsheet over all of it (it is
+ * what you opened to find out how to close the rest), then settings and the
+ * generator, the graph over the panels, the chat beside them, and the detail
  * panel is the floor. Nothing open and the press does nothing.
+ *
+ * The cheatsheet joins this list rather than taking an Escape listener of its
+ * own — two listeners on one key is how one press closes two layers.
  */
 function closeTopLayer() {
+  if (cheatsheetOpen.value)  { cheatsheetOpen.value = false; return; }
   if (settingsVisible.value) { closeSettings(); return; }
   if (generatorOpen.value)   { generatorOpen.value = false; return; }
   if (graphOpen.value)       { graphOpen.value = false; return; }
@@ -563,10 +581,19 @@ function openNewEntity() {
   openEditor();
 }
 
-useKeyboardShortcuts({
-  '/': focusSearch,
-  Escape: closeTopLayer,
-  n: openNewEntity,
+// Also the sidebar's `?` button, for anyone who would never guess the key.
+function showShortcuts() {
+  cheatsheetOpen.value = true;
+}
+
+// The labels are not decoration: `shortcuts` below is this map, and it is what
+// the cheatsheet renders — a binding added here without one throws at
+// registration instead of shipping as a key nobody can find (KOL-072).
+const { shortcuts } = useKeyboardShortcuts({
+  '/': { handler: focusSearch, label: 'Jump to the search box' },
+  Escape: { handler: closeTopLayer, label: 'Close the topmost panel or overlay' },
+  n: { handler: openNewEntity, label: 'Start a new entity' },
+  '?': { handler: showShortcuts, label: 'Open this list of shortcuts' },
 });
 
 // ─── SSE change summary helpers ───────────────────────────────────────────────
@@ -999,6 +1026,11 @@ provide('openSnapshot', openSnapshot);
 }
 
 /* Graph overlay fade */
+.sheet-fade-enter-active,
+.sheet-fade-leave-active { transition: opacity 0.15s ease; }
+.sheet-fade-enter-from,
+.sheet-fade-leave-to { opacity: 0; }
+
 .graph-fade-enter-active,
 .graph-fade-leave-active { transition: opacity 0.2s ease; }
 .graph-fade-enter-from,

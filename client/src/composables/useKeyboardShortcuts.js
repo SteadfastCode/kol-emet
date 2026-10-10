@@ -15,21 +15,32 @@ import { onMounted, onUnmounted } from 'vue';
  *     character it is entitled to; Escape is how you get back out of the field,
  *     so that one is always ours.
  *   - A key held with ctrl, meta or alt is never ours — those belong to the
- *     browser and the OS.
+ *     browser and the OS. Shift is deliberately not in that list: `?` *is*
+ *     shift and another key on most layouts, so a press that arrives as
+ *     `event.key === '?'` with `shiftKey` set is that shortcut, not a
+ *     modifier combination someone else owns.
  *
  * Handlers decide about `preventDefault` themselves: `/` has to swallow the
  * character it would otherwise type, Escape has nothing to swallow.
  *
- * @param {Record<string, (event: KeyboardEvent) => void>} bindings
- *   `event.key` → handler. Use named functions: the name is what the log lines
- *   below report, and what makes the shortcut set readable in one place.
+ * @param {Record<string, { handler: (event: KeyboardEvent) => void, label: string }>} bindings
+ *   `event.key` → `{ handler, label }`. Use named functions for the handler:
+ *   the name is what the log lines below report, and what makes the shortcut
+ *   set readable in one place. The label is the sentence the `?` cheatsheet
+ *   shows for the key.
+ * @returns {{ shortcuts: Array<{ key: string, label: string }> }}
+ *   The same set, in the order it was registered, for the cheatsheet to render.
  */
 export function useKeyboardShortcuts(bindings) {
+  // Before the listener: a malformed binding is a startup bug, not a key that
+  // silently does nothing (see describeBindings).
+  const shortcuts = describeBindings(bindings);
+
   function onKeydown(event) {
     shortcutLog('verbose', `keydown "${event.key}" from ${describeTarget(event.target)}`);
 
-    const handler = Object.hasOwn(bindings, event.key) ? bindings[event.key] : null;
-    if (typeof handler !== 'function') return;
+    if (!Object.hasOwn(bindings, event.key)) return;
+    const { handler } = bindings[event.key];
 
     if (event.ctrlKey || event.metaKey || event.altKey) {
       shortcutLog('normal', `"${event.key}" declined: held with ctrl/meta/alt, so it is the browser's`);
@@ -47,6 +58,30 @@ export function useKeyboardShortcuts(bindings) {
 
   onMounted(() => window.addEventListener('keydown', onKeydown));
   onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+
+  return { shortcuts };
+}
+
+/**
+ * The `?` cheatsheet is this list, which is why it is derived from the binding
+ * map instead of written out beside it (KOL-072): a shortcut added to the map
+ * reaches the sheet with it, and one added without a sentence to show for it
+ * fails here — at registration, loudly — rather than shipping as a key nobody
+ * can discover. Order is the map's order, so the sheet reads the way the
+ * bindings are written.
+ */
+function describeBindings(bindings) {
+  return Object.entries(bindings).map(([key, binding]) => {
+    if (typeof binding?.handler !== 'function') {
+      throw new TypeError(`Keyboard shortcut "${key}" needs a { handler } function.`);
+    }
+    if (typeof binding.label !== 'string' || !binding.label.trim()) {
+      throw new TypeError(
+        `Keyboard shortcut "${key}" needs a { label } — the sentence the ? cheatsheet shows for it.`,
+      );
+    }
+    return { key, label: binding.label };
+  });
 }
 
 // ─── Debug tiers ──────────────────────────────────────────────────────────────

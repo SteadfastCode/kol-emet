@@ -28,7 +28,9 @@ import EntitySidebar from './EntitySidebar.vue';
 import EntityEditor from './EntityEditor.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
+import ShortcutCheatsheet from './ShortcutCheatsheet.vue';
 import { SEARCH_DEBOUNCE_MS } from '../composables/useFilters.js';
+import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts.js';
 
 // The layout now holds a window-level keydown listener (KOL-063), so a wrapper
 // left mounted keeps answering keys for the rest of the file. Unmount them all.
@@ -590,6 +592,116 @@ describe('WikiLayout keyboard shortcuts', () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(document.activeElement).not.toBe(input);
+  });
+});
+
+/**
+ * The `?` cheatsheet (KOL-072). What is pinned here is that the sheet *is* the binding map: the
+ * rows are asserted against the list the composable derived from it, not against a list written
+ * out in this file — a binding added to the layout appears here with it, and one added without a
+ * label never reaches this group at all, because registration throws (last case below). So the
+ * sheet cannot drift out of date with the keys that actually work.
+ *
+ * `?` is also the one shortcut whose press arrives with a modifier flag set — it is shift and
+ * another key on most layouts — which is the one case the "ctrl/meta/alt is never ours" rule must
+ * not catch.
+ */
+const sheet = (wrapper) => wrapper.findComponent(ShortcutCheatsheet);
+
+describe('WikiLayout shortcut cheatsheet', () => {
+  beforeEach(() => {
+    entities.length = 0;
+    entities.push(...BLOCKLESS.map((e) => ({ ...e })));
+  });
+
+  it('opens on `?` and lists every registered binding, key and sentence', async () => {
+    const wrapper = mountShell();
+    expect(sheet(wrapper).exists()).toBe(false);
+
+    press('?');
+    await wrapper.vm.$nextTick();
+
+    // The map, as the composable derived it — the sheet's only source of rows.
+    const registered = sheet(wrapper).props('shortcuts');
+    expect(registered.length).toBeGreaterThan(0);
+
+    const rows = wrapper.findAll('.sheet-row').map((row) => ({
+      key: row.get('.sheet-key').text(),
+      label: row.get('.sheet-label').text(),
+    }));
+    expect(rows).toEqual(registered.map(({ key, label }) => ({ key, label })));
+    // Every one of them says something; an empty sentence is a row nobody can read.
+    expect(rows.every((r) => r.label.trim().length > 0)).toBe(true);
+    // And the keys that work today are all on it.
+    expect(rows.map((r) => r.key)).toEqual(expect.arrayContaining(['/', 'Escape', 'n', '?']));
+  });
+
+  it('treats `?` as its own key, not a modifier press, when it arrives with shift held', async () => {
+    // On most layouts `?` *is* shift and another key, so the press really does carry shiftKey.
+    const wrapper = mountShell();
+
+    press('?', { shiftKey: true });
+    await wrapper.vm.$nextTick();
+
+    expect(sheet(wrapper).exists()).toBe(true);
+  });
+
+  it('closes on Escape before any other layer — the panel underneath stays open', async () => {
+    const wrapper = mountShell();
+    wrapper.findComponent(EntitySidebar).vm.$emit('select', 'e1', 'Boiler Room');
+    press('?');
+    await wrapper.vm.$nextTick();
+    expect(sheet(wrapper).exists()).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+
+    press('Escape');
+    await wrapper.vm.$nextTick();
+
+    expect(sheet(wrapper).exists()).toBe(false);
+    // One press, one layer: the detail panel is still where it was.
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+  });
+
+  it('closes on a click outside it, and not on a click within it', async () => {
+    const wrapper = mountShell();
+    press('?');
+    await wrapper.vm.$nextTick();
+
+    await sheet(wrapper).get('.sheet').trigger('click');
+    expect(sheet(wrapper).exists()).toBe(true);
+
+    await sheet(wrapper).get('.sheet-backdrop').trigger('click');
+    expect(sheet(wrapper).exists()).toBe(false);
+  });
+
+  it('types a `?` into the search box instead of opening, once the box has focus', async () => {
+    const wrapper = mountShell();
+    const input = wrapper.get('.search-input').element;
+    input.focus();
+
+    const event = press('?', { from: input, shiftKey: true });
+    await wrapper.vm.$nextTick();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(sheet(wrapper).exists()).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('opens from the sidebar hint button, for anyone who would not guess the key', async () => {
+    const wrapper = mountShell();
+    expect(sheet(wrapper).exists()).toBe(false);
+
+    await wrapper.get('.shortcut-hint').trigger('click');
+
+    expect(sheet(wrapper).exists()).toBe(true);
+  });
+
+  it('refuses a binding with no label — that is what keeps the sheet complete', () => {
+    // The guarantee behind the first case: there is no way to register a key that the sheet
+    // would not list, so this fails at startup rather than shipping an undiscoverable shortcut.
+    expect(() => useKeyboardShortcuts({ z: { handler: function zap() {} } })).toThrow(/label/);
+    expect(() => useKeyboardShortcuts({ z: { handler: function zap() {}, label: '  ' } })).toThrow(/label/);
+    expect(() => useKeyboardShortcuts({ z: { label: 'Zap something' } })).toThrow(/handler/);
   });
 });
 
