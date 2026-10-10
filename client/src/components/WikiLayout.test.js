@@ -1,6 +1,7 @@
 /**
- * Where the Passkeys, Recently deleted and Tags groups sit: in Settings, between Account and Delete
- * account, and mounted only while Settings shows, so their lists are fetched fresh on each open and
+ * Where the Passkeys, Recently deleted, Export workspace and Tags groups sit: in Settings, between
+ * Account and Delete account, and — bar the Export row, which fetches nothing until it is pressed —
+ * mounted only while Settings shows, so their lists are fetched fresh on each open and
  * never on page load. What each group itself does is pinned in PasskeySettings.test.js,
  * RecentlyDeleted.test.js and TagSettings.test.js; what is asserted here is that Tags is handed the
  * entity list the layout already holds (its counts come from there, not from a route) and that a
@@ -62,6 +63,15 @@ vi.mock('../api/entities.js', () => ({
   getEntityHistory: vi.fn(), rollbackEntity: vi.fn(),
   getDeletedEntities: vi.fn(), restoreEntity: vi.fn(),
 }));
+// The Export workspace row calls this; nothing in a test should fetch, and nothing should try to
+// save a file. What the real module does with the response is its own concern (api/export.js).
+const { downloadWorkspaceExport } = vi.hoisted(() => ({ downloadWorkspaceExport: vi.fn() }));
+vi.mock('../api/export.js', () => ({
+  downloadWorkspaceExport,
+  default: downloadWorkspaceExport,
+  filenameFromDisposition: vi.fn(),
+  FALLBACK_FILENAME: 'workspace-export.json',
+}));
 // useFilters is deliberately NOT mocked: it reaches nothing by itself — the layout hands it the
 // keyword request, which is the mocked `searchEntities` above — and the fields it reads off a
 // listed entity are the point of the list group below.
@@ -95,11 +105,13 @@ describe('WikiLayout entity types', () => {
 });
 
 describe('WikiLayout settings', () => {
-  it('has Passkeys, Recently deleted and Tags groups between Account and Delete account', () => {
+  it('has Passkeys, Recently deleted, Export workspace and Tags groups between Account and Delete account', () => {
     const wrapper = shallowMount(WikiLayout);
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
-    expect(titles).toEqual(['Account', 'Passkeys', 'Recently deleted', 'Tags', 'Delete account']);
+    expect(titles).toEqual([
+      'Account', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags', 'Delete account',
+    ]);
   });
 
   it('mounts the group only while Settings shows: the mobile tab, or the overlay from the sidebar', async () => {
@@ -162,6 +174,45 @@ describe('WikiLayout settings', () => {
     group.vm.$emit('restored', 'ent-brakeman');
     await wrapper.vm.$nextTick();
     expect(loadEntities.mock.calls.length).toBe(beforeRestore + 1);
+  });
+
+  // The way out of the product (KOL-070). The row is the only thing in Settings that is NOT gated
+  // on `settingsVisible`: it fetches nothing until it is pressed, so there is no stale list to keep
+  // fresh. What the request and the saved file look like is pinned on the server
+  // (server/tests/http/export.test.js) and in api/export.js; what matters here is that the row
+  // reaches the API at all, and that a refusal stays in Settings.
+  const exportRow = (wrapper) =>
+    wrapper.findAll('.mobile-settings-panel .settings-row').find((b) => b.text().startsWith('Download workspace'));
+
+  it('the Export workspace row asks the API for the download', async () => {
+    downloadWorkspaceExport.mockClear();
+    downloadWorkspaceExport.mockResolvedValue({ filename: 'my-workspace-2026-10-10.json', bytes: 2048 });
+    const wrapper = shallowMount(WikiLayout);
+
+    await settingsTab(wrapper).trigger('click');
+    expect(downloadWorkspaceExport).not.toHaveBeenCalled();
+
+    await exportRow(wrapper).trigger('click');
+    expect(downloadWorkspaceExport).toHaveBeenCalledTimes(1);
+    // Every light-tier log line names what started the export, so the source is part of the call.
+    expect(downloadWorkspaceExport.mock.calls[0][0]).toMatchObject({ source: expect.stringContaining('Settings') });
+
+    await flushPromises();
+    expect(wrapper.find('.settings-error').exists()).toBe(false);
+  });
+
+  it('a failed export says so in Settings rather than navigating away', async () => {
+    downloadWorkspaceExport.mockClear();
+    downloadWorkspaceExport.mockRejectedValue(new Error('No workspace for this user'));
+    const wrapper = shallowMount(WikiLayout);
+
+    await settingsTab(wrapper).trigger('click');
+    await exportRow(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('.settings-error').text()).toBe('No workspace for this user');
+    // And the row is usable again, so a transient failure is not a dead end.
+    expect(exportRow(wrapper).attributes('disabled')).toBeUndefined();
   });
 });
 

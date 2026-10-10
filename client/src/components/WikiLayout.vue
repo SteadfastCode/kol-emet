@@ -127,6 +127,20 @@
           <RecentlyDeleted v-if="settingsVisible" @restored="onEntityRestored" />
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">Export workspace</div>
+          <!-- The way out (KOL-070): the whole graph as one canonical JSON file. No `v-if` —
+               nothing is fetched until the row is pressed, so there is no stale list to keep
+               fresh. The server names the file; this only asks for it. -->
+          <button class="settings-row" :disabled="exporting" @click="exportWorkspace">
+            {{ exporting ? 'Preparing your export…' : 'Download workspace as JSON' }}
+          </button>
+          <p class="settings-note">
+            Everything in this workspace — entities, relationships, open questions and your type
+            vocabularies — in one file you can keep. Account details are never included.
+          </p>
+          <p v-if="exportError" class="settings-error" role="alert">{{ exportError }}</p>
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">Tags</div>
           <!-- Counts come from the entity list already loaded here, not a route of their own;
                a rename or removal touches many entities, so the list is refetched after one. -->
@@ -206,6 +220,7 @@ import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import { searchEntities } from '../api/entities.js';
+import { downloadWorkspaceExport } from '../api/export.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -300,6 +315,28 @@ function closeSettings() {
  */
 function onEntityRestored() {
   loadEntities();
+}
+
+/**
+ * The Export workspace row (KOL-070). The request carries the session cookie
+ * and the file is saved from a blob, so a refusal stays a message in Settings
+ * instead of navigating the app away to show an error body.
+ */
+const exporting = ref(false);
+const exportError = ref('');
+
+async function exportWorkspace() {
+  if (exporting.value) return;
+  exporting.value = true;
+  exportError.value = '';
+  try {
+    const { filename } = await downloadWorkspaceExport({ source: 'Settings → Export workspace' });
+    addToast({ message: `Exported ${filename}`, actorType: 'system', actorLabel: 'Export' });
+  } catch (err) {
+    exportError.value = err.message || 'Export failed';
+  } finally {
+    exporting.value = false;
+  }
 }
 
 function onChatClose() {
@@ -720,6 +757,19 @@ provide('openSnapshot', openSnapshot);
 .settings-row:hover { background: #1a1a1a; }
 .settings-row.danger { color: #e07070; }
 .settings-row.danger:hover { background: #1a0a0a; }
+.settings-row:disabled { color: #666; cursor: default; }
+
+.settings-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #666;
+}
+.settings-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #e07070;
+}
 
 .settings-close { display: none; }
 
