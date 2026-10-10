@@ -58,7 +58,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-072) A `?` cheatsheet for the keyboard shortcuts**
+- [x] **(KOL-072) A `?` cheatsheet for the keyboard shortcuts**
   KOL-063 shipped `/`, `Escape` and `n` through `client/src/composables/useKeyboardShortcuts.js` and listed "a `?`
   cheatsheet overlay" in its own out-of-scope note; `docs/wishlist.md` carries the same open item ("a `?` cheatsheet and
   user-configurable bindings are still open"). The three bindings are registered in one place
