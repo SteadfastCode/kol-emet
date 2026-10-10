@@ -19,15 +19,21 @@
  *   wrote. `tests/http/entitySearch.test.js` asserts the same thing over real
  *   HTTP, where the parser is the real one rather than a hand-built object.
  *
+ * `boundedInteger` is the same typing rule for `?limit=` (KOL-067), and the
+ * group at the bottom is where its arithmetic lives: the HTTP suite can see
+ * that `?limit=0` returned the whole list, but not that the cap is 200 rather
+ * than a number that happens to exceed the fixture.
+ *
  * Falsification: drop the `escapeRegex` call in `keywordFilter` and the literal
  * matching group fails; drop the `typeof raw !== 'string'` guard and the typing
- * group fails; drop the `MAX_TERM_LENGTH` slice and the cap test fails.
+ * group fails; drop the `MAX_TERM_LENGTH` slice and the cap test fails; return
+ * `value` instead of `Math.min(value, max)` and the clamp test fails.
  */
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { escapeRegex, searchTerm, keywordFilter, MAX_TERM_LENGTH } from '../../src/lib/searchFilter.js';
+import { escapeRegex, searchTerm, keywordFilter, boundedInteger, MAX_TERM_LENGTH } from '../../src/lib/searchFilter.js';
 
 /** The title regex out of a filter, which is what the term compiled to. */
 function titleRegex(term) {
@@ -131,6 +137,48 @@ describe('keywordFilter', () => {
   test('compiles rather than throwing for every shape of punctuation', () => {
     for (const term of ['(', '[', '\\', '*', '?', '+', '{2,}', 'a)b', '[z-a]']) {
       assert.doesNotThrow(() => keywordFilter(term), `keywordFilter(${JSON.stringify(term)}) threw`);
+    }
+  });
+});
+
+describe('boundedInteger', () => {
+  const BOUNDS = { min: 1, max: 200 };
+
+  test('reads a page size a caller typed', () => {
+    assert.equal(boundedInteger('1', BOUNDS), 1);
+    assert.equal(boundedInteger('200', BOUNDS), 200);
+    assert.equal(boundedInteger(' 25 ', BOUNDS), 25, 'surrounding whitespace is not part of the number');
+    assert.equal(boundedInteger('+25', BOUNDS), 25);
+  });
+
+  test('clamps above the maximum rather than refusing', () => {
+    // A caller asking for more rows than the route serves gets the most it
+    // serves — that is what a page size is for.
+    assert.equal(boundedInteger('201', BOUNDS), 200);
+    assert.equal(boundedInteger('9999', BOUNDS), 200);
+    assert.equal(boundedInteger('999999999999999999999', BOUNDS), 200, 'past Number.MAX_SAFE_INTEGER too');
+  });
+
+  test('below the minimum is no page size at all', () => {
+    // `.limit(0)` means *no limit* to MongoDB, so a 0 passed through would be
+    // read as a page of everything — the opposite of what was asked for.
+    for (const raw of ['0', '-1', '-200']) {
+      assert.equal(boundedInteger(raw, BOUNDS), null, `${JSON.stringify(raw)} should be no page size`);
+    }
+  });
+
+  test('anything that is not plainly an integer is no page size', () => {
+    for (const raw of ['', '   ', 'abc', '1.5', '2e3', '0x10', '1,2', '1 2', 'Infinity', 'NaN']) {
+      assert.equal(boundedInteger(raw, BOUNDS), null, `${JSON.stringify(raw)} should be no page size`);
+    }
+  });
+
+  test('a non-string is no page size — the operator object and the repeated parameter', () => {
+    // `?limit[$gt]=1` and `?limit=1&limit=2` out of the extended query parser.
+    // `Number({})` and `Number(['1','2'])` are both NaN, which would reach
+    // `.limit()` and throw inside the route's try as a 500.
+    for (const raw of [undefined, null, { $gt: 1 }, ['1', '2'], ['1'], 25, true, {}]) {
+      assert.equal(boundedInteger(raw, BOUNDS), null, `${JSON.stringify(raw) ?? String(raw)} should be no page size`);
     }
   });
 });

@@ -17,7 +17,7 @@
  * what it reads off an entity is part of what is pinned here.
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { enableAutoUnmount, mount, shallowMount } from '@vue/test-utils';
+import { enableAutoUnmount, flushPromises, mount, shallowMount } from '@vue/test-utils';
 import WikiLayout from './WikiLayout.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
@@ -31,18 +31,35 @@ import GraphView from './GraphView.vue';
 // left mounted keeps answering keys for the rest of the file. Unmount them all.
 enableAutoUnmount(afterEach);
 
-const { entities, loadEntities, selectEntity } = vi.hoisted(() => ({
+const { entities, loadEntities, selectEntity, realEntities } = vi.hoisted(() => ({
   entities: [], loadEntities: vi.fn(), selectEntity: vi.fn(),
+  // The paged-load group at the bottom needs the *real* composable — the thing
+  // it asserts is that two pages end up as one list of cards — while every
+  // other group here needs the stub. A flag, rather than a second test file
+  // mounting its own copy of this layout.
+  realEntities: { value: false },
 }));
-vi.mock('../composables/useEntities.js', async () => {
+vi.mock('../composables/useEntities.js', async (importOriginal) => {
   const { ref } = await import('vue');
+  const actual = await importOriginal();
   return {
-    useEntities: () => ({
+    useEntities: () => (realEntities.value ? actual.useEntities() : {
       entities: ref(entities), selectedEntity: ref(null), sidebarLoading: ref(false), detailLoading: ref(false),
       loadEntities, selectEntity, addEntity: vi.fn(), editEntity: vi.fn(), removeEntity: vi.fn(),
     }),
   };
 });
+// Mocked for the paged-load group, which is the only one that reaches it: the
+// real composable calls getEntityPage, and nothing in a test should fetch.
+const { getEntityPage } = vi.hoisted(() => ({ getEntityPage: vi.fn() }));
+vi.mock('../api/entities.js', () => ({
+  ENTITY_PAGE_SIZE: 200,
+  getEntityPage,
+  getEntities: vi.fn(), getEntity: vi.fn(), createEntity: vi.fn(),
+  updateEntity: vi.fn(), deleteEntity: vi.fn(),
+  getEntityHistory: vi.fn(), rollbackEntity: vi.fn(),
+  getDeletedEntities: vi.fn(), restoreEntity: vi.fn(),
+}));
 // useFilters is deliberately NOT mocked: it reaches nothing, and the fields it reads off a listed
 // entity are the point of the list group below.
 vi.mock('../composables/useNavigation.js', async () => {
@@ -356,5 +373,74 @@ describe('WikiLayout keyboard shortcuts', () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(document.activeElement).not.toBe(input);
+  });
+});
+
+/**
+ * The paged load (KOL-067). `GET /entities` used to answer with every row in the workspace in one
+ * response; `loadEntities` now walks pages and appends, so the list a person ends up looking at is
+ * assembled from several requests rather than handed over whole. Two things can break in a way no
+ * server test can see, and both are asserted here over the real composable and the real sidebar:
+ *
+ *   The pages have to *add up*. A list built by concatenation can drop a page or paint only the
+ *   first one, and the symptom is an entity that is simply not in the sidebar.
+ *
+ *   The first page has to paint before the rest arrive — that is the reason for paging at all. So
+ *   page 2 is left pending while the cards from page 1 are asserted: a load that waits for the
+ *   whole workspace before clearing `sidebarLoading` shows "Loading…" at that moment instead.
+ *
+ * Falsification: assign only the last page in `loadEntities` and the first assertion fails; clear
+ * `sidebarLoading` after the loop instead of after the first page and the mid-load one does.
+ */
+const PAGE_1 = [
+  { _id: 'p1', title: 'Aqueduct', category: 'Worlds', summary: 'Water over the gorge.', tags: [], open_questions: [], relationships: [] },
+  { _id: 'p2', title: 'Brakeman', category: 'Characters', summary: 'Rides the last car.', tags: [], open_questions: [], relationships: [] },
+];
+const PAGE_2 = [
+  { _id: 'p3', title: 'Coupling', category: 'Lore & Mechanics', summary: 'What holds the train together.', tags: [], open_questions: [], relationships: [] },
+];
+
+describe('WikiLayout paged entity load', () => {
+  beforeEach(() => {
+    realEntities.value = true;
+    getEntityPage.mockReset();
+  });
+
+  afterEach(() => {
+    realEntities.value = false;
+  });
+
+  it('ends a two-page load with every entity listed, once each', async () => {
+    getEntityPage
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: { title: 'Brakeman', _id: 'p2' }, total: 3 })
+      .mockResolvedValueOnce({ items: PAGE_2, nextAfter: null, total: 3 });
+
+    const wrapper = mountList();
+    await flushPromises();
+
+    expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
+    expect(getEntityPage).toHaveBeenCalledTimes(2);
+    // The second request is the first page's cursor, sent back as it was handed over.
+    expect(getEntityPage.mock.calls[0][0]).toEqual({ limit: 200, after: null });
+    expect(getEntityPage.mock.calls[1][0]).toEqual({ limit: 200, after: { title: 'Brakeman', _id: 'p2' } });
+  });
+
+  it('paints the first page while the rest of the workspace is still arriving', async () => {
+    let releasePage2;
+    getEntityPage
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: { title: 'Brakeman', _id: 'p2' }, total: 3 })
+      .mockReturnValueOnce(new Promise((resolve) => { releasePage2 = resolve; }));
+
+    const wrapper = mountList();
+    await flushPromises();
+
+    // Page 2 has not resolved, so this is the sidebar mid-load: cards, not "Loading…".
+    expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman']);
+    expect(wrapper.find('.list-empty').exists()).toBe(false);
+
+    releasePage2({ items: PAGE_2, nextAfter: null, total: 3 });
+    await flushPromises();
+
+    expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
   });
 });
