@@ -79,7 +79,7 @@
     "KOL-068": {
       "order": 5,
       "title": "The search box asks the server, so block text is searchable in the UI",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-068",

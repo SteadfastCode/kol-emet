@@ -54,34 +54,6 @@ registration, or removes a feature.
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
 
-- [x] **(KOL-068) The search box asks the server, so block text is searchable in the UI**
-  `useFilters` (`client/src/composables/useFilters.js:11`) filters the already-loaded list in the browser over `title`,
-  `summary` and `tags` only. The server's `?q=` (`keywordFilter`, `server/src/lib/searchFilter.js:85`) matches title,
-  summary **and** every block's `data.markdown`. So the one field a wiki keeps its content in is not searchable from the
-  UI at all: a word that appears only in a text block finds nothing in the sidebar while `GET /entities?q=<word>`
-  returns the entity. KOL-061 flagged this as "a real gap worth filing separately" when it stopped shipping `blocks` to
-  the list route — before that projection the browser at least *had* the text to search, so the projection made a
-  pre-existing gap permanent. Build: the search box queries the server; the category and tag pills stay local.
-  `useFilters` keeps `activeCat`/`activeTag` as in-browser filters but takes the searched set as an input rather than
-  searching it — with a non-empty `searchQuery`, `WikiLayout.vue:224` feeds it `GET /entities?q=<term>` (debounced
-  ~250 ms, newest response wins: an overtaken request must never replace a newer one, the guard
-  `client/src/composables/useEntityTypes.js` already implements) and with an empty one it falls back to the full loaded
-  list. Because a match can now be invisible, a row whose only hit was inside a block gets a "matched in text" line in
-  `client/src/components/EntitySidebar.vue`, so no result appears without a reason the reader can see. Tiered logging
-  `SEARCH_LOG_LEVEL = off | light | normal | verbose` (default light): light names each query, its source (a typed term,
-  a cleared box, a pill change), the row count, and every stale response discarded. Files:
-  `client/src/composables/useFilters.js`, `client/src/components/WikiLayout.vue`,
-  `client/src/components/EntitySidebar.vue`, `client/src/api/entities.js`, and the `GET /entities` row of `docs/api.md`
-  if the server grows a `matchedIn` hint. Verify: a new `client/src/composables/useFilters.test.js` — an empty box
-  filters locally with no request, a typed term calls the API once after the debounce rather than once per keystroke, an
-  overtaken response is discarded, a failed request keeps the previous results and raises a toast instead of emptying
-  the sidebar, and a category pill still narrows a server result set. `client/src/components/EntitySidebar.test.js` — a
-  row that matched only in a block carries the "matched in text" line. `server/tests/http/entitySearch.test.js` — one
-  case pinning that `?q=` finds a word present only in block markdown, which is the behaviour the client now depends
-  on. `cd client && yarn test && yarn build` and `cd server && yarn test` green. Out of scope: a MongoDB text index or
-  `$text` ranking (an Atlas index change), fuzzy matching (`fuse.js` is a dependency in `client/package.json` and
-  imported nowhere in `client/src` — removing it belongs to KOL-013), server-side tag search (`?tag=` is exact-match by
-  design), and highlighting the matched span inside the block.
 
 - [ ] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text**
   Every `:id` route hands `req.params.id` straight to Mongoose: `GET/PUT/DELETE /entities/:id`
@@ -232,6 +204,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-068) The search box asks the server, so block text is searchable in the UI** (routine 2026-10-10, 560b600)
+  `useFilters` (`client/src/composables/useFilters.js:11`) filters the already-loaded list in the browser over `title`,
+  `summary` and `tags` only. The server's `?q=` (`keywordFilter`, `server/src/lib/searchFilter.js:85`) matches title,
+  summary **and** every block's `data.markdown`. So the one field a wiki keeps its content in is not searchable from the
+  UI at all: a word that appears only in a text block finds nothing in the sidebar while `GET /entities?q=<word>`
+  returns the entity. KOL-061 flagged this as "a real gap worth filing separately" when it stopped shipping `blocks` to
+  the list route — before that projection the browser at least *had* the text to search, so the projection made a
+  pre-existing gap permanent. Build: the search box queries the server; the category and tag pills stay local.
+  `useFilters` keeps `activeCat`/`activeTag` as in-browser filters but takes the searched set as an input rather than
+  searching it — with a non-empty `searchQuery`, `WikiLayout.vue:224` feeds it `GET /entities?q=<term>` (debounced
+  ~250 ms, newest response wins: an overtaken request must never replace a newer one, the guard
+  `client/src/composables/useEntityTypes.js` already implements) and with an empty one it falls back to the full loaded
+  list. Because a match can now be invisible, a row whose only hit was inside a block gets a "matched in text" line in
+  `client/src/components/EntitySidebar.vue`, so no result appears without a reason the reader can see. Tiered logging
+  `SEARCH_LOG_LEVEL = off | light | normal | verbose` (default light): light names each query, its source (a typed term,
+  a cleared box, a pill change), the row count, and every stale response discarded. Files:
+  `client/src/composables/useFilters.js`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/EntitySidebar.vue`, `client/src/api/entities.js`, and the `GET /entities` row of `docs/api.md`
+  if the server grows a `matchedIn` hint. Verify: a new `client/src/composables/useFilters.test.js` — an empty box
+  filters locally with no request, a typed term calls the API once after the debounce rather than once per keystroke, an
+  overtaken response is discarded, a failed request keeps the previous results and raises a toast instead of emptying
+  the sidebar, and a category pill still narrows a server result set. `client/src/components/EntitySidebar.test.js` — a
+  row that matched only in a block carries the "matched in text" line. `server/tests/http/entitySearch.test.js` — one
+  case pinning that `?q=` finds a word present only in block markdown, which is the behaviour the client now depends
+  on. `cd client && yarn test && yarn build` and `cd server && yarn test` green. Out of scope: a MongoDB text index or
+  `$text` ranking (an Atlas index change), fuzzy matching (`fuse.js` is a dependency in `client/package.json` and
+  imported nowhere in `client/src` — removing it belongs to KOL-013), server-side tag search (`?tag=` is exact-match by
+  design), and highlighting the matched span inside the block.
 - [x] **(KOL-067) Pagination and a total count on `GET /entities`** (routine 2026-10-10, fbd3c73)
   `GET /entities` (`server/src/routes/entities.js:66`) returns every entity in the workspace, unbounded:
   `Entity.find(filter).sort({ title: 1 })` with no `limit`, no `skip` and no cursor, and `loadEntities`
