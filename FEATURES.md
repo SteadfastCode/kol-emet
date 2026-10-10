@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-071) A workspace has a name its owner can see and change**
+- [x] **(KOL-071) A workspace has a name its owner can see and change**
   `POST /auth/register` hard-codes `name: 'My Workspace'` (`server/src/routes/auth.js:143`) and nothing ever reads it
   back: no route returns or changes a workspace name, and no component in `client/src` displays one. `Workspace` models
   `members` with `owner | editor | viewer` roles from the start so sharing would not need a schema reshape
