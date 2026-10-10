@@ -61,6 +61,30 @@ export const getEntityPage = ({ limit = ENTITY_PAGE_SIZE, after = null } = {}) =
   return req(`/entities?${params}`);
 };
 
+/**
+ * The workspace's entities matching a keyword, as `GET /entities?q=` matches it
+ * (KOL-068): case-insensitively, literally, against a title, a summary, **or
+ * any block's markdown**.
+ *
+ * That last clause is the whole reason this function exists. The browser does
+ * not have block content — the list route projects it away (`LIST_FIELDS` in
+ * server/src/routes/entities.js) — so a word that lives only in an entity's
+ * text could not be searched in the browser at all, however the loaded list was
+ * filtered. Asking the server is the only place that word is known.
+ *
+ * Deliberately unpaged: no `?limit=`, so the response is the bare array this
+ * route has always answered rather than `getEntityPage`'s envelope. A result
+ * set is a search's whole answer, and `useFilters` narrows it with the category
+ * and tag pills in the browser — a page boundary would make a pill able to hide
+ * rows that exist. The route's own regex escaping and length cap bound the work
+ * (server/src/lib/searchFilter.js).
+ *
+ * The rows come back under the list projection, so they carry no `blocks`:
+ * `useFilters` is what works out which of them matched out of sight.
+ */
+export const searchEntities = (term) =>
+  req(`/entities?q=${encodeURIComponent(term)}`);
+
 export const getEntity = (id) => req(`/entities/${id}`);
 export const createEntity = (data) => req('/entities', { method: 'POST', body: JSON.stringify(data) });
 export const updateEntity = (id, data) => req(`/entities/${id}`, { method: 'PUT', body: JSON.stringify(data) });

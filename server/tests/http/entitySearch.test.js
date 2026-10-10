@@ -22,6 +22,13 @@
  *   plausible results, so a term both tenants match is asserted to return only
  *   the caller's row.
  *
+ *   A word that is only in a block has to be findable. That is the clause the
+ *   UI's search box rests on since KOL-068 — the browser has no block content
+ *   to search, so `?q=` is the only thing that knows the word is in the
+ *   workspace — and the same response has to keep *not* carrying the block it
+ *   matched, because the client works out which rows matched out of sight by
+ *   elimination. Both halves are one assertion here.
+ *
  * `tests/unit/searchFilter.test.js` owns the term's own semantics (what escapes,
  * what is null, the length cap). This file asserts what the route does with it.
  *
@@ -105,6 +112,13 @@ const BLOCKS = {
   tags: ['notes'],
   blocks: [{ type: 'text', order: 0, data: { markdown: 'Built against C++ (v2) on the old toolchain.' } }],
 };
+/**
+ * A word in BLOCKS' markdown and nowhere else — not in a title, not in a
+ * summary, not in a tag. Searching for it can only be answered by the `$or`'s
+ * third clause, which is the clause the UI's search box depends on (KOL-068).
+ */
+const BLOCK_ONLY_WORD = 'toolchain';
+
 const PLAIN = {
   title: 'Iron Gate',
   category: 'Characters',
@@ -185,6 +199,26 @@ after(async () => {
 });
 
 describe('GET /entities keyword search', () => {
+  test('a word that lives only in a block is found, and comes back without the block', async () => {
+    // The clause the whole UI search now rests on (KOL-068). The browser does
+    // not have block content — the list projection strips it — so this is the
+    // only place "toolchain" is known to be in the workspace at all. Premise
+    // first: the word is in neither title nor summary of anything here.
+    const visible = [PUNCTUATED, BLOCKS, PLAIN]
+      .map(e => `${e.title} ${e.summary}`)
+      .join(' ')
+      .toLowerCase();
+    assert.ok(!visible.includes(BLOCK_ONLY_WORD), `"${BLOCK_ONLY_WORD}" must be block-only for this case to mean anything`);
+
+    const body = await search(alice, `?q=${BLOCK_ONLY_WORD}`);
+
+    assert.deepEqual(titles(body), [BLOCKS.title], `expected only the entity whose block holds "${BLOCK_ONLY_WORD}"`);
+    // And the client's half of the deal: the row that matched carries no
+    // blocks, which is why it derives its "matched in text" line by
+    // elimination rather than reading the hit.
+    assert.ok(!('blocks' in body[0]), `the list projection must still strip blocks: ${Object.keys(body[0]).join(', ')}`);
+  });
+
   test('a bare opening bracket is a search, not a 500', async () => {
     const found = titles(await search(alice, '?q=('));
 

@@ -69,19 +69,23 @@ function stripTenancy(body) {
  * This is the first request a new workspace makes and the one every reload,
  * second tab and SSE reconnect repeats, and nothing on the list path reads
  * block content: the sidebar card shows a title, a category badge and a
- * summary, `useFilters` searches titles, summaries and tags, and the detail
- * panel and the editor both re-read the entity through `GET /entities/:id`
- * (which does its own `.lean()` read). Sending every block of every entity
- * here put the entire text of the wiki — megabytes for a workspace of a few
- * hundred real entities — on the one request that decides how long a workspace
- * takes to open, for nothing that gets rendered.
+ * summary, the client's filters narrow the list by category and tag only, and
+ * the detail panel and the editor both re-read the entity through
+ * `GET /entities/:id` (which does its own `.lean()` read). Sending every block
+ * of every entity here put the entire text of the wiki — megabytes for a
+ * workspace of a few hundred real entities — on the one request that decides
+ * how long a workspace takes to open, for nothing that gets rendered.
  *
  * `?include=blocks` asks for the old, unprojected shape, so a caller outside
  * this repo is not cut off by the change.
  *
  * `?q=` is unaffected. Its third clause matches `blocks.data.markdown` in the
  * *query* (lib/searchFilter.js), and a projection changes what comes back, not
- * what is searched — `tests/http/entityList.test.js` pins that.
+ * what is searched — `tests/http/entityList.test.js` pins that. The client's
+ * search box relies on exactly that split since KOL-068: it sends the keyword
+ * here because the block text it needs searched is not in the list it holds,
+ * and it works out which rows matched out of sight from the fact that the
+ * response still carries no blocks.
  */
 const LIST_FIELDS = 'title category summary tags open_questions relationships createdAt updatedAt';
 

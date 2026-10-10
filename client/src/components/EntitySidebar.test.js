@@ -4,6 +4,13 @@
  * is that the list comes from GET /entity-types, in the order the server sends it, and that a
  * category the registry lacks still gets a colour. VirtualList is stubbed to render every item:
  * jsdom has no layout, so the real one would window the list down to nothing.
+ *
+ * The second group is the search result's "matched in text" line (KOL-068). The search box asks the
+ * server, which matches block markdown as well as title and summary, so a result can be on screen
+ * for a reason that appears nowhere on its card — and a result with no visible reason is the thing
+ * this line exists to prevent. `useFilters` decides which rows get it (see its own tests); what is
+ * pinned here is that the sidebar renders it, on those rows only, without swallowing the click that
+ * opens the entity.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -44,8 +51,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const mountSidebar = () => mount(EntitySidebar, {
-  props: { entities: ENTITIES, activeCat: 'All', activeTag: null, searchQuery: '', loading: false },
+const mountSidebar = (props = {}) => mount(EntitySidebar, {
+  props: { entities: ENTITIES, activeCat: 'All', activeTag: null, searchQuery: '', loading: false, ...props },
   global: { stubs: { VirtualList: VirtualListStub } },
 });
 
@@ -84,5 +91,53 @@ describe('EntitySidebar categories', () => {
     const { styleFor } = useEntityTypes();
     expect(styleFor('Starships')).toEqual({ bg: '#333', color: '#aaa' });
     expect(styleFor('Characters')).toEqual({ bg: '#B5D4F4', color: '#0C447C' });
+  });
+});
+
+/**
+ * A search result set as `useFilters` hands it over: `matchedInText` on the row whose term was in
+ * neither its title nor its summary, absent on the one it could be read off.
+ */
+const RESULTS = [
+  { _id: 'r1', title: 'Boiler Room', category: 'Worlds', summary: 'Holds the boiler.', tags: [] },
+  { _id: 'r2', title: 'Coupling Rod', category: 'Worlds', summary: 'Holds the wheels in step.', tags: [], matchedInText: true },
+];
+
+const cardFor = (wrapper, title) =>
+  wrapper.findAll('.result-row').find((r) => r.find('.card-title').text() === title);
+
+describe('EntitySidebar search results', () => {
+  it("gives the row that matched only in a block the 'matched in text' line, and no other row", async () => {
+    const wrapper = mountSidebar({ entities: RESULTS, searchQuery: 'boiler' });
+    await flushPromises();
+
+    expect(cardFor(wrapper, 'Coupling Rod').get('.matched-in-text').text()).toBe('matched in text');
+    expect(cardFor(wrapper, 'Boiler Room').find('.matched-in-text').exists()).toBe(false);
+  });
+
+  it('leaves the line off every row when nothing is searched', async () => {
+    const wrapper = mountSidebar();
+    await flushPromises();
+
+    expect(wrapper.find('.matched-in-text').exists()).toBe(false);
+  });
+
+  it('still opens the entity when the marked row is clicked', async () => {
+    const wrapper = mountSidebar({ entities: RESULTS, searchQuery: 'boiler' });
+    await flushPromises();
+
+    await cardFor(wrapper, 'Coupling Rod').get('.sidebar-card').trigger('click');
+
+    expect(wrapper.emitted('select')).toEqual([['r2', 'Coupling Rod']]);
+  });
+
+  it('says a query is out while one is, on the count line', async () => {
+    const wrapper = mountSidebar({ entities: RESULTS, searchQuery: 'boiler', searching: true });
+    await flushPromises();
+
+    expect(wrapper.get('.entity-count').text()).toBe('2 entities \u00b7 searching\u2026');
+
+    await wrapper.setProps({ searching: false });
+    expect(wrapper.get('.entity-count').text()).toBe('2 entities');
   });
 });
