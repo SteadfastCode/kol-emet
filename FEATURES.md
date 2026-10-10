@@ -209,6 +209,31 @@ registration, or removes a feature.
   a product decision), enforcing `editor`/`viewer` on the content routes (every workspace has exactly one member today,
   so there is nothing yet to enforce against), and billing.
 
+- [ ] **(KOL-072) A `?` cheatsheet for the keyboard shortcuts**
+  KOL-063 shipped `/`, `Escape` and `n` through `client/src/composables/useKeyboardShortcuts.js` and listed "a `?`
+  cheatsheet overlay" in its own out-of-scope note; `docs/wishlist.md` carries the same open item ("a `?` cheatsheet and
+  user-configurable bindings are still open"). The three bindings are registered in one place
+  (`client/src/components/WikiLayout.vue:435`) and nothing in the UI names any of them, so a shortcut nobody can
+  discover is a shortcut nobody uses — and for a product people reach straight from a signup form, the first visit is
+  exactly when it has to be discoverable. Build: a new `client/src/components/ShortcutCheatsheet.vue` overlay listing
+  each binding as key + sentence, opened by `?` registered in the same binding map (so the single global listener still
+  owns every key, which is the invariant `useKeyboardShortcuts` exists to hold) and closed by `Escape` or a click
+  outside. `Escape` must close it *first*, ahead of Settings and the generator, so it joins `closeTopLayer`'s stated
+  order rather than taking a listener of its own. The list is derived from the binding map, not retyped beside it:
+  `useKeyboardShortcuts` takes `{ handler, label }` per key (or a parallel label map it validates) so a binding added
+  later cannot be missing from the sheet — that derivation is the reason this belongs next to the composable instead of
+  in a static template. A small `?` hint button beside the sidebar search opens the same overlay for anyone who would
+  never guess the key. Files: `client/src/composables/useKeyboardShortcuts.js`,
+  `client/src/components/ShortcutCheatsheet.vue` (new), `client/src/components/WikiLayout.vue`,
+  `client/src/components/EntitySidebar.vue`, and the Frontend — UX list in `docs/wishlist.md`. Verify:
+  `client/src/components/WikiLayout.test.js` — `?` opens the sheet and it lists every registered binding (asserted
+  against the map itself, so a new binding with no label fails the test); `Escape` closes the sheet and leaves an open
+  detail panel open; `?` typed into the search input types a `?` and opens nothing; the hint button opens it; and a
+  press reported as `event.key === '?'` with `shiftKey` true is not declined as a modifier press.
+  `cd client && yarn test && yarn build` green; no server change. Out of scope: user-configurable bindings
+  (`docs/wishlist.md` keeps them), shortcuts inside the draft review UI (KOL-063's own exclusion), a per-platform
+  `⌘`/`Ctrl` legend beyond plain text, and persisting a "don't show this again" preference.
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -234,30 +259,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-072) A `?` cheatsheet for the keyboard shortcuts** [proposed]
-  KOL-063 shipped `/`, `Escape` and `n` through `client/src/composables/useKeyboardShortcuts.js` and listed "a `?`
-  cheatsheet overlay" in its own out-of-scope note; `docs/wishlist.md` carries the same open item ("a `?` cheatsheet and
-  user-configurable bindings are still open"). The three bindings are registered in one place
-  (`client/src/components/WikiLayout.vue:435`) and nothing in the UI names any of them, so a shortcut nobody can
-  discover is a shortcut nobody uses — and for a product people reach straight from a signup form, the first visit is
-  exactly when it has to be discoverable. Build: a new `client/src/components/ShortcutCheatsheet.vue` overlay listing
-  each binding as key + sentence, opened by `?` registered in the same binding map (so the single global listener still
-  owns every key, which is the invariant `useKeyboardShortcuts` exists to hold) and closed by `Escape` or a click
-  outside. `Escape` must close it *first*, ahead of Settings and the generator, so it joins `closeTopLayer`'s stated
-  order rather than taking a listener of its own. The list is derived from the binding map, not retyped beside it:
-  `useKeyboardShortcuts` takes `{ handler, label }` per key (or a parallel label map it validates) so a binding added
-  later cannot be missing from the sheet — that derivation is the reason this belongs next to the composable instead of
-  in a static template. A small `?` hint button beside the sidebar search opens the same overlay for anyone who would
-  never guess the key. Files: `client/src/composables/useKeyboardShortcuts.js`,
-  `client/src/components/ShortcutCheatsheet.vue` (new), `client/src/components/WikiLayout.vue`,
-  `client/src/components/EntitySidebar.vue`, and the Frontend — UX list in `docs/wishlist.md`. Verify:
-  `client/src/components/WikiLayout.test.js` — `?` opens the sheet and it lists every registered binding (asserted
-  against the map itself, so a new binding with no label fails the test); `Escape` closes the sheet and leaves an open
-  detail panel open; `?` typed into the search input types a `?` and opens nothing; the hint button opens it; and a
-  press reported as `event.key === '?'` with `shiftKey` true is not declined as a modifier press.
-  `cd client && yarn test && yarn build` green; no server change. Out of scope: user-configurable bindings
-  (`docs/wishlist.md` keeps them), shortcuts inside the draft review UI (KOL-063's own exclusion), a per-platform
-  `⌘`/`Ctrl` legend beyond plain text, and persisting a "don't show this again" preference.
 
 ## Blocked Items
 
