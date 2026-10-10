@@ -56,7 +56,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-070) Canonical workspace export: `GET /export`**
+- [x] **(KOL-070) Canonical workspace export: `GET /export`**
   There is no way to get a workspace's graph out of the product. `server/src/lib/draftExporter.js` and
   `server/scripts/export-drafts-jsonl.js` export *decision records* as JSONL training data, not content; the only other
   reader of the whole graph is the client's own list route. For a product that charges for storing someone's work that
