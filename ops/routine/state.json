@@ -79,7 +79,7 @@
     "KOL-070": {
       "order": 5,
       "title": "Canonical workspace export: `GET /export`",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-070",

@@ -56,38 +56,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-070) Canonical workspace export: `GET /export`**
-  There is no way to get a workspace's graph out of the product. `server/src/lib/draftExporter.js` and
-  `server/scripts/export-drafts-jsonl.js` export *decision records* as JSONL training data, not content; the only other
-  reader of the whole graph is the client's own list route. For a product that charges for storing someone's work that
-  is two gaps at once: a user who wants to leave cannot take the graph with them, and the roadmap's Git-native track
-  names the missing piece exactly — "give the graph a canonical serializable form" is step one of the repo-resident
-  graph, and no Git connector can round-trip a form that does not exist. Build:
-  `server/src/lib/graphExporter.js` — a pure function from a `workspaceId` to one deterministic JSON document,
-  `{ version, exportedAt, workspace: { name }, entityTypes, relationshipTypes, entities, relationshipGroups,
-  openQuestions }`, with every collection sorted by a stable key (entities by `title` then `_id`, types by `order` then
-  `name`, groups by `_id`), every `ObjectId` stringified, and nothing else in it: no user, no session, no `aiBudget`, no
-  ChangeLog, no Draft. Deterministic because diffability is the point — the same graph exported twice must be
-  byte-identical, which is what a Git connector needs and what the test pins. Then `GET /export`
-  (`server/src/routes/export.js`, mounted behind `requireAuth` + `resolveWorkspace` in `server/src/app.js` like every
-  other tenant-content route) returning it with
-  `Content-Disposition: attachment; filename="<workspace>-<YYYY-MM-DD>.json"`, and an "Export workspace" row among the
-  Settings groups (`client/src/components/WikiLayout.vue:112`, beside "Recently deleted"). Tiered logging
-  `EXPORT_LOG_LEVEL = off | light | normal | verbose` (default light): light names the workspace, the per-collection
-  counts and the byte size, and the source (this route, or a later script), because an export that silently omits a
-  collection leaves a count as its only trace. Files: `server/src/lib/graphExporter.js` and
-  `server/src/routes/export.js` (both new), `server/src/app.js` (one mount), `client/src/components/WikiLayout.vue`, a
-  new `client/src/api/export.js`, a `## Export` section in `docs/api.md`, and a Decision Log line in `kol_emet_spec.md`
-  for the canonical form. Verify: a new `server/tests/unit/graphExporter.test.js` — a fixture workspace exports every
-  collection with the documented keys; two exports of the same data are byte-identical; ordering does not depend on
-  insertion order; ids are strings; and no `aiBudget`, `passwordHash`, `userId`, `email` or `workspaceId` key appears
-  anywhere in the output. A new `server/tests/http/export.test.js` — an authenticated caller gets their own graph and
-  nothing of a second workspace's, an unauthenticated call is 401, and the filename header is set. Plus a
-  `client/src/components/WikiLayout.test.js` case that the Settings row triggers the download. `cd server && yarn test`
-  and `cd client && yarn test && yarn build` green. Out of scope: the import side (`POST /import`, the wishlist's bulk
-  import — it needs an id-collision and merge policy and is its own item), the Git connector itself, YAML or Markdown
-  output, streaming for very large workspaces, and including ChangeLog history (KOL-019 has to settle whether history
-  is permanent first).
 
 - [ ] **(KOL-071) A workspace has a name its owner can see and change**
   `POST /auth/register` hard-codes `name: 'My Workspace'` (`server/src/routes/auth.js:143`) and nothing ever reads it
@@ -176,6 +144,38 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-070) Canonical workspace export: `GET /export`** (routine 2026-10-10, 9f9538c)
+  There is no way to get a workspace's graph out of the product. `server/src/lib/draftExporter.js` and
+  `server/scripts/export-drafts-jsonl.js` export *decision records* as JSONL training data, not content; the only other
+  reader of the whole graph is the client's own list route. For a product that charges for storing someone's work that
+  is two gaps at once: a user who wants to leave cannot take the graph with them, and the roadmap's Git-native track
+  names the missing piece exactly — "give the graph a canonical serializable form" is step one of the repo-resident
+  graph, and no Git connector can round-trip a form that does not exist. Build:
+  `server/src/lib/graphExporter.js` — a pure function from a `workspaceId` to one deterministic JSON document,
+  `{ version, exportedAt, workspace: { name }, entityTypes, relationshipTypes, entities, relationshipGroups,
+  openQuestions }`, with every collection sorted by a stable key (entities by `title` then `_id`, types by `order` then
+  `name`, groups by `_id`), every `ObjectId` stringified, and nothing else in it: no user, no session, no `aiBudget`, no
+  ChangeLog, no Draft. Deterministic because diffability is the point — the same graph exported twice must be
+  byte-identical, which is what a Git connector needs and what the test pins. Then `GET /export`
+  (`server/src/routes/export.js`, mounted behind `requireAuth` + `resolveWorkspace` in `server/src/app.js` like every
+  other tenant-content route) returning it with
+  `Content-Disposition: attachment; filename="<workspace>-<YYYY-MM-DD>.json"`, and an "Export workspace" row among the
+  Settings groups (`client/src/components/WikiLayout.vue:112`, beside "Recently deleted"). Tiered logging
+  `EXPORT_LOG_LEVEL = off | light | normal | verbose` (default light): light names the workspace, the per-collection
+  counts and the byte size, and the source (this route, or a later script), because an export that silently omits a
+  collection leaves a count as its only trace. Files: `server/src/lib/graphExporter.js` and
+  `server/src/routes/export.js` (both new), `server/src/app.js` (one mount), `client/src/components/WikiLayout.vue`, a
+  new `client/src/api/export.js`, a `## Export` section in `docs/api.md`, and a Decision Log line in `kol_emet_spec.md`
+  for the canonical form. Verify: a new `server/tests/unit/graphExporter.test.js` — a fixture workspace exports every
+  collection with the documented keys; two exports of the same data are byte-identical; ordering does not depend on
+  insertion order; ids are strings; and no `aiBudget`, `passwordHash`, `userId`, `email` or `workspaceId` key appears
+  anywhere in the output. A new `server/tests/http/export.test.js` — an authenticated caller gets their own graph and
+  nothing of a second workspace's, an unauthenticated call is 401, and the filename header is set. Plus a
+  `client/src/components/WikiLayout.test.js` case that the Settings row triggers the download. `cd server && yarn test`
+  and `cd client && yarn test && yarn build` green. Out of scope: the import side (`POST /import`, the wishlist's bulk
+  import — it needs an id-collision and merge policy and is its own item), the Git connector itself, YAML or Markdown
+  output, streaming for very large workspaces, and including ChangeLog history (KOL-019 has to settle whether history
+  is permanent first).
 - [x] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text** (routine 2026-10-10, 7b97b5d)
   Every `:id` route hands `req.params.id` straight to Mongoose: `GET/PUT/DELETE /entities/:id`
   (`server/src/routes/entities.js:99,142,172`), `GET /entities/:id/history` and
