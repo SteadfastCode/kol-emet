@@ -244,7 +244,7 @@ row; the reasoning is the KOL-060 Decision Log entry in `kol_emet_spec.md`.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/auth/register` | Create account (open registration). Body `{ email, password, template? }`: `template` is a key from [`GET /templates`](#templates) and decides what the new workspace is seeded with; left out, it is `worldbuilding`. 201 `{ ok: true }` and a session; 400 missing email or password; 400 `Unknown template` for a `template` that names none (including `null` or a non-string), creating no user or workspace; 409 email already registered. Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once a client address has created its limit of accounts (default 10 per 60 minutes — its own counter and its own window, not the sign-in one), checked before the duplicate lookup and the password hash and creating no user or workspace. Only a *created* account is counted, so a 400 or a 409 leaves the budget untouched ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
+| POST | `/auth/register` | Create account (open registration). Body `{ email, password, template?, workspaceName? }`: `template` is a key from [`GET /templates`](#templates) and decides what the new workspace is seeded with; left out, it is `worldbuilding`. `workspaceName` names the new workspace (trimmed, 1–80 characters, the same rule as [`PATCH /workspace`](#workspace)); left out, it is `My Workspace`, and an unusable one is 400 `INVALID_WORKSPACE_NAME` creating no user or workspace. 201 `{ ok: true }` and a session; 400 missing email or password; 400 `Unknown template` for a `template` that names none (including `null` or a non-string), creating no user or workspace; 409 email already registered. Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once a client address has created its limit of accounts (default 10 per 60 minutes — its own counter and its own window, not the sign-in one), checked before the duplicate lookup and the password hash and creating no user or workspace. Only a *created* account is counted, so a 400 or a 409 leaves the budget untouched ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
 | POST | `/auth/login` | Password login → session. 401 `Invalid email or password` for both a wrong password and an unknown address (byte-identical). Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once an email or a client address is over its failure limit, checked before the password is compared and identical for known and unknown addresses; a successful sign-in clears that email's counter ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
 | POST | `/auth/logout` | End session (`requireAuth`) |
 | GET | `/auth/me` | Current session user |
@@ -457,6 +457,39 @@ Requires `EXPORT_HMAC_SECRET`; returns **503** if it is unset rather than export
 key. If any raw ObjectId survives mapping the export fails with a 500 naming the field — a partial
 record is worse than a failure. The bulk equivalent is
 [`server/scripts/export-drafts-jsonl.js`](../server/scripts/export-drafts-jsonl.js).
+
+## Workspace
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/workspace` | The caller's workspace: `{ _id, name, role, createdAt }`. `role` is the caller's own membership role (`owner` \| `editor` \| `viewer`), read from the `members` array by `resolveWorkspace` and never from a request, so a client can hide what an editor or a viewer may not do |
+| PATCH | `/workspace` | Rename it. Body `{ name }`, trimmed, 1–80 characters. **Owners only**: 403 `{ error: 'NOT_WORKSPACE_OWNER' }` for any other role. 400 `{ error: 'INVALID_WORKSPACE_NAME' }` for an empty, whitespace-only, over-long or non-string name, changing nothing. Answers the same shape as `GET` |
+
+Registration has created a workspace since tenancy landed, and until KOL-071 nothing read its name
+back — every tenant's workspace was "My Workspace" and indistinguishable from every other. So
+`POST /auth/register` now takes an optional `workspaceName` (the same rule, and the same
+`INVALID_WORKSPACE_NAME` refusal, creating no account), the Workspace group in Settings
+(`client/src/components/WikiLayout.vue`) shows the name with an inline rename for an owner, and the
+signup form offers the name as an optional field.
+
+- **Scoped by the mount.** `requireAuth` + `resolveWorkspace`, like every other tenant-content
+  route, so the workspace read or renamed is the caller's own and there is no parameter with which
+  to name another. Unauthenticated is **401**.
+- **The role check lives once.** `requireWorkspaceRole('owner')` in
+  [`middleware/workspace.js`](../server/src/middleware/workspace.js), beside `resolveWorkspace`,
+  because collaborator invites, member removal and billing will each need exactly it. It is
+  hierarchical — a gate asking for `editor` passes an owner too — and it fails closed: with no
+  `req.workspaceRole` (a route mounted without `resolveWorkspace`) nothing passes.
+- **Only `name` is read from a body**, so a forged `_id`, `members`, `ownerId` or `aiBudget` there is
+  ignored. The 80-character cap is counted in code points, so it is the same cap for a Hebrew or an
+  emoji name as for an ASCII one.
+- Logging is `WORKSPACE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`): the light
+  tier names every rename with the old name, the new one and who asked, and every role refusal with
+  the role it read — the **source** of a change, not just its result.
+
+**Not here yet:** inviting or removing members, enforcing `editor`/`viewer` on the content routes
+(every workspace has exactly one member today, so there is nothing to enforce against), and more
+than one workspace per user — `resolveWorkspace` still takes the first membership it finds.
 
 ## Export
 

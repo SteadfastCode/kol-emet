@@ -49,6 +49,21 @@
             required
           />
 
+          <!-- Optional, and the one field here a credential manager must keep out of:
+               autocomplete="off" so it is never offered as a username (KOL-071). Left
+               empty, registration names no workspace and the server's default stands. -->
+          <input
+            v-if="mode === 'register'"
+            v-model="workspaceName"
+            class="workspace-name-input"
+            type="text"
+            name="workspace-name"
+            autocomplete="off"
+            :maxlength="WORKSPACE_NAME_MAX"
+            placeholder="Workspace name (optional)"
+            :disabled="loading"
+          />
+
           <fieldset v-if="mode === 'register' && templates.length" class="template-picker" :disabled="loading">
             <legend>Start with</legend>
             <label v-for="t in templates" :key="t.key" class="template-option">
@@ -88,6 +103,7 @@
 <script setup>
 import { ref } from 'vue';
 import { login, register, getTemplates, loginWithPasskey, registerPasskey } from '../api/auth.js';
+import { WORKSPACE_NAME_MAX } from '../api/workspace.js';
 
 // Shown above the form; App passes one after an account is deleted.
 defineProps({ notice: { type: String, default: '' } });
@@ -100,6 +116,11 @@ const email    = ref('');
 const password = ref('');
 const error    = ref('');
 const loading  = ref(false);
+
+// What the new workspace is called (KOL-071). Optional: blank means the field
+// is left out of the request entirely and the server's default name stands,
+// which is also what every account created before this got.
+const workspaceName = ref('');
 
 // The "Start with" picker. Fetched the first time the form enters register
 // mode (sign-in never needs it), and fetched again on a later visit if that
@@ -140,7 +161,12 @@ async function submit() {
       await login(email.value, password.value);
       emit('login-success');
     } else {
-      await register(email.value, password.value, templates.value.length ? template.value : undefined);
+      await register(
+        email.value,
+        password.value,
+        templates.value.length ? template.value : undefined,
+        workspaceName.value.trim() || undefined,
+      );
       step.value = 'passkey-prompt';
     }
   } catch (err) {
@@ -387,6 +413,10 @@ input:disabled { opacity: 0.5; }
   color: #777;
   line-height: 1.4;
 }
+
+/* The optional workspace name sits with the credential inputs but is not one;
+   a dimmer placeholder is what says so. */
+.workspace-name-input::placeholder { color: #555; }
 
 .login-disclosure {
   font-size: 12px;

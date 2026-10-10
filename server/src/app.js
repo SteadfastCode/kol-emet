@@ -32,6 +32,7 @@ import relationshipGroupsRouter from './routes/relationshipGroups.js';
 import chatRouter from './routes/chat.js';
 import conversationsRouter from './routes/conversations.js';
 import exportRouter from './routes/export.js';
+import workspaceRouter from './routes/workspace.js';
 import './models/User.js';
 import './models/Conversation.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
@@ -145,6 +146,11 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // the same two middlewares as every other tenant-content route, so the
   // workspace exported is the caller's own and cannot be named in a parameter.
   app.use('/export', requireAuth, resolveWorkspace, exportRouter);
+  // The workspace itself: its name, and the caller's role in it (KOL-071).
+  // Same two middlewares again — the role PATCH gates on is the one
+  // resolveWorkspace read from the caller's own membership, so a rename cannot
+  // be aimed at another tenant's workspace or performed by a non-owner.
+  app.use('/workspace', requireAuth, resolveWorkspace, workspaceRouter);
 
   return app;
 }

@@ -9,6 +9,12 @@ import {
 import User from '../models/User.js';
 import Workspace from '../models/Workspace.js';
 import { requireAuth, requireActor } from '../middleware/auth.js';
+import {
+  DEFAULT_WORKSPACE_NAME,
+  WORKSPACE_NAME_MAX,
+  workspaceLog,
+  workspaceName,
+} from '../middleware/workspace.js';
 import { seedWorkspace } from '../lib/workspaceSeeder.js';
 import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
@@ -98,7 +104,7 @@ const usablePassword = (password) => typeof password === 'string' && password !=
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
-  const { email, password, template } = req.body ?? {};
+  const { email, password, template, workspaceName: requestedName } = req.body ?? {};
   if (!usableEmail(email) || !usablePassword(password)) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
@@ -108,8 +114,22 @@ router.post('/register', async (req, res) => {
   if (template !== undefined && !hasTemplate(template)) {
     return res.status(400).json({ error: 'Unknown template' });
   }
+  // The new workspace's name (KOL-071). Optional: absent, it is the default
+  // every account got before this, so an existing client is unaffected.
+  // Present, it goes through the same rule `PATCH /workspace` uses
+  // (middleware/workspace.js) and a bad one is refused here, next to the
+  // template check and before any write — a 400 that creates no account is
+  // strictly better than an account whose workspace is named something the
+  // user did not ask for.
+  const newWorkspaceName = requestedName === undefined
+    ? DEFAULT_WORKSPACE_NAME
+    : workspaceName(requestedName);
+  if (!newWorkspaceName) {
+    workspaceLog('light', `refused registration (source: POST /auth/register from ${req.ip}): workspaceName is not a name of 1–${WORKSPACE_NAME_MAX} characters, so no account was created`);
+    return res.status(400).json({ error: 'INVALID_WORKSPACE_NAME' });
+  }
 
-  // Asked here: after the two refusals above, which cost no I/O and are what a
+  // Asked here: after the refusals above, which cost no I/O and are what a
   // malformed body gets whatever anyone's budget says, and before the duplicate
   // lookup — so a blocked caller buys neither a database read, nor the bcrypt
   // hash, nor the workspace and the whole template seed that follow it.
@@ -140,10 +160,11 @@ router.post('/register', async (req, res) => {
   let workspace;
   try {
     workspace = await Workspace.create({
-      name:    'My Workspace',
+      name:    newWorkspaceName,
       ownerId: user._id,
       members: [{ userId: user._id, role: 'owner' }],
     });
+    workspaceLog('light', `created workspace ${workspace._id} named "${workspace.name}" for user ${user._id} (source: POST /auth/register, ${requestedName === undefined ? `no workspaceName in the request → the default` : `workspaceName from the request`})`);
   } catch (err) {
     // Don't strand a user with an account but no workspace.
     await User.deleteOne({ _id: user._id });
