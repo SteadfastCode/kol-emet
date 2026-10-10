@@ -31,6 +31,7 @@ import changelogRouter from './routes/changelog.js';
 import relationshipGroupsRouter from './routes/relationshipGroups.js';
 import chatRouter from './routes/chat.js';
 import conversationsRouter from './routes/conversations.js';
+import exportRouter from './routes/export.js';
 import './models/User.js';
 import './models/Conversation.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
@@ -140,6 +141,10 @@ export function createApp({ sessionStore, authLimits } = {}) {
   app.use('/chat', chatRouter);
   app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
   app.use('/drafts', requireAuth, resolveWorkspace, draftsRouter);
+  // The way out: the whole workspace graph as one canonical JSON file. Behind
+  // the same two middlewares as every other tenant-content route, so the
+  // workspace exported is the caller's own and cannot be named in a parameter.
+  app.use('/export', requireAuth, resolveWorkspace, exportRouter);
 
   return app;
 }

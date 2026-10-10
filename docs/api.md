@@ -458,6 +458,51 @@ key. If any raw ObjectId survives mapping the export fails with a 500 naming the
 record is worse than a failure. The bulk equivalent is
 [`server/scripts/export-drafts-jsonl.js`](../server/scripts/export-drafts-jsonl.js).
 
+## Export
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/export` | The caller's whole workspace as one canonical JSON document, as an `attachment`. |
+
+The way a user takes their graph out of the product, and the form a Git connector will commit —
+`server/src/lib/graphExporter.js` builds the document, `server/src/routes/export.js` is the HTTP skin
+on it. The response is `application/json`, indented two spaces, with
+`Content-Disposition: attachment; filename="<workspace>-<YYYY-MM-DD>.json"` (the name is an ASCII
+slug of the workspace name, falling back to `workspace`, and the day is the export's own, in UTC).
+
+```jsonc
+{
+  "version": "kol-emet/workspace-export@1",
+  "exportedAt": "2026-10-10T08:30:00.000Z",
+  "workspace":          { "name": "My Workspace" },
+  "entityTypes":        [{ "_id", "name", "icon", "color": { "bg", "text" }, "order", "createdAt", "updatedAt" }],
+  "relationshipTypes":  [{ "_id", "name", "scope", "sourceCategory", "targetCategory", "createdAt", "updatedAt" }],
+  "entities":           [{ "_id", "title", "category", "summary", "tags", "blocks", "relationships", "open_questions", "createdAt", "updatedAt" }],
+  "relationshipGroups": [{ "_id", "label", "members": [{ "refId", "refModel", "label", "notes" }], "createdAt" }],
+  "openQuestions":      [{ "_id", "question", "status", "entry_ids", "createdAt", "updatedAt" }]
+}
+```
+
+- **Deterministic.** The same graph exported twice is byte-identical, because diffability is the
+  point. Every collection is sorted by a stable key — entities by `title` then `_id`, types by
+  `order` then `name` then `_id`, groups and open questions by `_id` — sets of ids (`relationships`,
+  `open_questions`, `entry_ids`) are sorted too, and blocks come back in their own `order`. A
+  relationship group's `members` keep their stored order, which the reorder route owns. Every
+  `ObjectId` is a string and every date an ISO-8601 string. The **only** field that is not a function
+  of the data is `exportedAt`, which `exportWorkspace()` takes as an argument for exactly that reason.
+- **Content only.** The document is built from an allowlist per collection, so no `workspaceId`,
+  `aiBudget`, `ownerId`, `userId`, `email` or `passwordHash` appears anywhere in it — and a schema
+  field added later cannot leak in by default. ChangeLog history and drafts are not included.
+- **Scoped by the mount.** `requireAuth` + `resolveWorkspace`, like every other tenant-content
+  route, so the workspace exported is the caller's own and there is no parameter with which to name
+  another. Unauthenticated is **401**.
+- Logging is `EXPORT_LOG_LEVEL` (`off | light | normal | verbose`, default `light`): the light tier
+  names the workspace, the per-collection counts, the byte size and the **source** — this route, or
+  a script that calls the same function.
+
+The import side (`POST /import`) does not exist yet: it needs an id-collision and merge policy of
+its own. Nor does streaming, so a workspace is serialized in one go.
+
 ## Events (SSE)
 
 | Method | Route | Description |
