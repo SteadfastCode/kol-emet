@@ -55,34 +55,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text**
-  Every `:id` route hands `req.params.id` straight to Mongoose: `GET/PUT/DELETE /entities/:id`
-  (`server/src/routes/entities.js:99,142,172`), `GET /entities/:id/history` and
-  `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:86,177`), all ten `/relationship-groups/:id…`
-  routes (`server/src/routes/relationshipGroups.js:81` onward), and the `:id` routes of `/open-questions`,
-  `/conversations` and `/drafts`. A caller sending anything that is not a 24-hex id — a slug, a truncated id, a
-  URL-encoded title, a stale link — gets a Mongoose `CastError` thrown inside the route's `try`, caught by
-  `catch (err) { res.status(500).json({ error: err.message }) }`, and answered **500** with
-  `Cast to ObjectId failed for value "…" (type string) at path "_id" for model "Entity"`. That is two defects in one: a
-  client error is reported as a server fault, so in whatever monitors this deployment a mistyped URL is
-  indistinguishable from a real outage; and the body is an internal error string naming the model and the driver's cast
-  path, which is not a shape a public API should return. `server/src/routes/entityTypes.js:111` already guards with
-  `mongoose.isValidObjectId`, so the work is making that the rule instead of one router's good habit. Build:
-  `server/src/middleware/objectId.js` exporting `objectIdParam(name)`, which answers
-  `400 { error: 'INVALID_ID', param }` when the named route parameter is not a valid ObjectId, registered per router
-  with `router.param('id', …)` (plus `logId`, `entityId` and `subGroupId` where they appear) so a route added to that
-  router later inherits the check rather than re-deriving it. 400 and not 404 on purpose: a well-formed id that belongs
-  to another tenant stays 404, so the API still never confirms another workspace's row exists, but a malformed id
-  cannot name anyone's row and so reveals nothing — it is simply a request the caller got wrong. Files:
-  `server/src/middleware/objectId.js` (new), the five routers above, and a line in `docs/api.md` stating that any `:id`
-  route answers 400 `INVALID_ID` for a malformed id. Verify: a new `server/tests/http/objectId.test.js` — `not-an-id`
-  in place of the id is 400 `INVALID_ID` and never 500 on each of the entity, history, rollback, relationship-group,
-  open-question, conversation and draft id routes; a well-formed id belonging to a second workspace is still 404; a
-  valid id still succeeds on every router touched; and no response body anywhere in the suite contains
-  `Cast to ObjectId`. `cd server && yarn test` green. Out of scope: reshaping the 34
-  `res.status(500).json({ error: err.message })` handlers into a fixed body plus a server-side log (the same leak in the
-  general case, and worth its own item), validating non-id parameters, and the MCP tools' id arguments, which come from
-  a model that read them from this API and already answer tool errors rather than HTTP statuses.
 
 - [ ] **(KOL-070) Canonical workspace export: `GET /export`**
   There is no way to get a workspace's graph out of the product. `server/src/lib/draftExporter.js` and
@@ -204,6 +176,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text** (routine 2026-10-10, 7b97b5d)
+  Every `:id` route hands `req.params.id` straight to Mongoose: `GET/PUT/DELETE /entities/:id`
+  (`server/src/routes/entities.js:99,142,172`), `GET /entities/:id/history` and
+  `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:86,177`), all ten `/relationship-groups/:id…`
+  routes (`server/src/routes/relationshipGroups.js:81` onward), and the `:id` routes of `/open-questions`,
+  `/conversations` and `/drafts`. A caller sending anything that is not a 24-hex id — a slug, a truncated id, a
+  URL-encoded title, a stale link — gets a Mongoose `CastError` thrown inside the route's `try`, caught by
+  `catch (err) { res.status(500).json({ error: err.message }) }`, and answered **500** with
+  `Cast to ObjectId failed for value "…" (type string) at path "_id" for model "Entity"`. That is two defects in one: a
+  client error is reported as a server fault, so in whatever monitors this deployment a mistyped URL is
+  indistinguishable from a real outage; and the body is an internal error string naming the model and the driver's cast
+  path, which is not a shape a public API should return. `server/src/routes/entityTypes.js:111` already guards with
+  `mongoose.isValidObjectId`, so the work is making that the rule instead of one router's good habit. Build:
+  `server/src/middleware/objectId.js` exporting `objectIdParam(name)`, which answers
+  `400 { error: 'INVALID_ID', param }` when the named route parameter is not a valid ObjectId, registered per router
+  with `router.param('id', …)` (plus `logId`, `entityId` and `subGroupId` where they appear) so a route added to that
+  router later inherits the check rather than re-deriving it. 400 and not 404 on purpose: a well-formed id that belongs
+  to another tenant stays 404, so the API still never confirms another workspace's row exists, but a malformed id
+  cannot name anyone's row and so reveals nothing — it is simply a request the caller got wrong. Files:
+  `server/src/middleware/objectId.js` (new), the five routers above, and a line in `docs/api.md` stating that any `:id`
+  route answers 400 `INVALID_ID` for a malformed id. Verify: a new `server/tests/http/objectId.test.js` — `not-an-id`
+  in place of the id is 400 `INVALID_ID` and never 500 on each of the entity, history, rollback, relationship-group,
+  open-question, conversation and draft id routes; a well-formed id belonging to a second workspace is still 404; a
+  valid id still succeeds on every router touched; and no response body anywhere in the suite contains
+  `Cast to ObjectId`. `cd server && yarn test` green. Out of scope: reshaping the 34
+  `res.status(500).json({ error: err.message })` handlers into a fixed body plus a server-side log (the same leak in the
+  general case, and worth its own item), validating non-id parameters, and the MCP tools' id arguments, which come from
+  a model that read them from this API and already answer tool errors rather than HTTP statuses.
 - [x] **(KOL-068) The search box asks the server, so block text is searchable in the UI** (routine 2026-10-10, 560b600)
   `useFilters` (`client/src/composables/useFilters.js:11`) filters the already-loaded list in the browser over `title`,
   `summary` and `tags` only. The server's `?q=` (`keywordFilter`, `server/src/lib/searchFilter.js:85`) matches title,

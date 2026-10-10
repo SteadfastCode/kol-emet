@@ -79,7 +79,7 @@
     "KOL-069": {
       "order": 5,
       "title": "A malformed id answers 400, not a 500 carrying the database's own error text",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-069",
