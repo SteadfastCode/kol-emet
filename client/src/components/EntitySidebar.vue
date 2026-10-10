@@ -48,18 +48,30 @@
         <span v-if="activeTag" class="pill active" @click="$emit('clear-tag')">#{{ activeTag }} ✕</span>
       </div>
 
-      <div class="entity-count">{{ entities.length }} entities</div>
+      <div class="entity-count">
+        {{ entities.length }} entities<span v-if="searching"> · searching…</span>
+      </div>
     </div>
 
     <!-- Entity list -->
     <div v-if="loading" class="list-empty">Loading…</div>
     <VirtualList v-else-if="entities.length" :items="entities">
       <template #default="{ item }">
-        <SidebarCard
-          :entity="item"
-          :selected="item._id === selectedId"
-          @select="$emit('select', $event, item.title)"
-        />
+        <!-- The search asks the server, which matches block markdown as well as
+             title and summary, so a row can be here for a reason that is
+             nowhere on the card. `matchedInText` is useFilters saying exactly
+             that, and this line is the reason made visible — no result without
+             one. Overlaid rather than stacked: the row is a fixed height the
+             virtual list measures with, and a third line would push the
+             summary out of it. -->
+        <div class="result-row">
+          <SidebarCard
+            :entity="item"
+            :selected="item._id === selectedId"
+            @select="$emit('select', $event, item.title)"
+          />
+          <span v-if="item.matchedInText" class="matched-in-text">matched in text</span>
+        </div>
       </template>
     </VirtualList>
     <!-- A filtered-to-nothing view and a genuinely empty workspace need
@@ -97,6 +109,7 @@ const props = defineProps({
   searchQuery: String,
   selectedId: String,
   loading: Boolean,
+  searching: Boolean,
   graphOpen: Boolean,
 });
 
@@ -184,6 +197,25 @@ defineExpose({ focusSearch });
   font-size: 11px;
   color: #3a3a3a;
 }
+
+.result-row { position: relative; }
+
+/* Sits over the end of the summary line, which is already ellipsized, so the
+   row keeps the height the virtual list estimates. Not clickable: the card
+   underneath owns the whole row. */
+.matched-in-text {
+  position: absolute;
+  right: 20px;
+  bottom: 10px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-style: italic;
+  color: #6a6a6a;
+  background: #0f0f0f;
+  pointer-events: none;
+}
+.sidebar-card.selected + .matched-in-text,
+.result-row:hover .matched-in-text { background: #141414; }
 
 /* Entry list scroll area */
 .list-scroll {

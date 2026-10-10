@@ -13,8 +13,9 @@
  * The last two groups are the exception — they mount the list for real (sidebar, cards and all) over
  * entities that carry no `blocks`, which is the shape `GET /entities` now sends (KOL-061). Nothing
  * on this path reads block content, and the group fails if something starts to. `useFilters` is
- * therefore the real composable throughout this file rather than a stub: it reaches no network, and
- * what it reads off an entity is part of what is pinned here.
+ * therefore the real composable throughout this file rather than a stub: it reaches no network of
+ * its own — the layout hands it the keyword request (KOL-068), which is mocked above — and what it
+ * reads off an entity is part of what is pinned here.
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, shallowMount } from '@vue/test-utils';
@@ -26,6 +27,7 @@ import EntitySidebar from './EntitySidebar.vue';
 import EntityEditor from './EntityEditor.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
+import { SEARCH_DEBOUNCE_MS } from '../composables/useFilters.js';
 
 // The layout now holds a window-level keydown listener (KOL-063), so a wrapper
 // left mounted keeps answering keys for the rest of the file. Unmount them all.
@@ -51,17 +53,18 @@ vi.mock('../composables/useEntities.js', async (importOriginal) => {
 });
 // Mocked for the paged-load group, which is the only one that reaches it: the
 // real composable calls getEntityPage, and nothing in a test should fetch.
-const { getEntityPage } = vi.hoisted(() => ({ getEntityPage: vi.fn() }));
+const { getEntityPage, searchEntities } = vi.hoisted(() => ({ getEntityPage: vi.fn(), searchEntities: vi.fn() }));
 vi.mock('../api/entities.js', () => ({
   ENTITY_PAGE_SIZE: 200,
-  getEntityPage,
+  getEntityPage, searchEntities,
   getEntities: vi.fn(), getEntity: vi.fn(), createEntity: vi.fn(),
   updateEntity: vi.fn(), deleteEntity: vi.fn(),
   getEntityHistory: vi.fn(), rollbackEntity: vi.fn(),
   getDeletedEntities: vi.fn(), restoreEntity: vi.fn(),
 }));
-// useFilters is deliberately NOT mocked: it reaches nothing, and the fields it reads off a listed
-// entity are the point of the list group below.
+// useFilters is deliberately NOT mocked: it reaches nothing by itself — the layout hands it the
+// keyword request, which is the mocked `searchEntities` above — and the fields it reads off a
+// listed entity are the point of the list group below.
 vi.mock('../composables/useNavigation.js', async () => {
   const { ref } = await import('vue');
   return {
@@ -181,6 +184,22 @@ const BLOCKLESS = [
   },
 ];
 
+/**
+ * What `GET /entities?q=toolchain` answers (KOL-068): the same projected shape, and a row the loaded
+ * list above does not contain. Neither row holds the term in its title or summary — that is what
+ * "matched in text" means — so the server matched both inside a block.
+ */
+const SERVER_ANSWER = [
+  {
+    _id: 'e1', title: 'Boiler Room', category: 'Worlds', summary: 'Where the pressure comes from.',
+    tags: ['engine'], open_questions: [], relationships: [],
+  },
+  {
+    _id: 'e3', title: 'Coupling Rod', category: 'Worlds', summary: 'Holds the wheels in step.',
+    tags: [], open_questions: [], relationships: [],
+  },
+];
+
 const VirtualListStub = {
   props: ['items'],
   template: '<div><div v-for="(item, index) in items" :key="index"><slot :item="item" :index="index" /></div></div>',
@@ -204,6 +223,13 @@ describe('WikiLayout list over entities that carry no blocks', () => {
     entities.length = 0;
     entities.push(...BLOCKLESS.map((e) => ({ ...e })));
     selectEntity.mockClear();
+    searchEntities.mockReset();
+  });
+
+  // The two search cases below run the debounce on fake timers; the rest of the
+  // file does not, so they are handed back here rather than per case.
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders a card per entity, title, category and summary and all', () => {
@@ -218,12 +244,46 @@ describe('WikiLayout list over entities that carry no blocks', () => {
     expect(first.get('.entity-cat').text()).toBe('Worlds');
   });
 
-  it('searches the list on summary text, with no block content to read', async () => {
+  it('sends a typed term to the server rather than filtering the loaded list', async () => {
+    vi.useFakeTimers();
+    searchEntities.mockResolvedValue(SERVER_ANSWER);
     const wrapper = mountList();
 
-    await wrapper.get('.search-input').setValue('northern');
+    await wrapper.get('.search-input').setValue('toolchain');
+    // Inside the debounce: no request yet, and nothing filtered out in the
+    // meantime either — the box is not a local filter any more.
+    expect(searchEntities).not.toHaveBeenCalled();
+    expect(cards(wrapper)).toEqual(['Boiler Room', 'Alder Street']);
 
-    expect(cards(wrapper)).toEqual(['Alder Street']);
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await flushPromises();
+
+    expect(searchEntities).toHaveBeenCalledTimes(1);
+    expect(searchEntities).toHaveBeenCalledWith('toolchain');
+    // `Coupling Rod` is in no page the loaded list holds: this is the server's
+    // answer on screen, which is the whole point — "toolchain" lives inside a
+    // block, and the browser never had that text to search.
+    expect(cards(wrapper)).toEqual(['Boiler Room', 'Coupling Rod']);
+    // Neither row shows the term, so both carry the reason they are listed.
+    expect(wrapper.findAll('.matched-in-text')).toHaveLength(2);
+  });
+
+  it('puts the loaded list back when the box is cleared, without another request', async () => {
+    vi.useFakeTimers();
+    searchEntities.mockResolvedValue(SERVER_ANSWER);
+    const wrapper = mountList();
+
+    await wrapper.get('.search-input').setValue('toolchain');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await flushPromises();
+    expect(cards(wrapper)).toEqual(['Boiler Room', 'Coupling Rod']);
+
+    await wrapper.get('.search-input').setValue('');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await flushPromises();
+
+    expect(cards(wrapper)).toEqual(['Boiler Room', 'Alder Street']);
+    expect(searchEntities).toHaveBeenCalledTimes(1);
   });
 
   it('filters the list by tag', async () => {

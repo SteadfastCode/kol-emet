@@ -26,7 +26,8 @@ export function useEntities() {
    * is cleared after the *first* page: the sidebar paints the first 200 rows
    * immediately instead of waiting for the whole workspace, and the rest arrive
    * under it. A partial list is the right thing on screen while more is coming
-   * — `useFilters` searches what is loaded, and every card opens by id.
+   * — the search box asks the server rather than this list (KOL-068), the pills
+   * narrow what has arrived, and every card opens by id.
    *
    * A failing page rejects, as the single request did. What earlier pages
    * already put on screen stays there rather than being rolled back to nothing.

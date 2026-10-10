@@ -10,6 +10,7 @@
         :search-query="searchQuery"
         :selected-id="activePanelId"
         :loading="sidebarLoading"
+        :searching="searching"
         :graph-open="graphOpen"
         @search="searchQuery = $event"
         @set-cat="setCat"
@@ -204,6 +205,7 @@ import AccountDeletion from './AccountDeletion.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
+import { searchEntities } from '../api/entities.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -221,7 +223,14 @@ const {
   loadEntities, selectEntity, addEntity, editEntity, removeEntity,
 } = useEntities();
 
-const { searchQuery, activeCat, activeTag, filtered, setCat, setTag, clearTag, resetFilters } = useFilters(entities);
+// The search box asks the server, because block markdown — the one field a
+// wiki keeps its content in — is not in the list the browser holds (KOL-068).
+// The request is handed in rather than imported by the composable, so the
+// filters themselves still reach nothing. The pills stay in the browser.
+const {
+  searchQuery, activeCat, activeTag, filtered, searching,
+  setCat, setTag, clearTag, resetFilters,
+} = useFilters(entities, { search: searchEntities });
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
 const { loadEntityTypes } = useEntityTypes();
