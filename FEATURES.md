@@ -54,7 +54,7 @@ registration, or removes a feature.
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
 
-- [ ] **(KOL-068) The search box asks the server, so block text is searchable in the UI**
+- [x] **(KOL-068) The search box asks the server, so block text is searchable in the UI**
   `useFilters` (`client/src/composables/useFilters.js:11`) filters the already-loaded list in the browser over `title`,
   `summary` and `tags` only. The server's `?q=` (`keywordFilter`, `server/src/lib/searchFilter.js:85`) matches title,
   summary **and** every block's `data.markdown`. So the one field a wiki keeps its content in is not searchable from the
