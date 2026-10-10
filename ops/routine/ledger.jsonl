@@ -250,3 +250,16 @@
 {"event":"note","text":"bridge queue.promote moved KOL-070 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-070","atUtc":"2026-10-10T11:32:42.352Z"}
 {"event":"note","text":"bridge queue.promote moved KOL-071 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-071","atUtc":"2026-10-10T11:32:44.300Z"}
 {"event":"note","text":"bridge queue.promote moved KOL-072 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-072","atUtc":"2026-10-10T11:32:46.147Z"}
+{"event":"ack","items":["KOL-049"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.975Z"}
+{"event":"ack","items":["KOL-050"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-051"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-052"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-053"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-054"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-058"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-059"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-060"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-061"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-062"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-063"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
+{"event":"ack","items":["KOL-064"],"by":"daniel","source":"manual","atUtc":"2026-10-10T11:33:43.976Z"}
