@@ -79,7 +79,7 @@
     "KOL-072": {
       "order": 5,
       "title": "A `?` cheatsheet for the keyboard shortcuts",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-072",
