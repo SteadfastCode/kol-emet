@@ -55,7 +55,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text**
+- [x] **(KOL-069) A malformed id answers 400, not a 500 carrying the database's own error text**
   Every `:id` route hands `req.params.id` straight to Mongoose: `GET/PUT/DELETE /entities/:id`
   (`server/src/routes/entities.js:99,142,172`), `GET /entities/:id/history` and
   `POST /entities/:id/rollback/:logId` (`server/src/routes/changelog.js:86,177`), all ten `/relationship-groups/:id…`
