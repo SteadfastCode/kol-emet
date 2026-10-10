@@ -79,7 +79,7 @@
     "KOL-071": {
       "order": 5,
       "title": "A workspace has a name its owner can see and change",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-071",

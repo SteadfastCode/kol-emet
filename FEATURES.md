@@ -57,37 +57,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-071) A workspace has a name its owner can see and change**
-  `POST /auth/register` hard-codes `name: 'My Workspace'` (`server/src/routes/auth.js:143`) and nothing ever reads it
-  back: no route returns or changes a workspace name, and no component in `client/src` displays one. `Workspace` models
-  `members` with `owner | editor | viewer` roles from the start so sharing would not need a schema reshape
-  (`server/src/models/Workspace.js`), but `resolveWorkspace` (`server/src/middleware/workspace.js:30`) checks membership
-  only and no route anywhere checks a role. For a product whose next commercial step is collaborator invites, a
-  workspace that cannot be named, shown, or told apart from another is a gap in the shape of the product — and the role
-  check is the piece every later sharing route needs. Build: `GET /workspace` returns
-  `{ _id, name, role, createdAt }` for the caller's workspace, `role` read from their own `members` entry so the client
-  can hide what an editor or a viewer may not do; `PATCH /workspace` sets `name`, trimmed, 1–80 characters, 400 for
-  anything else, and only for an owner — 403 `{ error: 'NOT_WORKSPACE_OWNER' }` otherwise. The role check lives once, as
-  `requireWorkspaceRole('owner')` in `server/src/middleware/workspace.js` beside `resolveWorkspace`, because invites,
-  member removal and billing will each need exactly it. `POST /auth/register` accepts an optional `workspaceName` (same
-  validation; absent keeps today's default) and `client/src/views/LoginView.vue` offers it as an optional field with
-  `autocomplete="off"`, so a new user's first workspace is theirs rather than "My Workspace". A "Workspace" group in
-  Settings (`client/src/components/WikiLayout.vue:112`) shows the name with an inline rename for an owner and read-only
-  text for anyone else. Tiered logging `WORKSPACE_LOG_LEVEL = off | light | normal | verbose` (default light): light
-  names every rename with the old name, the new one and who asked, and every refusal with the role it read — the source
-  of the change, not just the new value. Files: `server/src/middleware/workspace.js`, `server/src/routes/workspace.js`
-  (new), `server/src/app.js`, `server/src/routes/auth.js`, `client/src/api/auth.js`, `client/src/views/LoginView.vue`,
-  `client/src/components/WikiLayout.vue`, and a `## Workspace` section in `docs/api.md`. Verify: a new
-  `server/tests/http/workspace.test.js` — `GET /workspace` returns the caller's own workspace with `role: 'owner'` and
-  never another user's; `PATCH` renames it; an empty, whitespace-only, non-string and 81-character name are each 400 and
-  change nothing; a member whose role is `editor` gets 403 and the name is unchanged; an unauthenticated call is 401;
-  registering with `workspaceName` uses it and registering without it keeps `My Workspace`. Plus a
-  `client/src/views/LoginView.test.js` case that the optional field posts through, and a
-  `client/src/components/WikiLayout.test.js` case that the Settings group shows the name and the rename calls the API.
-  `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: inviting or removing members,
-  more than one workspace per user (`resolveWorkspace` still takes the first membership, and choosing between several is
-  a product decision), enforcing `editor`/`viewer` on the content routes (every workspace has exactly one member today,
-  so there is nothing yet to enforce against), and billing.
 
 - [ ] **(KOL-072) A `?` cheatsheet for the keyboard shortcuts**
   KOL-063 shipped `/`, `Escape` and `n` through `client/src/composables/useKeyboardShortcuts.js` and listed "a `?`
@@ -144,6 +113,37 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-071) A workspace has a name its owner can see and change** (routine 2026-10-10, 8043cf0)
+  `POST /auth/register` hard-codes `name: 'My Workspace'` (`server/src/routes/auth.js:143`) and nothing ever reads it
+  back: no route returns or changes a workspace name, and no component in `client/src` displays one. `Workspace` models
+  `members` with `owner | editor | viewer` roles from the start so sharing would not need a schema reshape
+  (`server/src/models/Workspace.js`), but `resolveWorkspace` (`server/src/middleware/workspace.js:30`) checks membership
+  only and no route anywhere checks a role. For a product whose next commercial step is collaborator invites, a
+  workspace that cannot be named, shown, or told apart from another is a gap in the shape of the product — and the role
+  check is the piece every later sharing route needs. Build: `GET /workspace` returns
+  `{ _id, name, role, createdAt }` for the caller's workspace, `role` read from their own `members` entry so the client
+  can hide what an editor or a viewer may not do; `PATCH /workspace` sets `name`, trimmed, 1–80 characters, 400 for
+  anything else, and only for an owner — 403 `{ error: 'NOT_WORKSPACE_OWNER' }` otherwise. The role check lives once, as
+  `requireWorkspaceRole('owner')` in `server/src/middleware/workspace.js` beside `resolveWorkspace`, because invites,
+  member removal and billing will each need exactly it. `POST /auth/register` accepts an optional `workspaceName` (same
+  validation; absent keeps today's default) and `client/src/views/LoginView.vue` offers it as an optional field with
+  `autocomplete="off"`, so a new user's first workspace is theirs rather than "My Workspace". A "Workspace" group in
+  Settings (`client/src/components/WikiLayout.vue:112`) shows the name with an inline rename for an owner and read-only
+  text for anyone else. Tiered logging `WORKSPACE_LOG_LEVEL = off | light | normal | verbose` (default light): light
+  names every rename with the old name, the new one and who asked, and every refusal with the role it read — the source
+  of the change, not just the new value. Files: `server/src/middleware/workspace.js`, `server/src/routes/workspace.js`
+  (new), `server/src/app.js`, `server/src/routes/auth.js`, `client/src/api/auth.js`, `client/src/views/LoginView.vue`,
+  `client/src/components/WikiLayout.vue`, and a `## Workspace` section in `docs/api.md`. Verify: a new
+  `server/tests/http/workspace.test.js` — `GET /workspace` returns the caller's own workspace with `role: 'owner'` and
+  never another user's; `PATCH` renames it; an empty, whitespace-only, non-string and 81-character name are each 400 and
+  change nothing; a member whose role is `editor` gets 403 and the name is unchanged; an unauthenticated call is 401;
+  registering with `workspaceName` uses it and registering without it keeps `My Workspace`. Plus a
+  `client/src/views/LoginView.test.js` case that the optional field posts through, and a
+  `client/src/components/WikiLayout.test.js` case that the Settings group shows the name and the rename calls the API.
+  `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: inviting or removing members,
+  more than one workspace per user (`resolveWorkspace` still takes the first membership, and choosing between several is
+  a product decision), enforcing `editor`/`viewer` on the content routes (every workspace has exactly one member today,
+  so there is nothing yet to enforce against), and billing.
 - [x] **(KOL-070) Canonical workspace export: `GET /export`** (routine 2026-10-10, 9f9538c)
   There is no way to get a workspace's graph out of the product. `server/src/lib/draftExporter.js` and
   `server/scripts/export-drafts-jsonl.js` export *decision records* as JSONL training data, not content; the only other
