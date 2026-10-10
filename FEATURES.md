@@ -53,38 +53,6 @@ registration, or removes a feature.
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
-- [x] **(KOL-067) Pagination and a total count on `GET /entities`**
-  `GET /entities` (`server/src/routes/entities.js:66`) returns every entity in the workspace, unbounded:
-  `Entity.find(filter).sort({ title: 1 })` with no `limit`, no `skip` and no cursor, and `loadEntities`
-  (`client/src/composables/useEntities.js:10`) calls it on page load and again after every create. KOL-061 took the block
-  content out of that response; the row count is still the whole workspace, and it is the first request every tenant
-  makes. At a few thousand entities the projected rows are still a megabyte of JSON serialized in one go on the single
-  event loop this multi-tenant API shares, so one tenant opening a large workspace stalls everybody else's requests.
-  KOL-049 and KOL-061 both put pagination out of scope, and KOL-061 said it "deserves its own item". Build: keyset
-  pagination on the sort the route already uses. `?limit=` (an integer 1–200, read through an integer counterpart to
-  `searchTerm` in `server/src/lib/searchFilter.js` so a bracketed operator or a repeated parameter is *no* limit rather
-  than one the caller never wrote) and `?after=` (the `title` and `_id` of the previous page's last row — titles are not
-  unique, so the filter is `{ $or: [{ title: { $gt: t } }, { title: t, _id: { $gt: id } }] }` and the sort becomes
-  `{ title: 1, _id: 1 }`; keyset and not `skip`, because `skip` on a growing collection drops and repeats rows between
-  pages). With `limit` present the response is an envelope `{ items, nextAfter: { title, _id } | null, total }`, `total`
-  from a `countDocuments` of the same filter; without it the response stays today's bare array, so the MCP tools, the
-  chat tool and any outside script keep working — the envelope is what KOL-061 called the breaking part, and making it
-  opt-in is what keeps this item from being one. Client side, `getEntities` (`client/src/api/entities.js:30`) gains a
-  paged variant and `loadEntities` appends page by page at `limit=200`, clearing `sidebarLoading` after the *first*
-  page so the sidebar paints immediately instead of waiting for the workspace. Tiered logging
-  `ENTITY_LIST_LOG_LEVEL = off | light | normal | verbose` (default light): light names each page's limit, cursor and
-  row count and the query string it came from, because a page boundary that drops or repeats a row leaves no other
-  trace. Files: `server/src/routes/entities.js`, `server/src/lib/searchFilter.js`, `client/src/api/entities.js`,
-  `client/src/composables/useEntities.js`, the `GET /entities` row of `docs/api.md`, and a Decision Log line in
-  `kol_emet_spec.md` for the envelope-only-when-asked shape. Verify: `server/tests/http/entityList.test.js` grows — no
-  `limit` returns the bare array unchanged; `?limit=2` returns the envelope with the first two rows by title and a
-  `total` for the whole filter; paging with `nextAfter` walks a fixture containing two entities with the *same* title
-  exactly once each; `?limit=0`, `?limit=abc`, `?limit=-1` and `?limit[$gt]=1` are each no limit and `?limit=9999` is
-  capped; `?q=` and `?category=` still filter and `total` counts the filtered set; a second workspace's rows never
-  appear on any page. Plus a `client/src/components/WikiLayout.test.js` case where a two-page load ends with every
-  entity listed. `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: making the
-  client's search box ask the server (KOL-068), a MongoDB text index (an Atlas index change), offset/`skip` paging, and
-  pagination for `/conversations`, `/drafts` and `GET /entities/:id/history`, which already cap at 50.
 
 - [ ] **(KOL-068) The search box asks the server, so block text is searchable in the UI**
   `useFilters` (`client/src/composables/useFilters.js:11`) filters the already-loaded list in the browser over `title`,
@@ -264,6 +232,38 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-067) Pagination and a total count on `GET /entities`** (routine 2026-10-10, fbd3c73)
+  `GET /entities` (`server/src/routes/entities.js:66`) returns every entity in the workspace, unbounded:
+  `Entity.find(filter).sort({ title: 1 })` with no `limit`, no `skip` and no cursor, and `loadEntities`
+  (`client/src/composables/useEntities.js:10`) calls it on page load and again after every create. KOL-061 took the block
+  content out of that response; the row count is still the whole workspace, and it is the first request every tenant
+  makes. At a few thousand entities the projected rows are still a megabyte of JSON serialized in one go on the single
+  event loop this multi-tenant API shares, so one tenant opening a large workspace stalls everybody else's requests.
+  KOL-049 and KOL-061 both put pagination out of scope, and KOL-061 said it "deserves its own item". Build: keyset
+  pagination on the sort the route already uses. `?limit=` (an integer 1–200, read through an integer counterpart to
+  `searchTerm` in `server/src/lib/searchFilter.js` so a bracketed operator or a repeated parameter is *no* limit rather
+  than one the caller never wrote) and `?after=` (the `title` and `_id` of the previous page's last row — titles are not
+  unique, so the filter is `{ $or: [{ title: { $gt: t } }, { title: t, _id: { $gt: id } }] }` and the sort becomes
+  `{ title: 1, _id: 1 }`; keyset and not `skip`, because `skip` on a growing collection drops and repeats rows between
+  pages). With `limit` present the response is an envelope `{ items, nextAfter: { title, _id } | null, total }`, `total`
+  from a `countDocuments` of the same filter; without it the response stays today's bare array, so the MCP tools, the
+  chat tool and any outside script keep working — the envelope is what KOL-061 called the breaking part, and making it
+  opt-in is what keeps this item from being one. Client side, `getEntities` (`client/src/api/entities.js:30`) gains a
+  paged variant and `loadEntities` appends page by page at `limit=200`, clearing `sidebarLoading` after the *first*
+  page so the sidebar paints immediately instead of waiting for the workspace. Tiered logging
+  `ENTITY_LIST_LOG_LEVEL = off | light | normal | verbose` (default light): light names each page's limit, cursor and
+  row count and the query string it came from, because a page boundary that drops or repeats a row leaves no other
+  trace. Files: `server/src/routes/entities.js`, `server/src/lib/searchFilter.js`, `client/src/api/entities.js`,
+  `client/src/composables/useEntities.js`, the `GET /entities` row of `docs/api.md`, and a Decision Log line in
+  `kol_emet_spec.md` for the envelope-only-when-asked shape. Verify: `server/tests/http/entityList.test.js` grows — no
+  `limit` returns the bare array unchanged; `?limit=2` returns the envelope with the first two rows by title and a
+  `total` for the whole filter; paging with `nextAfter` walks a fixture containing two entities with the *same* title
+  exactly once each; `?limit=0`, `?limit=abc`, `?limit=-1` and `?limit[$gt]=1` are each no limit and `?limit=9999` is
+  capped; `?q=` and `?category=` still filter and `total` counts the filtered set; a second workspace's rows never
+  appear on any page. Plus a `client/src/components/WikiLayout.test.js` case where a two-page load ends with every
+  entity listed. `cd server && yarn test` and `cd client && yarn test && yarn build` green. Out of scope: making the
+  client's search box ask the server (KOL-068), a MongoDB text index (an Atlas index change), offset/`skip` paging, and
+  pagination for `/conversations`, `/drafts` and `GET /entities/:id/history`, which already cap at 50.
 - [x] **(KOL-064) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-08] (routine 2026-10-08, a8d0d5c)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,

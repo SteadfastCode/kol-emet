@@ -79,7 +79,7 @@
     "KOL-067": {
       "order": 5,
       "title": "Pagination and a total count on `GET /entities`",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-067",
