@@ -80,6 +80,78 @@ async function accountReq(path, options) {
   return body;
 }
 
+/**
+ * The shortest password `POST /auth/register` and `POST /auth/password` will
+ * store, mirroring the server's rule (server/src/lib/passwordPolicy.js). Stated
+ * at both forms so a user is told before they submit; the server is what
+ * enforces it, and its sentence is what a refusal shows.
+ */
+export const PASSWORD_MIN_LENGTH = 12;
+
+/**
+ * Whether `value` is too short for the forms to send. Counted in code points,
+ * as the server counts, so an emoji passphrase is as long here as it is there.
+ */
+export const passwordTooShort = (value) =>
+  [...(value ?? '')].length < PASSWORD_MIN_LENGTH;
+
+/**
+ * Tiered debug logging for the password change: set
+ * localStorage.PASSWORD_LOG_LEVEL to off | light | normal | verbose (default
+ * light). The server logs the same change on its own PASSWORD_LOG_LEVEL.
+ * **Neither password is ever logged, nor its length** — only what asked for the
+ * change and how it ended.
+ *   light   — every change sent from here and how it ended, naming what asked
+ *             and which credential confirmed it
+ *   normal  — light, plus the passkey challenge being fetched
+ *   verbose — normal, plus the status a refusal carried
+ */
+const PASSWORD_LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function logPasswordChange(level, msg) {
+  let configured;
+  try { configured = localStorage.getItem('PASSWORD_LOG_LEVEL'); } catch { configured = null; }
+  const active = PASSWORD_LEVELS[configured] ?? PASSWORD_LEVELS.light;
+  if (active >= PASSWORD_LEVELS[level]) console.log(`[auth/password:${level}] ${msg}`);
+}
+
+/** Sends one change and logs how it ended; `confirmedWith` names the credential. */
+async function postPasswordChange(body, { source, confirmedWith }) {
+  const asked = `source: ${source ?? 'POST /auth/password'}, confirmed with ${confirmedWith}`;
+  try {
+    const result = await accountReq('/auth/password', { method: 'POST', body: JSON.stringify(body) });
+    logPasswordChange('light', `password changed (${asked})`);
+    return result;
+  } catch (err) {
+    logPasswordChange('light', `password change refused: ${err.message} (${asked})`);
+    logPasswordChange('verbose', `the refusal carried status ${err.status ?? 'none'} (${asked})`);
+    throw err;
+  }
+}
+
+/**
+ * Replaces the signed-in account's password, re-authenticating with the current
+ * one. Session only — a connector token is refused — and a wrong current
+ * password is 403 rather than 401, so a client must not read it as a sign-out
+ * (see docs/api.md#password). Through accountReq, because the server's own
+ * sentence is what Settings shows: it says whether the current password was
+ * wrong or the new one too short.
+ */
+export const changePassword = ({ currentPassword, newPassword }, { source } = {}) =>
+  postPasswordChange({ currentPassword, newPassword }, { source, confirmedWith: 'the current password' });
+
+/**
+ * The same change, re-authenticated with a passkey instead: a challenge of this
+ * route's own (never the sign-in or deletion one), asserted once. This is how an
+ * account with no password of its own sets one.
+ */
+export async function changePasswordWithPasskey(newPassword, { source } = {}) {
+  logPasswordChange('normal', `fetching a passkey challenge for a password change (source: ${source ?? 'POST /auth/password'})`);
+  const options = await accountReq('/auth/password/passkey-challenge', { method: 'POST' });
+  const passkey = await startAuthentication({ optionsJSON: options });
+  return postPasswordChange({ newPassword, passkey }, { source, confirmedWith: 'a passkey' });
+}
+
 export const deleteAccount = ({ email, password }) =>
   accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, password }) });
 

@@ -150,6 +150,57 @@
           <div class="settings-group-title">Account</div>
           <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
         </div>
+        <!-- Beside the passkey settings on purpose (KOL-074): the two ways into an account sit
+             together. A form of its own with the standard autocomplete attributes, so a credential
+             manager offers the saved password and then offers to store the new one. The session is
+             already signed in; the server re-authenticates the change anyway, which is why the
+             current password is asked for here. -->
+        <div class="settings-group">
+          <div class="settings-group-title">Password</div>
+          <form class="password-change" autocomplete="on" @submit.prevent="savePassword">
+            <label class="password-label" for="settings-current-password">Current password</label>
+            <input
+              id="settings-current-password"
+              v-model="currentPassword"
+              class="workspace-input"
+              type="password"
+              name="current-password"
+              autocomplete="current-password"
+              :disabled="passwordSaving"
+            />
+            <label class="password-label" for="settings-new-password">New password</label>
+            <input
+              id="settings-new-password"
+              v-model="newPassword"
+              class="workspace-input"
+              type="password"
+              name="new-password"
+              autocomplete="new-password"
+              :minlength="PASSWORD_MIN_LENGTH"
+              :disabled="passwordSaving"
+            />
+            <!-- Said before it is typed, not only after a refusal: the server enforces the same
+                 minimum and answers its own sentence (lib/passwordPolicy.js). -->
+            <p class="settings-note">At least {{ PASSWORD_MIN_LENGTH }} characters. Length is the
+              only rule — a passphrase is a good password.</p>
+            <button type="submit" class="settings-row" :disabled="passwordSaving || !currentPassword || !newPasswordLongEnough">
+              {{ passwordSaving ? 'Changing…' : 'Change password' }}
+            </button>
+            <!-- For an account whose password is the thing being replaced because it is not
+                 trusted — and the only way in for one that has no password yet. -->
+            <button
+              type="button"
+              class="settings-row"
+              :disabled="passwordSaving || !newPasswordLongEnough"
+              @click="savePasswordWithPasskey"
+            >Confirm with a passkey instead</button>
+          </form>
+          <p v-if="passwordError" class="settings-error" role="alert">{{ passwordError }}</p>
+          <p v-else-if="passwordChanged" class="settings-done" role="status">
+            Password changed. You are still signed in here; other browsers signed in to this account
+            are not signed out.
+          </p>
+        </div>
         <div class="settings-group">
           <div class="settings-group-title">Passkeys</div>
           <!-- Mounted only while settings shows: fetched fresh on each open, never on page load. -->
@@ -256,6 +307,12 @@ import AccountDeletion from './AccountDeletion.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
+import {
+  changePassword,
+  changePasswordWithPasskey,
+  PASSWORD_MIN_LENGTH,
+  passwordTooShort,
+} from '../api/auth.js';
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport } from '../api/export.js';
 import { getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
@@ -436,6 +493,65 @@ async function saveWorkspaceName() {
     workspaceSaving.value = false;
   }
 }
+
+// ─── Settings → Password (KOL-074) ───────────────────────────────────────────
+// The group reads nothing on open, so unlike Passkeys it is not mounted behind
+// `settingsVisible`: there is no list here to go stale. Both buttons post the
+// same change and differ only in what re-authenticates it; the server refuses a
+// new password under the minimum with its own sentence, and this form keeps the
+// submit out of reach until the typed one could be accepted, so an opaque 400
+// is not how a user finds the rule out.
+const currentPassword = ref('');
+const newPassword     = ref('');
+const passwordSaving  = ref(false);
+const passwordError   = ref('');
+const passwordChanged = ref(false);
+
+const newPasswordLongEnough = computed(() => !passwordTooShort(newPassword.value));
+
+/** What Settings says about a refusal. The server's own sentence, where it has one. */
+function passwordMessageFor(err) {
+  // 403 is a failed re-authentication, not a dead session: the wrong current
+  // password, or a passkey that did not confirm. 401 is the dead session.
+  if (err.status === 400 || err.status === 403) return err.message;
+  if (err.status === 429) return err.message;   // the throttle says how long to wait
+  if (err.status === 401) return 'Your session has expired. Sign in again to change your password.';
+  return 'Could not change your password. Please try again.';
+}
+
+async function runPasswordChange(attempt) {
+  if (passwordSaving.value || !newPasswordLongEnough.value) return;
+  passwordError.value = '';
+  passwordChanged.value = false;
+  passwordSaving.value = true;
+  try {
+    await attempt();
+    currentPassword.value = '';
+    newPassword.value = '';
+    passwordChanged.value = true;
+    addToast({
+      message: 'Password changed',
+      actorType: 'system',
+      actorLabel: 'Account',
+    });
+  } catch (err) {
+    // The passkey prompt was dismissed: not a failure to report, as at sign-in.
+    if (err.name === 'NotAllowedError') return;
+    passwordError.value = passwordMessageFor(err);
+  } finally {
+    passwordSaving.value = false;
+  }
+}
+
+const savePassword = () => runPasswordChange(() => changePassword(
+  { currentPassword: currentPassword.value, newPassword: newPassword.value },
+  { source: 'Settings → Password' },
+));
+
+const savePasswordWithPasskey = () => runPasswordChange(() => changePasswordWithPasskey(
+  newPassword.value,
+  { source: 'Settings → Password, confirmed with a passkey' },
+));
 
 function onChatClose() {
   chatOpen.value = false;
@@ -908,6 +1024,21 @@ provide('openSnapshot', openSnapshot);
   margin: 8px 0 0;
   font-size: 12px;
   color: #e07070;
+}
+
+.password-change {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.password-label { font-size: 12px; color: #888; }
+
+.settings-done {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #7fb77f;
 }
 
 .settings-close { display: none; }

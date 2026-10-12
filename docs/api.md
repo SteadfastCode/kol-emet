@@ -249,11 +249,58 @@ row; the reasoning is the KOL-060 Decision Log entry in `kol_emet_spec.md`.
 | POST | `/auth/logout` | End session (`requireAuth`) |
 | GET | `/auth/me` | Current session user |
 | DELETE | `/auth/account` | Hard-delete the signed-in account: the user, every workspace they solely own and everything in it ([`accountDeleter.js`](../server/src/lib/accountDeleter.js)). `requireActor`, session only; a bearer token is 403. Body `{ email, password }` or `{ email, passkey }`: the account's email as a typed confirmation, plus a fresh credential. 204 and the session is destroyed; 400 missing or mismatched email; 403 wrong password or failed passkey; 429 once the account is over its failed-confirmation limit; 409 `{ error, memberships }` while the user belongs to a workspace they don't solely own, deleting nothing |
+| POST | `/auth/password` | Replace the signed-in account's password (see [Password](#password)). Session only; a bearer token is 403. Body `{ currentPassword, newPassword }` or `{ newPassword, passkey }`. 200 `{ ok: true }` and the caller stays signed in; 400 a new password under the minimum (the policy's own sentence) or no credential offered; 403 wrong current password or failed passkey — not 401, the session is still good; 429 once the account is over its failed-confirmation limit, which it shares with `DELETE /auth/account` |
+| POST | `/auth/password/passkey-challenge` | WebAuthn challenge for confirming `POST /auth/password` with a passkey (session only). One use, under its own session key: not the sign-in challenge, and not the deletion one. 400 when the account holds no passkey |
 | POST | `/auth/account/passkey-challenge` | WebAuthn challenge for confirming `DELETE /auth/account` with a passkey (`requireActor`, session only). One use, and kept apart from the sign-in challenge |
 | POST | `/auth/webauthn/register/begin` · `/complete` | Add a passkey (`requireAuth`): the prompt after signup, and Settings → Passkeys. `/begin` carries the account's stable WebAuthn user handle as `user.id`, so every passkey on an account is one WebAuthn user; an account registered before KOL-052 has one written here on its first registration. `/complete` answers 409 when the credential id is already registered — to this account or any other, with the same message either way (WebAuthn §7.1) |
 | GET | `/auth/webauthn/passkeys` | The signed-in user's passkeys, for Settings: `{ passkeys: [{ credentialID, deviceType, backedUp, createdAt, lastUsedAt }], hasPassword, userHandle, rpId }`. `userHandle` (null on an account registered before KOL-052) and `rpId` (`WEBAUTHN_RP_ID`, not necessarily the client's host) are what a `PublicKeyCredential.signal*` call needs to name the account; they are siblings of `passkeys`, so each summary stays the explicit field list it is. `requireAuth`, session only; a bearer token is 403. Never includes a public key |
 | DELETE | `/auth/webauthn/passkeys/:credentialID` | Remove one of the signed-in user's own passkeys (`requireAuth`, session only). Answers the list as it now stands; 404 when this account holds no such passkey, another account's included; 409 when it is the last way into an account with no password |
 | POST | `/auth/webauthn/login/begin` · `/complete` | Passwordless login via passkey. With an email or without one (discoverable credentials). Records the passkey's `lastUsedAt` and sync status. `/complete` answers 401 `Passkey not recognized` when no account holds the credential — the one refusal the client signals to the authenticator — and 401 `Passkey authentication failed` when the assertion did not verify. Throttled by client address (no email in its body), sharing that counter with `/auth/login`: 429 with a `Retry-After` |
+
+## Password
+
+One rule, in one place: [`lib/passwordPolicy.js`](../server/src/lib/passwordPolicy.js) exports
+`passwordProblem(value)`, which answers `null` or a single sentence. **A 12-character minimum, and
+nothing else** — length, not composition. NIST SP 800-63B stopped recommending the
+upper/lower/digit/symbol rules because they push people towards `Password1!` and away from the long
+passphrases that actually resist guessing. There is no maximum either: bcrypt reads the first 72
+bytes of any password, and both routes below hash the same way, so a long passphrase still signs in.
+
+Who asks, and who does not:
+
+- **`POST /auth/register`** asks, after its missing-field refusal (which keeps its own wording, so a
+  client can tell "you left it blank" from "it is too short") and before any counter, lookup or
+  hash. A refusal creates no user and no workspace.
+- **`POST /auth/password`** asks, with the same call, so what it takes to create an account and what
+  it takes to change one cannot drift apart.
+- **`POST /auth/login` never asks.** An account whose stored password is shorter than the minimum
+  goes on signing in: locking out everyone who registered before the rule is a worse failure than a
+  short password, and a sign-in form that refuses a *correct* password teaches nobody anything they
+  can act on. The policy gates writes.
+
+`POST /auth/password` re-authenticates exactly as [`DELETE /auth/account`](#auth) does, because a
+session is a thing a borrowed laptop also has and the premise of changing a password is that the old
+one may be known to someone else. The body carries the **current password**, or a **passkey
+assertion** against a single-use challenge from `POST /auth/password/passkey-challenge` — the latter
+is also how an account with no password of its own sets one. A failed re-authentication is **403, not
+401**: the session is still good, and a 401 reads to a client as "you have been signed out". Failed
+confirmations are counted by [`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js) under the
+account's own `user` key — the key `DELETE /auth/account` counts under too, deliberately: it is the
+same guess at the same secret, so two keys would hand one session twice the tries. Checked before the
+bcrypt compare and the signature verification, so a blocked caller costs neither.
+
+Session only, and **not `requireActor`**: that guard also admits the MCP bearer token, one secret
+shared with an AI connector, and a connector does not get to change someone's password — with or
+without the old one. A bearer caller is 403, as at passkey management.
+
+A successful change leaves **the caller signed in** and does **not** end the account's other
+sessions; KOL-076 owns that. Also out of scope today: password reset by email (it needs a mail
+credential), breach-list or zxcvbn scoring, and forcing a rotation on existing accounts.
+
+`PASSWORD_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) traces the route: every
+refusal with its reason and the user id, every password actually changed and which credential
+confirmed it, each challenge issued at `normal`. Neither password is ever logged, nor its length. The
+client logs its own side on `localStorage.PASSWORD_LOG_LEVEL`.
 
 ## Templates
 

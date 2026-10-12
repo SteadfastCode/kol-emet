@@ -28,6 +28,11 @@ vi.mock('../api/auth.js', () => ({
   getTemplates: vi.fn(async () => []),
   loginWithPasskey: vi.fn(),
   registerPasskey: vi.fn(),
+  // The password rule is not network, so these are the real thing rather than
+  // stubs: the form states the minimum and holds the submit by them (KOL-074),
+  // and a stub returning undefined would pass that test for the wrong reason.
+  PASSWORD_MIN_LENGTH: 12,
+  passwordTooShort: (value) => [...(value ?? '')].length < 12,
 }));
 
 async function switchTo(wrapper, label) {
@@ -268,6 +273,83 @@ describe('LoginView workspace name', () => {
 
     expect(autocomplete(wrapper, 'form input[type="email"]')).toBe('email');
     expect(autocomplete(wrapper, 'form input[type="password"]')).toBe('new-password');
+  });
+});
+
+/**
+ * The password minimum, stated where the password is chosen (KOL-074). `POST /auth/register`
+ * refuses a password under it, and that 400 reaches this form without the server's sentence, so a
+ * signup that said nothing here would read "Something went wrong" with no way to act on it.
+ *
+ * Goes red if the hint is dropped, if it stops naming the number, if the submit stops being held
+ * while the typed password is too short — or if either reaches *sign-in* mode, where the policy
+ * must not apply: an account registered before the rule still signs in with the password it has.
+ */
+describe('LoginView password minimum', () => {
+  const HINT = '.login-hint';
+  const submit = (wrapper) => wrapper.get('form button[type="submit"]');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getTemplates.mockResolvedValue([]);
+    register.mockResolvedValue({ ok: true });
+  });
+
+  async function registerMode() {
+    const wrapper = mount(LoginView);
+    await switchTo(wrapper, 'Create account');
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('create-account mode states it, by number, and asks the browser for it too', async () => {
+    const wrapper = await registerMode();
+
+    expect(wrapper.get(HINT).text()).toContain('At least 12 characters');
+    expect(wrapper.get('form input[type="password"]').attributes('minlength')).toBe('12');
+  });
+
+  it('sign-in mode states nothing and sets no minimum', async () => {
+    const wrapper = mount(LoginView);
+
+    expect(wrapper.find(HINT).exists()).toBe(false);
+    expect(wrapper.get('form input[type="password"]').attributes('minlength')).toBeUndefined();
+  });
+
+  it('holds the submit while the typed password is too short, and releases it at the minimum', async () => {
+    const wrapper = await registerMode();
+    await wrapper.get('form input[type="email"]').setValue('new@example.test');
+
+    await wrapper.get('form input[type="password"]').setValue('a'.repeat(11));
+    expect(submit(wrapper).attributes('disabled')).toBeDefined();
+    expect(wrapper.get(HINT).classes()).toContain('unmet');
+
+    await wrapper.get('form input[type="password"]').setValue('a'.repeat(12));
+    expect(submit(wrapper).attributes('disabled')).toBeUndefined();
+    expect(wrapper.get(HINT).classes()).not.toContain('unmet');
+  });
+
+  // Submitted with Enter, which is the path a disabled button does not cover.
+  it('a short password is never posted, and says why', async () => {
+    const wrapper = await registerMode();
+    await wrapper.get('form input[type="email"]').setValue('new@example.test');
+    await wrapper.get('form input[type="password"]').setValue('a'.repeat(11));
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).not.toHaveBeenCalled();
+    expect(wrapper.get('.login-error').text()).toBe('A password must be at least 12 characters.');
+  });
+
+  it('sign-in posts a short password unchanged — the policy gates writes, not sign-in', async () => {
+    const wrapper = mount(LoginView);
+    await wrapper.get('form input[type="email"]').setValue('legacy@example.test');
+    await wrapper.get('form input[type="password"]').setValue('short');
+    expect(submit(wrapper).attributes('disabled')).toBeUndefined();
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(login).toHaveBeenCalledWith('legacy@example.test', 'short');
   });
 });
 
