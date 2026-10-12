@@ -53,9 +53,21 @@ registration, or removes a feature.
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
-
-
-
+- [ ] **(KOL-080) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-19]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
 
 
 
@@ -84,6 +96,155 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+- [ ] **(KOL-074) Change your password, and one policy both routes share** [proposed]
+  An account registered today can never change its password. `server/src/routes/auth.js` has `/register`, `/login`,
+  `/logout`, `/me`, the WebAuthn routes and `DELETE /account`, and nothing between them that replaces `passwordHash` —
+  the only way out of a password you no longer trust is deleting the account and rebuilding the workspace. The same
+  file's `usablePassword` (`auth.js:103`) accepts any non-empty string, so `a` is a valid password on a product with
+  open registration. Build: `server/src/lib/passwordPolicy.js` exporting one `passwordProblem(value)` that returns
+  `null` or a sentence, enforcing a 12-character minimum and nothing else (length, not composition rules — NIST
+  800-63B), called by `/register` and by the new route so the two cannot drift apart. `POST /auth/password`
+  re-authenticates exactly as `DELETE /auth/account` does: the current password, or a passkey assertion against a
+  single-use challenge under its own session key, and session-only — not `requireActor`, because a connector token does
+  not get to change someone's password. Then bcrypt at 12 rounds, as `/register` uses. A failed re-authentication is
+  403, not 401, for the reason the Decision Log already gives for deletion: the session is still good, and a 401 reads
+  to a client as "signed out". Counted by the existing `createAuthLimiter` (`server/src/lib/attemptLimiter.js`) under
+  its own key, so guessing the current password here is throttled like guessing it at the sign-in form. Accounts whose
+  stored password is shorter than the new minimum keep signing in: the policy gates writes and never `/login`, because
+  locking out everyone who registered before it is a worse failure than a short password. Files:
+  `server/src/lib/passwordPolicy.js` (new), `server/src/routes/auth.js`, `client/src/api/auth.js`, a "Password" group in
+  `client/src/components/WikiLayout.vue` beside the passkey settings, `client/src/views/LoginView.vue` (state the
+  minimum at registration, with `autocomplete="new-password"`), and a `## Password` note in `docs/api.md`. Verify: a new
+  `server/tests/http/password.test.js` — the new password signs in and the old one does not; a wrong current password is
+  403 and the hash is unchanged; a passkey assertion is accepted; an 11-character new password is 400 and changes
+  nothing; registering with a short password is 400; an account whose stored password is short still signs in; the MCP
+  bearer token is refused; an unauthenticated call is 401; and repeated wrong attempts hit the limiter. Plus
+  `server/tests/unit/passwordPolicy.test.js` for the boundary, and a `client/src/components/WikiLayout.test.js` case
+  that the form posts. `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of scope:
+  password reset by email (it needs a mail credential and is `[needs-human]` when it is filed), breach-list or zxcvbn
+  scoring, forcing a rotation on existing accounts, and ending the user's *other* sessions on a change — KOL-076 below
+  owns that and wants to land after this one.
+- [ ] **(KOL-075) One error shape for the API, instead of the database's own error text** [proposed]
+  Fifty-nine handlers across twelve routers end in `catch (err) { res.status(500).json({ error: err.message }) }` or its
+  400 variant — `entities.js:244,267,287`, `changelog.js:119`, `drafts.js` (13 of them), `relationshipGroups.js` (11),
+  `conversations.js`, `openQuestions.js`, `relationshipTypes.js`, `entityTypes.js`, `tags.js`, `workspace.js`,
+  `export.js`, `auth.js:384,499` — plus `server/src/middleware/auth.js:51` and `workspace.js`, and `createApp` installs
+  no error middleware at all. So whatever Mongoose or the driver says reaches the caller verbatim: `E11000 duplicate key
+  error collection: … index: …`, `Entity validation failed: category: …`, or a pool error carrying a connection string.
+  KOL-069 closed the one case it could close from outside the catch — a malformed `:id` is 400 `INVALID_ID` before the
+  route runs — and that fix is the pattern this follows: the shape belongs in one place, not in fifty-nine catches.
+  Build: `server/src/middleware/errorHandler.js`, a four-argument Express handler mounted last in `createApp`, mapping a
+  Mongoose `ValidationError` to 400 `{ error: 'VALIDATION_FAILED', fields: [<schema paths>] }` (our own path names,
+  which are safe and are what a client needs to show), duplicate key 11000 to 409 `{ error: 'DUPLICATE', fields: […] }`,
+  an error carrying an explicit `status` and `code` to those, and anything else to 500 `{ error: 'INTERNAL', ref }`
+  where `ref` is a short random id also written to the server log beside the real stack — so a user can quote the ref
+  and nothing about the deployment leaves the box. Tiered `ERROR_LOG_LEVEL = off | light | normal | verbose` (default
+  light): light logs one line per handled error with the route, the status it chose, the `ref` and *which rule* chose
+  it, so the log says the source of the mapping and not just the status. Then the sweep: each leaking `catch` becomes
+  `catch (err) { next(err) }`, while every 400/403/404 a route answers on purpose with a written sentence stays exactly
+  as it is. Files: `server/src/middleware/errorHandler.js` (new), `server/src/app.js`, the twelve routers, the two
+  middleware files, and an `## Errors` section in `docs/api.md` listing the codes. Verify: a new
+  `server/tests/http/errorShape.test.js` — a write that fails schema validation is 400 `VALIDATION_FAILED` and the body
+  contains neither `validation failed` nor a model name; a duplicate unique value is 409 `DUPLICATE`; a route forced to
+  throw is 500 `INTERNAL` with a `ref` and no `message`; that same `ref` appears in the captured log; and a source-level
+  assertion that no file under `server/src/routes/` or `server/src/middleware/` still passes `err.message` into a
+  response body, so the sweep cannot quietly regress. `cd server && yarn test` green; the client is untouched. Out of
+  scope: `server/src/routes/bridge.js` and `mcp.js`, which answer JSON-RPC error objects on their own protocol and are
+  KOL-047's subject; request-id propagation into the client's own logs; and changing any status code a route chooses
+  deliberately today.
+- [ ] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended** [proposed]
+  A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
+  the Decision Log says so where it lists what account deletion cannot reach: "the user's *other* sessions cannot be
+  found by user in the store, so they outlive the account holding a dangling id". For a public product the consequence
+  is that a session left on a borrowed laptop, or one on a stolen phone, cannot be ended by its owner at all:
+  `POST /auth/logout` destroys only the session that called it, and KOL-038 taught just `GET /auth/me` to notice a
+  session whose user is gone. Build: `credentialsChangedAt` on `User` (set at creation alongside the existing
+  `timestamps`), an `issuedAt` written into the session at every sign-in — `/login`, the WebAuthn completion and
+  `/register` — and one check inside `requireAuth` and `requireActor`: a session whose `issuedAt` predates its user's
+  `credentialsChangedAt` is destroyed and answered 401. `POST /auth/sessions/revoke-all` re-authenticates the way
+  `DELETE /auth/account` does, bumps `credentialsChangedAt` to now, and re-stamps the calling session's `issuedAt` so
+  the device that asked stays signed in. A timestamp rather than a session table on purpose: the store cannot be queried
+  by user, and a second place that lists sessions is a second thing that has to stay true. Files:
+  `server/src/models/User.js`, `server/src/middleware/auth.js`, `server/src/routes/auth.js`, `client/src/api/auth.js`,
+  the Settings area that already holds the passkey list in `client/src/components/WikiLayout.vue`, `docs/api.md`, and a
+  Decision Log line in `kol_emet_spec.md` (it supersedes the "other sessions outlive the account" gap recorded there).
+  Verify: a new `server/tests/http/sessionRevocation.test.js` — two agents signed in as one user, revoke from the first,
+  and the second's next `/entities` request is 401 with its session gone from the store while the first still reads
+  `/entities`; a second user's session is untouched; a wrong password on the revoke is 403 and bumps nothing; an
+  unauthenticated call is 401; a session issued after the bump is accepted; and the MCP bearer token, which carries no
+  session, keeps working. Plus a `client/src/components/WikiLayout.test.js` case for the button and its confirmation.
+  `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of scope: listing active sessions
+  with device, IP or location (the store cannot enumerate them by user — that is precisely why this is a timestamp),
+  notifying the account by email, revoking the MCP bearer or OAuth tokens (KOL-014 owns per-connector identity), and
+  bumping the timestamp automatically when a passkey is removed.
+- [ ] **(KOL-077) `POST /import`: a canonical export round-trips back into an empty workspace** [proposed]
+  KOL-070 shipped `GET /export` and `server/src/lib/graphExporter.js` — one deterministic JSON document stamped
+  `version: 'kol-emet/workspace-export@1'` — and left the other half open: nothing reads it back. So the export is a
+  file nobody can prove is complete, `docs/wishlist.md`'s "Bulk import endpoint" has no answer, and the roadmap's
+  Git-native track ("a Git connector round-trips it into the customer's repo") has no round trip to connect. Build:
+  `server/src/lib/graphImporter.js` — from a parsed export document plus a `workspaceId` to the documents it writes:
+  refuse an unknown `version`; give every entity type, relationship type, entity, relationship group and open question a
+  fresh `ObjectId` and rewrite every reference to it; keep each group's `members` array order and its `refModel`
+  discriminator, because array position is what encodes order; rebuild `Entity.relationships` and
+  `Entity.open_questions` from the groups and questions rather than copying the file's ids; and ignore any `workspaceId`
+  the file carries, so a document hand-edited to name another tenant writes nothing there. It imports only into an
+  **empty** workspace — no entities, no relationship groups, no open questions — and answers 409
+  `WORKSPACE_NOT_EMPTY` otherwise. That refusal is the point: it is what lets this item ship with no merge or
+  id-collision policy, which is a product decision this deliberately does not make. `POST /import` sits behind
+  `requireAuth`, `resolveWorkspace` and `requireWorkspaceRole('owner')` (KOL-071's middleware, `workspace.js:138`), with
+  per-collection caps so one upload cannot write an unbounded graph, and tiered
+  `IMPORT_LOG_LEVEL = off | light | normal | verbose` (default light) naming the document's version, the per-collection
+  counts and the reason behind every refusal. Files: `server/src/lib/graphImporter.js` and `server/src/routes/import.js`
+  (both new), `server/src/app.js` (one mount beside `/export`), `client/src/api/export.js`, an "Import workspace" row
+  among the Settings groups in `client/src/components/WikiLayout.vue`, an `## Import` section in `docs/api.md`, and a
+  Decision Log line for the empty-workspace rule. Verify: a new `server/tests/unit/graphImporter.test.js` — a fixture
+  graph exported, imported into a fresh workspace and exported again is byte-identical except for the ids; a nested
+  subgroup and its member order survive; an unknown `version` is refused; a planted foreign `workspaceId` lands in the
+  caller's workspace and nowhere else; and a document over the caps is refused with nothing written. A new
+  `server/tests/http/import.test.js` — the owner of an empty workspace gets 201 and the entities appear under
+  `GET /entities`; a workspace holding one entity is 409 and is unchanged; a member whose role is `editor` is 403;
+  unauthenticated is 401; malformed JSON is 400. `cd server && yarn test` and `cd client && yarn test --run &&
+  yarn build` green. Out of scope: merging into a non-empty workspace and the id-collision policy that needs, importing
+  `ChangeLog` or `Draft` (KOL-019 has to settle whether history is permanent first), YAML or Markdown input, the Git
+  connector itself, and streaming for very large files.
+- [ ] **(KOL-078) `GET /health`: liveness and database readiness without a session** [proposed]
+  Every route in `createApp` is behind `requireAuth` except `/auth/*`, `/oauth`, `/templates`, `/mcp` and the bridge, so
+  there is no way to ask a deployed instance whether it is working. The repo runbook's deploy signal is Railway's own
+  commit status, which says a container started — not that it can reach Mongo. The failure that leaves invisible is the
+  likeliest one in production: the API answering while `mongoose.connection.readyState` is 0, which every tenant route
+  turns into a stall that reads to a user as their own connection. Build: `server/src/routes/health.js` — `GET /health`
+  returning `{ status, db, uptimeSeconds }`, where `status` is `ok` with 200 when `readyState` is 1 and `degraded` with
+  503 otherwise, and `db` is `up` or `down`. Deliberately nothing else in the body: no version, no commit, no
+  collection counts, no environment or provider names. It is the one unauthenticated route whose whole job is to be
+  polled, and a status endpoint that describes the deployment is a reconnaissance endpoint. Mounted ahead of
+  `requireAuth` in `createApp`; it needs no origin-guard exemption, because `originGuard` checks only unsafe methods
+  (`server/src/middleware/originGuard.js:148`). Files: `server/src/routes/health.js` (new), `server/src/app.js` (one
+  mount), and a `## Health` section in `docs/api.md`. Verify: a new `server/tests/http/health.test.js` — 200
+  `{ status: 'ok', db: 'up' }` with no session and no cookie; `degraded` / `down` with 503 when the connection is forced
+  to a non-ready state; the body carries exactly the three documented keys and no others, so adding a fourth has to be a
+  deliberate change to the assertion; a cross-origin `GET` is not refused; and `HEAD /health` answers for a monitor that
+  sends one. `cd server && yarn test` green; the client is untouched. Out of scope: checking the AI providers or any
+  outbound dependency, Prometheus or OpenTelemetry metrics, a status page, and pointing Railway's own healthcheck
+  setting at it — that is a dashboard change for Daniel, to be flagged in the PR.
+- [ ] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work** [proposed]
+  This audit found three documents describing work that has already shipped, which is exactly the input that makes the
+  next audit file a duplicate. (1) `docs/generator-v1-plan.md` "Remaining work" still lists **account-deletion hard
+  delete** and the **signup disclosure copy** as not built: both shipped in KOL-021 — `Draft` is in the deleted-model
+  list at `server/src/lib/accountDeleter.js:84`, and the disclosure is `client/src/views/LoginView.vue:85`. (2)
+  `docs/roadmap.md` still heads "Phase 5 — Polish (current)" and "Phase 6 — Generalize the engine (next)", although
+  Phase 6's steps all shipped (KOL-020, KOL-022, KOL-027 through KOL-031) and the `EntityType` registry now gates every
+  category write. (3) `docs/wishlist.md` still lists "Tag autocomplete on entry editor", "Bulk tag operations" and
+  "Entry revision history" as open; all three shipped (KOL-041, KOL-053, and the `ChangeLog` history view with
+  snapshot rollback). Build: mark each shipped line the way these same files already mark others — a ✅ with the item id
+  and the date — and move Phase 6 to shipped, naming what is actually next in its place (Phase 7's unbuilt halves:
+  vertical ingestion beyond the compose and OpenAPI producers, and drift detection). Nothing is deleted: a line that
+  now reads as history stays, because the goal is an accurate list rather than a shorter one. Files:
+  `docs/generator-v1-plan.md`, `docs/roadmap.md`, `docs/wishlist.md`. Verify: `git diff --name-only` names exactly those
+  three files, and `cd server && yarn test` and `cd client && yarn test --run && yarn build` are still green — this is
+  documentation only, so movement in either suite means the diff touched more than it should. Out of scope:
+  re-sequencing the roadmap or deciding what Phase 8 contains (Daniel's call), rewriting either plan's prose, and any
+  code change at all — a line that turns out to describe something genuinely unbuilt is left alone and becomes its own
+  queue item.
 
 ## Blocked Items
 
