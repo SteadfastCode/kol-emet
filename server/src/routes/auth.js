@@ -19,6 +19,7 @@ import { seedWorkspace } from '../lib/workspaceSeeder.js';
 import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
 import { createAuthLimiter } from '../lib/attemptLimiter.js';
+import { passwordProblem } from '../lib/passwordPolicy.js';
 import { clearSessionCookie } from '../lib/sessionCookie.js';
 import { closeStreamsForSession, closeStreamsForUser } from '../lib/broadcaster.js';
 import {
@@ -108,6 +109,15 @@ router.post('/register', async (req, res) => {
   if (!usableEmail(email) || !usablePassword(password)) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
+  // The product's one password rule, from lib/passwordPolicy.js — the same
+  // function POST /auth/password calls, so the minimum a new account must meet
+  // and the minimum a replacement must meet cannot drift apart. Asked here,
+  // after the required-fields guard whose wording a client already branches on
+  // and before any I/O: a refused password costs no database read, no bcrypt
+  // hash and no signup budget. Deliberately not asked by POST /auth/login —
+  // an account registered before this minimum keeps signing in (see the lib).
+  const problem = passwordProblem(password);
+  if (problem) return res.status(400).json({ error: problem });
   // Naming no template gets the default; naming one that doesn't exist is
   // refused before anything is written, rather than quietly seeding the
   // default (getTemplate's fallback) into a workspace the user didn't pick.
@@ -667,11 +677,21 @@ function refusedBearer(req, res, source) {
   return true;
 }
 
-/** Null when `response` is a valid assertion by one of `user`'s own passkeys; otherwise why not. */
-async function passkeyRefusal(req, user, response) {
+/**
+ * Null when `response` is a valid assertion by one of `user`'s own passkeys;
+ * otherwise why not.
+ *
+ * `challengeKey` names the session field the challenge was minted into and
+ * `source` the route asking, so the two re-authentications in this file —
+ * account deletion and the password change below — share one implementation
+ * while keeping their challenges apart: a challenge issued to confirm a
+ * deletion must not be spendable on a password change, nor the other way
+ * round, and neither on signing in (`currentChallenge`).
+ */
+async function passkeyRefusal(req, user, response, { challengeKey, source }) {
   // Spent on every attempt, pass or fail, so one challenge buys one try.
-  const expectedChallenge = req.session.accountDeleteChallenge;
-  delete req.session.accountDeleteChallenge;
+  const expectedChallenge = req.session[challengeKey];
+  delete req.session[challengeKey];
   if (!expectedChallenge) return 'no passkey challenge was issued to this session';
 
   const found = findPasskey(user.passkeys, response.id);
@@ -689,9 +709,9 @@ async function passkeyRefusal(req, user, response) {
     if (!verification.verified) return 'the passkey assertion did not verify';
     // The use recorded, and a legacy id repaired, even though a success
     // usually deletes the user: a 409 refusal leaves the account, and its
-    // passkey, in place.
-    recordUse(found.passkey, verification.authenticationInfo, { userId: user._id, source: DELETE_SOURCE });
-    migrateCredentialId(found, response.id, { userId: user._id, source: DELETE_SOURCE });
+    // passkey, in place. (And a password change always does.)
+    recordUse(found.passkey, verification.authenticationInfo, { userId: user._id, source });
+    migrateCredentialId(found, response.id, { userId: user._id, source });
     await user.save();
     return null;
   } catch (err) {
@@ -758,7 +778,10 @@ router.delete('/account', requireActor, async (req, res) => {
 
     const refusal = hasPassword
       ? (await bcrypt.compare(password, user.passwordHash) ? null : 'wrong password')
-      : await passkeyRefusal(req, user, passkey);
+      : await passkeyRefusal(req, user, passkey, {
+          challengeKey: 'accountDeleteChallenge',
+          source: DELETE_SOURCE,
+        });
     if (refusal) {
       // Counted: a wrong password and a bad assertion are both failed
       // re-authentication. The typed-email mismatch above is not — it is the
@@ -810,6 +833,182 @@ router.delete('/account', requireActor, async (req, res) => {
     if (err) logDeletion('light', `${DELETE_SOURCE}: user ${userId} deleted, but the session was not destroyed: ${err.message}`);
     res.status(204).end();
   });
+});
+
+// ─── Changing your password ───────────────────────────────────────────────────
+// Until this existed an account could not change its password at all: nothing
+// in this file wrote `passwordHash` after registration, so the only way out of
+// a password you no longer trusted was deleting the account and rebuilding the
+// workspace from an export.
+//
+// `POST /auth/password` re-authenticates exactly as `DELETE /auth/account`
+// does, and for the same reason: a session cookie is a thing a borrowed laptop
+// or a stolen phone has, and someone holding one must not be able to take the
+// account by replacing its password. So the body carries the current password,
+// or a passkey assertion against a challenge from
+// `POST /auth/password/passkey-challenge` — single-use, under its own session
+// key, so no other ceremony's challenge can be spent here. No typed email
+// confirmation, unlike deletion: that is a *are you sure* for something
+// irreversible, and this is reversible by doing it again.
+//
+// Session only, and `requireAuth` rather than `requireActor`: requireActor
+// would admit the MCP bearer token, one secret shared with an AI connector,
+// and a connector does not get to change the password of the account it acts
+// for — with or without that password. An anonymous caller is requireAuth's
+// 401; a bearer caller reaches the route and is 403, the same split the passkey
+// management routes above use.
+//
+// A failed re-authentication is **403, not 401**, for the reason the Decision
+// Log gives for deletion: the session is still perfectly good, and a 401 reads
+// to a client as "you have been signed out" — which would send someone whose
+// only mistake was a typo back to the sign-in form.
+//
+// What this deliberately does NOT do: end the account's *other* sessions. The
+// session store cannot be searched by user (see `GET /auth/me`), so that needs
+// a credentials-changed stamp checked on every request — KOL-076 — and until
+// it lands a password change locks nobody out of a session they already hold.
+// The light tier below says so on every change, because it is the one
+// consequence a user would reasonably assume the opposite of.
+//
+// ─── Tiered debug logging ────────────────────────────────────────────────────
+// PASSWORD_LOG_LEVEL = off | light | normal | verbose (default light). Ids
+// only — never the email, and obviously never either password.
+//   light   — every change, naming how it was re-authenticated and what it did
+//             not do, and every refusal with the reason that refused it
+//   normal  — light, plus each passkey challenge issued
+//   verbose — normal, plus the length the new password was measured at (a
+//             length, not a value: a refused length is otherwise invisible)
+
+const PASSWORD_SOURCE = 'POST /auth/password';
+const PASSWORD_CHALLENGE_SOURCE = 'POST /auth/password/passkey-challenge';
+
+function logPassword(level, msg) {
+  // Resolved per call, not at module load, so it can't depend on import order.
+  const active = LEVELS[process.env.PASSWORD_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[auth/password:${level}] ${msg}`);
+}
+
+/**
+ * The session's own user id, or null having answered 403.
+ *
+ * `requireAuth` has already answered 401 for a caller with neither a session
+ * nor the bearer token, so reaching here without a session means the bearer
+ * token — which is what this refuses.
+ */
+function passwordCaller(req, res, source) {
+  if (req.session?.userId) return req.session.userId;
+  logPassword('light', `${source} refused: bearer token, not a session`);
+  res.status(403).json({ error: 'Changing your password needs a signed-in browser session' });
+  return null;
+}
+
+// POST /auth/password/passkey-challenge
+router.post('/password/passkey-challenge', requireAuth, async (req, res) => {
+  const userId = passwordCaller(req, res, PASSWORD_CHALLENGE_SOURCE);
+  if (!userId) return;
+  try {
+    const user = await User.findById(userId).select('passkeys').lean();
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    if (!user.passkeys?.length) return res.status(400).json({ error: 'This account has no passkey' });
+
+    const options = await generateAuthenticationOptions({
+      rpID: RP_ID,
+      allowCredentials: credentialDescriptors(user.passkeys),
+      userVerification: 'preferred',
+    });
+    // Its own key, like the deletion challenge beside it: a challenge minted to
+    // sign in, or to delete an account, must not be spendable on replacing a
+    // password.
+    req.session.passwordChangeChallenge = options.challenge;
+    logPassword('normal', `passkey challenge issued to user ${userId} (source: ${PASSWORD_CHALLENGE_SOURCE})`);
+    res.json(options);
+  } catch (err) {
+    logPassword('light', `${PASSWORD_CHALLENGE_SOURCE} failed for user ${userId}: ${err.message}`);
+    res.status(500).json({ error: 'Could not start passkey confirmation' });
+  }
+});
+
+// POST /auth/password
+router.post('/password', requireAuth, async (req, res) => {
+  const userId = passwordCaller(req, res, PASSWORD_SOURCE);
+  if (!userId) return;
+
+  try {
+    const { currentPassword, newPassword, passkey } = req.body ?? {};
+    const byPassword = usablePassword(currentPassword);
+    const byPasskey  = !byPassword && passkey !== null && typeof passkey === 'object';
+    if (!byPassword && !byPasskey) {
+      logPassword('light', `${PASSWORD_SOURCE} refused for user ${userId}: no current password and no passkey`);
+      return res.status(400).json({ error: 'Confirm with your current password or a passkey' });
+    }
+
+    // The policy first, before any credential work: a new password that would
+    // be refused whatever the answer must not cost a bcrypt compare, must not
+    // spend the single-use passkey challenge, and must not count against the
+    // guess budget below. The same function `POST /auth/register` calls.
+    const problem = passwordProblem(newPassword);
+    if (problem) {
+      logPassword('light', `${PASSWORD_SOURCE} refused for user ${userId}: the new password does not meet the policy (source: lib/passwordPolicy.js — ${problem})`);
+      logPassword('verbose', `the refused new password was ${typeof newPassword === 'string' ? `${[...newPassword].length} characters` : `a ${typeof newPassword}`}`);
+      return res.status(400).json({ error: problem });
+    }
+
+    // Before the bcrypt compare and before the passkey verification, keyed by
+    // the account rather than an address: the caller is signed in, so who is
+    // guessing is known, and a session is not a licence to try every password
+    // its owner might have. Its own key — `password:` — rather than the bare
+    // user id account deletion counts under, so a run of wrong guesses at one
+    // form does not lock the other: a password you no longer trust is exactly
+    // the password you are most likely to mistype, and being unable to replace
+    // it because you also mistyped it at the delete form would be absurd. The
+    // cost of that choice, stated plainly: a stolen session gets this route's
+    // budget *and* deletion's, not one shared between them.
+    const keys = { user: `password:${userId}` };
+    const block = limiter(req).blocked(keys, PASSWORD_SOURCE);
+    if (block) {
+      logPassword('light', `${PASSWORD_SOURCE} refused for user ${userId}: too many failed confirmations, retry after ${block.retryAfter}s`);
+      return limiter(req).refuse(res, block);
+    }
+
+    const user = await User.findById(userId).select('passwordHash passkeys');
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    // An account with no stored password cannot confirm with one — bcrypt
+    // throws on a null hash rather than answering false, which would be a 500
+    // where a refusal belongs. The passkey path still works for such an
+    // account, so this route is also how a passkey-only account sets its first
+    // password.
+    const refusal = byPassword
+      ? (user.passwordHash && await bcrypt.compare(currentPassword, user.passwordHash) ? null : 'wrong current password')
+      : await passkeyRefusal(req, user, passkey, {
+          challengeKey: 'passwordChangeChallenge',
+          source: PASSWORD_SOURCE,
+        });
+    if (refusal) {
+      limiter(req).recordFailure(keys, PASSWORD_SOURCE);
+      logPassword('light', `${PASSWORD_SOURCE} refused for user ${userId}: ${refusal}`);
+      // 403, not 401 — the session is fine, the re-authentication was not.
+      return res.status(403).json({ error: byPassword ? 'Incorrect password' : 'Passkey confirmation failed' });
+    }
+    limiter(req).reset(keys, PASSWORD_SOURCE);
+
+    // Cost 12, as `POST /auth/register` hashes with. A targeted $set rather
+    // than saving the document loaded above: the passkey path has already
+    // saved it (a recorded use, maybe a migrated id), and the only field this
+    // route owns is the hash.
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const result = await User.updateOne({ _id: userId }, { $set: { passwordHash } });
+    if (!result.matchedCount) {
+      logPassword('light', `${PASSWORD_SOURCE} failed for user ${userId}: the account is gone`);
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    logPassword('light', `user ${userId}: password replaced (source: ${PASSWORD_SOURCE}, re-authenticated with ${byPassword ? 'the current password' : 'a passkey'}); this session and the account's other sessions all stay signed in (KOL-076 owns ending them)`);
+    res.json({ ok: true });
+  } catch (err) {
+    logPassword('light', `${PASSWORD_SOURCE} failed for user ${userId}: ${err.message}`);
+    res.status(500).json({ error: 'Could not change your password' });
+  }
 });
 
 export default router;

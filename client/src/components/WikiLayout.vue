@@ -150,6 +150,54 @@
           <div class="settings-group-title">Account</div>
           <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
         </div>
+        <!--
+          Before Passkeys, because the two are one subject — how this account signs in — and a
+          password is the way in every account has. A form of its own with the pair of
+          autocomplete attributes a credential manager looks for (current-password then
+          new-password), so it offers the saved password and then offers to update it (KOL-074).
+        -->
+        <div class="settings-group">
+          <div class="settings-group-title">Password</div>
+          <form class="password-form" autocomplete="on" @submit.prevent="savePassword">
+            <label class="settings-label" for="change-password-current">Current password</label>
+            <input
+              id="change-password-current"
+              v-model="currentPassword"
+              class="settings-input"
+              type="password"
+              name="current-password"
+              autocomplete="current-password"
+              :disabled="passwordSaving"
+            />
+
+            <label class="settings-label" for="change-password-new">New password</label>
+            <input
+              id="change-password-new"
+              v-model="newPassword"
+              class="settings-input"
+              type="password"
+              name="new-password"
+              autocomplete="new-password"
+              :minlength="PASSWORD_MIN_LENGTH"
+              :disabled="passwordSaving"
+            />
+            <p class="settings-note">At least {{ PASSWORD_MIN_LENGTH }} characters. Length is the only rule — a
+              passphrase of ordinary words is stronger than a short password with symbols in it.</p>
+
+            <p v-if="passwordError" class="settings-error" role="alert">{{ passwordError }}</p>
+
+            <button type="submit" class="settings-row" :disabled="passwordSaving || !passwordChangeReady">
+              {{ passwordSaving ? 'Saving…' : 'Change password' }}
+            </button>
+            <!-- The only way in for an account that has a passkey and no password it remembers. -->
+            <button
+              type="button"
+              class="settings-row"
+              :disabled="passwordSaving || passwordTooShort(newPassword)"
+              @click="savePasswordWithPasskey"
+            >Confirm with a passkey instead</button>
+          </form>
+        </div>
         <div class="settings-group">
           <div class="settings-group-title">Passkeys</div>
           <!-- Mounted only while settings shows: fetched fresh on each open, never on page load. -->
@@ -257,6 +305,12 @@ import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import { searchEntities } from '../api/entities.js';
+import {
+  changePassword,
+  changePasswordWithPasskey,
+  passwordTooShort,
+  PASSWORD_MIN_LENGTH,
+} from '../api/auth.js';
 import { downloadWorkspaceExport } from '../api/export.js';
 import { getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
@@ -436,6 +490,68 @@ async function saveWorkspaceName() {
     workspaceSaving.value = false;
   }
 }
+
+/**
+ * The Password group (KOL-074). The server owns every rule — the minimum, the
+ * re-authentication and the throttle — so this only collects the pair, states
+ * the minimum rather than letting the user discover it from a 400, and shows a
+ * refusal in the server's own words.
+ *
+ * Nothing is fetched: there is no state to read, so the group needs no
+ * `settingsVisible` gate. Both fields are cleared on success, because leaving
+ * a password sitting in a form that is still on screen is not something a
+ * settings panel should do.
+ */
+const currentPassword = ref('');
+const newPassword     = ref('');
+const passwordSaving  = ref(false);
+const passwordError   = ref('');
+
+const passwordChangeReady = computed(() =>
+  !!currentPassword.value && !passwordTooShort(newPassword.value));
+
+function passwordMessageFor(err) {
+  // The server's own wording: too short (400), wrong current password or a
+  // failed passkey (403), and the throttle's message, which says to wait
+  // (a "try again" of our own would be exactly the wrong advice).
+  if (err.status === 400 || err.status === 403 || err.status === 429) return err.message;
+  if (err.status === 401) return 'Your session has expired. Sign in again to change your password.';
+  return 'Could not change your password. Please try again.';
+}
+
+async function runPasswordChange(attempt) {
+  if (passwordSaving.value) return;
+  passwordSaving.value = true;
+  passwordError.value = '';
+  try {
+    await attempt();
+    currentPassword.value = '';
+    newPassword.value = '';
+    addToast({
+      message: 'Password changed. Your other sessions stay signed in.',
+      actorType: 'system',
+      actorLabel: 'Account',
+    });
+  } catch (err) {
+    if (err.name === 'NotAllowedError') return;  // the passkey prompt was dismissed
+    passwordError.value = passwordMessageFor(err);
+  } finally {
+    passwordSaving.value = false;
+  }
+}
+
+const savePassword = () => {
+  if (!passwordChangeReady.value) return;
+  return runPasswordChange(() => changePassword({
+    currentPassword: currentPassword.value,
+    newPassword: newPassword.value,
+  }));
+};
+
+const savePasswordWithPasskey = () => {
+  if (passwordTooShort(newPassword.value)) return;
+  return runPasswordChange(() => changePasswordWithPasskey(newPassword.value));
+};
 
 function onChatClose() {
   chatOpen.value = false;
@@ -909,6 +1025,32 @@ provide('openSnapshot', openSnapshot);
   font-size: 12px;
   color: #e07070;
 }
+
+/* The Password group's form (KOL-074): stacked labels and fields, then its two buttons. */
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-label { font-size: 12px; color: #888; }
+
+.settings-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #121212;
+  color: #e0e0e0;
+  font-family: inherit;
+}
+
+.settings-input:focus { outline: none; border-color: #555; }
+.settings-input:disabled { opacity: 0.5; }
+
+.password-form .settings-note,
+.password-form .settings-error { margin-top: 0; }
 
 .settings-close { display: none; }
 
