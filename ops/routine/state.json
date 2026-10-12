@@ -79,19 +79,19 @@
     "KOL-074": {
       "order": 5,
       "title": "Change your password, and one policy both routes share",
-      "status": "pending",
-      "attempts": 1,
+      "status": "claimed",
+      "attempts": 2,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-074",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-12T16:11:46.305Z",
-      "runId": null,
-      "lastFail": "abandoned"
+      "claimedAtUtc": "2026-10-12T21:09:00.848Z",
+      "runId": "2026-10-12T21:08:28.915Z",
+      "lastFail": null
     },
     "KOL-014": {
       "order": 6,
