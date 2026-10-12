@@ -79,7 +79,7 @@
     "KOL-074": {
       "order": 5,
       "title": "Change your password, and one policy both routes share",
-      "status": "claimed",
+      "status": "done",
       "attempts": 2,
       "cluster": null,
       "branch": "routine/item/KOL-074",

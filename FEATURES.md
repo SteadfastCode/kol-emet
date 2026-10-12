@@ -54,34 +54,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-074) Change your password, and one policy both routes share**
-  An account registered today can never change its password. `server/src/routes/auth.js` has `/register`, `/login`,
-  `/logout`, `/me`, the WebAuthn routes and `DELETE /account`, and nothing between them that replaces `passwordHash` —
-  the only way out of a password you no longer trust is deleting the account and rebuilding the workspace. The same
-  file's `usablePassword` (`auth.js:103`) accepts any non-empty string, so `a` is a valid password on a product with
-  open registration. Build: `server/src/lib/passwordPolicy.js` exporting one `passwordProblem(value)` that returns
-  `null` or a sentence, enforcing a 12-character minimum and nothing else (length, not composition rules — NIST
-  800-63B), called by `/register` and by the new route so the two cannot drift apart. `POST /auth/password`
-  re-authenticates exactly as `DELETE /auth/account` does: the current password, or a passkey assertion against a
-  single-use challenge under its own session key, and session-only — not `requireActor`, because a connector token does
-  not get to change someone's password. Then bcrypt at 12 rounds, as `/register` uses. A failed re-authentication is
-  403, not 401, for the reason the Decision Log already gives for deletion: the session is still good, and a 401 reads
-  to a client as "signed out". Counted by the existing `createAuthLimiter` (`server/src/lib/attemptLimiter.js`) under
-  its own key, so guessing the current password here is throttled like guessing it at the sign-in form. Accounts whose
-  stored password is shorter than the new minimum keep signing in: the policy gates writes and never `/login`, because
-  locking out everyone who registered before it is a worse failure than a short password. Files:
-  `server/src/lib/passwordPolicy.js` (new), `server/src/routes/auth.js`, `client/src/api/auth.js`, a "Password" group in
-  `client/src/components/WikiLayout.vue` beside the passkey settings, `client/src/views/LoginView.vue` (state the
-  minimum at registration, with `autocomplete="new-password"`), and a `## Password` note in `docs/api.md`. Verify: a new
-  `server/tests/http/password.test.js` — the new password signs in and the old one does not; a wrong current password is
-  403 and the hash is unchanged; a passkey assertion is accepted; an 11-character new password is 400 and changes
-  nothing; registering with a short password is 400; an account whose stored password is short still signs in; the MCP
-  bearer token is refused; an unauthenticated call is 401; and repeated wrong attempts hit the limiter. Plus
-  `server/tests/unit/passwordPolicy.test.js` for the boundary, and a `client/src/components/WikiLayout.test.js` case
-  that the form posts. `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of scope:
-  password reset by email (it needs a mail credential and is `[needs-human]` when it is filed), breach-list or zxcvbn
-  scoring, forcing a rotation on existing accounts, and ending the user's *other* sessions on a change — KOL-076 below
-  owns that and wants to land after this one.
 
 ## Proposed
 
@@ -234,6 +206,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-074) Change your password, and one policy both routes share** (routine 2026-10-12, f0bdcae)
+  An account registered today can never change its password. `server/src/routes/auth.js` has `/register`, `/login`,
+  `/logout`, `/me`, the WebAuthn routes and `DELETE /account`, and nothing between them that replaces `passwordHash` —
+  the only way out of a password you no longer trust is deleting the account and rebuilding the workspace. The same
+  file's `usablePassword` (`auth.js:103`) accepts any non-empty string, so `a` is a valid password on a product with
+  open registration. Build: `server/src/lib/passwordPolicy.js` exporting one `passwordProblem(value)` that returns
+  `null` or a sentence, enforcing a 12-character minimum and nothing else (length, not composition rules — NIST
+  800-63B), called by `/register` and by the new route so the two cannot drift apart. `POST /auth/password`
+  re-authenticates exactly as `DELETE /auth/account` does: the current password, or a passkey assertion against a
+  single-use challenge under its own session key, and session-only — not `requireActor`, because a connector token does
+  not get to change someone's password. Then bcrypt at 12 rounds, as `/register` uses. A failed re-authentication is
+  403, not 401, for the reason the Decision Log already gives for deletion: the session is still good, and a 401 reads
+  to a client as "signed out". Counted by the existing `createAuthLimiter` (`server/src/lib/attemptLimiter.js`) under
+  its own key, so guessing the current password here is throttled like guessing it at the sign-in form. Accounts whose
+  stored password is shorter than the new minimum keep signing in: the policy gates writes and never `/login`, because
+  locking out everyone who registered before it is a worse failure than a short password. Files:
+  `server/src/lib/passwordPolicy.js` (new), `server/src/routes/auth.js`, `client/src/api/auth.js`, a "Password" group in
+  `client/src/components/WikiLayout.vue` beside the passkey settings, `client/src/views/LoginView.vue` (state the
+  minimum at registration, with `autocomplete="new-password"`), and a `## Password` note in `docs/api.md`. Verify: a new
+  `server/tests/http/password.test.js` — the new password signs in and the old one does not; a wrong current password is
+  403 and the hash is unchanged; a passkey assertion is accepted; an 11-character new password is 400 and changes
+  nothing; registering with a short password is 400; an account whose stored password is short still signs in; the MCP
+  bearer token is refused; an unauthenticated call is 401; and repeated wrong attempts hit the limiter. Plus
+  `server/tests/unit/passwordPolicy.test.js` for the boundary, and a `client/src/components/WikiLayout.test.js` case
+  that the form posts. `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of scope:
+  password reset by email (it needs a mail credential and is `[needs-human]` when it is filed), breach-list or zxcvbn
+  scoring, forcing a rotation on existing accounts, and ending the user's *other* sessions on a change — KOL-076 below
+  owns that and wants to land after this one.
 - [x] **(KOL-073) Backlog audit: file new candidates under Proposed** (routine 2026-10-12, 4503714)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
