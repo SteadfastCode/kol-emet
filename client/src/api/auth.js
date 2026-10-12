@@ -80,6 +80,48 @@ async function accountReq(path, options) {
   return body;
 }
 
+/**
+ * The password minimum, mirrored from the server's one rule
+ * (`server/src/lib/passwordPolicy.js`, which is the authority and refuses
+ * regardless). It lives here because the two are separate bundles, exactly as
+ * `WORKSPACE_NAME_MAX` is mirrored in api/workspace.js — the forms state the
+ * minimum and gate on it so a password that cannot work is not a round trip,
+ * and the sentence the user reads on a refusal is still the server's.
+ *
+ * Counted in code points, as the server counts it: twelve emoji are twelve
+ * characters, not twenty-four.
+ */
+export const PASSWORD_MIN_LENGTH = 12;
+
+/** True when `value` is shorter than the minimum. Length only — never a composition rule. */
+export const passwordTooShort = (value) => [...(value ?? '')].length < PASSWORD_MIN_LENGTH;
+
+/**
+ * Replaces the signed-in account's password, re-authenticating with the current
+ * one. 403 when that is wrong (not 401: the session is still good), 400 when
+ * the new one is under the minimum, 429 once the account is over its failed-
+ * confirmation budget. The session stays signed in either way.
+ */
+export const changePassword = ({ currentPassword, newPassword }) =>
+  accountReq('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+
+/**
+ * The same change, re-authenticated with a passkey instead: a single-use
+ * challenge of its own, then the assertion. Also how an account that has only
+ * ever had a passkey sets a password.
+ */
+export async function changePasswordWithPasskey(newPassword) {
+  const options = await accountReq('/auth/password/passkey-challenge', { method: 'POST' });
+  const passkey = await startAuthentication({ optionsJSON: options });
+  return accountReq('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ passkey, newPassword }),
+  });
+}
+
 export const deleteAccount = ({ email, password }) =>
   accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, password }) });
 

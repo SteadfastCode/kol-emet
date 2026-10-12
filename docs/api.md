@@ -244,16 +244,49 @@ row; the reasoning is the KOL-060 Decision Log entry in `kol_emet_spec.md`.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/auth/register` | Create account (open registration). Body `{ email, password, template?, workspaceName? }`: `template` is a key from [`GET /templates`](#templates) and decides what the new workspace is seeded with; left out, it is `worldbuilding`. `workspaceName` names the new workspace (trimmed, 1–80 characters, the same rule as [`PATCH /workspace`](#workspace)); left out, it is `My Workspace`, and an unusable one is 400 `INVALID_WORKSPACE_NAME` creating no user or workspace. 201 `{ ok: true }` and a session; 400 missing email or password; 400 `Unknown template` for a `template` that names none (including `null` or a non-string), creating no user or workspace; 409 email already registered. Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once a client address has created its limit of accounts (default 10 per 60 minutes — its own counter and its own window, not the sign-in one), checked before the duplicate lookup and the password hash and creating no user or workspace. Only a *created* account is counted, so a 400 or a 409 leaves the budget untouched ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
+| POST | `/auth/register` | Create account (open registration). Body `{ email, password, template?, workspaceName? }`: `template` is a key from [`GET /templates`](#templates) and decides what the new workspace is seeded with; left out, it is `worldbuilding`. `workspaceName` names the new workspace (trimmed, 1–80 characters, the same rule as [`PATCH /workspace`](#workspace)); left out, it is `My Workspace`, and an unusable one is 400 `INVALID_WORKSPACE_NAME` creating no user or workspace. 201 `{ ok: true }` and a session; 400 missing email or password; 400 `Your password must be at least 12 characters.` for one under the [password minimum](#password), creating no user or workspace; 400 `Unknown template` for a `template` that names none (including `null` or a non-string), creating no user or workspace; 409 email already registered. Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once a client address has created its limit of accounts (default 10 per 60 minutes — its own counter and its own window, not the sign-in one), checked before the duplicate lookup and the password hash and creating no user or workspace. Only a *created* account is counted, so a 400 or a 409 leaves the budget untouched ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
 | POST | `/auth/login` | Password login → session. 401 `Invalid email or password` for both a wrong password and an unknown address (byte-identical). Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once an email or a client address is over its failure limit, checked before the password is compared and identical for known and unknown addresses; a successful sign-in clears that email's counter ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
 | POST | `/auth/logout` | End session (`requireAuth`) |
 | GET | `/auth/me` | Current session user |
 | DELETE | `/auth/account` | Hard-delete the signed-in account: the user, every workspace they solely own and everything in it ([`accountDeleter.js`](../server/src/lib/accountDeleter.js)). `requireActor`, session only; a bearer token is 403. Body `{ email, password }` or `{ email, passkey }`: the account's email as a typed confirmation, plus a fresh credential. 204 and the session is destroyed; 400 missing or mismatched email; 403 wrong password or failed passkey; 429 once the account is over its failed-confirmation limit; 409 `{ error, memberships }` while the user belongs to a workspace they don't solely own, deleting nothing |
+| POST | `/auth/password` | Replace the signed-in account's password — see [Password](#password). `requireAuth`, session only; a bearer token is 403. Body `{ currentPassword, newPassword }` or `{ passkey, newPassword }`. 200 `{ ok: true }`; 400 a new password under the minimum or no credential at all; 403 wrong current password or failed passkey; 429 once the account is over its failed-confirmation limit. Every session stays signed in, this one included |
+| POST | `/auth/password/passkey-challenge` | WebAuthn challenge for confirming `POST /auth/password` with a passkey (`requireAuth`, session only). One use, under its own session key — a sign-in or account-deletion challenge cannot be spent here. 400 when the account has no passkey |
 | POST | `/auth/account/passkey-challenge` | WebAuthn challenge for confirming `DELETE /auth/account` with a passkey (`requireActor`, session only). One use, and kept apart from the sign-in challenge |
 | POST | `/auth/webauthn/register/begin` · `/complete` | Add a passkey (`requireAuth`): the prompt after signup, and Settings → Passkeys. `/begin` carries the account's stable WebAuthn user handle as `user.id`, so every passkey on an account is one WebAuthn user; an account registered before KOL-052 has one written here on its first registration. `/complete` answers 409 when the credential id is already registered — to this account or any other, with the same message either way (WebAuthn §7.1) |
 | GET | `/auth/webauthn/passkeys` | The signed-in user's passkeys, for Settings: `{ passkeys: [{ credentialID, deviceType, backedUp, createdAt, lastUsedAt }], hasPassword, userHandle, rpId }`. `userHandle` (null on an account registered before KOL-052) and `rpId` (`WEBAUTHN_RP_ID`, not necessarily the client's host) are what a `PublicKeyCredential.signal*` call needs to name the account; they are siblings of `passkeys`, so each summary stays the explicit field list it is. `requireAuth`, session only; a bearer token is 403. Never includes a public key |
 | DELETE | `/auth/webauthn/passkeys/:credentialID` | Remove one of the signed-in user's own passkeys (`requireAuth`, session only). Answers the list as it now stands; 404 when this account holds no such passkey, another account's included; 409 when it is the last way into an account with no password |
 | POST | `/auth/webauthn/login/begin` · `/complete` | Passwordless login via passkey. With an email or without one (discoverable credentials). Records the passkey's `lastUsedAt` and sync status. `/complete` answers 401 `Passkey not recognized` when no account holds the credential — the one refusal the client signals to the authenticator — and 401 `Passkey authentication failed` when the assertion did not verify. Throttled by client address (no email in its body), sharing that counter with `/auth/login`: 429 with a `Retry-After` |
+
+## Password
+
+One rule, in one place: [`lib/passwordPolicy.js`](../server/src/lib/passwordPolicy.js) exports
+`passwordProblem(value)`, which answers `null` or one sentence, and both routes that write a
+`passwordHash` call it — so the minimum a new account must meet and the minimum a replacement must
+meet cannot drift apart.
+
+- **A 12-character minimum, and nothing else.** No required digit, symbol or mixed case (NIST SP
+  800-63B §3.1.1.2 — composition rules push people towards `Password1!`). No maximum, nothing
+  trimmed, and counted in **code points**, so twelve emoji are twelve characters.
+- **It gates writes, never `POST /auth/login`.** An account registered before the minimum holds a
+  password shorter than it and still signs in: refusing it at the door would lock its owner out of
+  their own workspace with no way back, since changing a password requires signing in first. The
+  refusal they get is `400 { error: "Your password must be at least 12 characters." }` on
+  `POST /auth/register` (creating no account) or on `POST /auth/password` (changing nothing).
+
+`POST /auth/password` re-authenticates exactly as [`DELETE /auth/account`](#auth) does — the current
+password, or a passkey assertion against a single-use challenge from
+`POST /auth/password/passkey-challenge` — because a session cookie is a thing a borrowed laptop has.
+A failed re-authentication is **403, not 401**: the session is still good, and a 401 reads to a
+client as "signed out". Failures are counted by the shared attempt limiter
+([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) under this route's own per-account
+key, checked before the bcrypt compare, and cleared by a successful change; the new hash is bcrypt
+at cost 12, as registration's is. An account with a passkey and no password can use the passkey path
+to set one.
+
+**Not done here:** the change does **not** end the account's other sessions (the session store
+cannot be searched by user — KOL-076 owns that), there is no reset-by-email flow, and no breach-list
+or strength scoring. `PASSWORD_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) traces
+the route; it logs ids, never an email and never a password.
 
 ## Templates
 

@@ -28,6 +28,11 @@ vi.mock('../api/auth.js', () => ({
   getTemplates: vi.fn(async () => []),
   loginWithPasskey: vi.fn(),
   registerPasskey: vi.fn(),
+  // The password minimum the register form states and gates on (KOL-074). Real
+  // values, not stubs: what the form shows the user is the rule itself, and the
+  // server (server/src/lib/passwordPolicy.js) refuses regardless.
+  PASSWORD_MIN_LENGTH: 12,
+  passwordTooShort: (value) => [...(value ?? '')].length < 12,
 }));
 
 async function switchTo(wrapper, label) {
@@ -77,6 +82,57 @@ describe('LoginView signup disclosure', () => {
 
   it('sign-in mode does not', () => {
     expect(mount(LoginView).find('.login-disclosure').exists()).toBe(false);
+  });
+});
+
+/**
+ * The password minimum at the signup form (KOL-074). The server refuses a short password on its
+ * own (400, `server/tests/http/password.test.js`), but `register()` does not carry its message
+ * back, so a signup that failed would say nothing useful — the rule is stated under the field and
+ * checked before the request. Sign-in is exempt on purpose: an account registered before the
+ * minimum holds a shorter password and must still be able to type it.
+ */
+describe('LoginView password minimum', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('states it under the password field in create-account mode, and not in sign-in mode', async () => {
+    const wrapper = mount(LoginView);
+    expect(wrapper.find('.login-hint').exists()).toBe(false);
+
+    await switchTo(wrapper, 'Create account');
+    expect(wrapper.get('.login-hint').text()).toContain('At least 12 characters');
+    expect(wrapper.get('form input[type="password"]').attributes('minlength')).toBe('12');
+  });
+
+  it('refuses a short password before the request, and sends one that meets it', async () => {
+    const wrapper = mount(LoginView);
+    await switchTo(wrapper, 'Create account');
+    await wrapper.get('form input[type="email"]').setValue('new@example.test');
+    await wrapper.get('form input[type="password"]').setValue('a'.repeat(11));
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).not.toHaveBeenCalled();
+    expect(wrapper.get('.login-error').text()).toContain('at least 12 characters');
+
+    await wrapper.get('form input[type="password"]').setValue('a'.repeat(12));
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register.mock.calls[0][1]).toBe('a'.repeat(12));
+  });
+
+  it('sign-in sends whatever was typed, however short', async () => {
+    const wrapper = mount(LoginView);
+    await wrapper.get('form input[type="email"]').setValue('old@example.test');
+    await wrapper.get('form input[type="password"]').setValue('short');
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(login).toHaveBeenCalledWith('old@example.test', 'short');
   });
 });
 

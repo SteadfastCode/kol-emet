@@ -44,10 +44,17 @@
             type="password"
             :name="mode === 'login' ? 'password' : 'new-password'"
             :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+            :minlength="mode === 'register' ? PASSWORD_MIN_LENGTH : undefined"
             placeholder="Password"
             :disabled="loading"
             required
           />
+          <!-- Stated here rather than discovered from a 400. The server's rule is the authority
+               (server/src/lib/passwordPolicy.js) and it is a length, not a composition rule —
+               sign-in never checks it, so an account registered before the minimum still works. -->
+          <p v-if="mode === 'register'" class="login-hint">
+            At least {{ PASSWORD_MIN_LENGTH }} characters. Length is the only rule.
+          </p>
 
           <!-- Optional, and the one field here a credential manager must keep out of:
                autocomplete="off" so it is never offered as a username (KOL-071). Left
@@ -102,7 +109,10 @@
 
 <script setup>
 import { ref } from 'vue';
-import { login, register, getTemplates, loginWithPasskey, registerPasskey } from '../api/auth.js';
+import {
+  login, register, getTemplates, loginWithPasskey, registerPasskey,
+  passwordTooShort, PASSWORD_MIN_LENGTH,
+} from '../api/auth.js';
 import { WORKSPACE_NAME_MAX } from '../api/workspace.js';
 
 // Shown above the form; App passes one after an account is deleted.
@@ -155,6 +165,15 @@ function switchMode(m) {
 
 async function submit() {
   error.value = '';
+  // Checked before the request, and only when registering: the server refuses
+  // a short password anyway (400), but `register()` does not carry its message
+  // back, and a signup that fails without saying why is worse than one that
+  // never leaves the browser. Sign-in is deliberately exempt — an account
+  // registered before the minimum must still be able to type its password.
+  if (mode.value === 'register' && passwordTooShort(password.value)) {
+    error.value = `Your password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+    return;
+  }
   loading.value = true;
   try {
     if (mode.value === 'login') {
@@ -422,6 +441,14 @@ input:disabled { opacity: 0.5; }
   font-size: 12px;
   color: #777;
   margin: 10px 0 0;
+  line-height: 1.5;
+}
+
+/* The password minimum, stated under the field it applies to (KOL-074). */
+.login-hint {
+  font-size: 12px;
+  color: #777;
+  margin: -4px 0 0;
   line-height: 1.5;
 }
 </style>

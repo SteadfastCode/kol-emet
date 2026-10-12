@@ -84,6 +84,21 @@ const { getWorkspace, renameWorkspace } = vi.hoisted(() => ({
 vi.mock('../api/workspace.js', () => ({
   getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX: 80, default: getWorkspace,
 }));
+// The Password group posts through this module (KOL-074), and the two stubbed children that also
+// import it — PasskeySettings and AccountDeletion — still have their imports resolved, so the
+// factory names their exports too. What the module itself does with a response is its own concern
+// (api/auth.js); PASSWORD_MIN_LENGTH is the real value, since the group's copy states it to the user.
+const { changePassword, changePasswordWithPasskey } = vi.hoisted(() => ({
+  changePassword: vi.fn(), changePasswordWithPasskey: vi.fn(),
+}));
+vi.mock('../api/auth.js', () => ({
+  changePassword, changePasswordWithPasskey,
+  PASSWORD_MIN_LENGTH: 12,
+  passwordTooShort: (value) => [...(value ?? '')].length < 12,
+  listPasskeys: vi.fn(), registerPasskey: vi.fn(), removePasskey: vi.fn(),
+  passkeysSupported: vi.fn(() => true),
+  deleteAccount: vi.fn(), deleteAccountWithPasskey: vi.fn(),
+}));
 // useFilters is deliberately NOT mocked: it reaches nothing by itself — the layout hands it the
 // keyword request, which is the mocked `searchEntities` above — and the fields it reads off a
 // listed entity are the point of the list group below.
@@ -122,7 +137,8 @@ describe('WikiLayout settings', () => {
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
     expect(titles).toEqual([
-      'Workspace', 'Account', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags', 'Delete account',
+      'Workspace', 'Account', 'Password', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags',
+      'Delete account',
     ]);
   });
 
@@ -321,6 +337,114 @@ describe('WikiLayout workspace group', () => {
     expect(group(wrapper).get('.settings-error').text()).toBe('Only an owner can rename this workspace.');
     // The name on screen is still the stored one, not the refused edit.
     expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+  });
+});
+
+/**
+ * The Password group (KOL-074), which sits before Passkeys because the two are one subject. The
+ * server owns every rule — the minimum, the re-authentication, the throttle — and
+ * server/tests/http/password.test.js pins them; what is asserted here is the client half: the pair
+ * the form posts, that it is a form a credential manager can fill and then offer to update, that
+ * the minimum is stated rather than discovered from a 400, and that a refusal stays in Settings in
+ * the server's own words.
+ *
+ * Goes red if the form stops reaching the API, if either autocomplete attribute is dropped (a
+ * password field a manager cannot fill is the thing CLAUDE.md forbids), or if a password is left
+ * sitting in the form after a successful change.
+ */
+describe('WikiLayout password group', () => {
+  beforeEach(() => {
+    changePassword.mockReset();
+    changePasswordWithPasskey.mockReset();
+    changePassword.mockResolvedValue({ ok: true });
+    changePasswordWithPasskey.mockResolvedValue({ ok: true });
+  });
+
+  const group = (wrapper) =>
+    wrapper.findAll('.mobile-settings-panel .settings-group')
+      .find((g) => g.get('.settings-group-title').text() === 'Password');
+
+  async function openSettings() {
+    const wrapper = shallowMount(WikiLayout);
+    await settingsTab(wrapper).trigger('click');
+    return wrapper;
+  }
+
+  async function fill(wrapper, { current = 'correct-horse-battery-staple', next = 'a-whole-new-horse' } = {}) {
+    await group(wrapper).get('#change-password-current').setValue(current);
+    await group(wrapper).get('#change-password-new').setValue(next);
+  }
+
+  const submitButton = (wrapper) => group(wrapper).get('button[type="submit"]');
+
+  it('posts the typed pair and clears the form when the server accepts it', async () => {
+    const wrapper = await openSettings();
+    await fill(wrapper);
+
+    await group(wrapper).get('form.password-form').trigger('submit');
+    await flushPromises();
+
+    expect(changePassword).toHaveBeenCalledTimes(1);
+    expect(changePassword).toHaveBeenCalledWith({
+      currentPassword: 'correct-horse-battery-staple',
+      newPassword: 'a-whole-new-horse',
+    });
+    // Nothing is left in the fields of a panel that is still on screen.
+    expect(group(wrapper).get('#change-password-current').element.value).toBe('');
+    expect(group(wrapper).get('#change-password-new').element.value).toBe('');
+    expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+  });
+
+  it('states the minimum, and sends nothing until the current password is typed and the new one meets it', async () => {
+    const wrapper = await openSettings();
+    expect(group(wrapper).get('.settings-note').text()).toContain('At least 12 characters');
+    expect(submitButton(wrapper).element.disabled).toBe(true);
+
+    await fill(wrapper, { next: 'a'.repeat(11) });
+    expect(submitButton(wrapper).element.disabled).toBe(true);
+
+    await group(wrapper).get('#change-password-new').setValue('a'.repeat(12));
+    expect(submitButton(wrapper).element.disabled).toBe(false);
+
+    // And a submit that slipped through anyway still reaches nothing.
+    await group(wrapper).get('#change-password-new').setValue('a'.repeat(11));
+    await group(wrapper).get('form.password-form').trigger('submit');
+    await flushPromises();
+    expect(changePassword).not.toHaveBeenCalled();
+  });
+
+  it('lets a credential manager fill the current password and offer to replace it', async () => {
+    const wrapper = await openSettings();
+
+    expect(group(wrapper).get('form.password-form').attributes('autocomplete')).toBe('on');
+    expect(group(wrapper).get('#change-password-current').attributes('autocomplete')).toBe('current-password');
+    expect(group(wrapper).get('#change-password-new').attributes('autocomplete')).toBe('new-password');
+  });
+
+  it('shows a refusal in the server\'s own words and keeps what was typed', async () => {
+    changePassword.mockRejectedValue(Object.assign(new Error('Incorrect password'), { status: 403 }));
+    const wrapper = await openSettings();
+    await fill(wrapper);
+
+    await group(wrapper).get('form.password-form').trigger('submit');
+    await flushPromises();
+
+    expect(group(wrapper).get('.settings-error').text()).toBe('Incorrect password');
+    expect(group(wrapper).get('#change-password-new').element.value).toBe('a-whole-new-horse');
+    expect(submitButton(wrapper).element.disabled).toBe(false);
+  });
+
+  it('confirms with a passkey instead, sending only the new password', async () => {
+    const wrapper = await openSettings();
+    await fill(wrapper, { current: '' });
+
+    const passkeyButton = group(wrapper).findAll('button')
+      .find((b) => b.text().startsWith('Confirm with a passkey'));
+    await passkeyButton.trigger('click');
+    await flushPromises();
+
+    expect(changePasswordWithPasskey).toHaveBeenCalledWith('a-whole-new-horse');
+    expect(changePassword).not.toHaveBeenCalled();
   });
 });
 
