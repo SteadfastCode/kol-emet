@@ -54,7 +54,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-074) Change your password, and one policy both routes share**
+- [ ] **(KOL-074) Change your password, and one policy both routes share**
   An account registered today can never change its password. `server/src/routes/auth.js` has `/register`, `/login`,
   `/logout`, `/me`, the WebAuthn routes and `DELETE /account`, and nothing between them that replaces `passwordHash` —
   the only way out of a password you no longer trust is deleting the account and rebuilding the workspace. The same
