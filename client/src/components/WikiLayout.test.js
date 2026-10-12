@@ -74,6 +74,24 @@ vi.mock('../api/export.js', () => ({
   filenameFromDisposition: vi.fn(),
   FALLBACK_FILENAME: 'workspace-export.json',
 }));
+// The Password group posts through these (KOL-074); nothing in a test should fetch, and nothing
+// should prompt an authenticator. The two policy exports are the real thing rather than stubs —
+// the rule is not network, and a stub returning undefined would let the form send a password the
+// server would refuse. What api/auth.js itself does with a response is its own concern.
+const { changePassword, changePasswordWithPasskey } = vi.hoisted(() => ({
+  changePassword: vi.fn(async () => ({ ok: true })),
+  changePasswordWithPasskey: vi.fn(async () => ({ ok: true })),
+}));
+vi.mock('../api/auth.js', () => ({
+  changePassword, changePasswordWithPasskey,
+  PASSWORD_MIN_LENGTH: 12,
+  passwordTooShort: (value) => [...(value ?? '')].length < 12,
+  login: vi.fn(), register: vi.fn(), logout: vi.fn(), getSession: vi.fn(), getTemplates: vi.fn(),
+  registerPasskey: vi.fn(), loginWithPasskey: vi.fn(), passkeysSupported: () => false,
+  deleteAccount: vi.fn(), deleteAccountWithPasskey: vi.fn(),
+  listPasskeys: vi.fn(async () => ({ passkeys: [], hasPassword: true, userHandle: null, rpId: 'localhost' })),
+  removePasskey: vi.fn(),
+}));
 // The Workspace group reads GET /workspace on each Settings open and PATCHes a rename;
 // nothing in a test should fetch. What the module itself does is its own concern
 // (api/workspace.js).
@@ -117,12 +135,13 @@ describe('WikiLayout entity types', () => {
 });
 
 describe('WikiLayout settings', () => {
-  it('opens with Workspace, then Account, and the rest between it and Delete account', () => {
+  it('opens with Workspace, then Account, then Password beside Passkeys, and Delete account last', () => {
     const wrapper = shallowMount(WikiLayout);
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
     expect(titles).toEqual([
-      'Workspace', 'Account', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags', 'Delete account',
+      'Workspace', 'Account', 'Password', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags',
+      'Delete account',
     ]);
   });
 
@@ -321,6 +340,129 @@ describe('WikiLayout workspace group', () => {
     expect(group(wrapper).get('.settings-error').text()).toBe('Only an owner can rename this workspace.');
     // The name on screen is still the stored one, not the refused edit.
     expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+  });
+});
+
+/**
+ * The Password group (KOL-074): the way an account changes its password without being deleted and
+ * rebuilt. It sits beside Passkeys because the two are the ways into an account, and it reads
+ * nothing when Settings opens — there is no list here to go stale, so unlike Passkeys it is not
+ * mounted behind `settingsVisible`.
+ *
+ * What is pinned here is that the form posts: the typed current and new password reach
+ * changePassword(), naming the source (every light-tier log line says what asked for a change,
+ * not just that one happened), and the passkey button posts the same new password through the
+ * assertion path instead. Plus the two refusals a user can act on — the server's own sentence for
+ * a wrong current password, and the minimum held locally so an opaque 400 is not how the rule is
+ * discovered. What the API module does with the response is its own concern (api/auth.js), and
+ * what the server does with the request is tests/http/password.test.js.
+ *
+ * Goes red if the group is dropped, if either button stops posting, if the submit stops being held
+ * while the new password is too short, or if a 403 stops showing the server's message.
+ */
+describe('WikiLayout password group', () => {
+  beforeEach(() => {
+    changePassword.mockReset();
+    changePasswordWithPasskey.mockReset();
+    changePassword.mockResolvedValue({ ok: true });
+    changePasswordWithPasskey.mockResolvedValue({ ok: true });
+  });
+
+  const group = (wrapper) =>
+    wrapper.findAll('.mobile-settings-panel .settings-group')
+      .find((g) => g.get('.settings-group-title').text() === 'Password');
+
+  async function openSettings() {
+    const wrapper = shallowMount(WikiLayout);
+    await settingsTab(wrapper).trigger('click');
+    await flushPromises();
+    expect(changePassword).not.toHaveBeenCalled();   // nothing is posted on open
+    return wrapper;
+  }
+
+  const fill = async (wrapper, { current = 'correct-horse-battery-staple', next = 'a-different-horse-entirely' } = {}) => {
+    await group(wrapper).get('input[autocomplete="current-password"]').setValue(current);
+    await group(wrapper).get('input[autocomplete="new-password"]').setValue(next);
+  };
+
+  const buttons = (wrapper) => group(wrapper).findAll('button');
+
+  it('posts the typed passwords, naming what asked, and says the change landed', async () => {
+    const wrapper = await openSettings();
+    await fill(wrapper);
+
+    await group(wrapper).get('form.password-change').trigger('submit');
+    await flushPromises();
+
+    expect(changePassword).toHaveBeenCalledTimes(1);
+    expect(changePassword.mock.calls[0][0]).toEqual({
+      currentPassword: 'correct-horse-battery-staple',
+      newPassword: 'a-different-horse-entirely',
+    });
+    // The light tier names the source of a change, not just that one happened.
+    expect(changePassword.mock.calls[0][1]).toMatchObject({ source: expect.stringContaining('Settings') });
+
+    expect(group(wrapper).get('.settings-done').text()).toContain('Password changed');
+    expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+    // Neither password is left in the form afterwards.
+    expect(group(wrapper).get('input[autocomplete="current-password"]').element.value).toBe('');
+    expect(group(wrapper).get('input[autocomplete="new-password"]').element.value).toBe('');
+  });
+
+  it('the passkey button posts the same new password through the assertion path', async () => {
+    const wrapper = await openSettings();
+    await fill(wrapper, { current: '' });
+
+    await buttons(wrapper).find((b) => b.text().includes('passkey')).trigger('click');
+    await flushPromises();
+
+    expect(changePassword).not.toHaveBeenCalled();
+    expect(changePasswordWithPasskey).toHaveBeenCalledTimes(1);
+    expect(changePasswordWithPasskey.mock.calls[0][0]).toBe('a-different-horse-entirely');
+    expect(changePasswordWithPasskey.mock.calls[0][1]).toMatchObject({ source: expect.stringContaining('Settings') });
+    expect(group(wrapper).get('.settings-done').exists()).toBe(true);
+  });
+
+  it('holds both buttons while the new password is under the minimum, and states it', async () => {
+    const wrapper = await openSettings();
+    expect(group(wrapper).get('.settings-note').text()).toContain('At least 12 characters');
+
+    await fill(wrapper, { next: 'a'.repeat(11) });
+    for (const button of buttons(wrapper)) expect(button.attributes('disabled')).toBeDefined();
+
+    await group(wrapper).get('form.password-change').trigger('submit');
+    await flushPromises();
+    expect(changePassword).not.toHaveBeenCalled();
+
+    await fill(wrapper, { next: 'a'.repeat(12) });
+    for (const button of buttons(wrapper)) expect(button.attributes('disabled')).toBeUndefined();
+  });
+
+  it("a refused change shows the server's sentence and keeps the group open", async () => {
+    // 403: the re-authentication failed, the session did not (docs/api.md#password).
+    changePassword.mockRejectedValue(Object.assign(new Error('Incorrect password'), { status: 403 }));
+    const wrapper = await openSettings();
+    await fill(wrapper);
+
+    await group(wrapper).get('form.password-change').trigger('submit');
+    await flushPromises();
+
+    expect(group(wrapper).get('.settings-error').text()).toBe('Incorrect password');
+    expect(group(wrapper).find('.settings-done').exists()).toBe(false);
+    // The typed current password stays, so the correction is one field away.
+    expect(group(wrapper).get('input[autocomplete="current-password"]').element.value).toBe('correct-horse-battery-staple');
+  });
+
+  it('a dismissed passkey prompt is not an error', async () => {
+    changePasswordWithPasskey.mockRejectedValue(Object.assign(new Error('cancelled'), { name: 'NotAllowedError' }));
+    const wrapper = await openSettings();
+    await fill(wrapper, { current: '' });
+
+    await buttons(wrapper).find((b) => b.text().includes('passkey')).trigger('click');
+    await flushPromises();
+
+    expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+    expect(group(wrapper).find('.settings-done').exists()).toBe(false);
   });
 });
 

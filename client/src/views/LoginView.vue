@@ -44,10 +44,21 @@
             type="password"
             :name="mode === 'login' ? 'password' : 'new-password'"
             :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+            :minlength="mode === 'register' ? PASSWORD_MIN_LENGTH : undefined"
             placeholder="Password"
             :disabled="loading"
             required
           />
+
+          <!-- The rule stated where the password is chosen, not after a refusal (KOL-074). The
+               server enforces the same minimum at `POST /auth/register`, but its 400 reaches this
+               form without a message, so a signup that said nothing here would be an opaque
+               "Something went wrong". Sign-in never states it: an account registered before the
+               rule still signs in with the password it has. -->
+          <p v-if="mode === 'register'" class="login-hint" :class="{ unmet: password && !passwordLongEnough }">
+            At least {{ PASSWORD_MIN_LENGTH }} characters. Length is the only rule — a passphrase
+            is a good password.
+          </p>
 
           <!-- Optional, and the one field here a credential manager must keep out of:
                autocomplete="off" so it is never offered as a username (KOL-071). Left
@@ -77,7 +88,7 @@
 
           <p v-if="error" class="login-error">{{ error }}</p>
 
-          <button type="submit" class="btn-sm primary full" :disabled="loading || !email || !password">
+          <button type="submit" class="btn-sm primary full" :disabled="loading || !email || !password || (mode === 'register' && !passwordLongEnough)">
             {{ loading ? '…' : mode === 'login' ? 'Sign in' : 'Create account' }}
           </button>
         </form>
@@ -101,8 +112,16 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { login, register, getTemplates, loginWithPasskey, registerPasskey } from '../api/auth.js';
+import { computed, ref } from 'vue';
+import {
+  login,
+  register,
+  getTemplates,
+  loginWithPasskey,
+  registerPasskey,
+  PASSWORD_MIN_LENGTH,
+  passwordTooShort,
+} from '../api/auth.js';
 import { WORKSPACE_NAME_MAX } from '../api/workspace.js';
 
 // Shown above the form; App passes one after an account is deleted.
@@ -116,6 +135,12 @@ const email    = ref('');
 const password = ref('');
 const error    = ref('');
 const loading  = ref(false);
+
+// Registration only: the minimum the server enforces on a stored password
+// (server/src/lib/passwordPolicy.js, mirrored in api/auth.js). Sign-in does not
+// ask — the policy gates writes, never a sign-in, or every account registered
+// before it would be locked out.
+const passwordLongEnough = computed(() => !passwordTooShort(password.value));
 
 // What the new workspace is called (KOL-071). Optional: blank means the field
 // is left out of the request entirely and the server's default name stands,
@@ -155,6 +180,15 @@ function switchMode(m) {
 
 async function submit() {
   error.value = '';
+  // Registration only, and in the handler rather than only on the button: a
+  // form submits on Enter too, and `POST /auth/register`'s 400 reaches this
+  // view without the server's sentence (register() goes through req(), not
+  // accountReq()), so a short password would otherwise read as "Something went
+  // wrong". The wording is the server's own (lib/passwordPolicy.js).
+  if (mode.value === 'register' && !passwordLongEnough.value) {
+    error.value = `A password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+    return;
+  }
   loading.value = true;
   try {
     if (mode.value === 'login') {
@@ -340,6 +374,16 @@ input:disabled { opacity: 0.5; }
   color: #e07070;
   margin: 0;
 }
+.login-hint {
+  margin: -2px 0 8px;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.45;
+  text-align: left;
+}
+
+/* Only once something has been typed: an empty field is not yet a mistake. */
+.login-hint.unmet { color: #d8a657; }
 
 .login-notice {
   font-size: 13px;
