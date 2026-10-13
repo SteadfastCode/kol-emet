@@ -28,6 +28,19 @@
  *   on every retry, quietly turning a 15-minute throttle into a permanent ban
  *   for any client that retries on a timer.
  *
+ *   **A slot can be taken before the work it bounds, and handed back.** A
+ *   limit read before the expensive work and written after it bounds nothing
+ *   when the callers overlap: each one reads a count none of them has written
+ *   yet, so N simultaneous requests all pass a ceiling of one (KOL-081, which
+ *   is what `POST /auth/register` did). `reserve` checks and counts in one
+ *   step, and `release` returns the slot on the paths that reach a refusal
+ *   without doing the work — so what is asserted here is that the two compose
+ *   back into the same ceiling: five reservations against a budget of three
+ *   grant exactly three, a refused one counts nothing, a released one is
+ *   spendable again, and a release with nothing to give back cannot buy an
+ *   extra slot. The composite adds the multi-key rollback: a request the
+ *   second kind refuses must not leave the first one charged.
+ *
  *   **The signup counter runs on its own clock.** It is the one counter here
  *   that counts a success rather than a guess (an account created by
  *   `POST /auth/register`), and 15 minutes is the wrong unit for that, so it
@@ -59,6 +72,16 @@
  *     with `perEmail` instead of `perSignupIp` → the signup tests fail.
  *   - Drop `signup` from `pairs()` → `record({ signup })` counts nothing and
  *     the signup tests fail on the block that never comes.
+ *   - Write `reserve` as `check` then `fail` with anything between them, or
+ *     have it skip the increment it grants → the five-at-once test fails,
+ *     since every caller then sees the same count.
+ *   - Have `reserve` count the request it refuses → the "counts nothing" test
+ *     fails on the window it would extend.
+ *   - Make `release` a no-op, or let it go below zero → the release tests fail
+ *     on the slot that is never returned, or on the extra one it would buy.
+ *   - Return early from the composite `reserve` without releasing what it
+ *     already took → the multi-key rollback test fails on the email key it
+ *     left charged.
  *
  * Debug logging: AUTH_LIMIT_LOG_LEVEL=off|light|normal|verbose. Forced to
  * 'off' below — this file drives hundreds of failures on purpose and the
@@ -179,6 +202,88 @@ describe('createAttemptLimiter: one fixed window', () => {
     clock.advance(WINDOW - 1_000); // still inside every key's window
     assert.equal(limiter.fail('guess-0@example.test'), 2, 'the entry is live, so its count continues rather than restarting');
     assert.equal(limiter.size(), 400, 'nothing has expired, so nothing may be dropped');
+  });
+
+  // ── reserve/release: the gate that holds under concurrency (KOL-081) ───────
+  // `check` then `fail` with the bounded work in between is not a limit when
+  // the callers overlap: each one reads a count none of them has written yet.
+  // `reserve` does both in one step, which is what these assert — from the
+  // outside, by counting who gets through.
+
+  test('reserve takes the slot as it checks, so max callers get through and the next does not', () => {
+    for (let i = 1; i <= 3; i += 1) {
+      assert.equal(limiter.reserve('10.0.0.1'), null, `reservation ${i} of 3 must be granted`);
+    }
+
+    const block = limiter.reserve('10.0.0.1');
+    assert.ok(block, 'the 4th reservation is over the limit of 3');
+    assert.equal(block.count, 3, 'and the count it reports is the ceiling, not a 4th slot it took anyway');
+    assert.equal(block.retryAfter, WINDOW / 1000);
+  });
+
+  // The whole point, stated as the thing the old shape could not do: nobody
+  // records anything between the reservations, because the work they stand for
+  // has not happened yet. Every caller still sees its predecessors.
+  test('three simultaneous callers take three different slots, with nothing recorded in between', () => {
+    const granted = [1, 2, 3, 4, 5].map(() => limiter.reserve('10.0.0.1') === null);
+
+    assert.deepEqual(granted, [true, true, true, false, false], 'five at once, three slots');
+    assert.equal(limiter.count('10.0.0.1'), 3, 'and the two refusals counted nothing');
+  });
+
+  test('a refused reserve counts nothing, so the window still ends', () => {
+    for (let i = 0; i < 3; i += 1) limiter.reserve('10.0.0.1');
+
+    for (let i = 0; i < 10; i += 1) assert.ok(limiter.reserve('10.0.0.1'), 'still refused');
+    assert.equal(limiter.count('10.0.0.1'), 3, 'ten refusals left the count where it was');
+
+    clock.advance(WINDOW);
+    assert.equal(limiter.reserve('10.0.0.1'), null, 'retrying through the window must not extend it');
+  });
+
+  test('release hands a slot back, and the key can spend it again', () => {
+    for (let i = 0; i < 3; i += 1) limiter.reserve('10.0.0.1');
+    assert.ok(limiter.reserve('10.0.0.1'), 'the budget of 3 is spent');
+
+    assert.equal(limiter.release('10.0.0.1'), 2, 'release reports what is left');
+    assert.equal(limiter.reserve('10.0.0.1'), null, 'so the returned slot is available again');
+    assert.ok(limiter.reserve('10.0.0.1'), 'and only that one: the limit is unchanged');
+  });
+
+  test('releasing the last slot forgets the key, so the next reservation opens its own window', () => {
+    assert.equal(limiter.reserve('10.0.0.1'), null);
+    assert.equal(limiter.release('10.0.0.1'), 0);
+    assert.equal(limiter.size(), 0, 'a count of 0 is no key at all');
+
+    // Half a window later the key reserves again. Were the released entry left
+    // behind, the new reservation would inherit a window already half spent.
+    clock.advance(WINDOW / 2);
+    assert.equal(limiter.reserve('10.0.0.1'), null);
+    for (let i = 0; i < 2; i += 1) limiter.reserve('10.0.0.1');
+    assert.equal(limiter.reserve('10.0.0.1').retryAfter, WINDOW / 1000, 'the window runs from the reservation, not from the released one');
+  });
+
+  test('releasing a key that holds nothing is a no-op, not a negative count', () => {
+    assert.equal(limiter.release('never-seen'), 0);
+    assert.equal(limiter.size(), 0);
+
+    limiter.reserve('10.0.0.1');
+    clock.advance(WINDOW + 1);
+    assert.equal(limiter.release('10.0.0.1'), 0, 'a window that has already ended has no slot to give back');
+
+    // And the key is free, rather than carrying a -1 that would buy an extra slot.
+    for (let i = 0; i < 3; i += 1) assert.equal(limiter.reserve('10.0.0.1'), null, 'three again, not four');
+    assert.ok(limiter.reserve('10.0.0.1'));
+  });
+
+  test('reserve and fail share one counter, so neither can be spent around the other', () => {
+    limiter.fail('10.0.0.1');
+    limiter.reserve('10.0.0.1');
+    assert.equal(limiter.count('10.0.0.1'), 2);
+
+    assert.equal(limiter.reserve('10.0.0.1'), null, 'the 3rd of 3');
+    assert.ok(limiter.reserve('10.0.0.1'), 'the 4th is refused whichever call took the first three');
+    assert.ok(limiter.check('10.0.0.1'), 'and check agrees with reserve about the ceiling');
   });
 
   test('refuses a max or window that would disable it', () => {
@@ -370,6 +475,70 @@ describe('createAuthLimiter: the four counters the routes share', () => {
       counted.blocked({ signup: '10.0.0.1' }, 'test'),
       failed.blocked({ signup: '10.0.0.1' }, 'test'),
     );
+  });
+
+  // ── reserve/release across the kinds (KOL-081) ─────────────────────────────
+  // `POST /auth/register` is the one route that takes its slot before the work
+  // rather than counting it afterwards. What the composite adds over the
+  // single counter is the multi-key rollback: a request refused by the second
+  // kind must not leave the first one charged.
+
+  test('reserve refuses the kind over its limit, shaped exactly like blocked()', () => {
+    const clock = fakeClock();
+    const auth = createAuthLimiter({ perSignupIp: 2, signupWindowMs: SIGNUP_WINDOW, now: clock.now });
+
+    assert.equal(auth.reserve({ signup: '10.0.0.1' }, 'test'), null, '1 of 2');
+    assert.equal(auth.reserve({ signup: '10.0.0.1' }, 'test'), null, '2 of 2');
+
+    const block = auth.reserve({ signup: '10.0.0.1' }, 'test');
+    assert.deepEqual(block, { kind: 'signup', count: 2, retryAfter: SIGNUP_WINDOW / 1000 });
+    assert.deepEqual(auth.blocked({ signup: '10.0.0.1' }, 'test'), block, 'the two answers are interchangeable, so refuse() needs no new shape');
+    assert.equal(auth.reserve({ signup: '10.0.0.2' }, 'test'), null, 'another address keeps its own budget');
+  });
+
+  test('a reserve refused by one kind gives back the slots it already took', () => {
+    const auth = createAuthLimiter({ perEmail: 5, perSignupIp: 1, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW });
+
+    assert.equal(auth.reserve({ email: 'a@example.test', signup: '10.0.0.1' }, 'test'), null, 'the first takes one of each');
+    assert.equal(auth.reserve({ email: 'a@example.test', signup: '10.0.0.1' }, 'test').kind, 'signup', 'the second is over the signup limit of 1');
+
+    // email is checked before signup (pairs()), so the refused request had
+    // already taken an email slot by the time signup refused it. Were it left
+    // charged, a client hammering a full signup budget would quietly spend
+    // somebody else's sign-in budget for that address.
+    assert.equal(auth.counters.email.count('a@example.test'), 1, 'still one, not two');
+  });
+
+  test('release returns the slot, so a reserve that led to nothing costs nothing', () => {
+    const auth = createAuthLimiter({ perSignupIp: 2, signupWindowMs: SIGNUP_WINDOW });
+    const keys = { signup: '10.0.0.1' };
+
+    assert.equal(auth.reserve(keys, 'test'), null);
+    auth.release(keys, 'test');
+    assert.equal(auth.counters.signup.count('10.0.0.1'), 0, 'the budget is untouched');
+
+    // Which is what keeps a duplicate-address 409 free: two reservations that
+    // were handed back, then the two real signups the budget is for.
+    assert.equal(auth.reserve(keys, 'test'), null);
+    auth.release(keys, 'test');
+    assert.equal(auth.reserve(keys, 'test'), null, '1 of 2');
+    assert.equal(auth.reserve(keys, 'test'), null, '2 of 2');
+    assert.ok(auth.reserve(keys, 'test'), 'and the limit still bites');
+  });
+
+  test('release only touches the kinds it is given, and never goes negative', () => {
+    const auth = createAuthLimiter({ perEmail: 2, perSignupIp: 2, windowMs: WINDOW, signupWindowMs: SIGNUP_WINDOW });
+    auth.recordFailure({ email: 'a@example.test' }, 'test');
+    auth.reserve({ signup: '10.0.0.1' }, 'test');
+
+    auth.release({ signup: '10.0.0.1' }, 'test');
+    auth.release({ signup: '10.0.0.1' }, 'test');  // nothing left to give back
+
+    assert.equal(auth.counters.signup.count('10.0.0.1'), 0);
+    assert.equal(auth.counters.email.count('a@example.test'), 1, 'the failure the sign-in route recorded is not a slot anyone can release');
+    assert.equal(auth.reserve({ signup: '10.0.0.1' }, 'test'), null, '1 of 2');
+    assert.equal(auth.reserve({ signup: '10.0.0.1' }, 'test'), null, '2 of 2');
+    assert.ok(auth.reserve({ signup: '10.0.0.1' }, 'test'), 'two releases did not buy a third slot');
   });
 
   test('a fresh limiter per call, so no two apps share counters', () => {
