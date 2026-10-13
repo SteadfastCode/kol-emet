@@ -76,21 +76,21 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-074": {
+    "KOL-081": {
       "order": 5,
-      "title": "Change your password, and one policy both routes share",
-      "status": "done",
-      "attempts": 2,
+      "title": "The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-074",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-12T21:09:00.848Z",
-      "runId": "2026-10-12T21:08:28.915Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
     "KOL-014": {
@@ -263,6 +263,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-074": {
+      "order": null,
+      "title": "Change your password, and one policy both routes share",
+      "status": "done",
+      "attempts": 2,
+      "cluster": null,
+      "branch": "routine/item/KOL-074",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-12T21:09:00.848Z",
+      "runId": "2026-10-12T21:08:28.915Z",
       "lastFail": null
     },
     "KOL-073": {

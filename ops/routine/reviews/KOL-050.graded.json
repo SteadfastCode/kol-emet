@@ -1,0 +1,113 @@
+{
+  "item": "KOL-050",
+  "repo": "kol-emet",
+  "mergeSha": "c0a17bfdc6963e2e47c2d2fa0fca1a562fa443fb",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-13T07:08:37.632Z",
+  "gradedAtUtc": "2026-10-13T07:14:03.318Z",
+  "independent": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 148,
+      "severity": "medium",
+      "summary": "The signup gate is read before the work and recorded only after it (`blocked` at :148, `record` at :166, with a `User.findOne`, a bcrypt cost-12 hash and two writes in between), so the per-address ceiling only binds sequential callers: a script that opens N connections at once has every request pass `blocked` while the counter is still 0 and ends up creating ~N accounts per window instead of `perSignupIp`, which is exactly the 'as fast as it can post' case the item set out to bound. Reserving the slot before the hash (increment-then-check, rolling back on a refusal) would hold the bound under concurrency."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The finding quotes the line this diff deletes — `server/src/app.js:49-51` now documents `{ perEmail, perIp, perUser, perSignupIp, windowMs, signupWindowMs }`, matching the implementation."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "Counting the signup before the workspace rollback is the stated design (the hash and two writes are already spent by then, which is the cost being bounded), and it is documented in the route comment, the limiter header and the Decision Log rather than being an oversight."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "Window expiry is asserted with an injected clock in `server/tests/unit/attemptLimiter.test.js` ('the signup window ends on its own clock'), including one millisecond short of the boundary and at it — which is where the item scoped that check, not the HTTP suite."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "`server/tests/http/entitySearch.test.js:162` is the exact line the diff changes to `createApp({ ..., authLimits: SUITE_AUTH_LIMITS })` (perSignupIp 10_000), which is what prevents the interference claimed."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "Same as 4 for `entityTypes.test.js:137` — the cited line is where `authLimits: SUITE_AUTH_LIMITS` is added, so the suite cannot hit the signup limit."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "Same as 4 for `mcp.test.js:309` — that line now builds the app with `SUITE_AUTH_LIMITS`, and the suite registers only four fixtures anyway."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "Same as 4 for `passkeys.test.js:180`, the suite the helper's comment calls out by name as the reason `SUITE_AUTH_LIMITS` exists; it is applied on that very line."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "Same as 4 for `tenancy.test.js:146` — the diff adds `authLimits: SUITE_AUTH_LIMITS` there, so no registration in the suite is throttled."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change is entirely in the auth throttle: `POST /auth/register`, `createAuthLimiter` and `createApp`'s `authLimits`."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "Only non-secret tuning variables (`AUTH_LIMIT_MAX_SIGNUPS_PER_IP`, `AUTH_LIMIT_SIGNUP_WINDOW_MS`) are added; no credential or token handling changes, and the limiter still never logs an email."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, or paid-provider call is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "Nothing destructive is introduced or modified — the change only refuses requests earlier; the `User.deleteOne` rollback at the cited region is pre-existing and untouched by this diff."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The counters are an in-process `Map`; no external service or network call is added."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, CI, or migration; the two new env vars are optional and fall back to shipped defaults, so no deploy step is required."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All eight findings are false positives — five are the same mistaken claim about suites whose cited lines are precisely where the diff adds `SUITE_AUTH_LIMITS`, one quotes a line the diff deletes, and two restate behaviour the change documents as deliberate — while the one real gap (the check-then-act gate that concurrency walks straight through) was missed.",
+  "counts": {
+    "findings": 8,
+    "confirmed": 0,
+    "falsePositive": 8,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.3968270000000005,
+  "numTurns": 17,
+  "durationMs": 189601,
+  "sessionId": "1135b067-2f30-41cc-8485-7d0c5ba1b732"
+}

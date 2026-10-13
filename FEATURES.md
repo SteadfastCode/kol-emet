@@ -57,6 +57,15 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-081) The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…**
+  Found by the grader of KOL-050 (medium, server/src/routes/auth.js:148). The signup gate is read
+  before the work and recorded only after it (`blocked` at :148, `record` at :166, with a
+  `User.findOne`, a bcrypt cost-12 hash and two writes in between), so the per-address ceiling
+  only binds sequential callers: a script that opens N connections at once has every request pass
+  `blocked` while the counter is still 0 and ends up creating ~N accounts per window instead of
+  `perSignupIp`, which is exactly the 'as fast as it can post' case the item set out to bound.
+  Reserving the slot before the hash (increment-then-check, rolling back on a refusal) would hold
+  the bound under concurrency.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
