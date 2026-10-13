@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-081) The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…**
+- [x] **(KOL-081) The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…**
   Found by the grader of KOL-050 (medium, server/src/routes/auth.js:148). The signup gate is read
   before the work and recorded only after it (`blocked` at :148, `record` at :166, with a
   `User.findOne`, a bcrypt cost-12 hash and two writes in between), so the per-address ceiling

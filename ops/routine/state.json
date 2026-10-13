@@ -79,18 +79,18 @@
     "KOL-081": {
       "order": 5,
       "title": "The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-081",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-13T07:14:19.503Z",
+      "runId": "2026-10-13T07:08:27.208Z",
       "lastFail": null
     },
     "KOL-014": {
