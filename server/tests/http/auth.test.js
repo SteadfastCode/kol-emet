@@ -39,10 +39,15 @@
  *   registration is deliberate (CLAUDE.md), but each success is a bcrypt hash
  *   at cost 12 plus a `User`, a `Workspace` and a whole template seed — so a
  *   per-address ceiling is what stops one client filling the database as fast
- *   as it can post. What has to be true of it is that only a *created account*
+ *   as it can post. Two things have to be true of it. Only a *created account*
  *   spends the budget: a mistyped form or an address that is already taken
  *   must cost nothing, or anyone could burn the budget of everyone else behind
- *   the same address without ever creating anything.
+ *   the same address without ever creating anything. And the ceiling has to
+ *   hold for requests that arrive *together*, not just one after another
+ *   (KOL-081) — "as fast as it can post" is a burst of open connections, and a
+ *   gate read before the hash but counted after it let every request in a
+ *   burst through on a counter none of them had written yet. So the budget is
+ *   asserted twice: once in sequence, once as six simultaneous POSTs.
  *
  *   Logout has to end the session on the server. Clearing the cookie only
  *   removes the browser's copy; a session left live in the store is still
@@ -68,8 +73,12 @@
  * `POST /auth/register` and the unknown-template test fails on its 201; mount
  * `/templates` behind `requireAuth` and the listing test fails on its 401;
  * delete the limiter check from `POST /auth/register` and the signup-throttling
- * tests fail on a 201 where they expect a 429; move its `record` above the
- * duplicate check and the budget test fails on the 409 it would then charge for.
+ * tests fail on a 201 where they expect a 429; drop the `release` from its
+ * duplicate branch and the budget test fails on the 409 it would then charge
+ * for; swap its `reserve` back for a `blocked` with a `record` after the
+ * writes and the burst test fails with one account per connection (six against
+ * a budget of two), while every sequential assertion here still passes — which
+ * is why that test is here.
  *
  * Not here: the WebAuthn ceremonies. `/auth/webauthn/*` is covered in
  * tests/http/passkeys.test.js, driven by a software authenticator
@@ -950,6 +959,45 @@ describe('signup throttling', () => {
     assert.equal(
       called('POST /auth/register (3/2)', await signUp(budgetApp, { email: uniqueEmail('signup-budget-third'), password: PASSWORD })).status, 429,
       'and the third is the block, so the budget really was two rather than unlimited',
+    );
+  });
+
+  // ── The burst, not just the sequence (KOL-081) ─────────────────────────────
+  // The gate was read before the work and the counter written after it, with a
+  // `User.findOne`, a cost-12 hash and two writes in between — so the ceiling
+  // only bound callers that arrived one at a time. Run against that code this
+  // test fails on six accounts against a budget of two: every request reaches
+  // `blocked` while the counter still reads 0, because none of their outcomes
+  // has been written yet. It is the 'as fast as it can post' case the limit was
+  // added for, so it is asserted over HTTP rather than on the counter alone.
+  test('a burst of simultaneous signups is bounded, not only a sequence of them', async () => {
+    const burstApp = createApp({ sessionStore: new session.MemoryStore(), authLimits: { perSignupIp: PER_SIGNUP_IP } });
+    const emails = Array.from({ length: 6 }, (_, i) => uniqueEmail(`signup-burst-${i}`));
+    const workspacesBefore = await Workspace.countDocuments({});
+
+    // Dispatched together rather than awaited one at a time: six sockets, and
+    // no request's outcome known to the next by the time it reaches the gate.
+    const results = await Promise.all(emails.map(email => signUp(burstApp, { email, password: PASSWORD })));
+    const statuses = results.map(res => res.status);
+    log('light', `POST /auth/register ×${emails.length} at once, budget ${PER_SIGNUP_IP} (source: the KOL-081 burst test) → ${statuses.join(', ')}`);
+
+    assert.equal(
+      statuses.filter(status => status === 201).length, PER_SIGNUP_IP,
+      `exactly ${PER_SIGNUP_IP} of ${emails.length} simultaneous signups may be created, not one per connection`,
+    );
+    assert.equal(statuses.filter(status => status === 429).length, emails.length - PER_SIGNUP_IP, 'and every other one is refused');
+    for (const res of results.filter(r => r.status === 429)) {
+      assert.deepEqual(res.body, { error: 'Too many attempts. Try again later.' }, 'with the body every throttled auth route shares');
+    }
+
+    // What the budget is a budget of: the writes, not the answers.
+    assert.equal(
+      await User.countDocuments({ email: { $in: emails } }), PER_SIGNUP_IP,
+      'the accounts on disk match the budget rather than the request count',
+    );
+    assert.equal(
+      await Workspace.countDocuments({}), workspacesBefore + PER_SIGNUP_IP,
+      'and so do the workspaces, each of which is a whole template seed',
     );
   });
 

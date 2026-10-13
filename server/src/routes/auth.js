@@ -60,8 +60,13 @@ const LOGIN_SOURCE    = 'POST /auth/webauthn/login/complete';
 //
 // `POST /auth/register` is the fourth, and the odd one out: it has no credential
 // to guess at, so what it counts is a created account, keyed on the client
-// address under its own kind and its own hour-long window. Limits, keys and
-// logging (AUTH_LIMIT_LOG_LEVEL): see lib/attemptLimiter.js.
+// address under its own kind and its own hour-long window. It is also the only
+// one that knows *before* the expensive work whether this is a request it must
+// charge for, so it takes its slot up front with `reserve` and hands it back
+// with `release` on the one refusal that reaches past the gate — a ceiling
+// read before the work and written after it is no ceiling at all for callers
+// that arrive together (KOL-081). Limits, keys and logging
+// (AUTH_LIMIT_LOG_LEVEL): see lib/attemptLimiter.js.
 
 const PASSWORD_LOGIN_SOURCE = 'POST /auth/login';
 const SIGNUP_SOURCE         = 'POST /auth/register';
@@ -140,30 +145,48 @@ router.post('/register', async (req, res) => {
     return res.status(400).json({ error: 'INVALID_WORKSPACE_NAME' });
   }
 
-  // Asked here: after the refusals above, which cost no I/O and are what a
-  // malformed body gets whatever anyone's budget says, and before the duplicate
-  // lookup — so a blocked caller buys neither a database read, nor the bcrypt
-  // hash, nor the workspace and the whole template seed that follow it.
+  // The signup slot, taken here: after the refusals above, which cost no I/O
+  // and are what a malformed body gets whatever anyone's budget says, and
+  // before the duplicate lookup — so a blocked caller buys neither a database
+  // read, nor the bcrypt hash, nor the workspace and the whole template seed
+  // that follow it.
+  //
+  // `reserve` rather than `blocked` here, and no `record` further down, because
+  // the gap between the two *was* the limit (KOL-081). The check sat above the
+  // `User.findOne` and the count eighteen lines below it, past a lookup, a
+  // cost-12 hash and two writes — three awaits. So a script that opened N
+  // connections at once had every one of them read a counter none of them had
+  // written yet, pass the gate, and create ~N accounts per window instead of
+  // `perSignupIp`: the ceiling bound sequential callers only, which is the one
+  // case it was not written for. `reserve` checks and counts in the same
+  // synchronous step, so the N-th simultaneous caller sees the N-1 slots its
+  // predecessors hold (lib/attemptLimiter.js).
   const signupKeys = { signup: req.ip };
-  const signupBlock = limiter(req).blocked(signupKeys, SIGNUP_SOURCE);
+  const signupBlock = limiter(req).reserve(signupKeys, SIGNUP_SOURCE);
   if (signupBlock) return limiter(req).refuse(res, signupBlock);
 
   // The stored form, not the raw body value: what is checked for a duplicate is
   // exactly what the schema would write, and the filter is a primitive string
   // rather than whatever the request sent (KOL-044).
   const existing = await User.findOne({ email: emailKey(email) });
-  if (existing) return res.status(409).json({ error: 'Email already registered' });
+  if (existing) {
+    // The one path that reserves and then creates nothing, so the one that
+    // hands the slot back: asking whether an address is taken must not burn
+    // the budget of everyone else behind the same address. What is counted is
+    // still a created account — the reservation only moves *when* that is
+    // decided, from after the work to before it.
+    limiter(req).release(signupKeys, SIGNUP_SOURCE);
+    return res.status(409).json({ error: 'Email already registered' });
+  }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  // Deliberately keeping the slot from here on, whatever happens next: the
+  // hash is paid and the writes are under way, and that cost is the thing
+  // being bounded. So the workspace rollback below stays counted, and so does
+  // the E11000 a registration that lost a race to the same address rejects
+  // with (the unique index on `User.email`; Express 4 does not catch it, which
+  // is the documented gap at the top of tests/http/auth.test.js).
   const user = await User.create({ email, passwordHash });
-
-  // Counted once the account exists, which is what makes the 400s and the 409
-  // above free: a typo at the signup form is not a spent signup, and asking
-  // whether an address is taken cannot burn the budget of everyone else behind
-  // the same address. The workspace rollback below deliberately leaves this
-  // counted — by then the hash and two writes have been paid for, and that
-  // cost is the thing being bounded.
-  limiter(req).record(signupKeys, SIGNUP_SOURCE);
 
   // Every user needs a workspace immediately — resolveWorkspace fails closed
   // without one, so a user created here but left workspace-less could not read

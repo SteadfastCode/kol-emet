@@ -36,16 +36,29 @@
  * and then writes a `User`, a `Workspace` and a whole template seed — 38
  * relationship types plus starter content (lib/workspaceSeeder.js) — so
  * unthrottled it let one unauthenticated client fill this database and spend
- * this API's CPU as fast as it could post. Three consequences of counting the
+ * this API's CPU as fast as it could post. Four consequences of counting the
  * success and not the attempt:
+ *   - **The slot is taken before the work, not counted after it** (KOL-081).
+ *     The route used to ask `blocked` and then `record` once the account
+ *     existed, with a `User.findOne`, the cost-12 hash and two writes in
+ *     between — so the ceiling only bound callers arriving one at a time. A
+ *     script opening N connections at once had every request read a counter
+ *     none of them had written yet, pass the gate, and mint ~N accounts per
+ *     window instead of `perSignupIp`: exactly the "as fast as it could post"
+ *     case the limit exists for. `reserve` checks and counts in one
+ *     synchronous step instead, so the N-th of N simultaneous callers sees
+ *     the N-1 slots its predecessors hold.
  *   - A 400 (no password, unknown template) and a 409 (address already taken)
- *     cost the caller nothing. A typo at the signup form is not a spent
- *     signup, and "is this address taken?" is not a way to burn the budget of
- *     everyone else behind the same address.
- *   - It is `record`, not `recordFailure`. Same counter and the same
- *     arithmetic; only the log wording differs, because a line reading
- *     "failure" about somebody who just signed up successfully would send
- *     whoever is reading it the wrong way.
+ *     cost the caller nothing. The 400s are refused before the reservation;
+ *     the 409 reserves, finds the address taken and `release`s the slot. A
+ *     typo at the signup form is not a spent signup, and "is this address
+ *     taken?" is not a way to burn the budget of everyone else behind the
+ *     same address.
+ *   - **Nothing about it is logged as a "failure".** It shares the counters
+ *     and the arithmetic with the sign-in routes and differs only in the
+ *     words that reach the log, because a line reading "failure" about
+ *     somebody who just signed up successfully would send whoever is reading
+ *     it the wrong way.
  *   - **Its window is its own.** 15 minutes is the unit for a password guess,
  *     where the job is to make a long run of tries slow. An hour is the unit
  *     for account creation, where the job is a ceiling on how many tenants one
@@ -62,10 +75,14 @@
  * that is the whole story; the moment a second one does, each enforces the
  * limit separately and the effective ceiling multiplies by the instance count.
  * The fix then is a shared store (Redis, or a Mongo collection with a TTL
- * index) behind this same interface — the routes call `blocked`, `record`,
- * `recordFailure` and `reset` and would not change. Also not covered here:
- * CAPTCHA, email verification, account lockout, and rate limits on
- * `/oauth/token` and `/drafts`.
+ * index) behind this same interface — the routes call `blocked`, `reserve`,
+ * `release`, `recordFailure` and `reset` and would not change. One thing that
+ * store must keep is `reserve`'s atomicity: here it is a function with no
+ * await in it, there it has to be one round trip that both increments and
+ * reports (`INCR` plus an expiry, or a single `findOneAndUpdate`), or the
+ * shared ceiling goes back to being the per-caller one KOL-081 closed. Also
+ * not covered here: CAPTCHA, email verification, account lockout, and rate
+ * limits on `/oauth/token` and `/drafts`.
  *
  * ─── Tiered debug logging ───────────────────────────────────────────────────
  * AUTH_LIMIT_LOG_LEVEL = off | light | normal | verbose (default light).
@@ -74,8 +91,10 @@
  * the defence. Only the *kind* of key ever appears for an email.
  *   light   — every block, with the key kind, the route that was refused, the
  *             count and how long the caller must wait
- *   normal  — light, plus every failure and every signup recorded and every
- *             counter reset, each naming the route it came from
+ *   normal  — light, plus every failure recorded, every slot reserved before
+ *             the work it bounds or released because that work did not
+ *             happen, and every counter reset, each naming the route it came
+ *             from
  *   verbose — normal, plus ip, signup and user-id key values (never an email)
  *             and the number of live counters
  */
@@ -123,8 +142,11 @@ export function authLimitsFromEnv(env = process.env) {
  *
  * A key's first failure opens a window of `windowMs`; the `max`-th failure
  * inside it is still answered normally, and everything after it is blocked
- * until the window ends. `now` is injectable so the tests can drive the clock
- * rather than sleep through a real window.
+ * until the window ends. A `reserve` counts and opens a window exactly as a
+ * failure does — it differs only in doing the check in the same step, for the
+ * callers that know before the work whether it is one they must pay for.
+ * `now` is injectable so the tests can drive the clock rather than sleep
+ * through a real window.
  *
  * @param {object}   options
  * @param {number}   options.max       failures allowed per window (>= 1)
@@ -167,6 +189,20 @@ export function createAttemptLimiter({ max, windowMs, now = Date.now } = {}) {
     return entry;
   }
 
+  /** Why a key at its ceiling is refused. `retryAfter` is never 0, so a Retry-After asks for a real wait. */
+  function refusal(entry, at) {
+    return { count: entry.count, retryAfter: Math.max(1, Math.ceil((entry.resetAt - at) / 1000)) };
+  }
+
+  /** The key's live entry, opening a window for it when it has none. */
+  function open(key, at) {
+    const entry = live(key, at);
+    if (entry) return entry;
+    const fresh = { count: 0, resetAt: at + windowMs };
+    hits.set(key, fresh);
+    return fresh;
+  }
+
   return {
     max,
     windowMs,
@@ -181,20 +217,70 @@ export function createAttemptLimiter({ max, windowMs, now = Date.now } = {}) {
       sweep(at);
       const entry = live(key, at);
       if (!entry || entry.count < max) return null;
-      return { count: entry.count, retryAfter: Math.max(1, Math.ceil((entry.resetAt - at) / 1000)) };
+      return refusal(entry, at);
     },
 
     /** Records one failure against the key and returns its new count. */
     fail(key) {
       const at = now();
       sweep(at);
-      let entry = live(key, at);
-      if (!entry) {
-        entry = { count: 0, resetAt: at + windowMs };
-        hits.set(key, entry);
-      }
+      const entry = open(key, at);
       entry.count += 1;
       return entry.count;
+    },
+
+    /**
+     * Takes one slot against the key, checking and counting in the same step:
+     * `null` when the slot is now held, otherwise the same
+     * `{ count, retryAfter }` `check` reports, with nothing counted.
+     *
+     * This is not `check` followed by `fail`, and the difference is the whole
+     * limit (KOL-081). A caller that reads the counter, awaits the work it is
+     * bounding and writes the counter afterwards has no bound under
+     * concurrency: every request that arrives while the first is awaiting
+     * reads a count none of them has written yet, so N simultaneous callers
+     * all pass a ceiling of one. This runs to completion with no await inside
+     * it, so on one event loop the N-th caller sees the N-1 slots its
+     * predecessors took.
+     *
+     * The slot is held until the window ends. A caller whose work does not
+     * happen — a registration refused as a duplicate — must `release` it, or
+     * the counter is a ceiling on attempts rather than on outcomes.
+     */
+    reserve(key) {
+      const at = now();
+      sweep(at);
+      const entry = open(key, at);
+      if (entry.count >= max) return refusal(entry, at);
+      entry.count += 1;
+      return null;
+    },
+
+    /**
+     * Gives one reserved slot back and returns the key's remaining count. A
+     * key with no live entry is left alone and answers 0: its window has
+     * already ended, so there is nothing to hand back.
+     *
+     * Dropping the entry at zero rather than leaving a count of 0 behind
+     * matters for the window, not the arithmetic: the next reservation then
+     * opens a window from its own moment instead of inheriting one started by
+     * a caller who was given its slot back.
+     */
+    release(key) {
+      const at = now();
+      const entry = live(key, at);
+      if (!entry) return 0;
+      entry.count -= 1;
+      if (entry.count <= 0) {
+        hits.delete(key);
+        return 0;
+      }
+      return entry.count;
+    },
+
+    /** The key's live count, 0 when it has none. For logging and tests. */
+    count(key) {
+      return live(key, now())?.count ?? 0;
     },
 
     /** Forgets the key. True when there was something to forget. */
@@ -276,9 +362,8 @@ export function createAuthLimiter(limits = {}) {
   /**
    * Counts one event against every named key. The two public recorders differ
    * only in the words that reach the log: `recordFailure` counts a guess that
-   * was wrong, `record` counts something that happened — today, one created
-   * account. Sharing the arithmetic is the point, so the signup counter cannot
-   * drift away from the ones the sign-in routes use.
+   * was wrong, `record` counts something that happened. Sharing the arithmetic
+   * is the point, so no counter here can drift away from the others.
    */
   function tally(keys, source, noun, subject) {
     for (const [kind, key] of pairs(keys)) {
@@ -315,10 +400,65 @@ export function createAuthLimiter(limits = {}) {
     },
 
     /**
+     * Takes one slot against every named key **before** the work being
+     * bounded, in a single synchronous step. `null` when every key had room —
+     * the slots are now held, and a caller whose work then does not happen
+     * must `release` them. Otherwise the first key over its limit, shaped
+     * exactly like `blocked`'s answer and logged the same way, with nothing
+     * counted: every slot taken on the way to it is given back.
+     *
+     * `blocked` then `record` is the read-then-write pair this replaces for
+     * `POST /auth/register`, and it does not bound a burst — see
+     * `reserve` in `createAttemptLimiter` and the header (KOL-081). The
+     * sign-in routes keep `blocked`/`recordFailure`: what they count is a
+     * wrong guess, which is only known after the credential check, and a
+     * concurrent burst of them is bounded by the next window rather than by
+     * this one.
+     */
+    reserve(keys, source) {
+      const held = [];
+      for (const [kind, key] of pairs(keys)) {
+        const over = counters[kind].reserve(key);
+        if (over) {
+          for (const [heldKind, heldKey] of held) counters[heldKind].release(heldKey);
+          logAuthLimit('light', `blocked: ${kind} key over its limit of ${counters[kind].max} (source: ${source}), ${counted(kind, over.count)}, retry after ${over.retryAfter}s`);
+          logAuthLimit('verbose', `the blocked key was ${shown(kind, key)}; ${counters[kind].size()} live ${kind} counters; ${held.length} slot(s) reserved by this request were given back (source: ${source})`);
+          return { kind, ...over };
+        }
+        held.push([kind, key]);
+        logAuthLimit('normal', `reserved ${counters[kind].count(key)}/${counters[kind].max} for a ${kind} key, before the work it bounds (source: ${source})`);
+        logAuthLimit('verbose', `the reserved key was ${shown(kind, key)} (source: ${source})`);
+      }
+      return null;
+    },
+
+    /**
+     * Hands back one slot `reserve` took against every named key, for the
+     * paths that reach a refusal without doing the thing the slot was for —
+     * registration answering 409 for an address that is already taken. Without
+     * it the budget would be spent by asking whether an address is free, which
+     * is the thing counting a created account rather than an attempt exists to
+     * avoid (see the header).
+     */
+    release(keys, source) {
+      for (const [kind, key] of pairs(keys)) {
+        const left = counters[kind].release(key);
+        logAuthLimit('normal', `released a ${kind} slot, leaving ${left}/${counters[kind].max} — the work it was reserved for did not happen (source: ${source})`);
+        logAuthLimit('verbose', `the released key was ${shown(kind, key)} (source: ${source})`);
+      }
+    },
+
+    /**
      * Records one *neutral* event against every named key — a thing that
-     * happened rather than a guess that was wrong. `POST /auth/register` calls
-     * this for a signup, after the account exists, so a refused registration
-     * costs the caller nothing (see the header).
+     * happened rather than a guess that was wrong.
+     *
+     * This is the after-the-fact form, and nothing counts a signup with it any
+     * more: `POST /auth/register` reserved its slot before the work and
+     * counting it afterwards was the hole KOL-081 closed. Anything reaching
+     * for this to bound a cost should ask first whether what it is counting is
+     * known *before* that cost is paid — if it is, `reserve` is the call, and
+     * if it is not (a wrong password, which only a finished bcrypt compare
+     * reveals) this is.
      */
     record(keys, source) {
       tally(keys, source, 'recorded', 'counted');
