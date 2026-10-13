@@ -79,7 +79,7 @@
     "KOL-081": {
       "order": 5,
       "title": "The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-081",
