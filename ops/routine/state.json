@@ -79,7 +79,7 @@
     "KOL-082": {
       "order": 5,
       "title": "searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-082",

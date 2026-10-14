@@ -57,14 +57,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-082) searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…**
-  Found by the grader of KOL-068 (medium, client/src/api/entities.js:85). `searchEntities` sends
-  no `?limit=`, so every keystroke-word triggers an unbounded `GET /entities?q=` that serializes
-  every matching row in the workspace in one response — the exact unpaged full-workspace read
-  KOL-067 removed from the initial load (`LIST_LIMIT_MAX`'s own comment: "an unbounded
-  JSON.stringify of one workspace's entire row set is time nobody else's request can run in"), now
-  reachable from the search box: typing a single common letter matches nearly every entity, on the
-  single event loop every tenant shares.
 - [ ] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…**
   Found by the grader of KOL-067 (medium, client/src/composables/useEntities.js:52). A page
   failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is
@@ -235,6 +227,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-082) searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…** (routine 2026-10-14, d7dda3c)
+  Found by the grader of KOL-068 (medium, client/src/api/entities.js:85). `searchEntities` sends
+  no `?limit=`, so every keystroke-word triggers an unbounded `GET /entities?q=` that serializes
+  every matching row in the workspace in one response — the exact unpaged full-workspace read
+  KOL-067 removed from the initial load (`LIST_LIMIT_MAX`'s own comment: "an unbounded
+  JSON.stringify of one workspace's entire row set is time nobody else's request can run in"), now
+  reachable from the search box: typing a single common letter matches nearly every entity, on the
+  single event loop every tenant shares.
 - [x] **(KOL-081) The signup gate is read before the work and recorded only after it (blocked at :148, record at :1…** (routine 2026-10-13, fb2150d)
   Found by the grader of KOL-050 (medium, server/src/routes/auth.js:148). The signup gate is read
   before the work and recorded only after it (`blocked` at :148, `record` at :166, with a
