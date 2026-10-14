@@ -21,13 +21,18 @@
           >
             <div class="convo-body">
               <template v-if="editingConvId === conv._id">
+                <!-- Escape cancels the rename and the press stops there (see onRenameEscape): the
+                     layout owns the app's one global keydown listener and closes the topmost layer
+                     with it (KOL-063), so a press left to bubble out of this field would cancel the
+                     rename *and* close the whole chat panel under it — one press, two things
+                     (KOL-085). -->
                 <input
-                  ref="renameInput"
+                  :ref="setRenameInput"
                   v-model="editingTitle"
                   class="convo-rename-input"
-                  @keydown.enter.prevent="commitRename(conv._id)"
-                  @keydown.escape.prevent="cancelRename"
-                  @blur="commitRename(conv._id)"
+                  @keydown.enter.prevent="commitRename(conv._id, 'Enter')"
+                  @keydown.escape="onRenameEscape"
+                  @blur="commitRename(conv._id, 'blur')"
                   @click.stop
                 />
               </template>
@@ -201,6 +206,18 @@ const editingConvId = ref(null);
 const editingTitle  = ref('');
 const renameInput   = ref(null);
 
+/**
+ * A function ref, not `ref="renameInput"`: a plain string ref inside a v-for collects an *array*
+ * of the matching elements, so `renameInput.value.focus` was undefined and startRename's focus
+ * threw a TypeError inside a nextTick callback, where nothing surfaced it — the field opened
+ * without focus and you had to click into it. Only one of these exists at a time (the v-if renders
+ * it for the conversation being renamed), so a function ref is the whole fix: it is handed the
+ * element itself, and null when the field closes.
+ */
+function setRenameInput(el) {
+  renameInput.value = el;
+}
+
 async function loadConversations() {
   try {
     conversations.value = await listConversations();
@@ -243,7 +260,28 @@ async function refreshTitle(convId) {
 function startRename(conv) {
   editingConvId.value = conv._id;
   editingTitle.value  = conv.title || '';
+  chatLog('normal', `rename of ${conv._id} started by a double-click on "${conv.title || 'New conversation'}"`);
   nextTick(() => renameInput.value?.focus());
+}
+
+/**
+ * Escape cancels the rename, and the press stops here.
+ *
+ * The layout owns the app's one global keydown listener and closes the topmost layer with it
+ * (KOL-063, useKeyboardShortcuts.js); a focused text field keeps every key except Escape, because
+ * Escape is how you get back out of a field. This input sits inside the chat panel, so a press
+ * left to bubble would cancel the rename and then reach that listener, which would find no rename
+ * in progress and close the whole panel underneath: one press doing two things (KOL-085). A
+ * subtree handler for a key the layout owns therefore has to stop the event, the way the entity
+ * editor's tag list does (EntityEditor.vue, onTagsEscape). A second press — nothing left to
+ * cancel, nothing bound in here — closes the panel, which is the one-layer-per-press rule intact.
+ */
+function onRenameEscape(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  chatLog('light', `rename of ${editingConvId.value} cancelled by Escape in the rename input; the press stops here, so the chat panel stays open`);
+  chatLog('verbose', `discarded rename text: "${editingTitle.value}"`);
+  cancelRename();
 }
 
 function cancelRename() {
@@ -251,10 +289,15 @@ function cancelRename() {
   editingTitle.value  = '';
 }
 
-async function commitRename(convId) {
-  const title = editingTitle.value.trim();
+/** `source` is the thing that ended the rename — 'Enter' or 'blur' — and is what the log reports. */
+async function commitRename(convId, source) {
+  const title    = editingTitle.value.trim();
+  const previous = conversations.value.find(c => c._id === convId)?.title ?? '';
   editingConvId.value = null;
-  if (!title) return;
+  if (!title) {
+    chatLog('normal', `rename of ${convId} by ${source} saved nothing: the field was empty, so "${previous}" stands`);
+    return;
+  }
   try {
     await renameConversation(convId, title);
     const idx = conversations.value.findIndex(c => c._id === convId);
@@ -262,8 +305,10 @@ async function commitRename(convId) {
       conversations.value[idx].title     = title;
       conversations.value[idx].autoTitle = false;
     }
-  } catch {
-    // silently fail
+    chatLog('light', `title of ${convId} set by ${source}: "${previous}" -> "${title}"`);
+  } catch (err) {
+    // Still silent in the UI — the sidebar keeps the old title — but no longer silent in the log.
+    chatLog('light', `rename of ${convId} by ${source} to "${title}" failed (${err.message}); "${previous}" stands`);
   }
 }
 
@@ -377,6 +422,25 @@ async function sendMessage() {
   } finally {
     streaming.value    = false;
     streamBuffer.value = '';
+  }
+}
+
+// ─── Debug tiers ──────────────────────────────────────────────────────────────
+// A rename leaves no trace once the input is gone: a title that changed when it should not have,
+// or did not change when it should, looks the same afterwards. The shortcut log cannot fill that
+// in either — Escape in this field is now stopped before the global listener sees it (KOL-085) —
+// so the panel keeps its own: localStorage `CHAT_PANEL_LOG_LEVEL` ∈ off | light | normal | verbose
+// (default light). light names what set a title and what it was before, and reports the press
+// this field swallowed. normal adds the renames that started and the ones that saved nothing.
+// verbose adds the text a cancelled rename threw away.
+
+const LOG_LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function chatLog(level, msg) {
+  let setting = null;
+  try { setting = localStorage.getItem('CHAT_PANEL_LOG_LEVEL'); } catch { /* storage blocked */ }
+  if ((LOG_LEVELS[setting] ?? LOG_LEVELS.light) >= LOG_LEVELS[level]) {
+    console.log(`[chat:${level}] ${msg}`);
   }
 }
 </script>
