@@ -1,5 +1,12 @@
 <template>
-  <div class="gen-overlay" @keydown.esc="tryClose">
+  <!-- Escape is not bound on this root. The layout owns the app's one global keydown listener and
+       closes the topmost layer with it (KOL-063). A `@keydown.esc` here would fire first, emit
+       `close` — which synchronously clears `generatorOpen` — and then bubble on to that listener,
+       which would find the generator already shut and close the chat or the detail panel
+       underneath: one press, two layers (KOL-084). A subtree handler for a key the layout owns has
+       to stop the event (EntityEditor's tag list does); this one had nothing of its own to do, so
+       it is gone rather than stopped. The ✕ below still emits `close`. -->
+  <div class="gen-overlay">
     <div class="gen-chrome">
       <span class="gen-title">{{ titleFor(stage) }}</span>
       <button class="icon-btn" title="Close" @click="tryClose">✕</button>
