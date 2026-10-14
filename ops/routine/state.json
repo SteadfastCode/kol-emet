@@ -79,7 +79,7 @@
     "KOL-083": {
       "order": 5,
       "title": "A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-083",

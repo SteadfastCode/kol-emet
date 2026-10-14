@@ -57,13 +57,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…**
-  Found by the grader of KOL-067 (medium, client/src/composables/useEntities.js:52). A page
-  failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is
-  already false, the rejection has no catch anywhere (`onMounted(() => loadEntities())` in
-  WikiLayout.vue:574, no global error/unhandledrejection handler in the client), so a 500 or
-  network blip on page 3 of 5 renders a partial list that is indistinguishable from a complete one
-  — before this change a failed load left the list empty, which at least looked wrong.
 - [ ] **(KOL-084) Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc="tryClos…**
   Found by the grader of KOL-063 (high, client/src/components/WikiLayout.vue:690). Escape inside
   GeneratorOverlay closes two layers at once: the overlay's own `@keydown.esc="tryClose"`
@@ -227,6 +220,13 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…** (routine 2026-10-14, f6a9855)
+  Found by the grader of KOL-067 (medium, client/src/composables/useEntities.js:52). A page
+  failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is
+  already false, the rejection has no catch anywhere (`onMounted(() => loadEntities())` in
+  WikiLayout.vue:574, no global error/unhandledrejection handler in the client), so a 500 or
+  network blip on page 3 of 5 renders a partial list that is indistinguishable from a complete one
+  — before this change a failed load left the list empty, which at least looked wrong.
 - [x] **(KOL-082) searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…** (routine 2026-10-14, d7dda3c)
   Found by the grader of KOL-068 (medium, client/src/api/entities.js:85). `searchEntities` sends
   no `?limit=`, so every keystroke-word triggers an unbounded `GET /entities?q=` that serializes
