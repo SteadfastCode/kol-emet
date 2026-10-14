@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-086) In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…**
+- [x] **(KOL-086) In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…**
   Found by the grader of KOL-054 (medium, server/src/lib/draftApplier.js:259). In
   findOrCreateGroup, the `proposed-target` path trusts `p.targetGroupId` without re-checking that
   the group still holds the proposal's members: a member the group does not hold is silently

@@ -79,18 +79,18 @@
     "KOL-086": {
       "order": 5,
       "title": "In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-086",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-14T11:29:34.457Z",
+      "runId": "2026-10-14T11:13:39.694Z",
       "lastFail": null
     },
     "KOL-014": {
