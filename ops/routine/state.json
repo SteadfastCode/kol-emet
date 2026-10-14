@@ -79,7 +79,7 @@
     "KOL-086": {
       "order": 5,
       "title": "In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-086",
