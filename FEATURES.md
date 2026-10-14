@@ -57,6 +57,12 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-087) An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…**
+  Found by the grader of KOL-051 (medium, server/src/lib/producers/openApi.js:362). An operation
+  whose `tags` is not a sequence crashes the parse: `toJS(...)` returns a string (or plain object)
+  for `tags: Pets` / `tags: {a: b}`, `?? []` does not replace it, and `.filter` is not a function
+  — a TypeError escapes `parseOpenApi`, so `POST /drafts/openapi` answers 500 with a raw stack
+  message instead of the 400/drop-reason the producer promises for a malformed document.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

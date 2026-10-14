@@ -1,0 +1,160 @@
+{
+  "item": "KOL-051",
+  "repo": "kol-emet",
+  "mergeSha": "b53462d8d7d48b0a34216abb3f488c4422615bd8",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T16:11:51.737Z",
+  "gradedAtUtc": "2026-10-14T16:17:30.609Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/openApi.js",
+      "line": 362,
+      "severity": "medium",
+      "summary": "An operation whose `tags` is not a sequence crashes the parse: `toJS(...)` returns a string (or plain object) for `tags: Pets` / `tags: {a: b}`, `?? []` does not replace it, and `.filter` is not a function — a TypeError escapes `parseOpenApi`, so `POST /drafts/openapi` answers 500 with a raw stack message instead of the 400/drop-reason the producer promises for a malformed document."
+    },
+    {
+      "file": "server/src/lib/producers/openApi.js",
+      "line": 319,
+      "severity": "low",
+      "summary": "`decodeURIComponent(raw)` in `resolveLocalRef` throws URIError on a ref segment containing a stray `%` (e.g. `$ref: \"#/components/pathItems/50%off\"`), which escapes the parse as a non-OpenApiParseError and becomes a 500 — the item and docs state an unresolvable ref must be a drop reason, and the surrounding code is written to return a reason string for every other bad ref."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "BraindumpInput.test.js explicitly covers the both-keys case: `expect(producerFor('openapi: 3.0.0\\nservices:\\n  - name: x\\n')).toBe('openapi')`."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The message names all three keys the file could have had, which is the stated intent; wording is a preference, not a defect."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "`filename` is only used as a log label and a 60-char draft title — nothing writes a file, so traversal is impossible; it is also type-checked as a string."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "The version gate at openApi.js:222-228 throws `OpenApiParseError` naming `openapi: 4.0.0` etc., and the route maps that to a 400; a unit test asserts it."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "`doc.errors` is checked first and raises a line-numbered `Invalid JSON or YAML` 400, and non-mapping content hits the explicit `top level ... is not a mapping` refusal."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "`new URL('https://a.example/v2?x=1')` yields hostname `a.example`; only genuinely relative URLs resolve against the `relative.invalid` base and correctly return null."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "The comment lists producers still to come (drift/repo/k8s) and was deliberately updated because `openapi` graduated into the enum; it matches the code."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "The factory calls `parse(source, { existingEntities: roster, lineOffset })` — both options are passed, and both default anyway."
+    },
+    {
+      "index": 9,
+      "verdict": "false-positive",
+      "reason": "`parseOpenApi` is imported at the top of the same diff hunk from `../lib/producers/openApi.js`, which the diff also adds."
+    },
+    {
+      "index": 10,
+      "verdict": "false-positive",
+      "reason": "`OpenApiParseError` is exported by the new openApi.js and imported in the same import statement shown in the diff."
+    },
+    {
+      "index": 11,
+      "verdict": "false-positive",
+      "reason": "`MAX_OPENAPI_CHARS` is exported from openApi.js (= `MAX_COMPOSE_CHARS`) and imported in the diff; the route also reads it via `maxChars`, not directly."
+    },
+    {
+      "index": 12,
+      "verdict": "false-positive",
+      "reason": "`resolveLocalRef` returns the string `\"... is not defined in this document\"`, which the caller turns into a drop reason; a unit test asserts exactly that."
+    },
+    {
+      "index": 13,
+      "verdict": "false-positive",
+      "reason": "The re-import test does assert `item.matchedBy === 'exact-normalized-title'` for every entity item."
+    },
+    {
+      "index": 14,
+      "verdict": "false-positive",
+      "reason": "The test's claim is that a re-import proposes updates rather than copies, and it verifies op, matchedBy, targetEntityId and pruned blocks; applying the second draft is not what it claims to test."
+    },
+    {
+      "index": 15,
+      "verdict": "false-positive",
+      "reason": "Backwards: a near-miss must stay `op: 'create'` (never merged), and the test asserts precisely that plus the `duplicate_candidate` flag."
+    },
+    {
+      "index": 16,
+      "verdict": "false-positive",
+      "reason": "That test is scoped to the item cap being a no-op; the fixture's parse is asserted in detail by the tests in the 'openapi fixture' describe block."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "No authentication or authorization code changes; the new route inherits `requireAuth` + `resolveWorkspace` already mounted on `/drafts` in app.js."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "Credential handling is central — the uploaded spec goes through `redactSecrets` at the route seam and the fixture carries an example API key asserted never to be stored."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The producer is deterministic with no model call, and no allowance, quota or billing code is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The change only creates draft rows; no deletion or overwrite path is added or modified, and the applier is untouched."
+    },
+    {
+      "key": "externalApi",
+      "correct": false,
+      "reason": "Nothing in the diff makes a network call — it parses a document that describes APIs, which is not the same as calling one."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, CI or version configuration is changed."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "Every one of the 16 local findings is a false positive — most assert that symbols imported in the diff are undefined or that assertions the tests plainly make are absent — and the triage is wrong on three of six categories, while both genuine defects (malformed-input paths that return 500 instead of a 400/drop reason) were missed.",
+  "counts": {
+    "findings": 16,
+    "confirmed": 0,
+    "falsePositive": 16,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 3
+  },
+  "costUsd": 2.7203550000000005,
+  "numTurns": 23,
+  "durationMs": 336280,
+  "sessionId": "38fff02a-f1f3-4250-b880-ac90fd758e8d"
+}

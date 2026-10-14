@@ -76,21 +76,21 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-086": {
+    "KOL-087": {
       "order": 5,
-      "title": "In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…",
-      "status": "done",
-      "attempts": 1,
+      "title": "An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-086",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-14T11:29:34.457Z",
-      "runId": "2026-10-14T11:13:39.694Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
     "KOL-014": {
@@ -263,6 +263,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-086": {
+      "order": null,
+      "title": "In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-086",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-14T11:29:34.457Z",
+      "runId": "2026-10-14T11:13:39.694Z",
       "lastFail": null
     },
     "KOL-085": {
