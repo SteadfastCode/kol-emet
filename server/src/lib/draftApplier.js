@@ -31,7 +31,8 @@ import { relationshipGroupMatcher } from './draftNormalizer.js';
 // APPLY_LOG_LEVEL = off | light | normal | verbose (default light)
 //   light   — one line per draft, per item that failed or was blocked, and per
 //             relationship write, naming what that write was matched against
-//             rather than only what it produced
+//             rather than only what it produced — including a recorded target
+//             the write had to drop, and which members it no longer held
 //   normal  — light (every line this module logs today is light or verbose;
 //             the tier is kept so a new per-item line has somewhere to go)
 //   verbose — light, plus each member label or note an update actually changed
@@ -194,9 +195,11 @@ async function applyRelationship(item, ctx) {
   // entity this same apply has just created — could not be matched back then,
   // so the same check runs again over the ids now known. One rule, applied
   // wherever the ids become known.
-  const { group, matchedBy } = await findOrCreateGroup(p, members, ctx);
+  const { group, matchedBy, flag } = await findOrCreateGroup(p, members, ctx, item);
 
-  // Back-reference, scoped so a stray id cannot reach another workspace.
+  // Back-reference, scoped so a stray id cannot reach another workspace, and
+  // claimed only for members the group actually holds — which is every one of
+  // them, because findOrCreateGroup returns no group that holds fewer.
   // Re-run on an update too: $addToSet is idempotent, and it repairs a
   // back-reference that went missing.
   await Entity.updateMany(
@@ -209,20 +212,39 @@ async function applyRelationship(item, ctx) {
     `${JSON.stringify(p.label ?? null)} over ${members.length} member(s) ` +
     `(source: draft ${ctx.draftId} via ${ctx.producer}, matched by ${matchedBy})`);
 
-  return { resultId: group._id, changeLogId: null };
+  return { resultId: group._id, changeLogId: null, flag };
 }
+
+/** The slot `group` holds for member `m`, or undefined if it holds none.
+ *  One definition, so "does this group hold this member" cannot mean one thing
+ *  where a group is chosen and another where its members are written. */
+const heldMember = (group, m) =>
+  group.members.find(x => String(x.refId) === String(m.refId) && x.refModel === m.refModel);
 
 /**
  * The group this proposal is, creating it only if the workspace has none.
  *
- * @returns {Promise<{group: Document, matchedBy: string}>} `matchedBy` says
- *   which of the three paths wrote: 'created', 'proposed-target' (the match the
- *   draft already recorded) or 'resolved-members' (matched here, on ids that
- *   only existed once the entities above had landed).
+ * ONE RULE DECIDES: a group is the one this proposal already is only if it
+ * still holds every member the proposal names. The members search gets that
+ * from its own `$all` query; the id-targeted path has to ask, because the id
+ * was matched when the draft was generated and either side can have moved
+ * since. Without the question the proposal's own members would be written as
+ * though the group held them — a back-reference on an entity the group does
+ * not list, an accepted edit that wrote nothing, and `applied` on both.
+ *
+ * @returns {Promise<{group: Document, matchedBy: string, flag: string|null}>}
+ *   `matchedBy` says which of the three paths wrote: 'created',
+ *   'proposed-target' (the match the draft already recorded) or
+ *   'resolved-members' (matched here, on ids that only existed once the
+ *   entities above had landed). `flag` is set when a recorded target had to be
+ *   dropped, so the item says so rather than reporting a clean apply.
  */
-async function findOrCreateGroup(p, members, ctx) {
+async function findOrCreateGroup(p, members, ctx, item) {
   let group = null;
   let matchedBy = 'created';
+  let flag = null;
+
+  const holdsAll = g => members.every(m => heldMember(g, m));
 
   // The match the draft recorded, re-scoped to the workspace: the id travels in
   // a payload a human can edit, so it is never trusted as a bare id. A target
@@ -230,8 +252,26 @@ async function findOrCreateGroup(p, members, ctx) {
   const proposedTarget = p.targetGroupId ?? null;
   if (proposedTarget && !ctx.usedGroups.has(String(proposedTarget))) {
     if (!mongoose.isValidObjectId(proposedTarget)) throw new Error(`targetGroupId ${JSON.stringify(String(proposedTarget))} is not an id`);
-    group = await RelationshipGroup.findOne({ _id: proposedTarget, workspaceId: ctx.workspaceId });
-    if (group) matchedBy = 'proposed-target';
+    const target = await RelationshipGroup.findOne({ _id: proposedTarget, workspaceId: ctx.workspaceId });
+    if (target && holdsAll(target)) {
+      group = target;
+      matchedBy = 'proposed-target';
+    } else if (target) {
+      // The group outlived the match. Two ways in: a human removed one of these
+      // members by hand (DELETE /relationship-groups/:id/members/:entityId
+      // leaves a 3+-member group alive), or an edit re-pointed `members` and
+      // kept the id they were matched from. Either way this is no longer the
+      // group the proposal describes, so the id is dropped and the search below
+      // decides — which restores the edge as its own group, rather than
+      // silently skipping the members it cannot write.
+      flag = 'target_group_changed';
+      const absent = members.filter(m => !heldMember(target, m));
+      log('light',
+        `item ${item.localKey}: dropped targetGroupId ${target._id} — it no longer holds ` +
+        `${absent.length} of ${members.length} member(s) [${absent.map(m => m.refId).join(', ')}] ` +
+        `(source: the ${item.accepted ? 'edited' : 'proposed'} payload of draft ${ctx.draftId}, ` +
+        `re-checked against the live group)`);
+    }
   }
 
   if (!group) {
@@ -246,8 +286,14 @@ async function findOrCreateGroup(p, members, ctx) {
     }).lean();
     const hit = relationshipGroupMatcher(candidates.filter(g => !ctx.usedGroups.has(String(g._id))))(p.label ?? null, members);
     if (hit) {
-      group = await RelationshipGroup.findOne({ _id: hit._id, workspaceId: ctx.workspaceId });
-      if (group) matchedBy = 'resolved-members';
+      const matched = await RelationshipGroup.findOne({ _id: hit._id, workspaceId: ctx.workspaceId });
+      // The matcher compares member ids; the same question again here also pins
+      // the refModel, so a group that holds one of these ids as a SUBGROUP is
+      // not updated as though it held the entity.
+      if (matched && holdsAll(matched)) {
+        group = matched;
+        matchedBy = 'resolved-members';
+      }
     }
   }
 
@@ -257,8 +303,8 @@ async function findOrCreateGroup(p, members, ctx) {
     // everyone else. A member someone added by hand keeps both its place and
     // its label, and the group never shrinks.
     for (const m of members) {
-      const held = group.members.find(x => String(x.refId) === String(m.refId) && x.refModel === m.refModel);
-      if (!held) continue;   // cannot happen under the match rule; a no-op if it ever does
+      const held = heldMember(group, m);
+      if (!held) continue;   // unreachable: holdsAll gated every path to here
       for (const field of ['label', 'notes']) {
         // An absent value says nothing rather than saying "clear it", so a role
         // a person wrote survives a producer that emits none.
@@ -277,7 +323,7 @@ async function findOrCreateGroup(p, members, ctx) {
   }
 
   ctx.usedGroups.add(String(group._id));
-  return { group, matchedBy };
+  return { group, matchedBy, flag };
 }
 
 async function applyOpenQuestion(item, ctx) {
