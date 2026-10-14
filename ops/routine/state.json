@@ -79,7 +79,7 @@
     "KOL-085": {
       "order": 5,
       "title": "The conversation-rename input binds @keydown.escape.prevent=\"cancelRename\" with no stopPropagatio…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-085",
