@@ -28,7 +28,9 @@
  * spec that declares no tags map to one API entity per path prefix. Every
  * operation therefore lands on exactly one API entity, which is the property
  * worth having — a document is free to tag operations without declaring the
- * tags, and dropping those would lose the paths the import is for.
+ * tags, and dropping those would lose the paths the import is for. An operation
+ * whose `tags` is malformed — not a sequence, or a sequence naming nothing
+ * usable — is grouped the same way, with a drop reason naming what was found.
  *
  * Only local `#/components/...` `$ref`s are followed, one level deep, and only
  * where a `$ref` can change the mapping — a path item. An unresolvable ref is
@@ -244,6 +246,17 @@ export function parseOpenApi(text, { existingEntities = [], existingGroups = [],
     if (dropReasons.length < MAX_DROP_REASONS) dropReasons.push(reason);
   };
 
+  /**
+   * What a value that should have been a sequence turned out to be, for a drop
+   * reason that names it. A scalar is quoted and capped, because the value is
+   * the document's and a 5KB string would otherwise become a 5KB drop reason.
+   */
+  const describeNotASequence = value => {
+    if (value && typeof value === 'object') return 'a mapping';
+    const text = String(value);
+    return `\`${text.length > 60 ? `${text.slice(0, 60)}…` : text}\``;
+  };
+
   // ── the service ────────────────────────────────────────────────────────────
   const apiVersion = (scalarString(pairOf(infoPair?.value, 'version')?.value) ?? '').trim();
   const description = (scalarString(pairOf(infoPair?.value, 'description')?.value) ?? '').trim();
@@ -302,6 +315,16 @@ export function parseOpenApi(text, { existingEntities = [], existingGroups = [],
       const tagDescription = (scalarString(pairOf(tag, 'description')?.value) ?? '').trim();
       apiFor(name, namePair?.key?.range?.[0] ?? tag?.range?.[0], tagDescription || null);
     }
+  } else {
+    // Malformed the same way an operation's `tags` can be — an empty `tags:`
+    // reads back as null and declares nothing, which is not malformed. Nothing
+    // is lost here that the operations below will not re-create, but silence
+    // would leave a reviewer wondering where the names and descriptions went.
+    const declared = toJS(tagsNode);
+    if (declared != null) {
+      drop(`\`tags\` is not a list of tag declarations (found ` +
+        `${describeNotASequence(declared)}), so none were read`);
+    }
   }
 
   // ── paths -> operations, grouped onto those tags ───────────────────────────
@@ -359,9 +382,23 @@ export function parseOpenApi(text, { existingEntities = [], existingGroups = [],
 
         const operation = `${method.toUpperCase()} ${path}`;
         const opOffset = opPair.key.range?.[0] ?? pathOffset;
-        const opTags = (toJS(pairOf(opPair.value, 'tags')?.value) ?? [])
-          .filter(t => typeof t === 'string' && t.trim())
-          .map(t => t.trim());
+        // `tags` is a sequence of names in a valid document, and anything else
+        // there is malformed: `tags: Pets` reads back as a string, which `?? []`
+        // does not replace and `.filter` would throw on. A malformed one costs
+        // the operation its tag, not the import — it is grouped by path segment
+        // like any other untagged operation, with a reason naming what was
+        // found, which is the same bargain an unresolvable `$ref` gets.
+        const rawTags = toJS(pairOf(opPair.value, 'tags')?.value);
+        let opTags = [];
+        if (Array.isArray(rawTags)) {
+          opTags = rawTags.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim());
+          if (!opTags.length && rawTags.length) {
+            drop(`\`tags\` of ${operation} names no tag, so the operation was grouped by its path`);
+          }
+        } else if (rawTags != null) {
+          drop(`\`tags\` of ${operation} is not a list of tag names (found ` +
+            `${describeNotASequence(rawTags)}), so the operation was grouped by its path`);
+        }
 
         for (const title of opTags.length ? [...new Set(opTags)] : [segment]) {
           const api = apiFor(title, opOffset);

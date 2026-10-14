@@ -21,7 +21,10 @@
  *     import created rather than a second copy;
  *   - a document that is not OpenAPI is a 400 naming what it found instead, a
  *     workspace without the types is a 400 naming them, and another tenant
- *     cannot read the draft.
+ *     cannot read the draft;
+ *   - a localized malformation inside a valid document — an operation whose
+ *     `tags` is not a sequence — is a ready draft with a drop reason rather
+ *     than a 500 carrying a raw error message.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_OPENAPI_DRAFT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -293,5 +296,38 @@ describe('POST /drafts/openapi refusals', () => {
     const res = await request(app).post('/drafts/openapi').send({ text: FIXTURE });
     log('normal', `anonymous POST /drafts/openapi → ${res.status}`);
     assert.equal(res.status, 401);
+  });
+});
+
+describe('POST /drafts/openapi with a malformed `tags`', () => {
+  // A `tags` that is not a sequence used to throw a TypeError out of the
+  // producer, which this route answered with a 500 and a raw stack message.
+  // It is a localized malformation, so it is a drop reason on an otherwise
+  // ready draft — the same bargain an unresolvable `$ref` gets.
+  const MALFORMED = [
+    'openapi: 3.1.0',
+    'info:',
+    '  title: Malformed Store',
+    '  version: 1',
+    'paths:',
+    '  /pets:',
+    '    get:',
+    '      tags: Pets',
+    '  /vets:',
+    '    get:',
+    '      tags: [Vets]',
+  ].join('\n');
+
+  test('is a ready draft naming the drop, not a 500', async () => {
+    const res = await postOpenApi(architect, { text: MALFORMED, filename: 'malformed.openapi.yaml' });
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+    assert.equal(res.body.status, 'ready');
+    assert.equal(res.body.counts.dropped, 1);
+    assert.deepEqual(res.body.diagnostics.dropReasons, [
+      '`tags` of GET /pets is not a list of tag names (found `Pets`), so the operation was grouped by its path',
+    ]);
+    // The operation keeps an API to land on, and the rest of the document maps.
+    assert.deepEqual(res.body.items.filter(i => i.kind === 'entity').map(i => i.proposed.title),
+      ['Malformed Store', 'pets', 'Vets']);
   });
 });
