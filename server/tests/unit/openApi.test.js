@@ -21,6 +21,9 @@
  *   - existingByKey lookup removed           -> the re-import test fails (all creates)
  *   - the version gate removed               -> the refusal tests pass nothing
  *   - the operation list left uncapped       -> the MAX_OPERATIONS_LISTED test fails
+ *   - the `tags` sequence guards removed     -> 5 of the 7 malformed-tags tests
+ *                                               fail, 4 of them on the TypeError
+ *                                               the guards exist to prevent
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_OPENAPI_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -460,6 +463,88 @@ describe('$ref handling', () => {
     assert.equal(dropReasons.length, 2);
     assert.match(dropReasons[0], /is not a local `#\/components\/…` reference/);
     assert.match(dropReasons[1], /resolves to another `\$ref`, which is not followed/);
+  });
+});
+
+describe('malformed tags', () => {
+  // `tags` is a sequence in a valid document. Anything else there used to reach
+  // `.filter` as a string or an object and throw a TypeError out of
+  // parseOpenApi, which POST /drafts/openapi answered with a 500 and a raw
+  // stack message. A malformed `tags` costs the operation its tag, not the
+  // import: the operation is grouped by its path segment like any other
+  // untagged one, and a drop reason names what was found.
+  const doc = (...opTags) => [
+    'openapi: 3.1.0',
+    'info:',
+    '  title: Store',
+    '  version: 1',
+    'paths:',
+    '  /pets:',
+    '    get:',
+    ...opTags.map(l => `      ${l}`),
+    '  /vets:',
+    '    get:',
+    '      tags: [Vets]',
+  ].join('\n');
+
+  test('an operation whose tags is a scalar is a drop reason, not a TypeError', () => {
+    const { items, dropReasons, dropped } = parse(doc('tags: Pets'), {}, 'an operation with `tags: Pets`');
+    assert.equal(dropped, 1);
+    assert.deepEqual(dropReasons, [
+      '`tags` of GET /pets is not a list of tag names (found `Pets`), so the operation was grouped by its path',
+    ]);
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['Store', 'pets', 'Vets'],
+      'the operation still lands on an API, and the rest of the document still maps');
+    assert.equal(attribute(entityNamed(items, 'pets'), 'Operations'), 'GET /pets');
+  });
+
+  test('an operation whose tags is a mapping or a number names what was found', () => {
+    assert.match(parse(doc('tags:', '  Pets: true'), {}, 'an operation with a mapping of tags').dropReasons[0],
+      /^`tags` of GET \/pets is not a list of tag names \(found a mapping\)/);
+    assert.match(parse(doc('tags: 7'), {}, 'an operation with `tags: 7`').dropReasons[0],
+      /\(found `7`\)/);
+  });
+
+  test('a long scalar tags is capped in the drop reason it produces', () => {
+    const [reason] = parse(doc(`tags: ${'x'.repeat(400)}`), {}, 'an operation with a 400-character tags').dropReasons;
+    assert.ok(reason.length < 200, `the document's own value is capped, got ${reason.length} characters`);
+    assert.match(reason, /\(found `x{60}…`\)/);
+  });
+
+  test('a tags list that names nothing usable is a drop reason too', () => {
+    // `- name: Pets` is the shape of a *declared* tag, and a plausible mistake
+    // to make on an operation; it used to silently become an untagged one.
+    const { items, dropReasons } = parse(doc('tags:', '  - name: Pets'), {}, 'an operation tagged with declarations');
+    assert.deepEqual(dropReasons, ['`tags` of GET /pets names no tag, so the operation was grouped by its path']);
+    assert.equal(attribute(entityNamed(items, 'pets'), 'Operations'), 'GET /pets');
+  });
+
+  test('an absent, empty or partly unusable tags is not malformed', () => {
+    assert.deepEqual(parse(doc('summary: Lists pets'), {}, 'an operation with no tags').dropReasons, []);
+    assert.deepEqual(parse(doc('tags:'), {}, 'an operation with an empty tags').dropReasons, []);
+    assert.deepEqual(parse(doc('tags: []'), {}, 'an operation with an empty tags list').dropReasons, []);
+    const mixed = parse(doc('tags: [Pets, 7]'), {}, 'an operation with one usable tag name');
+    assert.deepEqual(mixed.dropReasons, [], 'one usable name is enough to tag the operation');
+    assert.equal(attribute(entityNamed(mixed.items, 'Pets'), 'Operations'), 'GET /pets');
+  });
+
+  test('a top-level tags that is not a list of declarations is a drop reason, and the paths still map', () => {
+    const { items, dropReasons } = parse([
+      'openapi: 3.1.0', 'info:', '  title: Store', '  version: 1',
+      'tags: Pets',
+      'paths:', '  /pets:', '    get:', '      tags: [Pets]',
+    ].join('\n'), {}, 'a document with `tags: Pets` at the top level');
+    assert.deepEqual(dropReasons, ['`tags` is not a list of tag declarations (found `Pets`), so none were read']);
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['Store', 'Pets'],
+      'the tag the operation names is still an API');
+  });
+
+  test('a top-level tags that is absent or empty is not malformed', () => {
+    const base = ['openapi: 3.1.0', 'info:', '  title: Store', '  version: 1'];
+    const paths = ['paths:', '  /pets:', '    get: {}'];
+    assert.deepEqual(parse([...base, ...paths].join('\n'), {}, 'a document with no tags key').dropReasons, []);
+    assert.deepEqual(parse([...base, 'tags:', ...paths].join('\n'), {}, 'a document with an empty tags key').dropReasons, []);
+    assert.deepEqual(parse([...base, 'tags: []', ...paths].join('\n'), {}, 'a document with an empty tags list').dropReasons, []);
   });
 });
 
