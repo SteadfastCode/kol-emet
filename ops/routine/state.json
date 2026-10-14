@@ -79,18 +79,18 @@
     "KOL-087": {
       "order": 5,
       "title": "An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-087",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-14T16:17:46.704Z",
+      "runId": "2026-10-14T16:11:29.030Z",
       "lastFail": null
     },
     "KOL-014": {

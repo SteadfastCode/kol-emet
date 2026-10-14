@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-087) An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…**
+- [x] **(KOL-087) An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…**
   Found by the grader of KOL-051 (medium, server/src/lib/producers/openApi.js:362). An operation
   whose `tags` is not a sequence crashes the parse: `toJS(...)` returns a string (or plain object)
   for `tags: Pets` / `tags: {a: b}`, `?? []` does not replace it, and `.filter` is not a function
