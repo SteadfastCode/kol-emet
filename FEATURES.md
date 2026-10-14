@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-082) searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…**
+- [x] **(KOL-082) searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…**
   Found by the grader of KOL-068 (medium, client/src/api/entities.js:85). `searchEntities` sends
   no `?limit=`, so every keystroke-word triggers an unbounded `GET /entities?q=` that serializes
   every matching row in the workspace in one response — the exact unpaged full-workspace read

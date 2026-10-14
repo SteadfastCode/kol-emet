@@ -79,18 +79,18 @@
     "KOL-082": {
       "order": 5,
       "title": "searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-082",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-14T10:29:46.331Z",
+      "runId": "2026-10-14T09:07:28.985Z",
       "lastFail": null
     },
     "KOL-083": {
