@@ -1,0 +1,304 @@
+{
+  "item": "KOL-074",
+  "repo": "kol-emet",
+  "mergeSha": "f0bdcae8caec9ebe177dd1d68115628265f14e16",
+  "completedAtUtc": "2026-10-12T21:27:20.734Z",
+  "completeRunId": "2026-10-12T21:08:28.915Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:55:23.668Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 96791,
+  "contextFiles": 11,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/auth.js"
+      ],
+      "part": null,
+      "bytes": 3997,
+      "contextBytes": 8105,
+      "promptTokens": 4070,
+      "completionTokens": 137,
+      "latencyMs": 18744,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 8950,
+      "contextBytes": 0,
+      "promptTokens": 3299,
+      "completionTokens": 139,
+      "latencyMs": 13908,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "client/src/views/LoginView.test.js"
+      ],
+      "part": null,
+      "bytes": 11633,
+      "contextBytes": 0,
+      "promptTokens": 3975,
+      "completionTokens": 163,
+      "latencyMs": 17082,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/views/LoginView.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 11480,
+      "contextBytes": 0,
+      "promptTokens": 4077,
+      "completionTokens": 123,
+      "latencyMs": 15578,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11681,
+      "contextBytes": 0,
+      "promptTokens": 3870,
+      "completionTokens": 123,
+      "latencyMs": 14955,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/passwordPolicy.js"
+      ],
+      "part": null,
+      "bytes": 3508,
+      "contextBytes": 0,
+      "promptTokens": 2017,
+      "completionTokens": 112,
+      "latencyMs": 8713,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8101,
+      "contextBytes": 0,
+      "promptTokens": 3125,
+      "completionTokens": 143,
+      "latencyMs": 13189,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 9622,
+      "contextBytes": 0,
+      "promptTokens": 3525,
+      "completionTokens": 116,
+      "latencyMs": 13312,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/password.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12449,
+      "contextBytes": 0,
+      "promptTokens": 4353,
+      "completionTokens": 131,
+      "latencyMs": 16869,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/password.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11903,
+      "contextBytes": 0,
+      "promptTokens": 4084,
+      "completionTokens": 135,
+      "latencyMs": 18669,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/passwordPolicy.test.js"
+      ],
+      "part": null,
+      "bytes": 3830,
+      "contextBytes": 0,
+      "promptTokens": 2099,
+      "completionTokens": 110,
+      "latencyMs": 8961,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/WikiLayout.test.js",
+      "line": 345,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the password change is rejected if the new password is too short.",
+      "scenario": "A user tries to change their password with a new password shorter than the minimum length (12 characters). The test should expect a 400 response and check that the form remains open with an error message.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the password change is rejected if the new password is too short."
+      }
+    },
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 307,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The password change form does not validate the new password against the policy before submission.",
+      "scenario": "A user enters a new password that is shorter than the minimum required length (12 characters) and clicks 'Change password'. The form should prevent submission and display an error message, but currently, it allows the request to be sent to the server, which will then return a 400 error.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not validate the new password against the policy before submission."
+      }
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 747,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Passkey challenge key mismatch between routes.",
+      "scenario": "When a user attempts to change their password using a passkey assertion, the route uses `DELETE_CHALLENGE_KEY` instead of `PASSWORD_CHALLENGE_KEY`. This could lead to incorrect behavior where a challenge issued for account deletion is used for password change, potentially allowing unauthorized access.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code uses DELETE_CHALLENGE_KEY for both account deletion and password change routes."
+      }
+    },
+    {
+      "file": "server/tests/http/password.test.js",
+      "line": 185,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The test does not verify that the passkey assertion changes the password hash.",
+      "scenario": "After a successful passkey assertion, the stored hash should be different from before the change. The current test only checks that the challenge is successful but does not verify the actual password change.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the passkey assertion changes the password hash."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/api/auth.js:103"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:103"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One high-severity issue found in the code change. · One finding identified in the diff. · One finding identified: the password change form does not validate the new password against the policy before submission. · One high-severity finding identified in the code change. · One high-severity finding identified in the code change. · One high-severity finding identified. · One high-severity issue found in server/src/routes/auth.js. · One high-severity issue found in the password change route. · One high-severity finding identified in the provided diff. · One finding identified: the password change is not logged in the Decision Log. · One high-severity defect found in the password policy implementation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 114821,
+    "completionTokens": 3505
+  },
+  "latencyMs": 453355
+}

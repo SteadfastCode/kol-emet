@@ -1,0 +1,182 @@
+{
+  "item": "KOL-068",
+  "repo": "kol-emet",
+  "mergeSha": "560b600f9b742bc22424d3f31be7c773fc5b746e",
+  "completedAtUtc": "2026-10-10T14:43:28.699Z",
+  "completeRunId": "2026-10-10T14:08:28.940Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:22:07.766Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 55953,
+  "contextFiles": 11,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/entities.js",
+        "client/src/components/EntitySidebar.test.js",
+        "client/src/components/EntitySidebar.vue"
+      ],
+      "part": null,
+      "bytes": 8444,
+      "contextBytes": 0,
+      "promptTokens": 3386,
+      "completionTokens": 140,
+      "latencyMs": 16579,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue",
+        "client/src/composables/useEntities.js"
+      ],
+      "part": null,
+      "bytes": 9295,
+      "contextBytes": 0,
+      "promptTokens": 3507,
+      "completionTokens": 155,
+      "latencyMs": 15214,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useFilters.js"
+      ],
+      "part": null,
+      "bytes": 11121,
+      "contextBytes": 0,
+      "promptTokens": 4002,
+      "completionTokens": 143,
+      "latencyMs": 16294,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useFilters.test.js"
+      ],
+      "part": null,
+      "bytes": 11039,
+      "contextBytes": 0,
+      "promptTokens": 3971,
+      "completionTokens": 145,
+      "latencyMs": 16331,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 10985,
+      "contextBytes": 0,
+      "promptTokens": 3733,
+      "completionTokens": 353,
+      "latencyMs": 25864,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 2,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/entities.js",
+        "server/tests/http/entitySearch.test.js"
+      ],
+      "part": null,
+      "bytes": 5069,
+      "contextBytes": 7059,
+      "promptTokens": 4218,
+      "completionTokens": 135,
+      "latencyMs": 16642,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/EntitySidebar.vue",
+      "line": 78,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The 'matched-in-text' line is not styled to be visible over the card's background.",
+      "scenario": "When a row has the 'matched in text' line, it may not be visible against the card's background color, making it difficult for users to notice.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The '.matched-in-text' class does not specify any styling that ensures visibility over the card's background."
+      }
+    },
+    {
+      "file": "client/src/composables/useFilters.js",
+      "line": 11,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "`useFilters` only filters over `title`, `summary`, and `tags`, missing the content in blocks.",
+      "scenario": "A word that appears only in a text block is not found by the search box, even though it exists on the server.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`useFilters` filters over `title`, `summary`, and `tags` only, missing content in blocks."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/api/entities.js:67"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One potential issue found: The 'matched-in-text' line may not be visible over the card's background. · One high-severity issue found: missing definition of `searchEntities` in `WikiLayout.vue`. · One potential issue found: unnecessary API calls when clearing the search term. · One finding identified: The test for marking rows as 'matched in text' does not verify display correctness. · The search box queries the server but does not handle cases where the server returns no results. Rows that match only in a block do not carry the 'matched in text' line. · One finding identified: a mismatch between the comment and the actual implementation in the code.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 75512,
+    "completionTokens": 2181
+  },
+  "latencyMs": 275402
+}

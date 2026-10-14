@@ -1,0 +1,153 @@
+{
+  "item": "KOL-061",
+  "repo": "kol-emet",
+  "mergeSha": "38f84c84890171502550a3973a6601a80b1f4d21",
+  "completedAtUtc": "2026-10-07T10:45:02.106Z",
+  "completeRunId": "2026-10-07T10:12:59.366Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T07:56:55.827Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 30350,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11601,
+      "contextBytes": 0,
+      "promptTokens": 4008,
+      "completionTokens": 210,
+      "latencyMs": 22124,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/entities.js"
+      ],
+      "part": null,
+      "bytes": 2584,
+      "contextBytes": 6417,
+      "promptTokens": 3142,
+      "completionTokens": 131,
+      "latencyMs": 15366,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityList.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12881,
+      "contextBytes": 0,
+      "promptTokens": 4306,
+      "completionTokens": 159,
+      "latencyMs": 18323,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityList.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3492,
+      "contextBytes": 6131,
+      "promptTokens": 3399,
+      "completionTokens": 145,
+      "latencyMs": 16903,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/entityList.test.js",
+      "line": 245,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the projected response is indeed a fraction of the one carrying blocks.",
+      "scenario": "The test compares the serialized length of the projected response against the `?include=blocks` one, but it does not assert that the projected response is smaller. This could lead to false positives if the projection does not actually reduce the size.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test compares serialized lengths but does not assert that the projected response is smaller."
+      }
+    },
+    {
+      "file": "server/tests/http/entityList.test.js",
+      "line": 275,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the projection correctly excludes other fields not explicitly requested.",
+      "scenario": "If a client requests only 'title' and 'summary', the response should not include any other fields like 'category' or 'tags'. The current test only checks for the presence of 'blocks' but does not ensure that other unnecessary fields are excluded.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test only verifies the absence of 'blocks' and does not check for the exclusion of other fields like 'category' or 'tags'."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/tests/http/entityList.test.js:327"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces a new test group for verifying that the `GET /entities` endpoint returns entities without the `blocks` field. However, the test does not explicitly check for the absence of the `blocks` key in the response, which is crucial to ensure that the optimization has been correctly implemented. · One finding identified: potential NoSQL injection vulnerability due to lack of validation on the `include` query parameter. · One finding identified: The test does not verify that the projected response is indeed a fraction of the one carrying blocks. · One potential defect found in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 44380,
+    "completionTokens": 1309
+  },
+  "latencyMs": 186548
+}

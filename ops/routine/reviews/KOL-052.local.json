@@ -1,0 +1,208 @@
+{
+  "item": "KOL-052",
+  "repo": "kol-emet",
+  "mergeSha": "6472f25acee0cdef6e29a66b41113016de5d7189",
+  "completedAtUtc": "2026-10-06T04:22:55.375Z",
+  "completeRunId": "2026-10-06T03:10:29.997Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T07:22:05.173Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 61124,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/auth.js",
+        "client/src/api/auth.test.js"
+      ],
+      "part": null,
+      "bytes": 8497,
+      "contextBytes": 4336,
+      "promptTokens": 4341,
+      "completionTokens": 178,
+      "latencyMs": 21441,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/api/passkeySignals.js",
+        "client/src/components/PasskeySettings.test.js"
+      ],
+      "part": null,
+      "bytes": 11843,
+      "contextBytes": 0,
+      "promptTokens": 4152,
+      "completionTokens": 178,
+      "latencyMs": 21039,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/PasskeySettings.vue",
+        "docs/api.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 9551,
+      "contextBytes": 0,
+      "promptTokens": 3515,
+      "completionTokens": 150,
+      "latencyMs": 17436,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/passkeyIds.js",
+        "server/src/models/User.js"
+      ],
+      "part": null,
+      "bytes": 12130,
+      "contextBytes": 0,
+      "promptTokens": 4071,
+      "completionTokens": 134,
+      "latencyMs": 16141,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 6136,
+      "contextBytes": 6412,
+      "promptTokens": 4370,
+      "completionTokens": 129,
+      "latencyMs": 19296,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/passkeys.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12138,
+      "contextBytes": 0,
+      "promptTokens": 4184,
+      "completionTokens": 165,
+      "latencyMs": 20519,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/passkeys.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 1025,
+      "contextBytes": 4650,
+      "promptTokens": 2476,
+      "completionTokens": 122,
+      "latencyMs": 12842,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/passkeySignals.js",
+      "line": 85,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The `signalAcceptedCredentials` function does not validate the `credentialIDs` array, which could lead to an empty list being sent to the authenticator.",
+      "scenario": "If the `credentialIDs` array is empty or contains invalid credential IDs, the function will send an empty list to the authenticator. This could potentially cause the authenticator to drop all credentials associated with the user handle, leading to a loss of access for the account.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `signalAcceptedCredentials` function does not validate the `credentialIDs` array, which could lead to an empty list being sent to the authenticator."
+      }
+    },
+    {
+      "file": "server/tests/http/passkeys.test.js",
+      "line": 659,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the `userHandle` is correctly stored and retrieved.",
+      "scenario": "If the `userHandle` generation or storage logic fails, the test will pass even though the functionality it's supposed to verify is broken.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The finding mentions a potential issue with `userHandle` generation and storage logic, but the provided code does not show where this logic is implemented or how it interacts with the test. Without seeing the relevant parts of the code that handle `userHandle` generation and storage, it's unclear if the test actually verifies this functionality."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/api/auth.js:75"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "client/src/components/PasskeySettings.test.js:159"
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/api/auth.js:1"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One high-severity finding identified in the code change. · One finding identified: potential data loss due to empty or invalid `credentialIDs` array in `signalAcceptedCredentials` function. · One high-severity defect found. · One high-severity finding identified. · One high-severity finding identified. · One high-severity issue found: potential null reference error in `storedHandle` function. · One finding identified in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 81051,
+    "completionTokens": 2472
+  },
+  "latencyMs": 352224
+}

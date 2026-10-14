@@ -1,0 +1,179 @@
+{
+  "item": "KOL-069",
+  "repo": "kol-emet",
+  "mergeSha": "7b97b5d01d8c8b83f78e417903fad81015e79865",
+  "completedAtUtc": "2026-10-10T14:58:02.926Z",
+  "completeRunId": "2026-10-10T14:08:28.940Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:27:37.471Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 47899,
+  "contextFiles": 10,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11768,
+      "contextBytes": 0,
+      "promptTokens": 4100,
+      "completionTokens": 1011,
+      "latencyMs": 63078,
+      "findings": 7,
+      "critiqued": 7,
+      "dropped": 7,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/middleware/objectId.js",
+        "server/src/routes/changelog.js",
+        "server/src/routes/conversations.js",
+        "server/src/routes/drafts.js",
+        "server/src/routes/entities.js",
+        "server/src/routes/openQuestions.js",
+        "server/src/routes/relationshipGroups.js"
+      ],
+      "part": null,
+      "bytes": 9535,
+      "contextBytes": 0,
+      "promptTokens": 3707,
+      "completionTokens": 131,
+      "latencyMs": 17029,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/objectId.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12561,
+      "contextBytes": 0,
+      "promptTokens": 4503,
+      "completionTokens": 169,
+      "latencyMs": 19290,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/objectId.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12537,
+      "contextBytes": 0,
+      "promptTokens": 4609,
+      "completionTokens": 431,
+      "latencyMs": 35676,
+      "findings": 5,
+      "critiqued": 5,
+      "dropped": 4,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/objectId.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1903,
+      "contextBytes": 4709,
+      "promptTokens": 2850,
+      "completionTokens": 161,
+      "latencyMs": 15962,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/middleware/objectId.js",
+      "line": 86,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "Logging level check is resolved per call, which can lead to unexpected behavior if the environment variable changes during runtime.",
+      "scenario": "If the OBJECT_ID_LOG_LEVEL environment variable is changed while the application is running, the logging behavior may not reflect the new setting until the middleware function is called again.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "Logging level check is resolved per call, which can lead to unexpected behavior if the environment variable changes during runtime."
+      }
+    },
+    {
+      "file": "server/tests/http/objectId.test.js",
+      "line": 245,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test file is missing the required imports for `mongoose` and other dependencies.",
+      "scenario": "Running the tests will fail due to undefined references.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test file does not import `mongoose`, which is used in the `fill` function."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "Multiple routes do not validate ids before passing them to Mongoose, leading to potential exposure of internal error messages and incorrect status codes. · One potential issue found in the change. · One potential issue found: The draft fixture is inserted directly into the database rather than through the API endpoints, which may lead to inconsistencies in testing. · The test file is incomplete and missing several required imports and setup steps, which will cause the tests to fail when run. · One finding identified: The test 'no response body in this suite contains \"Cast to ObjectId\"' does not cover all routes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 101851,
+    "completionTokens": 3191
+  },
+  "latencyMs": 329514
+}

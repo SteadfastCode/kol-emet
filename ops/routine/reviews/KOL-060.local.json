@@ -1,0 +1,253 @@
+{
+  "item": "KOL-060",
+  "repo": "kol-emet",
+  "mergeSha": "2fc69c86ad49794141b65b1742764443c141800e",
+  "completedAtUtc": "2026-10-07T10:33:52.322Z",
+  "completeRunId": "2026-10-07T10:12:59.366Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T07:53:49.165Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 65600,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/entities.js",
+        "client/src/components/RecentlyDeleted.test.js"
+      ],
+      "part": null,
+      "bytes": 10211,
+      "contextBytes": 2471,
+      "promptTokens": 4512,
+      "completionTokens": 233,
+      "latencyMs": 25123,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RecentlyDeleted.vue"
+      ],
+      "part": null,
+      "bytes": 10490,
+      "contextBytes": 0,
+      "promptTokens": 3916,
+      "completionTokens": 125,
+      "latencyMs": 17630,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 10900,
+      "contextBytes": 0,
+      "promptTokens": 3832,
+      "completionTokens": 149,
+      "latencyMs": 16156,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 5074,
+      "contextBytes": 7273,
+      "promptTokens": 3980,
+      "completionTokens": 164,
+      "latencyMs": 17415,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/changelog.js"
+      ],
+      "part": null,
+      "bytes": 11427,
+      "contextBytes": 0,
+      "promptTokens": 3953,
+      "completionTokens": 402,
+      "latencyMs": 31410,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/restore.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12663,
+      "contextBytes": 0,
+      "promptTokens": 4452,
+      "completionTokens": 155,
+      "latencyMs": 20876,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/restore.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 5034,
+      "contextBytes": 7678,
+      "promptTokens": 4260,
+      "completionTokens": 148,
+      "latencyMs": 19941,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/entities.js",
+      "line": 53,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `getDeletedEntities` function does not handle potential errors from the server response.",
+      "scenario": "If the server returns an error when fetching deleted entities, the function will not handle it and may lead to unhandled promise rejections in the client.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `getDeletedEntities` function does not include any error handling for the server response."
+      }
+    },
+    {
+      "file": "client/src/api/entities.js",
+      "line": 76,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `restoreEntity` function does not handle potential errors from the server response.",
+      "scenario": "If the server returns an error when restoring an entity, the function will not handle it and may lead to unhandled promise rejections in the client.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `restoreEntity` function does not include any error handling for the server response."
+      }
+    },
+    {
+      "file": "client/src/components/RecentlyDeleted.vue",
+      "line": 235,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The 'SESSION_EXPIRED' message is not localized.",
+      "scenario": "If a user's session expires, the error message 'Your session has expired. Sign in again to restore an entity.' will be displayed in English regardless of the user's language settings.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The 'SESSION_EXPIRED' message is hardcoded in English and not localized."
+      }
+    },
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 41,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The rollback route does not handle the case where a deleted entity's snapshot category is missing.",
+      "scenario": "When attempting to restore an entity with a snapshot that references a category no longer present in the workspace, the rollback route should return a 400 error indicating the stale snapshot category. However, the current implementation may not correctly handle this scenario, leading to potential data inconsistencies or errors.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The rollback route does not handle the case where a deleted entity's snapshot category is missing."
+      }
+    },
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 188,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The rollback route does not handle the case where a deleted entity is restored and then deleted again, leading to potential confusion for users.",
+      "scenario": "A user deletes an entity, restores it using the rollback feature, and then deletes it again. When attempting to restore the entity again, the system should indicate that the entity has been restored before and cannot be restored again.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code checks if the entity is live again before restoring it, but does not handle the case where a deleted entity is restored and then deleted again."
+      }
+    },
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 292,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The rollback route does not handle the case where a deleted entity is restored and then deleted again, leading to potential data inconsistency.",
+      "scenario": "A user deletes an entity, restores it using the rollback feature, and then deletes it again. When attempting to restore the entity again, the system should indicate that the entity has been deleted again and cannot be restored.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code checks if the entity is live before restoring it (line 188), but it does not handle the case where the entity was restored and then deleted again."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/changelog.js:41"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "Two functions do not handle potential errors from the server response, which could lead to unhandled promise rejections in the client. · One finding identified: localization issue for session expiration message. · One high-severity finding identified. · The rollback route does not handle the case where a deleted entity's snapshot is missing, leading to potential data loss. · The rollback route does not handle all possible scenarios for restoring a deleted entity, leading to potential confusion and data inconsistency for users. · One high-severity finding identified in the test file. · The test does not verify that the restored entity is correctly linked to its relationships.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 98727,
+    "completionTokens": 2720
+  },
+  "latencyMs": 382404
+}

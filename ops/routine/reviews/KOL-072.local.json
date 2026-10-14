@@ -1,0 +1,143 @@
+{
+  "item": "KOL-072",
+  "repo": "kol-emet",
+  "mergeSha": "bd9934ff3deafb1c8e0d177cc5605c5ec62c465e",
+  "completedAtUtc": "2026-10-10T21:37:38.043Z",
+  "completeRunId": "2026-10-10T21:10:28.980Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:44:29.690Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 33721,
+  "contextFiles": 7,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/ShortcutCheatsheet.vue",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 11845,
+      "contextBytes": 0,
+      "promptTokens": 4382,
+      "completionTokens": 125,
+      "latencyMs": 18972,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "client/src/composables/useKeyboardShortcuts.js",
+        "docs/wishlist.md"
+      ],
+      "part": null,
+      "bytes": 8808,
+      "contextBytes": 0,
+      "promptTokens": 3347,
+      "completionTokens": 149,
+      "latencyMs": 16939,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10759,
+      "contextBytes": 0,
+      "promptTokens": 3576,
+      "completionTokens": 171,
+      "latencyMs": 16419,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 2532,
+      "contextBytes": 10189,
+      "promptTokens": 4017,
+      "completionTokens": 157,
+      "latencyMs": 17262,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "kol_emet_spec.md",
+      "line": 403,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `router.param` middleware is registered on specific routes but not on `/relationship-types/:id`, which still answers 500 for a malformed id.",
+      "scenario": "A client sends a request with a malformed id to the `/relationship-types/:id` route. The server should respond with a 400 status code and an error message indicating that the id is invalid, but instead it throws a `CastError` and responds with a 500 status code.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The finding correctly identifies that the `router.param` middleware is not registered on `/relationship-types/:id`, which leads to a 500 error for malformed ids."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified: The test for closing the cheatsheet on a click outside does not actually check if the overlay is closed after the click. · One finding identified: The `closeTopLayer` function does not handle multiple layers correctly when `Escape` is pressed. · One high-severity defect found in kol_emet_spec.md. · One finding identified: potential startup failure due to missing labels for keyboard shortcuts.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 45775,
+    "completionTokens": 1296
+  },
+  "latencyMs": 187644
+}

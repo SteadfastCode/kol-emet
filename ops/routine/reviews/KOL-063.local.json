@@ -1,0 +1,130 @@
+{
+  "item": "KOL-063",
+  "repo": "kol-emet",
+  "mergeSha": "2bc1c8a8a461b56aa03719f5d3b607e256f99ba2",
+  "completedAtUtc": "2026-10-07T11:13:57.227Z",
+  "completeRunId": "2026-10-07T10:12:59.366Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:06:24.278Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 26166,
+  "contextFiles": 7,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/GraphView.vue",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 11167,
+      "contextBytes": 0,
+      "promptTokens": 4140,
+      "completionTokens": 145,
+      "latencyMs": 19303,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "client/src/composables/useKeyboardShortcuts.js",
+        "docs/wishlist.md"
+      ],
+      "part": null,
+      "bytes": 7102,
+      "contextBytes": 4506,
+      "promptTokens": 4242,
+      "completionTokens": 152,
+      "latencyMs": 17245,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 7897,
+      "contextBytes": 0,
+      "promptTokens": 3138,
+      "completionTokens": 125,
+      "latencyMs": 12223,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/WikiLayout.test.js",
+      "line": 295,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the search input is focused when `/` is pressed while another input has focus.",
+      "scenario": "When `/` is pressed while another input (e.g., a textarea) has focus, the search input should be focused without typing the `/` character. The current test only checks the scenario where the search input does not have focus.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not cover the scenario where another input (e.g., a textarea) has focus when `/` is pressed."
+      }
+    },
+    {
+      "file": "client/src/composables/useKeyboardShortcuts.js",
+      "line": 10,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Escape key handling may conflict with other global listeners.",
+      "scenario": "If another component or library also registers a global 'keydown' listener for the Escape key, it could lead to unexpected behavior where multiple layers are closed simultaneously instead of walking back out as intended.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not prevent other components from registering their own global 'keydown' listeners for the Escape key."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified in the provided diff. · One finding identified: potential TypeError in `focusSearch` function due to null or undefined `sidebarRef.value`. · One potential defect found in the change.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 34408,
+    "completionTokens": 925
+  },
+  "latencyMs": 129406
+}

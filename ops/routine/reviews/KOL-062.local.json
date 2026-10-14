@@ -1,0 +1,267 @@
+{
+  "item": "KOL-062",
+  "repo": "kol-emet",
+  "mergeSha": "8e6698ce7d9799ad9e7f67697d135d42093a3045",
+  "completedAtUtc": "2026-10-07T11:01:31.913Z",
+  "completeRunId": "2026-10-07T10:12:59.366Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:04:14.729Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 77029,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/.env.example"
+      ],
+      "part": null,
+      "bytes": 11706,
+      "contextBytes": 0,
+      "promptTokens": 3818,
+      "completionTokens": 418,
+      "latencyMs": 31748,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 3,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/app.js"
+      ],
+      "part": null,
+      "bytes": 1982,
+      "contextBytes": 6736,
+      "promptTokens": 2986,
+      "completionTokens": 170,
+      "latencyMs": 16619,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/broadcaster.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12938,
+      "contextBytes": 0,
+      "promptTokens": 4353,
+      "completionTokens": 139,
+      "latencyMs": 17574,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/broadcaster.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 2501,
+      "contextBytes": 4916,
+      "promptTokens": 2862,
+      "completionTokens": 123,
+      "latencyMs": 14210,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js",
+        "server/src/routes/events.js"
+      ],
+      "part": null,
+      "bytes": 4843,
+      "contextBytes": 8184,
+      "promptTokens": 4223,
+      "completionTokens": 145,
+      "latencyMs": 17317,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/events.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 13025,
+      "contextBytes": 0,
+      "promptTokens": 4349,
+      "completionTokens": 148,
+      "latencyMs": 20205,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/events.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 9594,
+      "contextBytes": 0,
+      "promptTokens": 3460,
+      "completionTokens": 115,
+      "latencyMs": 15545,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/broadcaster.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8498,
+      "contextBytes": 0,
+      "promptTokens": 3264,
+      "completionTokens": 165,
+      "latencyMs": 15251,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/broadcaster.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12543,
+      "contextBytes": 0,
+      "promptTokens": 4370,
+      "completionTokens": 163,
+      "latencyMs": 18754,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/events.js",
+      "line": 30,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The `sessionAlive` function is not defined or imported in this file.",
+      "scenario": "When a client connects to the `/events` stream, the `addClient` function is called with an object that includes `sessionAlive`. However, `sessionAlive` is not defined anywhere in the provided diff or context. This will result in a runtime error.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The symbol `sessionAlive` used but not defined in what you see exists elsewhere."
+      }
+    },
+    {
+      "file": "server/tests/http/events.test.js",
+      "line": 279,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `openStream` function does not handle the case where the server responds with a non-200 status code.",
+      "scenario": "If the server responds with a non-200 status code, the `openStream` function will resolve immediately without checking the response body. This can lead to tests passing when they should fail because the stream was not opened successfully.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `openStream` function resolves as soon as the response head arrives, regardless of the status code."
+      }
+    },
+    {
+      "file": "server/tests/unit/broadcaster.test.js",
+      "line": 402,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test 'a closed stream frees the slot' does not correctly verify that a closed stream frees the slot.",
+      "scenario": "In the test, after closing a stream with `removeClient('tab-a')`, it checks if a new connection is accepted. However, the test does not wait for the sweep to occur, which is responsible for actually freeing up the slot. As a result, the test may pass even if the slot is not freed immediately.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not wait for the sweep to occur after closing the stream with `removeClient('tab-a')`, which means it does not verify that the slot is actually freed."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/events.js:1"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/lib/broadcaster.js:20"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The `/events` stream does not properly handle session deletion or exceeding the stream limit, which can lead to security vulnerabilities and performance issues. Additionally, the logging is insufficient for diagnosing issues with stream management. · One high-severity issue found: The `sessionAlive` function does not handle falsy values returned by the session store correctly, which could lead to unexpected behavior. · One potential defect found in the diff. · One finding identified. · One finding identified: missing definition of `sessionAlive` function. · One high-severity issue found in the diff. · One finding identified in the provided diff. · One finding identified in the provided diff. · One finding identified in the diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 108259,
+    "completionTokens": 3346
+  },
+  "latencyMs": 438733
+}

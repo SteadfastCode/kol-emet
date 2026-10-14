@@ -1,0 +1,188 @@
+{
+  "item": "KOL-059",
+  "repo": "kol-emet",
+  "mergeSha": "1c273f6c85419aee438e05bf695fb124a9be57cf",
+  "completedAtUtc": "2026-10-07T04:09:29.567Z",
+  "completeRunId": "2026-10-07T03:10:01.491Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T07:47:26.603Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 57659,
+  "contextFiles": 8,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/entities.js",
+        "client/src/components/EntityDetail.test.js"
+      ],
+      "part": null,
+      "bytes": 10408,
+      "contextBytes": 2321,
+      "promptTokens": 4517,
+      "completionTokens": 158,
+      "latencyMs": 21096,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityDetail.vue"
+      ],
+      "part": null,
+      "bytes": 11180,
+      "contextBytes": 0,
+      "promptTokens": 4004,
+      "completionTokens": 153,
+      "latencyMs": 19343,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/entityTypeRegistry.js"
+      ],
+      "part": null,
+      "bytes": 10304,
+      "contextBytes": 0,
+      "promptTokens": 3589,
+      "completionTokens": 183,
+      "latencyMs": 19314,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/changelog.js"
+      ],
+      "part": null,
+      "bytes": 8013,
+      "contextBytes": 0,
+      "promptTokens": 3014,
+      "completionTokens": 120,
+      "latencyMs": 12149,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/rollback.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12691,
+      "contextBytes": 0,
+      "promptTokens": 4321,
+      "completionTokens": 144,
+      "latencyMs": 17463,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/rollback.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 5265,
+      "contextBytes": 7472,
+      "promptTokens": 4191,
+      "completionTokens": 210,
+      "latencyMs": 22847,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/entities.js",
+      "line": 34,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Error handling for non-JSON responses in fetch is incomplete.",
+      "scenario": "If the server responds with a non-JSON body (e.g., plain text or HTML), `res.json().catch(() => null)` will return `null`, and `body?.error` will be `undefined`. The error message will then default to `${res.status} ${res.statusText}`, which might not provide enough context for debugging or user feedback.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`res.json().catch(() => null)` returning `null` when the response is not JSON, leading to a generic error message."
+      }
+    },
+    {
+      "file": "client/src/components/EntityDetail.vue",
+      "line": 105,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Potential issue with history loading and error handling.",
+      "scenario": "If the `getEntityHistory` call fails due to a network issue or server error, the `historyError` message is set but the component does not provide any visual indication of the error to the user. This could lead to confusion as the user might think there is no history available.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code sets `historyError` when `getEntityHistory` fails, but it does not provide any visual indication of this error to the user."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/changelog.js:27"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/changelog.js:27"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One potential defect found in the provided diff. · One potential issue found in the client-side code related to error handling during history loading. · The rollback route does not handle the case where the snapshot's category is no longer registered and a new category is provided in the request body. · One finding identified in the diff. · One test case is incomplete and does not verify the expected behavior. · The provided diff introduces a new test file `server/tests/http/rollback.test.js` with several tests related to entity rollbacks, including handling of renamed and deleted entity types. However, there is a potential issue where the rollback route's behavior for deleted types when no category is provided in the request body is not fully tested.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 70663,
+    "completionTokens": 2013
+  },
+  "latencyMs": 293773
+}

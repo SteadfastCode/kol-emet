@@ -1,0 +1,186 @@
+{
+  "item": "KOL-064",
+  "repo": "kol-emet",
+  "mergeSha": "a8d0d5c1ccaa866aa7e0fc9fe313549b994f6973",
+  "completedAtUtc": "2026-10-08T06:27:06.715Z",
+  "completeRunId": "2026-10-08T06:08:28.937Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:09:52.465Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 22567,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 2611,
+      "contextBytes": 11387,
+      "promptTokens": 4466,
+      "completionTokens": 123,
+      "latencyMs": 19176,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13972,
+      "contextBytes": 0,
+      "promptTokens": 4430,
+      "completionTokens": 454,
+      "latencyMs": 36175,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 2,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 6248,
+      "contextBytes": 7723,
+      "promptTokens": 4280,
+      "completionTokens": 420,
+      "latencyMs": 33915,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "FEATURES.md",
+      "line": 47,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Duplicate item with the same ID and description.",
+      "scenario": "The diff adds a new item with ID KOL-073, which is identical to an existing item in the 'Workqueue Items' section. This duplication could lead to confusion and potential double execution of the same task.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff adds a new item with ID KOL-073, which is identical to an existing item in the 'Workqueue Items' section."
+      }
+    },
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 66,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Pagination logic is not implemented in the GET /entities route.",
+      "scenario": "When a client requests `GET /entities` with pagination parameters (`limit` and `after`), the server does not correctly paginate the results, leading to potential data leakage or incorrect responses.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not implement pagination logic for the GET /entities route."
+      }
+    },
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 99,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Malformed ID handling is not implemented in the GET /entities/:id route.",
+      "scenario": "When a client requests `GET /entities/:id` with a malformed ID, the server returns a 500 error instead of a 400 error, exposing internal error messages and potentially revealing information about other workspaces.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle malformed IDs in the GET /entities/:id route, leading to a 500 error with internal details."
+      }
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 143,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "`POST /auth/register` hard-codes `name: 'My Workspace'`, which may not be suitable for all users.",
+      "scenario": "A new user registers without providing a workspace name, resulting in the default 'My Workspace', which might not reflect their actual needs or preferences.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code hard-codes `name: 'My Workspace'` in `server/src/routes/auth.js:143`, and there is no mechanism to override this default unless the user provides a workspace name during registration."
+      }
+    },
+    {
+      "file": "server/src/routes/workspace.js",
+      "line": 1,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "`GET /workspace` and `PATCH /workspace` routes are added but not fully tested for edge cases.",
+      "scenario": "An unauthenticated user attempts to access or modify a workspace, resulting in unauthorized access or modification.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`server/tests/http/workspace.test.js` includes tests for unauthenticated calls, expecting a 401 response."
+      }
+    },
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 1,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "`WikiLayout` component does not handle workspace name changes dynamically.",
+      "scenario": "A user renames their workspace, but the UI does not update to reflect the new name until a page refresh.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not show any mechanism for updating the workspace name in real-time within the `WikiLayout` component."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:143"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "Found 1 real defect. · The proposed changes introduce several features that are not fully implemented in the code. This includes pagination and search logic, malformed ID handling, and workspace export functionality. These issues could lead to data leakage, incorrect responses, or internal error exposure. · The diff introduces several features related to workspace management and keyboard shortcuts. However, there are potential issues with hard-coded defaults, lack of comprehensive testing for edge cases, and dynamic UI updates that need addressing.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 65199,
+    "completionTokens": 1752
+  },
+  "latencyMs": 208136
+}

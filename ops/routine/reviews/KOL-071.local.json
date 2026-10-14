@@ -1,0 +1,274 @@
+{
+  "item": "KOL-071",
+  "repo": "kol-emet",
+  "mergeSha": "8043cf048acb94f0e55e773256863b7c4b2b9769",
+  "completedAtUtc": "2026-10-10T21:27:34.429Z",
+  "completeRunId": "2026-10-10T21:10:28.980Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:41:21.894Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 76259,
+  "contextFiles": 13,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/auth.js",
+        "client/src/api/workspace.js",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 11821,
+      "contextBytes": 0,
+      "promptTokens": 4293,
+      "completionTokens": 137,
+      "latencyMs": 19360,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "client/src/views/LoginView.test.js"
+      ],
+      "part": null,
+      "bytes": 10960,
+      "contextBytes": 0,
+      "promptTokens": 3964,
+      "completionTokens": 128,
+      "latencyMs": 15284,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/views/LoginView.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 8843,
+      "contextBytes": 0,
+      "promptTokens": 3448,
+      "completionTokens": 160,
+      "latencyMs": 15042,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 9916,
+      "contextBytes": 0,
+      "promptTokens": 3579,
+      "completionTokens": 431,
+      "latencyMs": 28869,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3837,
+      "contextBytes": 7881,
+      "promptTokens": 3964,
+      "completionTokens": 144,
+      "latencyMs": 16067,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/app.js",
+        "server/src/middleware/workspace.js",
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 11299,
+      "contextBytes": 0,
+      "promptTokens": 4130,
+      "completionTokens": 176,
+      "latencyMs": 18382,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/workspace.js"
+      ],
+      "part": null,
+      "bytes": 4867,
+      "contextBytes": 0,
+      "promptTokens": 2467,
+      "completionTokens": 122,
+      "latencyMs": 10319,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/workspace.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12052,
+      "contextBytes": 0,
+      "promptTokens": 4324,
+      "completionTokens": 128,
+      "latencyMs": 16209,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/workspace.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3092,
+      "contextBytes": 5532,
+      "promptTokens": 3408,
+      "completionTokens": 141,
+      "latencyMs": 14142,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/workspace.js",
+      "line": 75,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `renameWorkspace` function does not validate the length of the new workspace name before sending it to the server.",
+      "scenario": "If a user enters a workspace name that is longer than 80 characters, the client will send it to the server without trimming or validation, potentially leading to a 400 error.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `renameWorkspace` function does not validate the length of the new workspace name before sending it to the server."
+      }
+    },
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 246,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `workspaceDraft` is not reset when the settings are closed and reopened.",
+      "scenario": "If a user opens the settings, types a new workspace name, then closes and reopens the settings without saving, the input field will still show the previously typed name.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `workspaceDraft` is not reset when the settings are closed and reopened."
+      }
+    },
+    {
+      "file": "server/src/routes/workspace.js",
+      "line": 86,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The PATCH /workspace endpoint does not validate that the new workspace name is unique.",
+      "scenario": "An owner attempts to rename their workspace to a name that already exists. The API will update the workspace with the duplicate name, leading to confusion and potential data inconsistency.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The PATCH /workspace endpoint does not check for uniqueness of the new workspace name before updating it."
+      }
+    },
+    {
+      "file": "server/tests/http/workspace.test.js",
+      "line": 143,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the workspace name is trimmed before validation.",
+      "scenario": "If a user sends a name with leading or trailing whitespace, the PATCH /workspace endpoint should trim it before checking its length and validity. The current test cases do not cover this scenario.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the workspace name is trimmed before validation."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/api/auth.js:25"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One potential defect found in the code change. · One potential issue found in the code change. · One potential issue found: client-side validation for workspace name input is missing. · The change introduces a new feature for searching entities by keyword and category/tag pills. The search box asks the server, which knows block content, while the category and tag pills stay in the browser. However, KOL-061's list projection makes this gap permanent, and the browser does not have the text it was failing to search. · Found 1 real defect in the change. · The change introduces a new feature to allow users to specify a workspace name during registration, but it does not handle the case where the provided name is invalid or missing. The server defaults to 'My Workspace' in such cases, which may not be desirable for all users. · One defect found in the change. · One potential defect found in the provided diff. · One real defect found.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 100482,
+    "completionTokens": 3133
+  },
+  "latencyMs": 389948
+}

@@ -1,0 +1,336 @@
+{
+  "item": "KOL-070",
+  "repo": "kol-emet",
+  "mergeSha": "9f9538cbd1c6b7df04208b8a8813009e9f452498",
+  "completedAtUtc": "2026-10-10T15:11:50.278Z",
+  "completeRunId": "2026-10-10T14:08:28.940Z",
+  "reviewRunId": "2026-10-14T07:02:31.936Z",
+  "reviewedAtUtc": "2026-10-14T08:34:51.724Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 77933,
+  "contextFiles": 10,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/export.js",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 9550,
+      "contextBytes": 0,
+      "promptTokens": 3576,
+      "completionTokens": 162,
+      "latencyMs": 18169,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 6918,
+      "contextBytes": 0,
+      "promptTokens": 3025,
+      "completionTokens": 170,
+      "latencyMs": 14341,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8246,
+      "contextBytes": 0,
+      "promptTokens": 3211,
+      "completionTokens": 169,
+      "latencyMs": 14737,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4441,
+      "contextBytes": 6974,
+      "promptTokens": 3932,
+      "completionTokens": 153,
+      "latencyMs": 16294,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/app.js"
+      ],
+      "part": null,
+      "bytes": 1162,
+      "contextBytes": 7615,
+      "promptTokens": 3151,
+      "completionTokens": 146,
+      "latencyMs": 13646,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/graphExporter.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12143,
+      "contextBytes": 0,
+      "promptTokens": 4386,
+      "completionTokens": 128,
+      "latencyMs": 16691,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/graphExporter.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 801,
+      "contextBytes": 3466,
+      "promptTokens": 2241,
+      "completionTokens": 122,
+      "latencyMs": 12243,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/export.js"
+      ],
+      "part": null,
+      "bytes": 3001,
+      "contextBytes": 0,
+      "promptTokens": 1920,
+      "completionTokens": 102,
+      "latencyMs": 7619,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/export.test.js"
+      ],
+      "part": null,
+      "bytes": 11335,
+      "contextBytes": 0,
+      "promptTokens": 4070,
+      "completionTokens": 141,
+      "latencyMs": 15945,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/graphExporter.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12168,
+      "contextBytes": 0,
+      "promptTokens": 4351,
+      "completionTokens": 150,
+      "latencyMs": 17832,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/graphExporter.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8802,
+      "contextBytes": 0,
+      "promptTokens": 3560,
+      "completionTokens": 159,
+      "latencyMs": 18175,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/export.js",
+      "line": 85,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The function `downloadWorkspaceExport` does not handle the case where the response body is not JSON.",
+      "scenario": "If the server returns a non-JSON response body for an error, the `res.json().catch(() => null)` will catch the error and return `null`. When trying to access `body?.error`, it will throw a TypeError because `body` is `null`. This can lead to an unhandled exception in the function.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle the case where the response body is not JSON, leading to a potential TypeError."
+      }
+    },
+    {
+      "file": "kol_emet_spec.md",
+      "line": 401,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The description of the export feature does not match the actual implementation.",
+      "scenario": "The description states that `GET /export` returns a JSON document with specific fields, but it does not mention that the exported file is named using an ASCII slug of the workspace name. This could lead to confusion for users who expect the filename to be based on the original workspace name.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The description states that `GET /export` returns a JSON document with specific fields, but it does not mention that the exported file is named using an ASCII slug of the workspace name."
+      }
+    },
+    {
+      "file": "server/src/routes/export.js",
+      "line": 42,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Potential security issue: filename interpolation in header.",
+      "scenario": "If the workspace name contains special characters or is crafted maliciously, it could lead to HTTP response splitting attacks.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The filename is interpolated directly into the Content-Disposition header without sanitization."
+      }
+    },
+    {
+      "file": "server/tests/http/export.test.js",
+      "line": 215,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the exported JSON is byte-identical on repeated exports.",
+      "scenario": "When exporting the same workspace multiple times, the resulting JSON files may differ due to non-deterministic factors such as timestamps or ordering of objects with the same key.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the exported JSON is byte-identical on repeated exports."
+      }
+    },
+    {
+      "file": "server/tests/unit/graphExporter.test.js",
+      "line": 195,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the 'entityTypes' collection is sorted by 'order' then 'name'.",
+      "scenario": "The test checks that each collection has documented keys and is non-empty, but it does not specifically verify the sorting order of the 'entityTypes' collection. This could lead to a situation where the exported document does not meet the requirement of being deterministic.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not explicitly check that the 'entityTypes' collection is sorted by 'order' then 'name'."
+      }
+    },
+    {
+      "file": "server/tests/unit/graphExporter.test.js",
+      "line": 190,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the exported JSON is byte-identical when exported twice with different timestamps.",
+      "scenario": "When exporting a workspace graph twice with different `exportedAt` timestamps, the resulting JSON strings are compared without considering the timestamp difference. This could lead to false positives in tests if other parts of the export process are not deterministic.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test compares two exports with different `exportedAt` timestamps but does not verify that the rest of the JSON is byte-identical."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/app.js:1"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One potential defect found in the provided diff. · One potential defect found in the code change. · One finding related to the search box and pills functionality. · One finding identified: mismatch between description and implementation in kol_emet_spec.md · One potential issue found in the code change. · One defect found: The 'openQuestions' collection is not included in the final export. · One high-severity finding identified. · One potential security issue found. · One finding identified: The test does not verify that the exported JSON is byte-identical on repeated exports. · One finding identified in the provided diff. · One finding identified: The test does not verify that the exported JSON is byte-identical when exported twice with different timestamps.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 111767,
+    "completionTokens": 3475
+  },
+  "latencyMs": 434074
+}
