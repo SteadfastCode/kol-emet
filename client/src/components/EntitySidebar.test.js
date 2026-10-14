@@ -10,7 +10,9 @@
  * for a reason that appears nowhere on its card — and a result with no visible reason is the thing
  * this line exists to prevent. `useFilters` decides which rows get it (see its own tests); what is
  * pinned here is that the sidebar renders it, on those rows only, without swallowing the click that
- * opens the entity.
+ * opens the entity. The same group covers the capped-result line (KOL-082), for the same reason:
+ * the request now asks for the first N matches rather than every one, and a truncated set that says
+ * nothing is a search presenting a page as its answer.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -139,5 +141,28 @@ describe('EntitySidebar search results', () => {
 
     await wrapper.setProps({ searching: false });
     expect(wrapper.get('.entity-count').text()).toBe('2 entities');
+  });
+
+  // A search asks for the first `SEARCH_RESULT_LIMIT` matches (KOL-082), so for a common term the
+  // rows on screen are a page of the matches. The count line above counts those rows and knows
+  // nothing of the rest; unsaid, that reads as the whole answer.
+  it('says how many matches the server held back when it capped the set', async () => {
+    const wrapper = mountSidebar({
+      entities: RESULTS,
+      searchQuery: 'a',
+      searchTruncation: { returned: 200, total: 1284 },
+    });
+    await flushPromises();
+
+    const capped = wrapper.get('.search-capped').text();
+    expect(capped).toContain('First 200 of 1284 matches');
+    expect(capped).toContain('narrow the search');
+  });
+
+  it('says nothing about a cap when the server sent every match', async () => {
+    const wrapper = mountSidebar({ entities: RESULTS, searchQuery: 'boiler', searchTruncation: null });
+    await flushPromises();
+
+    expect(wrapper.find('.search-capped').exists()).toBe(false);
   });
 });

@@ -11,6 +11,7 @@
         :selected-id="activePanelId"
         :loading="sidebarLoading"
         :searching="searching"
+        :search-truncation="searchTruncation"
         :graph-open="graphOpen"
         @search="searchQuery = $event"
         @set-cat="setCat"
@@ -338,7 +339,7 @@ const {
 // The request is handed in rather than imported by the composable, so the
 // filters themselves still reach nothing. The pills stay in the browser.
 const {
-  searchQuery, activeCat, activeTag, filtered, searching,
+  searchQuery, activeCat, activeTag, filtered, searching, searchTruncation,
   setCat, setTag, clearTag, resetFilters,
 } = useFilters(entities, { search: searchEntities });
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();

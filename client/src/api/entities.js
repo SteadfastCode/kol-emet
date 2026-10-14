@@ -62,6 +62,14 @@ export const getEntityPage = ({ limit = ENTITY_PAGE_SIZE, after = null } = {}) =
 };
 
 /**
+ * The most matches one search will ask for. The same number as
+ * `ENTITY_PAGE_SIZE` — both are `LIST_LIMIT_MAX`, the most rows the route
+ * serves in one response — but named apart from it, because a page size is a
+ * step through a list and this is the whole answer a reader gets.
+ */
+export const SEARCH_RESULT_LIMIT = 200;
+
+/**
  * The workspace's entities matching a keyword, as `GET /entities?q=` matches it
  * (KOL-068): case-insensitively, literally, against a title, a summary, **or
  * any block's markdown**.
@@ -72,18 +80,37 @@ export const getEntityPage = ({ limit = ENTITY_PAGE_SIZE, after = null } = {}) =
  * text could not be searched in the browser at all, however the loaded list was
  * filtered. Asking the server is the only place that word is known.
  *
- * Deliberately unpaged: no `?limit=`, so the response is the bare array this
- * route has always answered rather than `getEntityPage`'s envelope. A result
- * set is a search's whole answer, and `useFilters` narrows it with the category
- * and tag pills in the browser — a page boundary would make a pill able to hide
- * rows that exist. The route's own regex escaping and length cap bound the work
- * (server/src/lib/searchFilter.js).
+ * Capped, not paged (KOL-082). This used to send no `?limit=` at all, on the
+ * reasoning that a result set is a search's whole answer and `useFilters`
+ * narrows it with the pills in the browser, so a page boundary would let a pill
+ * hide rows that exist. True, and beside a worse problem: no `?limit=` is the
+ * unbounded bare array, so a typed `a` — which matches nearly every entity in a
+ * workspace — serialized the workspace's entire row set on the single event
+ * loop every tenant of this API shares, every 250ms-debounced word. That is the
+ * exact read `KOL-067` took off the initial load (`LIST_LIMIT_MAX`'s comment in
+ * server/src/routes/entities.js), reachable from the search box.
+ *
+ * So the request opts into the envelope — `{ items, nextAfter, total }` — and
+ * takes the first page only. There is still no second request: nobody pages a
+ * search here, and a cap and a page boundary are different promises. `total` is
+ * the match count for the whole term and `nextAfter` is the server saying it
+ * held a row back, which is what lets the sidebar say "first 200 of 1,284"
+ * instead of passing a truncated set off as the answer. A reader who wants the
+ * rest narrows the term — which is both cheaper and what they actually want
+ * from a 1,284-row "search".
  *
  * The rows come back under the list projection, so they carry no `blocks`:
  * `useFilters` is what works out which of them matched out of sight.
+ *
+ * @param {string} term the keyword, sent as typed (the server trims, caps at
+ *   `MAX_TERM_LENGTH` and regex-escapes it)
+ * @param {{ limit?: number }} opts
+ * @returns {Promise<{ items: object[], nextAfter: { title: string, _id: string }|null, total: number }>}
  */
-export const searchEntities = (term) =>
-  req(`/entities?q=${encodeURIComponent(term)}`);
+export const searchEntities = (term, { limit = SEARCH_RESULT_LIMIT } = {}) => {
+  const params = new URLSearchParams({ q: term, limit: String(limit) });
+  return req(`/entities?${params}`);
+};
 
 export const getEntity = (id) => req(`/entities/${id}`);
 export const createEntity = (data) => req('/entities', { method: 'POST', body: JSON.stringify(data) });

@@ -63,6 +63,18 @@
       <div class="entity-count">
         {{ entities.length }} entities<span v-if="searching"> · searching…</span>
       </div>
+
+      <!-- A search asks for the first `SEARCH_RESULT_LIMIT` matches and no more
+           (KOL-082): an unbounded `?q=` serialized a whole workspace on the one
+           event loop every tenant shares, for a single typed letter. The cap is
+           the fix; this line is what keeps it honest. Without it the count
+           above would present the first page of 1,284 matches as the answer,
+           and the pills would narrow that page while looking like they narrow
+           the search. -->
+      <div v-if="searchTruncation" class="search-capped">
+        First {{ searchTruncation.returned }} of {{ searchTruncation.total }} matches —
+        narrow the search to see the rest.
+      </div>
     </div>
 
     <!-- Entity list -->
@@ -122,6 +134,12 @@ const props = defineProps({
   selectedId: String,
   loading: Boolean,
   searching: Boolean,
+  /**
+   * `{ returned, total }` from useFilters when the server capped the result
+   * set, null otherwise. Not derivable here: `entities` is already narrowed by
+   * the pills, so its length is neither what the server sent nor what matched.
+   */
+  searchTruncation: Object,
   graphOpen: Boolean,
 });
 
@@ -223,6 +241,15 @@ defineExpose({ focusSearch });
 .entity-count {
   font-size: 11px;
   color: #3a3a3a;
+}
+
+/* Brighter than the count it follows: it is a caveat on that count, and a
+   caveat nobody reads is the same as not having one. */
+.search-capped {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #8a7a4a;
 }
 
 .result-row { position: relative; }
