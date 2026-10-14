@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-084) Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc="tryClos…**
+- [x] **(KOL-084) Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc="tryClos…**
   Found by the grader of KOL-063 (high, client/src/components/WikiLayout.vue:690). Escape inside
   GeneratorOverlay closes two layers at once: the overlay's own `@keydown.esc="tryClose"`
   (GeneratorOverlay.vue:2) emits `close`, which synchronously sets `generatorOpen = false`, and
