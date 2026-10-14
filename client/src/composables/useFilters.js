@@ -21,7 +21,7 @@ import { useToasts } from './useToasts.js';
  * and tags, so a pill needs no request — and a pill press during a search
  * narrows the result set rather than restarting it.
  *
- * Two consequences worth knowing:
+ * Three consequences worth knowing:
  *
  *   A search result is not the loaded list. It can hold an entity the paged
  *   load has not reached yet, and it does not change when the list is
@@ -32,12 +32,21 @@ import { useToasts } from './useToasts.js';
  *   therefore no longer finds a row on the strength of that tag alone; the tag
  *   pills are the exact-match path, and `setTag` is unchanged.
  *
+ *   A result set is capped at the route's own maximum (KOL-082,
+ *   `SEARCH_RESULT_LIMIT` in api/entities.js), so for a term that matches more
+ *   entities than that, the rows the pills narrow are the first page of the
+ *   matches and not all of them — a pill can hide a row, and a row the cap cut
+ *   is nowhere in the browser to be hidden. `searchTruncation` is that fact,
+ *   for the sidebar to say out loud; without it a truncated set would read as
+ *   the whole answer.
+ *
  * Tiered debug logging: set localStorage.SEARCH_LOG_LEVEL to
  * off | light | normal | verbose (default light). A search is debounced,
  * asynchronous and raced, and none of that is visible in the sidebar — a row
  * that should be there and is not looks the same whichever step dropped it.
  *   light   — every query, naming its source (a typed term, a cleared box, a
- *             pill change) and the rows it ended up showing; every stale
+ *             pill change), the rows it ended up showing and the match count
+ *             they were cut from when the server capped them; every stale
  *             response discarded; every failure
  *   normal  — light, plus each keystroke that restarted the debounce, which is
  *             how coalescing is checked
@@ -81,8 +90,32 @@ function markBlockOnlyMatches(rows, term) {
 }
 
 /**
+ * Reads what the keyword request answered, in either shape it can arrive in.
+ *
+ * `searchEntities` sends `?limit=`, so the answer is the envelope —
+ * `{ items, nextAfter, total }`. `nextAfter` is the cap made visible: the
+ * server hands one out only when it had a row it did not send, which is a fact
+ * about the response rather than `total > items.length`, a comparison against a
+ * second query's count that a concurrent write can make disagree with the page.
+ *
+ * A bare array is still read, and is not dead code: `?limit=` is an opt-in, and
+ * this client and the API deploy independently (Netlify and Railway). A browser
+ * holding this build can be talking to an API from before the parameter
+ * existed, which answers the unpaged array to it — there is no cap to report
+ * then, which is exactly right, because there was none.
+ *
+ * @returns {{ rows: object[], total: number, truncated: boolean }}
+ */
+function readAnswer(answer) {
+  if (Array.isArray(answer)) return { rows: answer, total: answer.length, truncated: false };
+  const rows = Array.isArray(answer?.items) ? answer.items : [];
+  const total = Number.isInteger(answer?.total) ? answer.total : rows.length;
+  return { rows, total, truncated: Boolean(answer?.nextAfter) };
+}
+
+/**
  * @param {import('vue').Ref<object[]>} entries the loaded entity list
- * @param {{ search?: (term: string) => Promise<object[]>, debounceMs?: number }} opts
+ * @param {{ search?: (term: string) => Promise<object[]|{items: object[], nextAfter: object|null, total: number}>, debounceMs?: number }} opts
  *   `search` is the keyword request — `searchEntities` from api/entities.js at
  *   the one call site (WikiLayout). Injected rather than imported so this
  *   composable still reaches nothing by itself, and so its own tests can hand
@@ -101,6 +134,13 @@ export function useFilters(entries, { search = null, debounceMs = SEARCH_DEBOUNC
   const searchResults = ref(null);
   /** A query is in flight. The previous rows stay on screen while it is. */
   const searching = ref(false);
+  /**
+   * `{ returned, total }` when the server capped the current result set, null
+   * otherwise (including while no search is in play). The sidebar renders a
+   * line from it, which is the whole reason it is here: a capped set that says
+   * nothing is a search quietly answering a different question.
+   */
+  const searchTruncation = ref(null);
 
   const { addToast } = useToasts();
 
@@ -136,6 +176,7 @@ export function useFilters(entries, { search = null, debounceMs = SEARCH_DEBOUNC
     cancelPending();
     latest += 1;
     searchResults.value = null;
+    searchTruncation.value = null;
     searching.value = false;
     log('light', `cleared the search (source: ${source}) → ${filtered.value.length} row(s) from the loaded list`);
   }
@@ -148,15 +189,17 @@ export function useFilters(entries, { search = null, debounceMs = SEARCH_DEBOUNC
     const seq = ++latest;
     searching.value = true;
     try {
-      const rows = await search(term);
+      const answer = await search(term);
       if (seq !== latest) {
         log('light', `discarded a stale response for "${term}" (source: ${source}): a newer query started`);
         return;
       }
-      const marked = markBlockOnlyMatches(Array.isArray(rows) ? rows : [], term);
+      const { rows, total, truncated } = readAnswer(answer);
+      const marked = markBlockOnlyMatches(rows, term);
       searchResults.value = marked;
+      searchTruncation.value = truncated ? { returned: marked.length, total } : null;
       const hidden = marked.filter(r => r.matchedInText).length;
-      log('light', `"${term}" (source: ${source}) → ${marked.length} row(s), ${hidden} matched only in block text, ${filtered.value.length} shown after the pills`);
+      log('light', `"${term}" (source: ${source}) → ${marked.length} of ${total} match(es)${truncated ? ' — capped by the server, the rest are not in the browser' : ''}, ${hidden} matched only in block text, ${filtered.value.length} shown after the pills`);
       log('verbose', `titles: ${marked.map(r => `${r.title}${r.matchedInText ? ' (in text)' : ''}`).join(' | ')}`);
     } catch (err) {
       if (seq !== latest) {
@@ -165,7 +208,8 @@ export function useFilters(entries, { search = null, debounceMs = SEARCH_DEBOUNC
       }
       // Emptying the sidebar would read as "no matches" — an answer the server
       // never gave. The previous rows stay, and the toast is what says the
-      // box is no longer describing them.
+      // box is no longer describing them. `searchTruncation` stays with them:
+      // it describes the rows on screen, which have not changed.
       log('light', `"${term}" (source: ${source}) failed: ${err.message}; keeping the ${filtered.value.length} row(s) already shown`);
       addToast({ message: `Search failed — showing the previous results. ${err.message}` });
     } finally {
@@ -216,7 +260,7 @@ export function useFilters(entries, { search = null, debounceMs = SEARCH_DEBOUNC
   }
 
   return {
-    searchQuery, activeCat, activeTag, filtered, searching,
+    searchQuery, activeCat, activeTag, filtered, searching, searchTruncation,
     setCat, setTag, clearTag, resetFilters,
   };
 }

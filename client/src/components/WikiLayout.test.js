@@ -486,11 +486,13 @@ const BLOCKLESS = [
 ];
 
 /**
- * What `GET /entities?q=toolchain` answers (KOL-068): the same projected shape, and a row the loaded
- * list above does not contain. Neither row holds the term in its title or summary — that is what
- * "matched in text" means — so the server matched both inside a block.
+ * What `GET /entities?q=toolchain&limit=200` answers (KOL-068, capped by KOL-082): the envelope
+ * `?limit=` opts into, around the same projected shape, and a row the loaded list above does not
+ * contain. Neither row holds the term in its title or summary — that is what "matched in text"
+ * means — so the server matched both inside a block. `nextAfter: null` is the server saying these
+ * two were every match; `SERVER_ANSWER_CAPPED` below is the other case.
  */
-const SERVER_ANSWER = [
+const SERVER_ROWS = [
   {
     _id: 'e1', title: 'Boiler Room', category: 'Worlds', summary: 'Where the pressure comes from.',
     tags: ['engine'], open_questions: [], relationships: [],
@@ -500,6 +502,15 @@ const SERVER_ANSWER = [
     tags: [], open_questions: [], relationships: [],
   },
 ];
+
+const SERVER_ANSWER = { items: SERVER_ROWS, nextAfter: null, total: SERVER_ROWS.length };
+
+/** The same two rows as the first page of a term that matched 1,284 entities. */
+const SERVER_ANSWER_CAPPED = {
+  items: SERVER_ROWS,
+  nextAfter: { title: 'Coupling Rod', _id: 'e3' },
+  total: 1284,
+};
 
 const VirtualListStub = {
   props: ['items'],
@@ -567,6 +578,20 @@ describe('WikiLayout list over entities that carry no blocks', () => {
     expect(cards(wrapper)).toEqual(['Boiler Room', 'Coupling Rod']);
     // Neither row shows the term, so both carry the reason they are listed.
     expect(wrapper.findAll('.matched-in-text')).toHaveLength(2);
+  });
+
+  it('tells the reader when the server capped the result set', async () => {
+    vi.useFakeTimers();
+    searchEntities.mockResolvedValue(SERVER_ANSWER_CAPPED);
+    const wrapper = mountList();
+
+    await wrapper.get('.search-input').setValue('a');
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await flushPromises();
+
+    // The rows are the server's; the line is what stops them reading as all of them.
+    expect(cards(wrapper)).toEqual(['Boiler Room', 'Coupling Rod']);
+    expect(wrapper.get('.search-capped').text()).toContain('First 2 of 1284 matches');
   });
 
   it('puts the loaded list back when the box is cleared, without another request', async () => {

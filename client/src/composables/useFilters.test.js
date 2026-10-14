@@ -12,11 +12,17 @@
  * listed and is not looks identical whichever of them dropped it. So each one
  * is pinned here, over an injected request this file controls.
  *
+ * The result set is also capped now (KOL-082): the request sends `?limit=`, so the answer is the
+ * route's envelope and the rows can be the first page of the matches rather than all of them. A cap
+ * nobody is told about is a search answering a different question, so what the sidebar needs to say
+ * so — `searchTruncation` — is pinned here too, including that it is dropped when the box is.
+ *
  * Falsification: drop the `setTimeout` and the debounce case sees one request
  * per keystroke; drop the `seq !== latest` guard and the overtaken case ends on
  * the stale rows; assign `searchResults` in the `catch` and the failure case
  * empties the sidebar; filter `entries` instead of `searched` and the pill case
- * loses the rows the server found.
+ * loses the rows the server found; read `items` without `nextAfter` and the
+ * capped group reports no cap.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
@@ -41,6 +47,16 @@ const SERVER_ROWS = [
   row('e1', 'Boiler Room', { summary: 'Where the pressure comes from.', tags: ['engine'] }),
   row('e3', 'Coupling Rod', { category: 'Characters', summary: 'Holds the wheels in step.', tags: [] }),
 ];
+
+/**
+ * The envelope `?limit=` opts into, as `GET /entities` answers it. `nextAfter` is the server saying
+ * it held a row back, so `more` is what makes a result set a capped one.
+ */
+const answer = (rows, { total = rows.length, more = false } = {}) => ({
+  items: rows,
+  nextAfter: more ? { title: rows[rows.length - 1]?.title ?? 'x', _id: 'cursor' } : null,
+  total,
+});
 
 const titles = (list) => list.map((e) => e.title);
 
@@ -102,7 +118,7 @@ describe('useFilters with an empty box', () => {
 
 describe('useFilters search request', () => {
   it('coalesces a typed word into one request, after the debounce', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     for (const term of ['c', 'co', 'cou', 'coup']) filters.searchQuery.value = term;
@@ -117,7 +133,7 @@ describe('useFilters search request', () => {
   });
 
   it('shows the server result set rather than the loaded list', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     await type(filters, 'coupling');
@@ -128,7 +144,7 @@ describe('useFilters search request', () => {
   });
 
   it('marks the row whose only hit was inside a block, and only that row', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     await type(filters, 'Boiler');
@@ -148,14 +164,14 @@ describe('useFilters search request', () => {
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     expect(filters.searching.value).toBe(true);
 
-    inFlight.resolve(SERVER_ROWS);
+    inFlight.resolve(answer(SERVER_ROWS));
     await vi.advanceTimersByTimeAsync(0);
     expect(filters.searching.value).toBe(false);
   });
 
   it('discards an overtaken response rather than letting it replace a newer one', async () => {
     const slow = pending();
-    search.mockReturnValueOnce(slow.promise).mockResolvedValueOnce([row('e9', 'Signal Box')]);
+    search.mockReturnValueOnce(slow.promise).mockResolvedValueOnce(answer([row('e9', 'Signal Box')]));
     const filters = build();
 
     // The first query goes out and stays out.
@@ -167,7 +183,7 @@ describe('useFilters search request', () => {
     expect(titles(filters.filtered.value)).toEqual(['Signal Box']);
 
     // The first finally answers, and must change nothing.
-    slow.resolve(SERVER_ROWS);
+    slow.resolve(answer(SERVER_ROWS));
     await vi.advanceTimersByTimeAsync(0);
     expect(titles(filters.filtered.value)).toEqual(['Signal Box']);
     expect(search).toHaveBeenCalledTimes(2);
@@ -175,7 +191,7 @@ describe('useFilters search request', () => {
 
   it('keeps the previous results and raises a toast when a request fails', async () => {
     search
-      .mockResolvedValueOnce(SERVER_ROWS)
+      .mockResolvedValueOnce(answer(SERVER_ROWS))
       .mockRejectedValueOnce(new Error('503 Service Unavailable'));
     const filters = build();
 
@@ -194,7 +210,7 @@ describe('useFilters search request', () => {
   });
 
   it('lets a category pill narrow a server result set', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     await type(filters, 'coupling');
@@ -207,7 +223,7 @@ describe('useFilters search request', () => {
   });
 
   it('lets a tag pill narrow a server result set, with no second request', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     await type(filters, 'coupling');
@@ -220,7 +236,7 @@ describe('useFilters search request', () => {
 
 describe('useFilters clearing the box', () => {
   it('falls back to the loaded list', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     await type(filters, 'coupling');
@@ -233,7 +249,7 @@ describe('useFilters clearing the box', () => {
   });
 
   it('cancels a debounce that has not fired', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     filters.searchQuery.value = 'coup';
@@ -252,7 +268,7 @@ describe('useFilters clearing the box', () => {
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     filters.searchQuery.value = '';
 
-    slow.resolve(SERVER_ROWS);
+    slow.resolve(answer(SERVER_ROWS));
     await vi.advanceTimersByTimeAsync(0);
 
     // The box is empty, so the loaded list is what belongs on screen.
@@ -261,7 +277,7 @@ describe('useFilters clearing the box', () => {
   });
 
   it('resetFilters drops the search and both pills at once', async () => {
-    search.mockResolvedValue(SERVER_ROWS);
+    search.mockResolvedValue(answer(SERVER_ROWS));
     const filters = build();
 
     await type(filters, 'coupling');
@@ -274,6 +290,92 @@ describe('useFilters clearing the box', () => {
     expect(filters.activeCat.value).toBe('All');
     expect(filters.activeTag.value).toBe(null);
     expect(titles(filters.filtered.value)).toEqual(['Boiler Room', 'Alder Street']);
+  });
+});
+
+describe('useFilters over a capped result set', () => {
+  /** A term that matched far more than the route serves: two rows back, 1,284 matched. */
+  const CAPPED = answer(SERVER_ROWS, { total: 1284, more: true });
+
+  it('reports what the server held back, so the rows are not passed off as the answer', async () => {
+    search.mockResolvedValue(CAPPED);
+    const filters = build();
+
+    await type(filters, 'a');
+
+    expect(filters.searchTruncation.value).toEqual({ returned: 2, total: 1284 });
+    // The rows themselves are still the rows: the cap is a caveat, not a filter.
+    expect(titles(filters.filtered.value)).toEqual(['Boiler Room', 'Coupling Rod']);
+  });
+
+  it('reports nothing when the server sent every match it had', async () => {
+    search.mockResolvedValue(answer(SERVER_ROWS));
+    const filters = build();
+
+    await type(filters, 'coupling');
+
+    expect(filters.searchTruncation.value).toBe(null);
+  });
+
+  it('drops the cap when a later search is not capped', async () => {
+    search.mockResolvedValueOnce(CAPPED).mockResolvedValueOnce(answer(SERVER_ROWS));
+    const filters = build();
+
+    await type(filters, 'a');
+    expect(filters.searchTruncation.value).not.toBe(null);
+
+    await type(filters, 'coupling');
+    expect(filters.searchTruncation.value).toBe(null);
+  });
+
+  it('drops the cap when the box is emptied', async () => {
+    search.mockResolvedValue(CAPPED);
+    const filters = build();
+
+    await type(filters, 'a');
+    await type(filters, '');
+
+    // The loaded list is back in the sidebar, and it was never capped by a search.
+    expect(filters.searchTruncation.value).toBe(null);
+  });
+
+  it('keeps the cap when a follow-up request fails, because it describes the rows still shown', async () => {
+    search.mockResolvedValueOnce(CAPPED).mockRejectedValueOnce(new Error('503 Service Unavailable'));
+    const filters = build();
+
+    await type(filters, 'a');
+    await type(filters, 'ab');
+
+    expect(titles(filters.filtered.value)).toEqual(['Boiler Room', 'Coupling Rod']);
+    expect(filters.searchTruncation.value).toEqual({ returned: 2, total: 1284 });
+  });
+
+  it('does not let an overtaken capped response label a newer uncapped one', async () => {
+    const slow = pending();
+    search.mockReturnValueOnce(slow.promise).mockResolvedValueOnce(answer([row('e9', 'Signal Box')]));
+    const filters = build();
+
+    filters.searchQuery.value = 'a';
+    await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+    await type(filters, 'signal');
+
+    slow.resolve(CAPPED);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(titles(filters.filtered.value)).toEqual(['Signal Box']);
+    expect(filters.searchTruncation.value).toBe(null);
+  });
+
+  it('still reads a bare array, which is what an API from before ?limit= answers', async () => {
+    // The client and the API deploy separately (Netlify and Railway), so this browser can be
+    // talking to one that ignores the parameter. The rows are the answer and there is no cap.
+    search.mockResolvedValue(SERVER_ROWS);
+    const filters = build();
+
+    await type(filters, 'coupling');
+
+    expect(titles(filters.filtered.value)).toEqual(['Boiler Room', 'Coupling Rod']);
+    expect(filters.searchTruncation.value).toBe(null);
   });
 });
 
