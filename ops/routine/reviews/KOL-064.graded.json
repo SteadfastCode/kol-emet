@@ -1,0 +1,103 @@
+{
+  "item": "KOL-064",
+  "repo": "kol-emet",
+  "mergeSha": "a8d0d5c1ccaa866aa7e0fc9fe313549b994f6973",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:44:17.393Z",
+  "independent": [
+    {
+      "file": "FEATURES.md",
+      "line": 80,
+      "severity": "low",
+      "summary": "The change also appends `[proposed]` to the pre-existing KOL-013 item, which the item did not ask for — it says to tag every item the audit *files*; KOL-013 was filed earlier and now shows up in the daily proposed list as if newly filed (harmless but outside the stated scope)."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The appended block is the renewal the item explicitly requires (\"append a copy of this block at the bottom of `## Workqueue Items` with the next free id\"), and its id is KOL-073, not a reused KOL-064, so nothing is duplicated in the sense claimed."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The diff touches only FEATURES.md; `server/src/routes/entities.js` is unmodified, and the missing pagination is the *premise* of filed item KOL-067 (verified true at the parent commit), not a defect introduced or left unfixed by this change."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "Same mistake: the CastError→500 behaviour is real in the repo but is the premise of filed item KOL-069; no route code is touched by this diff, so there is no defect in the change."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "`auth.js` is not in the diff, and the hard-coded `'My Workspace'` is the accurately-verified premise of filed item KOL-071 — plus \"may not be suitable\" is a preference, not a defect."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "`server/src/routes/workspace.js` does not exist at this commit and no route is added by the diff; the model reviewed code it inferred from the proposal text."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "No client file is touched and no workspace-name UI exists yet; this is the proposal's own scope (KOL-071), not a defect in the change."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The change is FEATURES.md-only; it modifies no auth code, and the cited `server/src/routes/auth.js:143` is an unmodified file quoted inside a backlog item."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing or AI-budget code is changed; `aiBudget` only appears as an exclusion in prose."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletions, migrations or data-destroying operations in a doc-only diff."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are added."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No CI, deploy, version or packaging files touched."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All six local findings are false positives — the model hallucinated implemented server and client code out of the backlog items' prose and reviewed that instead of the FEATURES.md-only diff, also misreading the required weekly renewal as a duplicate id, and its one \"touched\" triage call cites a file the change never modifies.",
+  "counts": {
+    "findings": 6,
+    "confirmed": 0,
+    "falsePositive": 6,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.6569505000000002,
+  "numTurns": 28,
+  "durationMs": 214608,
+  "sessionId": "d2495d79-d703-4c33-a6e1-374c3ba79530"
+}

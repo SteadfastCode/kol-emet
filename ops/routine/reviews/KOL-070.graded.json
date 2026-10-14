@@ -1,0 +1,103 @@
+{
+  "item": "KOL-070",
+  "repo": "kol-emet",
+  "mergeSha": "9f9538cbd1c6b7df04208b8a8813009e9f452498",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:25:04.277Z",
+  "independent": [
+    {
+      "file": "server/tests/unit/graphExporter.test.js",
+      "line": 286,
+      "severity": "low",
+      "summary": "The two tests that claim to pin id ordering are vacuous: each fixture workspace holds exactly one relationshipGroup and one openQuestion (so `deepEqual(ids, [...ids].sort())` compares a one-element array to itself), and alice's `entry_ids` were inserted Zephyr-then-Aleph, i.e. already in ascending ObjectId order — so deleting `.sort(cmpString)` from `asIdSet` and `.sort(byId)` from the exporter leaves the whole suite green, contradicting the file's own falsification claim that dropping any `.sort(…)` turns a test red. (Same cluster: `'members.userId'` in FORBIDDEN_KEYS can never be a key name returned by `allKeys`, so that sweep entry asserts nothing.)"
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`body` is read only through optional chaining (`body?.error`), so a null body yields `undefined` and falls back to `${res.status} ${res.statusText}` — no TypeError is possible."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The Decision Log line it cites explicitly states the filename is `<workspace>-<YYYY-MM-DD>.json` from an ASCII slug, with the Hebrew/Japanese fallback to `workspace` and the RFC 6266 follow-up named."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The interpolated value is `workspaceSlug(...)` output, which collapses everything outside `[a-z0-9]` to `-`, so quotes, `;`, CR/LF and `/` cannot reach the header — and `graphExporter.test.js` pins exactly those inputs."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Byte-identity is pinned where the item assigns it, in `tests/unit/graphExporter.test.js` ('two exports with the same timestamp are byte-identical'); the HTTP suite never claims to test it, and `exportedAt` is injected precisely so it can be."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "The file contains `test('entity types sort by \\`order\\`, then name — not by insertion')` asserting `['Characters', 'Worlds']` against a fixture inserted Worlds-first."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "The byte-identity test passes the same `EXPORTED_AT` to both exports, and a separate test compares two different timestamps only after deleting `exportedAt` from both — the stated scenario is not what the code does."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds a new route mounted behind `requireAuth` + `resolveWorkspace` in app.js and tests the 401/tenant-isolation behaviour, so the auth surface is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials or secret handling is added; `EXPORT_LOG_LEVEL` is a log knob, and the exporter deliberately excludes `passwordHash`/account fields."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "`aiBudget` only appears as an excluded/forbidden key; no billing or spend logic changes."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The exporter and route are read-only (`find`/`findById` plus a response); nothing is written or deleted."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No third-party service is called — the only new fetch is the client calling this app's own `/export`."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, deploy config, or packaging changes; `EXPORT_VERSION` is a document schema tag inside the app."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All six local findings are false positives — each is contradicted by code or by a test that is actually present — and the triage is right across the board, so the review's only value was the (correct) triage.",
+  "counts": {
+    "findings": 6,
+    "confirmed": 0,
+    "falsePositive": 6,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.224599,
+  "numTurns": 9,
+  "durationMs": 165406,
+  "sessionId": "e4bf0259-e0d6-4f15-a509-d6b05c24f056"
+}

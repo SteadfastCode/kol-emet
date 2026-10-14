@@ -1,0 +1,97 @@
+{
+  "item": "KOL-063",
+  "repo": "kol-emet",
+  "mergeSha": "2bc1c8a8a461b56aa03719f5d3b607e256f99ba2",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:46:37.369Z",
+  "independent": [
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 690,
+      "severity": "high",
+      "summary": "Escape inside GeneratorOverlay closes two layers at once: the overlay's own `@keydown.esc=\"tryClose\"` (GeneratorOverlay.vue:2) emits `close`, which synchronously sets `generatorOpen = false`, and the same event then bubbles on to the window listener, so `closeTopLayer` sees the generator already closed and falls through to close the chat or the detail panel underneath — the exact double-close the item removed GraphView's listener to prevent, and the opposite of the spec's claim that the double call is \"a no-op\"."
+    },
+    {
+      "file": "client/src/components/ChatPanel.vue",
+      "line": 29,
+      "severity": "medium",
+      "summary": "The conversation-rename input binds `@keydown.escape.prevent=\"cancelRename\"` with no `stopPropagation` (unlike EntityEditor's tag combobox, which stops it), so Escape while renaming a conversation cancels the rename and then reaches the global listener, which closes the whole chat panel — one press doing two things."
+    },
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 707,
+      "severity": "low",
+      "summary": "`n` has no layer guard: pressed while the settings overlay, generator or graph is open (focus outside a text field) it calls `openEditor()`, mounting a \"New Entity\" editor invisibly beneath the overlay, so the user sees nothing happen and finds an unexpected panel after closing the overlay."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The designed behaviour is the reverse — `/` typed while a text field has focus is declined as a character (and the suite does cover that case for the search input), so an untested \"focus moves from another input\" path is not a defect but behaviour that must not happen."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "Purely speculative and untrue of this code: `grep -rn \"window.addEventListener\" client/src` names only the composable, and the real double-close comes from GeneratorOverlay's subtree-scoped handler, not from a second global listener."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No session, login, passkey or authorization code is touched; the diff is client-side keyboard handling plus docs."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or AI-spend paths are modified."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations or irreversible operations are added; Escape only closes UI layers."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No HTTP, SSE or third-party API call is added or changed."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only a wishlist tick and a decision-log entry change in docs — no version bump, deploy config or build change."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "The local review found nothing real: one finding misreads the intended `/`-in-a-text-field behaviour and the other is a generic speculation that the code's own grep disproves, while it missed the genuine double-layer-close via GeneratorOverlay's un-stopped Escape and the same problem in ChatPanel's rename input.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.0126645,
+  "numTurns": 15,
+  "durationMs": 139941,
+  "sessionId": "eab1b63c-8120-4ab4-b6ce-eda7986eb093"
+}

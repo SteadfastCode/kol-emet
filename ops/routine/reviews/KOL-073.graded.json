@@ -1,0 +1,99 @@
+{
+  "item": "KOL-073",
+  "repo": "kol-emet",
+  "mergeSha": "4503714f59b4f71a2deca7bd32a80605bf6c1910",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:15:39.055Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "KOL-080 appears exactly once in FEATURES.md at the merged state (the renewal block); no other item carries that id, so there is no duplicate."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The filed item deliberately and explicitly states this ('Accounts whose stored password is shorter than the new minimum keep signing in: the policy gates writes and never /login') with its rationale, so the 'scenario' restates the design rather than exposing a defect — and no code is changed here anyway."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The proposal already specifies the catch-all: anything unmapped becomes 500 `{ error: 'INTERNAL', ref }` with the stack going only to the server log, which is the opposite of leaking details."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Password-change interaction is explicitly handed to KOL-076 by KOL-074's out-of-scope note, and passkey removal is named in KOL-076's own out-of-scope list; a deliberately bounded scope is not a defect."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "KOL-077 specifies conflict handling precisely — import only into an empty workspace, 409 `WORKSPACE_NOT_EMPTY` otherwise, fresh ObjectIds for everything — and defers the merge policy as a stated product decision."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "The project's only datastore is MongoDB via Mongoose (CLAUDE.md, server/src/app.js), so a non-Mongo readiness check is a hypothetical that this product does not have."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "No /health endpoint exists yet (verified absent from server/src/app.js and the routes tree); the proposal defines exactly the readyState→200/503 mapping and explicitly puts outbound-dependency checks out of scope."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The diff touches only FEATURES.md and changes no auth code, config or flow; the cited evidence server/src/routes/auth.js:103 is not in the diff at all."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling are added or changed."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing, billing or paid-generator code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The only removals are blank lines in a markdown backlog file; no data-deleting code or migration."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are added."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, CI, deploy or packaging change — a backlog document edit only."
+    }
+  ],
+  "missed": [],
+  "summary": "All seven findings are false positives: the model treated the prose of the newly filed backlog proposals as if it were shipped code and raised design-scope objections the items themselves already answer, while missing that the diff is documentation-only — and its one 'high' structural claim (duplicate KOL-080) is simply untrue in the file.",
+  "counts": {
+    "findings": 7,
+    "confirmed": 0,
+    "falsePositive": 7,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.0481805000000002,
+  "numTurns": 21,
+  "durationMs": 162711,
+  "sessionId": "5757982e-a3bb-482c-bed4-038a09add23b"
+}

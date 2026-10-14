@@ -1,0 +1,74 @@
+{
+  "item": "KOL-061",
+  "repo": "kol-emet",
+  "mergeSha": "38f84c84890171502550a3973a6601a80b1f4d21",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:55:42.453Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The size case does assert the win — `assert.ok(projected.length * 10 < withBlocks.length)` at server/tests/http/entityList.test.js:252 is strictly stronger than \"smaller\", and it fails if the projection stops applying."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The route has no field-selection API — `include` only adds `blocks` back (`query.select(LIST_FIELDS)` unless `include.includes('blocks')`), so there is no \"client requests only title and summary\" path to test; the fixed field set is already asserted by name in the LIST_FIELDS case."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff's new suite does exercise auth surface — it sets SESSION_SECRET, deletes BEARER_TOKEN (the var requireAuth actually reads), registers through /auth/register with session agents, and asserts 401 for an unauthenticated list at the cited line, plus cross-tenant isolation."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "Only a dummy test session secret is set in the test env; no credential handling, storage or exposure changes."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, quota or paid-API code is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Read-path projection only — no deletes, migrations or destructive writes; the test DB is an in-memory mongod."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Nothing calls out to a third-party service; the only change is this repo's own response shape, kept compatible via `?include=blocks`."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, or release tooling in the diff — only route, docs and tests."
+    }
+  ],
+  "missed": [],
+  "summary": "Both findings are false positives aimed at the test file — one misreads an assertion that is plainly there, the other invents a field-selection feature the route does not have — while the triage answers are all right; the review adds nothing, which matches my own read that the diff has no real defect (no client or server consumer reads `blocks` off the list, `_id` survives the projection, lean+populate is intact, and `include` is typed against operator/array injection).",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.493799,
+  "numTurns": 23,
+  "durationMs": 226294,
+  "sessionId": "03838164-4714-4681-ad7a-65f384277ca2"
+}

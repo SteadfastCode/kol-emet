@@ -1,0 +1,118 @@
+{
+  "item": "KOL-058",
+  "repo": "kol-emet",
+  "mergeSha": "a2c1f666f42d786e3cd5985311ac8889b9a6a975",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T10:10:55.479Z",
+  "independent": [
+    {
+      "file": "server/src/middleware/originGuard.js",
+      "line": 132,
+      "severity": "low",
+      "summary": "The own-origin allowlist entry is built from `req.get('host')`, which in Express 4 returns the raw `Host` header and never `X-Forwarded-Host` (express/lib/request.js:65-84 only special-cases referer/referrer) — so the inline comment \"req.get honours X-Forwarded-Host behind the trusted proxy\" is false, and behind a proxy that rewrites Host the allowlist would hold the internal host, 403-ing the API's own OAuth approval POST (/authorize, /bridge/authorize) whenever it is not also CLIENT_ORIGIN. The unit test that claims to cover this (tests/unit/originGuard.test.js, \"the own-origin entry follows the forwarded host behind a trusted proxy\") replaces `req.get` with its own stub returning the public host, so it asserts the stub rather than Express's behaviour and would stay green either way; `req.hostname` (plus port) is what honours the forwarded host."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`app.use(originGuard)` sits at app.js:96, ahead of every router including `/auth`, and tests/http/originGuard.test.js proves `POST /auth/logout` with `Origin: evil.test` is 403 — there is no per-route mounting to miss (and app.js has no line 191)."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`originOf('*')` fails `new URL()` and returns null, so the request falls into the refusal branch; a literal `*` Origin is 403, not a bypass (and no browser sends it)."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "`POST /auth/register` has no signed-in session to ride, so the guard deliberately does not check it (documented as out of scope in the decision log) — and a bogus Origin on registration grants an attacker nothing."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "A test suite must pin the origin it configures and sends; `CLIENT_ORIGIN` in tests/helpers/origin.js is test fixture data, not a deployment setting, and no production value is hardcoded anywhere in the diff."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "Same non-issue as finding 4 restated for chat.test.js — a test-local constant that matches what the suite sets in `process.env.CLIENT_ORIGIN` is exactly the intended design."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "Same non-issue as findings 4 and 5 restated for composeDraft.test.js; pinning the fixture origin is correct, not a security problem."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "The refusal tests do assert the database is untouched (`titled(title)` is null after the 403, and the unsafe-methods test re-reads the entity and asserts it still exists with its original summary after a refused PUT and DELETE)."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "The very first http test is a JSON `POST /entities` with `Origin: https://evil.test` asserting 403 and no entity written; the \"JSON is parsed as it always was\" test is a separate regression check, not the origin case."
+    },
+    {
+      "index": 9,
+      "verdict": "false-positive",
+      "reason": "The missing-Origin/matching-Referer branch is covered in tests/unit/originGuard.test.js and tests/http/originGuard.test.js; passkeys.test.js is not where that behaviour belongs, and its omission is not a defect."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds a session-authentication/CSRF middleware mounted after express-session and rewires auth-related tests, so auth is plainly touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret is added, read, or logged; the only token in the diff is the existing test fixture `test-mcp-bearer-token` in a test file."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, or quota code changes — the AI-allowance endpoint is only mentioned as motivation in comments and docs."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The diff performs no destructive operation (no deletes, drops, migrations, or data rewrites) — it only refuses requests — and the cited evidence file server/src/routes/entities.js is not modified by this change at all."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound integration changes; the OAuth/token endpoints touched are this API's own issuers, with only the body parser moved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, CI, container, or deploy-manifest change; `.env.example` only documents an optional log-level var and clarifies an existing one."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All nine findings are false positives — three are the same \"hardcoded test origin\" non-issue repeated, four complain about coverage that the new test files demonstrably contain, and two misstate the code (guard not mounted on /auth/logout; `*` Origin bypass) — and the one real defect, the false X-Forwarded-Host claim and the unit test that stubs it, was missed.",
+  "counts": {
+    "findings": 9,
+    "confirmed": 0,
+    "falsePositive": 9,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.7562470000000006,
+  "numTurns": 31,
+  "durationMs": 400742,
+  "sessionId": "ca262041-9f7b-46bb-b08a-a4d6331bcf44"
+}

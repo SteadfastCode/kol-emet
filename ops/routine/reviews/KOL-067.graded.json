@@ -1,0 +1,131 @@
+{
+  "item": "KOL-067",
+  "repo": "kol-emet",
+  "mergeSha": "fbd3c73dae82589f9f11db5a66e8a697d20f7cbd",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:40:42.754Z",
+  "independent": [
+    {
+      "file": "client/src/composables/useEntities.js",
+      "line": 52,
+      "severity": "medium",
+      "summary": "A page failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is already false, the rejection has no catch anywhere (`onMounted(() => loadEntities())` in WikiLayout.vue:574, no global error/unhandledrejection handler in the client), so a 500 or network blip on page 3 of 5 renders a partial list that is indistinguishable from a complete one — before this change a failed load left the list empty, which at least looked wrong."
+    },
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 210,
+      "severity": "low",
+      "summary": "The sort became `{ title: 1, _id: 1 }` while `Entity`'s only index is `{ workspaceId: 1, title: 1 }`, so every list read — paged and unpaged — now needs a blocking in-memory sort of the whole matching set; the paged path therefore still fetches and sorts the entire workspace per page (only serialization is bounded), and the unpaged read that MCP/graph/search still use got strictly more expensive than before (acknowledged as a follow-up in the Decision Log, not fixed here)."
+    },
+    {
+      "file": "client/src/composables/useEntities.js",
+      "line": 51,
+      "severity": "low",
+      "summary": "`entities.value = [...collected]` on every page reverts any concurrent change to the list made while pages 2..N are in flight: `removeEntity`'s filter, `editEntity`'s in-place slot replacement and an SSE-driven refresh all act on `entities.value`, while `collected` still holds the pre-change objects, so a deleted row reappears or an edit un-paints until the next full load — a window that was one request before and is now the whole multi-page walk."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "confirmed",
+      "reason": "Accurate about this code: a failing page rejects into a caller that never catches, `sidebarLoading` is already cleared, and the user is left with a partial list and no error — the same defect as my independent finding 1 (the suggested rollback is not the fix, but the failure scenario is real)."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The first test in that file asserts `getEntityPage.mock.calls` equals `[{limit:200, after:null},{limit:200, after:CURSOR}]`, which is exactly the claim the finding says is unverified."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "`total` is never read by the composable (only the server tests assert it), so there is nothing for this test to verify and no defect in not verifying it."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Untrue in this code: the cursor carries `_id` and the clause is `{$or:[{title:{$gt:t}},{title:t,_id:{$gt:id}}]}` with sort `{title:1,_id:1}`, and the same-title fixture walk at limit 1 pins that each duplicate title is served exactly once."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "No-limit-means-unpaged is the item's explicit, documented requirement (keeping the bare array so MCP/chat/outside callers are not broken), not a validation defect."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "Restates finding 4 and is equally untrue: `nextAfter` is the last served row's `(title, _id)` and the `_id` tie-break makes the next page strictly after it."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "The order is the opposite of what is claimed — every `process.env` assignment (including `delete process.env.BEARER_TOKEN`) runs before both dynamic imports, which is precisely why the import is dynamic."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "`BOB_ENTITY` and `BULK_PREFIX` are module constants defined in the same file (lines 128 and the pagination block), not untrusted inputs a test could or should validate."
+    },
+    {
+      "index": 9,
+      "verdict": "false-positive",
+      "reason": "Same void claim as 8 for `BIG`, which is a literal defined at line 111 of the test file."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "No auth, session, or permission code is changed — the cited line 607 is the cursor-400 assertion, and the only auth-adjacent addition is a test asserting the pre-existing 401 on the already-guarded route."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or secret handling in the diff; the only new env var is a log-level knob."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing- or pricing-related is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Read-path change only; no deletes, migrations, or data rewrites (the test fixtures only insert)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No third-party/outbound integration is involved, and the existing public response shape is preserved because the envelope is opt-in via `?limit=`."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No deploy, build, version, or release configuration is changed."
+    }
+  ],
+  "missed": [
+    2,
+    3
+  ],
+  "summary": "One of nine findings lands (the silent partial-list failure), the other eight are either contradicted by the code they cite or are content-free complaints about test constants, and the triage is right except for calling auth touched on the strength of a line that is about cursor validation.",
+  "counts": {
+    "findings": 9,
+    "confirmed": 1,
+    "falsePositive": 8,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.6701235,
+  "numTurns": 30,
+  "durationMs": 374609,
+  "sessionId": "c29c6ded-6adf-41e2-80b2-c66dc70a2d8d"
+}

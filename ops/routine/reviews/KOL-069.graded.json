@@ -1,0 +1,83 @@
+{
+  "item": "KOL-069",
+  "repo": "kol-emet",
+  "mergeSha": "7b97b5d01d8c8b83f78e417903fad81015e79865",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:29:37.783Z",
+  "independent": [
+    {
+      "file": "docs/api.md",
+      "line": 73,
+      "severity": "low",
+      "summary": "The new docs paragraph opens with a blanket contract — \"Any route taking an id in its path … answers 400 {\"error\":\"INVALID_ID\"} … when that parameter is not a valid 24-hex ObjectId\" — that two id routers do not honor: `PUT/DELETE /relationship-types/:id` (server/src/routes/relationshipTypes.js:62,85) still throws a CastError into `catch (err) { res.status(500).json({ error: err.message }) }` and answers 500 with the driver's cast text, and `/entity-types/:id` (server/src/routes/entityTypes.js:111 `findOwn`) answers 404, not 400 INVALID_ID. The sentence that follows names the six registered routers, and kol_emet_spec.md admits relationship-types is still open, so the code is in scope — but the published contract now documents behavior the API does not have for every `:id` route."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "Resolving `LEVELS[process.env.OBJECT_ID_LOG_LEVEL]` inside `log()` is precisely what makes a runtime change to the variable take effect (and matches the repo-wide tiered-logging pattern); the finding inverts the consequence and names no real failure."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "server/tests/http/objectId.test.js imports `node:test`, `node:assert/strict`, `mongoose`, `express-session`, the origin/db/suiteLimits helpers and the User/Workspace/ChangeLog/Draft models at the top of the diff, and line 245 is inside the ID_ROUTES table, not an undefined reference."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth or authorization code changes; mount-level `requireAuth`/`resolveWorkspace` still run before the routers, so the param guard never answers ahead of authentication."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials or secret handling touched; the only new env var is a log-level knob, and the test's `delete process.env.BEARER_TOKEN` is existing suite hygiene."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Drafts' budget/quota logic is untouched and the draft fixture is inserted via the model specifically to avoid any AI spend."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only adds a pre-handler validity check in front of existing DELETE/PUT routes; no deletions, migrations, or data rewrites."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No provider or outbound HTTP call is added or altered; the conversation fixture records a provider name without calling it."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, or infrastructure change — one new middleware file, six router registrations, docs and a spec entry."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found no real defect: both findings are false — one treats the deliberate per-call env read as a hazard while inverting its effect, the other claims imports that are plainly present in the diff — though its six triage answers are all correct.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.7316915,
+  "numTurns": 25,
+  "durationMs": 273469,
+  "sessionId": "5d6981ca-bdaa-44fa-844e-1c1683d0232b"
+}

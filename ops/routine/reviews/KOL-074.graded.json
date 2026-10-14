@@ -1,0 +1,84 @@
+{
+  "item": "KOL-074",
+  "repo": "kol-emet",
+  "mergeSha": "f0bdcae8caec9ebe177dd1d68115628265f14e16",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:12:56.313Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The suite does cover it — 'holds both buttons while the new password is under the minimum, and states it' sets an 11-character password, triggers submit and asserts changePassword was not called; a 400 is never reached because the form holds the request, so expecting one would be wrong."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "WikiLayout.vue:307ff defines newPasswordLongEnough from the real passwordTooShort, disables both buttons on it, and runPasswordChange returns early when it is false, so a short password is never posted."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "auth.js:747 is inside the shared passkeyRefusal verification, not a route; the password route passes PASSWORD_CHALLENGE_KEY ('passwordChangeChallenge', auth.js:1004) and the deletion route passes DELETE_CHALLENGE_KEY ('accountDeleteChallenge', auth.js:825) — the keys are distinct and neither route reads the other's."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "The passkey test asserts the hash changed (assert.notEqual(after, before)), that it hashes NEW_PASSWORD via bcrypt.compare, that the new password signs in, and that a replayed challenge is 403 with the hash unchanged."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds POST /auth/password plus its passkey-challenge route, a shared password policy called by /register, and re-authentication/throttling logic."
+    },
+    {
+      "key": "secrets",
+      "correct": false,
+      "reason": "The diff is credential handling end to end — it writes bcrypt password hashes, branches on the MCP bearer token, and adds client and server log tiers written specifically to keep passwords out of logs."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff touches billing, AI budget, or any cost-bearing path."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "It irreversibly overwrites passwordHash and refactors DELETE /auth/account's re-authentication (passkeyRefusal/issuePasskeyChallenge) that the account-deletion path runs through."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP or third-party service call is added; WebAuthn verification is local @simplewebauthn work."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, migration, or release tooling is touched."
+    }
+  ],
+  "missed": [],
+  "summary": "All four local findings are false positives — two claim missing client-side validation and tests that are plainly present, one misreads the challenge-key plumbing, one misreads assertions that exist — and the triage is right except for calling secrets untouched in a diff that is entirely about password material.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.419471,
+  "numTurns": 20,
+  "durationMs": 314320,
+  "sessionId": "51d62d71-b68e-4d11-9160-906e6184df6d"
+}

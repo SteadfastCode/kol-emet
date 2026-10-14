@@ -57,6 +57,35 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-082) searchEntities sends no ?limit=, so every keystroke-word triggers an unbounded GET /entities?q= t…**
+  Found by the grader of KOL-068 (medium, client/src/api/entities.js:85). `searchEntities` sends
+  no `?limit=`, so every keystroke-word triggers an unbounded `GET /entities?q=` that serializes
+  every matching row in the workspace in one response — the exact unpaged full-workspace read
+  KOL-067 removed from the initial load (`LIST_LIMIT_MAX`'s own comment: "an unbounded
+  JSON.stringify of one workspace's entire row set is time nobody else's request can run in"), now
+  reachable from the search box: typing a single common letter matches nearly every entity, on the
+  single event loop every tenant shares.
+- [ ] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…**
+  Found by the grader of KOL-067 (medium, client/src/composables/useEntities.js:52). A page
+  failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is
+  already false, the rejection has no catch anywhere (`onMounted(() => loadEntities())` in
+  WikiLayout.vue:574, no global error/unhandledrejection handler in the client), so a 500 or
+  network blip on page 3 of 5 renders a partial list that is indistinguishable from a complete one
+  — before this change a failed load left the list empty, which at least looked wrong.
+- [ ] **(KOL-084) Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc="tryClos…**
+  Found by the grader of KOL-063 (high, client/src/components/WikiLayout.vue:690). Escape inside
+  GeneratorOverlay closes two layers at once: the overlay's own `@keydown.esc="tryClose"`
+  (GeneratorOverlay.vue:2) emits `close`, which synchronously sets `generatorOpen = false`, and
+  the same event then bubbles on to the window listener, so `closeTopLayer` sees the generator
+  already closed and falls through to close the chat or the detail panel underneath — the exact
+  double-close the item removed GraphView's listener to prevent, and the opposite of the spec's
+  claim that the double call is "a no-op".
+- [ ] **(KOL-085) The conversation-rename input binds @keydown.escape.prevent="cancelRename" with no stopPropagatio…**
+  Found by the grader of KOL-063 (medium, client/src/components/ChatPanel.vue:29). The
+  conversation-rename input binds `@keydown.escape.prevent="cancelRename"` with no
+  `stopPropagation` (unlike EntityEditor's tag combobox, which stops it), so Escape while renaming
+  a conversation cancels the rename and then reaches the global listener, which closes the whole
+  chat panel — one press doing two things.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

@@ -1,0 +1,83 @@
+{
+  "item": "KOL-052",
+  "repo": "kol-emet",
+  "mergeSha": "6472f25acee0cdef6e29a66b41113016de5d7189",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T10:24:12.777Z",
+  "independent": [
+    {
+      "file": "server/src/lib/passkeyIds.js",
+      "line": 181,
+      "severity": "low",
+      "summary": "`newUserHandle`'s doc comment says \"Also the schema default, so every account created has one (models/User.js)\" and `routes/auth.js:339` repeats \"Every account created since carries one from the schema default\" — but there is deliberately no schema `default`; `User.js` uses a `pre('validate')` hook guarded on `isNew` precisely because a default would also fire on hydration, and the Decision Log entry documents that as the key decision. The comments contradict the mechanism they describe and invite a future change to \"simplify\" the hook into the default the code explicitly rejects."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "An empty/complete list is the intended semantics — the ids come straight from the server's own answer, and when the server holds no passkeys the authenticator *should* drop them all (scoped to rpId+this account's handle), so there is no scenario where a partial or bogus list is passed; the only non-array case is already guarded by `Array.isArray`."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The claim is untrue: `passkeys.test.js` asserts the stored handle directly via `storedHandle()` (43-char base64url, 32 bytes, non-identifying), that two `register/begin` calls answer that same stored value, that two accounts differ, that the backfill is written once under a race, and that the list route returns it — line 659 is the removal test, which additionally compares the response's `userHandle` to the stored one."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change rewrites WebAuthn registration options, the passkey sign-in failure path, and the passkey list/remove routes — squarely authentication."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No new secrets, env vars, or credential material handling; the user handle is a non-secret random account identifier that WebAuthn puts in the credential anyway, and no public key is exposed."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches billing, budgets, or model-cost paths."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change newly asks an authenticator to erase credentials it holds (`signalAllAcceptedCredentials` drops anything not in the list, `signalUnknownCredential` forgets one) — irreversible state outside the DB; the cited line is weak evidence but the category is genuinely touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "It adds calls into the browser's WebAuthn Signal API — an out-of-app surface that may be absent or throw, handled with feature detection and swallowed errors; evidence line is weak (an import line) but the category applies."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, or migration — the backfill is deliberately lazy so nothing has to be run against production."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "Both findings are false positives built on premises the code contradicts (the id list comes from the server and an empty list is the intended signal; the handle's storage, stability and uniqueness are each asserted by dedicated tests), while the triage calls are all right; the only thing of substance in this well-tested change — two comments asserting a schema `default` the design explicitly rejects — was missed.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.1052049999999998,
+  "numTurns": 25,
+  "durationMs": 263292,
+  "sessionId": "963c12c6-0fff-4d9a-ac9e-85fc62a0715c"
+}

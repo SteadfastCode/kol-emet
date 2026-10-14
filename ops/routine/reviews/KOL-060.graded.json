@@ -1,0 +1,110 @@
+{
+  "item": "KOL-060",
+  "repo": "kol-emet",
+  "mergeSha": "2fc69c86ad49794141b65b1742764443c141800e",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T10:00:01.964Z",
+  "independent": [
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 282,
+      "severity": "low",
+      "summary": "The restore awaits `logCreate` inside the same try block, so a failure of the ChangeLog write or broadcast after the entity is already recreated falls to the outer catch and answers 500 — the caller is told the restore failed while the entity is live, the row stays in \"Recently deleted\", and the retry returns the misleading 409 \"This entity exists again, so restoring the deleted version would overwrite it\" (the user's own restore is reported as somebody else's entity)."
+    },
+    {
+      "file": "server/src/routes/changelog.js",
+      "line": 132,
+      "severity": "low",
+      "summary": "`GET /deleted` applies `.limit(DELETED_LIMIT)` before dropping ids that are live again and older duplicate entries, so churn (delete → restore → delete of a few entities, or any bulk restore) can fill the newest 50 log entries with rows that are then filtered out, pushing still-restorable deleted entities off the list entirely; since the panel has no paging and nothing else in the client can reach a snapshot, those entities become unrecoverable until their 30-day TTL expires."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`req()` throws a typed error (status + body) and the only caller, `RecentlyDeleted.load()`, wraps the call in try/catch and sets `loadError` — the wrapper is not supposed to swallow, and there is no unhandled rejection."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`restoreEntity`'s sole caller, `RecentlyDeleted.restore()`, catches the throw and branches on `err.status` (401 / 409 / other), which is exactly how the 409 picker recovery works."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The app has no i18n layer at all — every string in every component is hardcoded English — so an unlocalized constant is neither a defect nor specific to this change."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "`server/src/routes/changelog.js:247-258` explicitly checks the snapshot category against `registeredCategories` and returns 409 with `snapshotCategory` + `availableCategories`, and `restore.test.js` pins that 409-then-201-with-`{category}` path."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "Delete → restore → delete is handled: the live-again check returns 409, `GET /deleted` drops live ids and keeps only the newest entry per `entityId`, and the second `deleted` entry is legitimately restorable — the asserted behaviour (\"cannot be restored again\") is not what the design calls for."
+    },
+    {
+      "index": 6,
+      "verdict": "duplicate",
+      "reason": "Identical claim and scenario to finding 5, only anchored at the catch block instead; it is equally not a defect."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth or authorization code changes; the new route inherits the existing `requireAuth` + `resolveWorkspace` mount and the restore keeps the existing `requireActor`."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env/secret handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches billing, pricing, quotas, or paid API usage."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change is entirely about deletion recovery — it recreates documents at an existing `_id` and guards against overwriting live data — so the category is genuinely touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Only internal Express routes and the client's own fetch wrapper are involved; no third-party service is called."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, build/deploy config, migrations, or dependency changes — only docs, spec prose, routes, a component, and tests."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "All six local findings are non-defects — four are generic \"no error handling / not localized\" boilerplate contradicted by the code, and two are the same invented delete-restore-delete scenario the implementation already handles — while the triage answers are all correct.",
+  "counts": {
+    "findings": 6,
+    "confirmed": 0,
+    "falsePositive": 5,
+    "duplicate": 1,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.9021529999999998,
+  "numTurns": 20,
+  "durationMs": 259475,
+  "sessionId": "2e232250-4949-4c99-b5da-ae93417292b4"
+}

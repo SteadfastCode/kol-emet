@@ -1,0 +1,83 @@
+{
+  "item": "KOL-059",
+  "repo": "kol-emet",
+  "mergeSha": "1c273f6c85419aee438e05bf695fb124a9be57cf",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T10:04:14.690Z",
+  "independent": [
+    {
+      "file": "server/tests/http/rollback.test.js",
+      "line": 268,
+      "severity": "low",
+      "summary": "In 'a deleted type behaves exactly as a renamed one does', the 200-path assertions are vacuous: `stale[0]` is the newest stale snapshot (title 'Current', category 'Vehicles'), and the entity already holds title 'Current' / category 'Characters' before the call, so `chosen.body.title === 'Current'` and `category === 'Characters'` would pass even if the rollback wrote nothing at all; rolling back `stale[1]` (title 'Original') or asserting the stored doc changed is what would prove the restore. The 409 half of the test is sound."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`res.json().catch(() => null)` falling back to `${res.status} ${res.statusText}` is exactly the intended behaviour and mirrors api/tags.js — a non-JSON body still yields a status-bearing error with `status` attached, so nothing is broken or lost."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The claim is untrue in this code: EntityDetail.vue renders `<p v-if=\"historyError\" class=\"history-error\" role=\"alert\">{{ historyError }}</p>` above the list, and the client test asserts that text is shown for a failed/refused request."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "No authentication or authorization logic is added or changed — `requireActor` at changelog.js:27 and the `requireAuth`/`resolveWorkspace` mounting are pre-existing and untouched; the diff only reads `req.workspaceId`/`req.actor.label` for scoping and logging."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env secrets appear in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, or paid-API usage anywhere in the change."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff modifies the rollback write path, which overwrites a live entity's fields from a snapshot — a destructive write, and the change adds the pre-write guard on it."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Only internal routes and Mongo reads; no third-party service is called."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No package manifests, CI, or deploy configuration touched — only server/client source, tests, docs, and the spec."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "Both local findings are false positives aimed at the trivial client plumbing (one describes the intended error-message fallback, the other denies an error banner that is plainly in the template), the review never looked at the server logic the item is actually about, and its triage wrongly marks auth as touched.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.8339809999999996,
+  "numTurns": 19,
+  "durationMs": 252693,
+  "sessionId": "1c16ff06-0457-4cd3-9108-42a4b960fac8"
+}

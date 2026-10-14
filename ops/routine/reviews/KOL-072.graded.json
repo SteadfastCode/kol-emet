@@ -1,0 +1,78 @@
+{
+  "item": "KOL-072",
+  "repo": "kol-emet",
+  "mergeSha": "bd9934ff3deafb1c8e0d177cc5605c5ec62c465e",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:19:15.187Z",
+  "independent": [
+    {
+      "file": "client/src/components/ShortcutCheatsheet.vue",
+      "line": 6,
+      "severity": "low",
+      "summary": "The overlay declares role=\"dialog\" aria-modal=\"true\" but nothing moves focus into it and nothing traps focus: pressing `?` leaves focus on body/the previous element, so a keyboard-only or screen-reader user gets a dialog that announces the rest of the page as inert while Tab still walks the hidden UI behind the backdrop and never reaches the sheet's close button — a discoverability feature aimed precisely at keyboard users is unreachable by keyboard except via Escape."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It restates KOL-069's own documented out-of-scope note in `kol_emet_spec.md` prose about `/relationship-types/:id`; that router is untouched by this diff and the limitation is pre-existing and already acknowledged, so it is not a defect in this change (and the finding points at documentation, not code)."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only the keyboard-shortcut composable, two client components, a test and two docs — no session, passkey, registration or middleware code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear anywhere in the change."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches budgets, billing or AI cost accounting."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations or data-mutating paths; the change only opens/closes a UI overlay."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No network calls or third-party integrations are added or modified; the sheet renders a locally derived array."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only `docs/wishlist.md` and the spec decision log change — no version bump, build config or deploy manifest."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found nothing real — its single finding quotes an unrelated, already-documented limitation in spec prose rather than anything this diff changes — though its triage was entirely correct.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.5593294999999998,
+  "numTurns": 22,
+  "durationMs": 216100,
+  "sessionId": "893176f7-e93e-4fbc-863c-14e58e158e61"
+}

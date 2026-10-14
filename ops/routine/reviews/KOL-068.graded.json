@@ -1,0 +1,97 @@
+{
+  "item": "KOL-068",
+  "repo": "kol-emet",
+  "mergeSha": "560b600f9b742bc22424d3f31be7c773fc5b746e",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T09:07:39.488Z",
+  "gradedAtUtc": "2026-10-14T09:34:28.109Z",
+  "independent": [
+    {
+      "file": "client/src/api/entities.js",
+      "line": 85,
+      "severity": "medium",
+      "summary": "`searchEntities` sends no `?limit=`, so every keystroke-word triggers an unbounded `GET /entities?q=` that serializes every matching row in the workspace in one response — the exact unpaged full-workspace read KOL-067 removed from the initial load (`LIST_LIMIT_MAX`'s own comment: \"an unbounded JSON.stringify of one workspace's entire row set is time nobody else's request can run in\"), now reachable from the search box: typing a single common letter matches nearly every entity, on the single event loop every tenant shares."
+    },
+    {
+      "file": "client/src/composables/useFilters.js",
+      "line": 114,
+      "severity": "low",
+      "summary": "While a search is active the sidebar reads `searchResults`, which no mutation path updates, so create/edit/delete no longer reach the list: `removeEntity` filters `entities` only, leaving the deleted row listed and clickable, and `selectEntity(id)` is called un-awaited and uncaught in WikiLayout, so clicking it rejects on a 404 with the stale detail panel left in place; `editEntity` likewise leaves the old title on screen until the box is cleared."
+    },
+    {
+      "file": "client/src/composables/useFilters.js",
+      "line": 76,
+      "severity": "low",
+      "summary": "`markBlockOnlyMatches` compares rows against the full term the client sent, but the server caps the term at `MAX_TERM_LENGTH` (200) in `searchTerm`, so for a longer term the needle is not what was matched and no row's title/summary can contain it — every returned row is falsely labelled \"matched in text\"."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The line does carry an explicit background (#0f0f0f, with #141414 overrides for hover/selected) and a #6a6a6a foreground on a near-black card, and contrast polish is style rather than a defect anyway."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "It quotes the new docstring's description of the pre-change behaviour: the merged `filtered` narrows only by category and tag, and the keyword goes to `GET /entities?q=` via the injected `search`, which is exactly the fix."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, passkey or permission code is in the diff."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling are touched; `SEARCH_LOG_LEVEL` is a localStorage debug tier."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or paid-API usage is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations or overwrites; the change is read-path only."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The diff adds a new HTTP call, `searchEntities` in client/src/api/entities.js, wired into WikiLayout/useFilters."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, build, deploy or config changes — only source, tests and the spec decision log."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "The local review surfaced nothing real: one out-of-scope CSS nit that the diff already handles, and one \"finding\" that just restates the pre-change bug this change fixes, while missing the unpaged full-workspace search request, the now-stale search result set, and the term-cap mismatch in the matched-in-text derivation.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.8906379999999998,
+  "numTurns": 23,
+  "durationMs": 290291,
+  "sessionId": "769cf259-9524-46b3-8c4a-3cb467c84b16"
+}
