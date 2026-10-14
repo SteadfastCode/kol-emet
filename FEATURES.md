@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…**
+- [x] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…**
   Found by the grader of KOL-067 (medium, client/src/composables/useEntities.js:52). A page
   failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is
   already false, the rejection has no catch anywhere (`onMounted(() => loadEntities())` in
