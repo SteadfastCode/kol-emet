@@ -118,6 +118,25 @@ vi.mock('../api/drafts.js', () => ({
   decideItem: vi.fn(), retargetItem: vi.fn(), acceptClean: vi.fn(), applyDraft: vi.fn(),
   createComposeDraft: vi.fn(), createOpenApiDraft: vi.fn(),
 }));
+// One Escape case below mounts the chat panel for real (KOL-085), and the panel asks for the
+// providers and the conversation list as it mounts; nothing in a test should fetch. The rename the
+// case drives goes through `renameConversation`, which is what proves a cancelled rename saved
+// nothing.
+const { getProviders, listConversations, renameConversation } = vi.hoisted(() => ({
+  getProviders: vi.fn(async () => ([
+    { id: 'anthropic', name: 'Anthropic', models: ['claude-opus-5'], defaultModel: 'claude-opus-5' },
+  ])),
+  listConversations: vi.fn(async () => ([
+    { _id: 'c1', title: 'Boiler notes', provider: 'anthropic', model: 'claude-opus-5' },
+  ])),
+  renameConversation: vi.fn(async () => ({})),
+}));
+vi.mock('../api/chat.js', () => ({ getProviders, streamChat: vi.fn() }));
+vi.mock('../api/conversations.js', () => ({
+  listConversations, renameConversation,
+  createConversation: vi.fn(), getConversation: vi.fn(),
+  deleteConversation: vi.fn(), generateTitle: vi.fn(),
+}));
 // useFilters is deliberately NOT mocked: it reaches nothing by itself — the layout hands it the
 // keyword request, which is the mocked `searchEntities` above — and the fields it reads off a
 // listed entity are the point of the list group below.
@@ -768,6 +787,46 @@ describe('WikiLayout keyboard shortcuts', () => {
     expect(wrapper.find('.gen-overlay').exists()).toBe(false);
     // One press, one layer: everything that was under the overlay is still open.
     expect(wrapper.findComponent(ChatPanel).props('open')).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+  });
+
+  // KOL-085. The chat panel is mounted for real here — `ChatPanel: false` — because what went
+  // wrong was in its own template, and a stub of it cannot reproduce that: the conversation-rename
+  // input bound `@keydown.escape.prevent` without stopping the event, so one press cancelled the
+  // rename and then bubbled on to the layout's listener, which found no rename in progress and
+  // closed the whole panel the field was in.
+  it('cancels only the conversation rename on Escape — the chat panel stays open', async () => {
+    renameConversation.mockClear();
+    const wrapper = mount(WikiLayout, {
+      attachTo: document.body,
+      global: { stubs: { ...SHELL_STUBS, ChatPanel: false } },
+    });
+    const sidebar = wrapper.findComponent(EntitySidebar);
+    sidebar.vm.$emit('select', 'e1', 'Boiler Room');
+    sidebar.vm.$emit('chat');
+    await flushPromises();
+
+    const panel = wrapper.findComponent(ChatPanel);
+    expect(panel.props('open')).toBe(true);
+
+    // A double-click on the title is how a rename starts; the field opens with the title in it.
+    await panel.get('.convo-title').trigger('dblclick');
+    await flushPromises();
+    const input = panel.get('.convo-rename-input');
+    expect(input.element.value).toBe('Boiler notes');
+
+    // The field takes focus as it opens, so that is where the press really comes from — a text
+    // field, which keeps every key but this one.
+    expect(document.activeElement).toBe(input.element);
+    press('Escape', { from: input.element });
+    await flushPromises();
+
+    // The rename is off, and nothing was saved.
+    expect(panel.find('.convo-rename-input').exists()).toBe(false);
+    expect(panel.get('.convo-title').text()).toBe('Boiler notes');
+    expect(renameConversation).not.toHaveBeenCalled();
+    // One press, one thing: the panel the field was in is still open, and so is the panel under it.
+    expect(panel.props('open')).toBe(true);
     expect(wrapper.find('.detail-panel').exists()).toBe(true);
   });
 
