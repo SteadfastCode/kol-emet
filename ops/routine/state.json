@@ -79,7 +79,7 @@
     "KOL-084": {
       "order": 5,
       "title": "Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc=\"tryClos…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-084",

@@ -57,14 +57,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-084) Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc="tryClos…**
-  Found by the grader of KOL-063 (high, client/src/components/WikiLayout.vue:690). Escape inside
-  GeneratorOverlay closes two layers at once: the overlay's own `@keydown.esc="tryClose"`
-  (GeneratorOverlay.vue:2) emits `close`, which synchronously sets `generatorOpen = false`, and
-  the same event then bubbles on to the window listener, so `closeTopLayer` sees the generator
-  already closed and falls through to close the chat or the detail panel underneath — the exact
-  double-close the item removed GraphView's listener to prevent, and the opposite of the spec's
-  claim that the double call is "a no-op".
 - [ ] **(KOL-085) The conversation-rename input binds @keydown.escape.prevent="cancelRename" with no stopPropagatio…**
   Found by the grader of KOL-063 (medium, client/src/components/ChatPanel.vue:29). The
   conversation-rename input binds `@keydown.escape.prevent="cancelRename"` with no
@@ -220,6 +212,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-084) Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc="tryClos…** (routine 2026-10-14, 9b08c2c)
+  Found by the grader of KOL-063 (high, client/src/components/WikiLayout.vue:690). Escape inside
+  GeneratorOverlay closes two layers at once: the overlay's own `@keydown.esc="tryClose"`
+  (GeneratorOverlay.vue:2) emits `close`, which synchronously sets `generatorOpen = false`, and
+  the same event then bubbles on to the window listener, so `closeTopLayer` sees the generator
+  already closed and falls through to close the chat or the detail panel underneath — the exact
+  double-close the item removed GraphView's listener to prevent, and the opposite of the spec's
+  claim that the double call is "a no-op".
 - [x] **(KOL-083) A page failure mid-walk leaves the sidebar showing a silently truncated workspace: sidebarLoading…** (routine 2026-10-14, f6a9855)
   Found by the grader of KOL-067 (medium, client/src/composables/useEntities.js:52). A page
   failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is
