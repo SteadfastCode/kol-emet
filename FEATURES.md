@@ -57,7 +57,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-085) The conversation-rename input binds @keydown.escape.prevent="cancelRename" with no stopPropagatio…**
+- [x] **(KOL-085) The conversation-rename input binds @keydown.escape.prevent="cancelRename" with no stopPropagatio…**
   Found by the grader of KOL-063 (medium, client/src/components/ChatPanel.vue:29). The
   conversation-rename input binds `@keydown.escape.prevent="cancelRename"` with no
   `stopPropagation` (unlike EntityEditor's tag combobox, which stops it), so Escape while renaming
