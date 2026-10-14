@@ -57,6 +57,22 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-086) In findOrCreateGroup, the proposed-target path trusts p.targetGroupId without re-checking that th…**
+  Found by the grader of KOL-054 (medium, server/src/lib/draftApplier.js:259). In
+  findOrCreateGroup, the `proposed-target` path trusts `p.targetGroupId` without re-checking that
+  the group still holds the proposal's members: a member the group does not hold is silently
+  skipped (`if (!held) continue`), yet the back-reference `$addToSet` is still written for every
+  member and the item is recorded `applied`. Reachable two ways — (a) a human removes a member
+  from a 3+-member group between draft creation and apply (DELETE
+  /relationship-groups/:id/members/:entityId leaves the group alive and pulls the back-ref), so
+  the re-import neither restores the edge nor reports a problem and leaves the entity with a
+  `relationships` entry for a group it is not in (inflating the list view's link count); (b) an
+  API-level edit (PATCH /drafts/:id/items/:itemId with decision 'edited') may re-point `members`
+  while keeping `targetGroupId`, which `relationshipPayloadSchema` accepts — the applier then
+  writes nothing of the accepted edit, bumps back-refs on entities the group does not contain, and
+  still returns success. The apply-time matcher path cannot hit this (it requires containment);
+  only the id-targeted path lacks the check the comment on line 261 assumes ("cannot happen under
+  the match rule").
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

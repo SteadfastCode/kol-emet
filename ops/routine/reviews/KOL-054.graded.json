@@ -1,0 +1,88 @@
+{
+  "item": "KOL-054",
+  "repo": "kol-emet",
+  "mergeSha": "ab01575ff67a30dbf469840041a2f038ecdc9ed2",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-14T11:13:50.530Z",
+  "gradedAtUtc": "2026-10-14T11:24:06.858Z",
+  "independent": [
+    {
+      "file": "server/src/lib/draftApplier.js",
+      "line": 259,
+      "severity": "medium",
+      "summary": "In findOrCreateGroup, the `proposed-target` path trusts `p.targetGroupId` without re-checking that the group still holds the proposal's members: a member the group does not hold is silently skipped (`if (!held) continue`), yet the back-reference `$addToSet` is still written for every member and the item is recorded `applied`. Reachable two ways — (a) a human removes a member from a 3+-member group between draft creation and apply (DELETE /relationship-groups/:id/members/:entityId leaves the group alive and pulls the back-ref), so the re-import neither restores the edge nor reports a problem and leaves the entity with a `relationships` entry for a group it is not in (inflating the list view's link count); (b) an API-level edit (PATCH /drafts/:id/items/:itemId with decision 'edited') may re-point `members` while keeping `targetGroupId`, which `relationshipPayloadSchema` accepts — the applier then writes nothing of the accepted edit, bumps back-refs on entities the group does not contain, and still returns success. The apply-time matcher path cannot hit this (it requires containment); only the id-targeted path lacks the check the comment on line 261 assumes (\"cannot happen under the match rule\")."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "Never shrinking a matched group is the item's explicit requirement (\"never removing a member a human added\") and proposing removals is listed out of scope as drift detection, so the described behaviour is the specified design, not a defect."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "normalizeDraft only proposes — it writes nothing — so member-label updating is not that test's subject, and the suite does assert the re-spelled role is carried on `proposed.members[0].label` while the apply-side `$set` (including resetting a hand-written 'Neighbour' to 'Dependency') is verified in server/tests/http/composeDraft.test.js."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "Same misreading as finding 2 applied to the OpenAPI parse test: a producer unit test cannot verify an apply-time `$set`, and that behaviour is covered by the http apply test, so the test does test what it claims."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No session, passkey, permission or actor logic is modified; workspace scoping is reused as-is."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential handling, redaction or export-secret code is touched."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No allowance, usage-meter or pricing code is in the diff; the file-producer routes remain unmetered."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The change introduces an in-place overwrite of pre-existing data — `$set` on an existing RelationshipGroup member's `label`/`notes`, with no ChangeLog for relationship writes — and its own test asserts a hand-written role ('Neighbour') is reset to the file's value, so destructive writes are squarely touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP or third-party provider call is added or changed; parsing stays local."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only an additive enum value and an optional payload field; no version, deploy config or migration is involved."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found nothing real — one finding restates the item's explicit out-of-scope decision, two are duplicate test-coverage complaints that misattribute apply-time behaviour to parse-time unit tests — and it also mis-triaged the in-place overwrite of existing relationship-group members as non-destructive while missing the unvalidated `targetGroupId` apply path.",
+  "counts": {
+    "findings": 3,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.4407925,
+  "numTurns": 26,
+  "durationMs": 318760,
+  "sessionId": "6d15516c-2772-42e5-b323-d1840047047c"
+}
