@@ -75,6 +75,23 @@
         First {{ searchTruncation.returned }} of {{ searchTruncation.total }} matches —
         narrow the search to see the rest.
       </div>
+
+      <!-- The load walks the workspace a page at a time and the spinner is gone
+           after the first one (KOL-067), so a page that fails halfway leaves a
+           list that looks finished: the count above it reads as the whole
+           workspace (KOL-083). This line is the count's other caveat — what is
+           actually there, out of what there is — and the retry is the way back
+           to a whole list. Stated about the walk rather than about the rows on
+           screen, because the pills and the search box narrow those. -->
+      <div v-if="loadError" class="load-failed">
+        <span>
+          {{ loadError.message }}
+          <template v-if="loadError.loaded">
+            Showing {{ loadError.loaded }}<template v-if="loadError.total"> of {{ loadError.total }}</template> entities.
+          </template>
+        </span>
+        <button class="btn-sm" @click="$emit('retry-load')">Retry</button>
+      </div>
     </div>
 
     <!-- Entity list -->
@@ -105,6 +122,15 @@
       <p class="empty-title">No matches</p>
       <p class="empty-body">Nothing here matches your current search or filters.</p>
       <button class="btn-sm" @click="$emit('reset-filters')">Clear filters</button>
+    </div>
+    <!-- Nothing arrived *and* the load failed: an empty workspace and a
+         workspace whose first page never came back are the same screen
+         otherwise, and "create your first entity" is the wrong advice for the
+         second one. -->
+    <div v-else-if="loadError" class="list-empty">
+      <p class="empty-title">Your workspace did not load</p>
+      <p class="empty-body">{{ loadError.message }}</p>
+      <button class="btn-sm primary" @click="$emit('retry-load')">Try again</button>
     </div>
     <div v-else class="list-empty">
       <p class="empty-title">Your wiki is empty</p>
@@ -140,6 +166,13 @@ const props = defineProps({
    * the pills, so its length is neither what the server sent nor what matched.
    */
   searchTruncation: Object,
+  /**
+   * `{ message, loaded, total }` from useEntities when a page of the paged
+   * load failed, null otherwise (KOL-083). Not derivable here: `entities` is
+   * what survived the walk *and* the filters, so neither its length nor its
+   * emptiness says whether the workspace finished loading.
+   */
+  loadError: Object,
   graphOpen: Boolean,
 });
 
@@ -154,7 +187,7 @@ const isFiltered = computed(() =>
   (props.activeCat && props.activeCat !== 'All')
 );
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate', 'shortcuts']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate', 'shortcuts', 'retry-load']);
 
 // The `/` shortcut lives in the layout (one global key listener for the app),
 // so it needs a way in here. Exposing the move rather than the element keeps
@@ -251,6 +284,23 @@ defineExpose({ focusSearch });
   line-height: 1.4;
   color: #8a7a4a;
 }
+
+/* A failed load is louder than a capped search: the capped search still
+   answered the question that was asked, this did not. */
+.load-failed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid #5a2a2a;
+  border-radius: 6px;
+  background: #1c1212;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #d08a8a;
+}
+.load-failed button { flex: 0 0 auto; }
 
 .result-row { position: relative; }
 

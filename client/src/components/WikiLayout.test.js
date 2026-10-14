@@ -50,6 +50,7 @@ vi.mock('../composables/useEntities.js', async (importOriginal) => {
   return {
     useEntities: () => (realEntities.value ? actual.useEntities() : {
       entities: ref(entities), selectedEntity: ref(null), sidebarLoading: ref(false), detailLoading: ref(false),
+      loadError: ref(null),
       loadEntities, selectEntity, addEntity: vi.fn(), editEntity: vi.fn(), removeEntity: vi.fn(),
     }),
   };
@@ -885,8 +886,16 @@ describe('WikiLayout shortcut cheatsheet', () => {
  *   page 2 is left pending while the cards from page 1 are asserted: a load that waits for the
  *   whole workspace before clearing `sidebarLoading` shows "Loading…" at that moment instead.
  *
+ *   A page that fails has to be visible as a failure (KOL-083). Mid-walk there is no spinner left
+ *   to miss and the count line counts what arrived, so a workspace truncated by a 500 looks exactly
+ *   like a whole one. The last case walks that end to end over the real composable and the real
+ *   sidebar: the rows that arrived stay, the notice says how many of how many they are, and the
+ *   retry it offers finishes the walk.
+ *
  * Falsification: assign only the last page in `loadEntities` and the first assertion fails; clear
- * `sidebarLoading` after the loop instead of after the first page and the mid-load one does.
+ * `sidebarLoading` after the loop instead of after the first page and the mid-load one does; throw
+ * out of the walk instead of recording the failure and the last one gets no notice (and an
+ * unhandled rejection).
  */
 const PAGE_1 = [
   { _id: 'p1', title: 'Aqueduct', category: 'Worlds', summary: 'Water over the gorge.', tags: [], open_questions: [], relationships: [] },
@@ -938,5 +947,30 @@ describe('WikiLayout paged entity load', () => {
     await flushPromises();
 
     expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
+  });
+
+  it('shows a workspace truncated by a failed page as truncated, and the retry finishes it', async () => {
+    getEntityPage
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: { title: 'Brakeman', _id: 'p2' }, total: 3 })
+      .mockRejectedValueOnce(Object.assign(new Error('500 Internal Server Error'), { status: 500 }));
+
+    const wrapper = mountList();
+    await flushPromises();
+
+    // The two rows that arrived are still listed — and are now labelled as two of three.
+    expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman']);
+    const notice = wrapper.get('.load-failed').text();
+    expect(notice).toContain('could not be loaded');
+    expect(notice).toContain('Showing 2 of 3 entities');
+
+    getEntityPage
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: { title: 'Brakeman', _id: 'p2' }, total: 3 })
+      .mockResolvedValueOnce({ items: PAGE_2, nextAfter: null, total: 3 });
+
+    await wrapper.get('.load-failed button').trigger('click');
+    await flushPromises();
+
+    expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
+    expect(wrapper.find('.load-failed').exists()).toBe(false);
   });
 });

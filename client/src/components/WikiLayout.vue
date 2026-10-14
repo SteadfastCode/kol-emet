@@ -12,12 +12,14 @@
         :loading="sidebarLoading"
         :searching="searching"
         :search-truncation="searchTruncation"
+        :load-error="loadError"
         :graph-open="graphOpen"
         @search="searchQuery = $event"
         @set-cat="setCat"
         @set-tag="setTag"
         @clear-tag="clearTag"
         @reset-filters="resetFilters"
+        @retry-load="loadEntities('Sidebar → retry after a failed load')"
         @select="openEntry"
         @new-entry="openEditor"
         @logout="$emit('logout')"
@@ -232,7 +234,7 @@
           <div class="settings-group-title">Tags</div>
           <!-- Counts come from the entity list already loaded here, not a route of their own;
                a rename or removal touches many entities, so the list is refetched after one. -->
-          <TagSettings v-if="settingsVisible" :entities="entities" @changed="loadEntities" />
+          <TagSettings v-if="settingsVisible" :entities="entities" @changed="loadEntities('Settings → Tags changed')" />
         </div>
         <!-- Last on purpose: the irreversible action sits at the bottom of settings. -->
         <div class="settings-group">
@@ -330,7 +332,7 @@ const EDITOR_ID = '__new_entity__';
 const emit = defineEmits(['logout', 'account-deleted']);
 
 const {
-  entities, selectedEntity, sidebarLoading, detailLoading,
+  entities, selectedEntity, sidebarLoading, detailLoading, loadError,
   loadEntities, selectEntity, addEntity, editEntity, removeEntity,
 } = useEntities();
 
@@ -349,7 +351,7 @@ const { loadEntityTypes } = useEntityTypes();
 // Applying is the only point at which a draft reaches the graph, so this is
 // where the entity list has to be refetched.
 async function onDraftApplied(res) {
-  await loadEntities();
+  await loadEntities('a generated draft was applied');
   const n = res?.applied ?? 0;
   addToast({
     message: `${n} item${n === 1 ? '' : 's'} added from your draft`,
@@ -411,7 +413,7 @@ function closeSettings() {
  * sidebar it is looking at is the one that has to be refetched here.
  */
 function onEntityRestored() {
-  loadEntities();
+  loadEntities('Settings → Recently deleted restore');
 }
 
 /**
@@ -573,7 +575,7 @@ const minimizedPanels = computed(() =>
 );
 
 onMounted(() => {
-  loadEntities();
+  loadEntities('WikiLayout mount');
   loadEntityTypes('WikiLayout mount');
 });
 

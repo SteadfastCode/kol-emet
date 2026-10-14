@@ -166,3 +166,61 @@ describe('EntitySidebar search results', () => {
     expect(wrapper.find('.search-capped').exists()).toBe(false);
   });
 });
+
+/**
+ * The failed-load notice (KOL-083). The load walks the workspace a page at a time and the spinner
+ * is gone after the first page (KOL-067), so a page that fails on the way leaves a truncated list
+ * with nothing on screen to say so — the count line above it counts what arrived and presents it as
+ * the workspace. `useEntities` records the failure (see its own tests); what is pinned here is that
+ * the sidebar shows it, offers the way back, and does not mistake a workspace that failed to load
+ * for one with nothing in it.
+ *
+ * Falsification: drop the `loadError` branch and the first two cases fail; put the empty-workspace
+ * state back in front of it and the third shows "Create your first entity" over a failed load.
+ */
+describe('EntitySidebar failed load', () => {
+  const PARTIAL = { message: 'Part of your workspace could not be loaded.', status: 500, loaded: 400, total: 1284, source: 'WikiLayout mount' };
+
+  it('says how much of the workspace is actually listed', async () => {
+    const wrapper = mountSidebar({ loadError: PARTIAL });
+    await flushPromises();
+
+    const failed = wrapper.get('.load-failed').text();
+    expect(failed).toContain('Part of your workspace could not be loaded.');
+    expect(failed).toContain('Showing 400 of 1284 entities');
+  });
+
+  it('offers a retry, and asks for one when it is pressed', async () => {
+    const wrapper = mountSidebar({ loadError: PARTIAL });
+    await flushPromises();
+
+    await wrapper.get('.load-failed button').trigger('click');
+
+    expect(wrapper.emitted('retry-load')).toHaveLength(1);
+  });
+
+  it('does not read a workspace that failed to load as an empty one', async () => {
+    const wrapper = mountSidebar({ entities: [], loadError: { ...PARTIAL, loaded: 0, total: null } });
+    await flushPromises();
+
+    expect(wrapper.get('.empty-title').text()).toBe('Your workspace did not load');
+    expect(wrapper.text()).not.toContain('Create your first entity');
+
+    await wrapper.get('.list-empty button').trigger('click');
+    expect(wrapper.emitted('retry-load')).toHaveLength(1);
+  });
+
+  it('says nothing when the load walked the whole workspace', async () => {
+    const wrapper = mountSidebar({ loadError: null });
+    await flushPromises();
+
+    expect(wrapper.find('.load-failed').exists()).toBe(false);
+  });
+
+  it('still shows an empty workspace as empty', async () => {
+    const wrapper = mountSidebar({ entities: [], loadError: null });
+    await flushPromises();
+
+    expect(wrapper.get('.empty-title').text()).toBe('Your wiki is empty');
+  });
+});

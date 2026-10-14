@@ -14,15 +14,23 @@
  *   token the slower run's later pages would append onto the faster run's list
  *   and the sidebar would show rows twice.
  *
- *   A failing page rejects and leaves what is already on screen alone, rather
- *   than resetting the list to nothing.
+ *   A failing page leaves what is already on screen alone, rather than
+ *   resetting the list to nothing — and records that it failed (KOL-083).
+ *   `sidebarLoading` is already false by page 2, so a walk that stops partway
+ *   through otherwise leaves a truncated workspace that looks exactly like a
+ *   whole one; `loadError` carries how much of how much is there, for the
+ *   sidebar to say so. It is recorded rather than thrown: no call site catches
+ *   this (the layout starts most loads without awaiting them) and the one that
+ *   awaits is `addEntity`, which would have reported a create that worked as a
+ *   failure.
  *
  * Falsification: clear `sidebarLoading` after the loop and the first case
  * fails; drop the `token !== loadToken` guard and the overlap case shows five
  * rows; wrap the walk in a `catch` that empties the list and the failure case
- * fails.
+ * fails; leave `loadError` unset, or set it from a superseded run, and the
+ * last three do.
  */
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 const { getEntityPage } = vi.hoisted(() => ({ getEntityPage: vi.fn() }));
 vi.mock('../api/entities.js', () => ({
@@ -48,6 +56,11 @@ function pending() {
 describe('useEntities paged load', () => {
   beforeEach(() => {
     getEntityPage.mockReset();
+    localStorage.setItem('ENTITY_LOAD_LOG_LEVEL', 'off');
+  });
+
+  afterEach(() => {
+    localStorage.clear();
   });
 
   it('asks for pages at ENTITY_PAGE_SIZE and hands back the cursor it was given', async () => {
@@ -110,15 +123,73 @@ describe('useEntities paged load', () => {
     expect(entities.value.map((e) => e.title)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
   });
 
-  it('a failing page rejects and leaves the pages already loaded on screen', async () => {
+  it('a failing page keeps the pages already loaded and records what is missing', async () => {
     getEntityPage
       .mockResolvedValueOnce({ items: PAGE_1, nextAfter: CURSOR, total: 3 })
       .mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }));
 
-    const { entities, sidebarLoading, loadEntities } = useEntities();
-    await expect(loadEntities()).rejects.toThrow('Unauthorized');
+    const { entities, sidebarLoading, loadError, loadEntities } = useEntities();
+    // Resolves: a rejection here reached no catch anywhere in the client.
+    await loadEntities('test');
 
     expect(entities.value.map((e) => e.title)).toEqual(['Aqueduct', 'Brakeman']);
     expect(sidebarLoading.value).toBe(false);
+    // Two of the three rows are on screen, and the record says exactly that —
+    // the sidebar has no other way to tell this list from a complete one.
+    expect(loadError.value).toMatchObject({ status: 401, loaded: 2, total: 3, source: 'test' });
+    expect(loadError.value.message).toMatch(/session has expired/i);
+  });
+
+  it('a first page that fails leaves an empty list that knows it is not an empty workspace', async () => {
+    getEntityPage.mockRejectedValueOnce(Object.assign(new Error('500 Internal Server Error'), { status: 500 }));
+
+    const { entities, sidebarLoading, loadError, loadEntities } = useEntities();
+    await loadEntities('mount');
+
+    expect(entities.value).toEqual([]);
+    expect(sidebarLoading.value).toBe(false);
+    // No page landed, so there is no workspace total to report against.
+    expect(loadError.value).toMatchObject({ status: 500, loaded: 0, total: null, source: 'mount' });
+    expect(loadError.value.message).toMatch(/could not be loaded/i);
+  });
+
+  it('a retry that completes clears the record', async () => {
+    getEntityPage
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: CURSOR, total: 3 })
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: CURSOR, total: 3 })
+      .mockResolvedValueOnce({ items: PAGE_2, nextAfter: null, total: 3 });
+
+    const { entities, loadError, loadEntities } = useEntities();
+    await loadEntities('mount');
+    expect(loadError.value).not.toBeNull();
+
+    await loadEntities('retry');
+    expect(loadError.value).toBeNull();
+    expect(entities.value.map((e) => e.title)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
+  });
+
+  it("a superseded load's failure does not put a banner over the newer load's list", async () => {
+    const slowSecondPage = pending();
+    getEntityPage
+      .mockResolvedValueOnce({ items: PAGE_1, nextAfter: CURSOR, total: 3 })
+      .mockReturnValueOnce(slowSecondPage.promise)
+      .mockResolvedValueOnce({ items: [...PAGE_1, ...PAGE_2], nextAfter: null, total: 3 });
+
+    const { entities, loadError, loadEntities } = useEntities();
+    const slow = loadEntities('mount');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const fresh = loadEntities('tag change');
+    await fresh;
+
+    slowSecondPage.reject(Object.assign(new Error('503 Service Unavailable'), { status: 503 }));
+    await slow;
+
+    // The newer load walked the whole workspace; the older one's failure is
+    // about a list that is no longer on screen.
+    expect(loadError.value).toBeNull();
+    expect(entities.value.map((e) => e.title)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
   });
 });
