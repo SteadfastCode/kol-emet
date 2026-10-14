@@ -79,7 +79,7 @@
     "KOL-087": {
       "order": 5,
       "title": "An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-087",
