@@ -103,6 +103,21 @@ const { getWorkspace, renameWorkspace } = vi.hoisted(() => ({
 vi.mock('../api/workspace.js', () => ({
   getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX: 80, default: getWorkspace,
 }));
+// One Escape case below mounts the generator overlay for real (KOL-084), and the overlay asks for
+// the AI allowance as it opens; nothing in a test should fetch. The rest of the module is mocked
+// with it because the overlay's subtree imports it too (the braindump input's producers, the
+// review's decide/apply calls) — none of it is called here.
+const { getAllowance } = vi.hoisted(() => ({
+  getAllowance: vi.fn(async () => ({
+    grantedMicros: 3_500_000, spentMicros: 0, remainingMicros: 3_500_000,
+    exhausted: false, granted: '$3.50', spent: '$0.00', remaining: '$3.50',
+  })),
+}));
+vi.mock('../api/drafts.js', () => ({
+  getAllowance, streamDraft: vi.fn(), listDrafts: vi.fn(), getDraft: vi.fn(), discardDraft: vi.fn(),
+  decideItem: vi.fn(), retargetItem: vi.fn(), acceptClean: vi.fn(), applyDraft: vi.fn(),
+  createComposeDraft: vi.fn(), createOpenApiDraft: vi.fn(),
+}));
 // useFilters is deliberately NOT mocked: it reaches nothing by itself — the layout hands it the
 // keyword request, which is the mocked `searchEntities` above — and the fields it reads off a
 // listed entity are the point of the list group below.
@@ -723,6 +738,37 @@ describe('WikiLayout keyboard shortcuts', () => {
     composer.remove();
 
     expect(wrapper.find('.detail-panel').exists()).toBe(false);
+  });
+
+  // KOL-084. The overlay is mounted for real here — `GeneratorOverlay: false` — because what went
+  // wrong was in its own template, and a stub of it cannot reproduce that: it bound
+  // `@keydown.esc` on its root, so one press closed the overlay and then bubbled on to the
+  // layout's listener, which found the generator already shut and closed the chat underneath it.
+  it('closes only the generator on Escape from inside it — the chat and the panel stay open', async () => {
+    const wrapper = mount(WikiLayout, {
+      attachTo: document.body,
+      global: { stubs: { ...SHELL_STUBS, GeneratorOverlay: false } },
+    });
+    const sidebar = wrapper.findComponent(EntitySidebar);
+    sidebar.vm.$emit('select', 'e1', 'Boiler Room');
+    sidebar.vm.$emit('chat');
+    sidebar.vm.$emit('generate');
+    await flushPromises();
+    expect(wrapper.findComponent(ChatPanel).props('open')).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+
+    // The braindump textarea takes focus as the overlay opens, so that is where the press really
+    // comes from — a text field, which keeps every key but this one.
+    const composer = wrapper.get('.gen-overlay textarea').element;
+    expect(document.activeElement).toBe(composer);
+
+    press('Escape', { from: composer });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.gen-overlay').exists()).toBe(false);
+    // One press, one layer: everything that was under the overlay is still open.
+    expect(wrapper.findComponent(ChatPanel).props('open')).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
   });
 
   it('opens the new-entity editor on `n`', async () => {
