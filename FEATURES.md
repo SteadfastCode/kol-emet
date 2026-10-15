@@ -39,7 +39,7 @@ registration, or removes a feature.
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
 
-- [ ] **(KOL-075) One error shape for the API, instead of the database's own error text**
+- [x] **(KOL-075) One error shape for the API, instead of the database's own error text**
   Fifty-nine handlers across twelve routers end in `catch (err) { res.status(500).json({ error: err.message }) }` or its
   400 variant — `entities.js:244,267,287`, `changelog.js:119`, `drafts.js` (13 of them), `relationshipGroups.js` (11),
   `conversations.js`, `openQuestions.js`, `relationshipTypes.js`, `entityTypes.js`, `tags.js`, `workspace.js`,
