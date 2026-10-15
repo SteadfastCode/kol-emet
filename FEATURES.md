@@ -40,7 +40,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended**
+- [x] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended**
   A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
   the Decision Log says so where it lists what account deletion cannot reach: "the user's *other* sessions cannot be
   found by user in the store, so they outlive the account holding a dangling id". For a public product the consequence
