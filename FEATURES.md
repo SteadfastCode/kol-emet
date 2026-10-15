@@ -41,36 +41,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-077) `POST /import`: a canonical export round-trips back into an empty workspace**
-  KOL-070 shipped `GET /export` and `server/src/lib/graphExporter.js` — one deterministic JSON document stamped
-  `version: 'kol-emet/workspace-export@1'` — and left the other half open: nothing reads it back. So the export is a
-  file nobody can prove is complete, `docs/wishlist.md`'s "Bulk import endpoint" has no answer, and the roadmap's
-  Git-native track ("a Git connector round-trips it into the customer's repo") has no round trip to connect. Build:
-  `server/src/lib/graphImporter.js` — from a parsed export document plus a `workspaceId` to the documents it writes:
-  refuse an unknown `version`; give every entity type, relationship type, entity, relationship group and open question a
-  fresh `ObjectId` and rewrite every reference to it; keep each group's `members` array order and its `refModel`
-  discriminator, because array position is what encodes order; rebuild `Entity.relationships` and
-  `Entity.open_questions` from the groups and questions rather than copying the file's ids; and ignore any `workspaceId`
-  the file carries, so a document hand-edited to name another tenant writes nothing there. It imports only into an
-  **empty** workspace — no entities, no relationship groups, no open questions — and answers 409
-  `WORKSPACE_NOT_EMPTY` otherwise. That refusal is the point: it is what lets this item ship with no merge or
-  id-collision policy, which is a product decision this deliberately does not make. `POST /import` sits behind
-  `requireAuth`, `resolveWorkspace` and `requireWorkspaceRole('owner')` (KOL-071's middleware, `workspace.js:138`), with
-  per-collection caps so one upload cannot write an unbounded graph, and tiered
-  `IMPORT_LOG_LEVEL = off | light | normal | verbose` (default light) naming the document's version, the per-collection
-  counts and the reason behind every refusal. Files: `server/src/lib/graphImporter.js` and `server/src/routes/import.js`
-  (both new), `server/src/app.js` (one mount beside `/export`), `client/src/api/export.js`, an "Import workspace" row
-  among the Settings groups in `client/src/components/WikiLayout.vue`, an `## Import` section in `docs/api.md`, and a
-  Decision Log line for the empty-workspace rule. Verify: a new `server/tests/unit/graphImporter.test.js` — a fixture
-  graph exported, imported into a fresh workspace and exported again is byte-identical except for the ids; a nested
-  subgroup and its member order survive; an unknown `version` is refused; a planted foreign `workspaceId` lands in the
-  caller's workspace and nowhere else; and a document over the caps is refused with nothing written. A new
-  `server/tests/http/import.test.js` — the owner of an empty workspace gets 201 and the entities appear under
-  `GET /entities`; a workspace holding one entity is 409 and is unchanged; a member whose role is `editor` is 403;
-  unauthenticated is 401; malformed JSON is 400. `cd server && yarn test` and `cd client && yarn test --run &&
-  yarn build` green. Out of scope: merging into a non-empty workspace and the id-collision policy that needs, importing
-  `ChangeLog` or `Draft` (KOL-019 has to settle whether history is permanent first), YAML or Markdown input, the Git
-  connector itself, and streaming for very large files.
 
 - [ ] **(KOL-078) `GET /health`: liveness and database readiness without a session**
   Every route in `createApp` is behind `requireAuth` except `/auth/*`, `/oauth`, `/templates`, `/mcp` and the bridge, so
@@ -325,6 +295,36 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-077) `POST /import`: a canonical export round-trips back into an empty workspace** (routine 2026-10-15, cfe4e7d)
+  KOL-070 shipped `GET /export` and `server/src/lib/graphExporter.js` — one deterministic JSON document stamped
+  `version: 'kol-emet/workspace-export@1'` — and left the other half open: nothing reads it back. So the export is a
+  file nobody can prove is complete, `docs/wishlist.md`'s "Bulk import endpoint" has no answer, and the roadmap's
+  Git-native track ("a Git connector round-trips it into the customer's repo") has no round trip to connect. Build:
+  `server/src/lib/graphImporter.js` — from a parsed export document plus a `workspaceId` to the documents it writes:
+  refuse an unknown `version`; give every entity type, relationship type, entity, relationship group and open question a
+  fresh `ObjectId` and rewrite every reference to it; keep each group's `members` array order and its `refModel`
+  discriminator, because array position is what encodes order; rebuild `Entity.relationships` and
+  `Entity.open_questions` from the groups and questions rather than copying the file's ids; and ignore any `workspaceId`
+  the file carries, so a document hand-edited to name another tenant writes nothing there. It imports only into an
+  **empty** workspace — no entities, no relationship groups, no open questions — and answers 409
+  `WORKSPACE_NOT_EMPTY` otherwise. That refusal is the point: it is what lets this item ship with no merge or
+  id-collision policy, which is a product decision this deliberately does not make. `POST /import` sits behind
+  `requireAuth`, `resolveWorkspace` and `requireWorkspaceRole('owner')` (KOL-071's middleware, `workspace.js:138`), with
+  per-collection caps so one upload cannot write an unbounded graph, and tiered
+  `IMPORT_LOG_LEVEL = off | light | normal | verbose` (default light) naming the document's version, the per-collection
+  counts and the reason behind every refusal. Files: `server/src/lib/graphImporter.js` and `server/src/routes/import.js`
+  (both new), `server/src/app.js` (one mount beside `/export`), `client/src/api/export.js`, an "Import workspace" row
+  among the Settings groups in `client/src/components/WikiLayout.vue`, an `## Import` section in `docs/api.md`, and a
+  Decision Log line for the empty-workspace rule. Verify: a new `server/tests/unit/graphImporter.test.js` — a fixture
+  graph exported, imported into a fresh workspace and exported again is byte-identical except for the ids; a nested
+  subgroup and its member order survive; an unknown `version` is refused; a planted foreign `workspaceId` lands in the
+  caller's workspace and nowhere else; and a document over the caps is refused with nothing written. A new
+  `server/tests/http/import.test.js` — the owner of an empty workspace gets 201 and the entities appear under
+  `GET /entities`; a workspace holding one entity is 409 and is unchanged; a member whose role is `editor` is 403;
+  unauthenticated is 401; malformed JSON is 400. `cd server && yarn test` and `cd client && yarn test --run &&
+  yarn build` green. Out of scope: merging into a non-empty workspace and the id-collision policy that needs, importing
+  `ChangeLog` or `Draft` (KOL-019 has to settle whether history is permanent first), YAML or Markdown input, the Git
+  connector itself, and streaming for very large files.
 - [x] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended** (routine 2026-10-15, 3a12e99)
   A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
   the Decision Log says so where it lists what account deletion cannot reach: "the user's *other* sessions cannot be
