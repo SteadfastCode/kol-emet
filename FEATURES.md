@@ -54,33 +54,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-
-## Proposed
-
-- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
-  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
-  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
-  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
-  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
-  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
-- [ ] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) [needs-human]
-  The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
-  (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
-  raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
-  `server/scripts/try-generate.js` against Daniel's allowance.
-- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [needs-human]
-  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
-  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
-  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
-- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
-  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
-  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
-  `usageMeter` test.
-- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
-  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
-  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
-  Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-075) One error shape for the API, instead of the database's own error text** [proposed]
+- [ ] **(KOL-075) One error shape for the API, instead of the database's own error text**
   Fifty-nine handlers across twelve routers end in `catch (err) { res.status(500).json({ error: err.message }) }` or its
   400 variant — `entities.js:244,267,287`, `changelog.js:119`, `drafts.js` (13 of them), `relationshipGroups.js` (11),
   `conversations.js`, `openQuestions.js`, `relationshipTypes.js`, `entityTypes.js`, `tags.js`, `workspace.js`,
@@ -108,6 +82,32 @@ registration, or removes a feature.
   scope: `server/src/routes/bridge.js` and `mcp.js`, which answer JSON-RPC error objects on their own protocol and are
   KOL-047's subject; request-id propagation into the client's own logs; and changing any status code a route chooses
   deliberately today.
+
+## Proposed
+
+- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
+  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
+  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
+  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
+  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
+  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
+- [ ] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) [needs-human]
+  The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
+  (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
+  raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
+  `server/scripts/try-generate.js` against Daniel's allowance.
+- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [needs-human]
+  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
+  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
+  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
+- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
+  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
+  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
+  `usageMeter` test.
+- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
+  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
+  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
+  Atlas index change is not something a migration script alone should decide.
 - [ ] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended** [proposed]
   A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
   the Decision Log says so where it lists what account deletion cannot reach: "the user's *other* sessions cannot be
