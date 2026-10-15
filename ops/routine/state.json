@@ -62,7 +62,7 @@
     "KOL-075": {
       "order": 4,
       "title": "One error shape for the API, instead of the database's own error text",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-075",

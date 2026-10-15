@@ -39,34 +39,6 @@ registration, or removes a feature.
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
 
-- [x] **(KOL-075) One error shape for the API, instead of the database's own error text**
-  Fifty-nine handlers across twelve routers end in `catch (err) { res.status(500).json({ error: err.message }) }` or its
-  400 variant — `entities.js:244,267,287`, `changelog.js:119`, `drafts.js` (13 of them), `relationshipGroups.js` (11),
-  `conversations.js`, `openQuestions.js`, `relationshipTypes.js`, `entityTypes.js`, `tags.js`, `workspace.js`,
-  `export.js`, `auth.js:384,499` — plus `server/src/middleware/auth.js:51` and `workspace.js`, and `createApp` installs
-  no error middleware at all. So whatever Mongoose or the driver says reaches the caller verbatim: `E11000 duplicate key
-  error collection: … index: …`, `Entity validation failed: category: …`, or a pool error carrying a connection string.
-  KOL-069 closed the one case it could close from outside the catch — a malformed `:id` is 400 `INVALID_ID` before the
-  route runs — and that fix is the pattern this follows: the shape belongs in one place, not in fifty-nine catches.
-  Build: `server/src/middleware/errorHandler.js`, a four-argument Express handler mounted last in `createApp`, mapping a
-  Mongoose `ValidationError` to 400 `{ error: 'VALIDATION_FAILED', fields: [<schema paths>] }` (our own path names,
-  which are safe and are what a client needs to show), duplicate key 11000 to 409 `{ error: 'DUPLICATE', fields: […] }`,
-  an error carrying an explicit `status` and `code` to those, and anything else to 500 `{ error: 'INTERNAL', ref }`
-  where `ref` is a short random id also written to the server log beside the real stack — so a user can quote the ref
-  and nothing about the deployment leaves the box. Tiered `ERROR_LOG_LEVEL = off | light | normal | verbose` (default
-  light): light logs one line per handled error with the route, the status it chose, the `ref` and *which rule* chose
-  it, so the log says the source of the mapping and not just the status. Then the sweep: each leaking `catch` becomes
-  `catch (err) { next(err) }`, while every 400/403/404 a route answers on purpose with a written sentence stays exactly
-  as it is. Files: `server/src/middleware/errorHandler.js` (new), `server/src/app.js`, the twelve routers, the two
-  middleware files, and an `## Errors` section in `docs/api.md` listing the codes. Verify: a new
-  `server/tests/http/errorShape.test.js` — a write that fails schema validation is 400 `VALIDATION_FAILED` and the body
-  contains neither `validation failed` nor a model name; a duplicate unique value is 409 `DUPLICATE`; a route forced to
-  throw is 500 `INTERNAL` with a `ref` and no `message`; that same `ref` appears in the captured log; and a source-level
-  assertion that no file under `server/src/routes/` or `server/src/middleware/` still passes `err.message` into a
-  response body, so the sweep cannot quietly regress. `cd server && yarn test` green; the client is untouched. Out of
-  scope: `server/src/routes/bridge.js` and `mcp.js`, which answer JSON-RPC error objects on their own protocol and are
-  KOL-047's subject; request-id propagation into the client's own logs; and changing any status code a route chooses
-  deliberately today.
 
 - [ ] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended**
   A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
@@ -378,6 +350,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-075) One error shape for the API, instead of the database's own error text** (routine 2026-10-15, 9d332c1)
+  Fifty-nine handlers across twelve routers end in `catch (err) { res.status(500).json({ error: err.message }) }` or its
+  400 variant — `entities.js:244,267,287`, `changelog.js:119`, `drafts.js` (13 of them), `relationshipGroups.js` (11),
+  `conversations.js`, `openQuestions.js`, `relationshipTypes.js`, `entityTypes.js`, `tags.js`, `workspace.js`,
+  `export.js`, `auth.js:384,499` — plus `server/src/middleware/auth.js:51` and `workspace.js`, and `createApp` installs
+  no error middleware at all. So whatever Mongoose or the driver says reaches the caller verbatim: `E11000 duplicate key
+  error collection: … index: …`, `Entity validation failed: category: …`, or a pool error carrying a connection string.
+  KOL-069 closed the one case it could close from outside the catch — a malformed `:id` is 400 `INVALID_ID` before the
+  route runs — and that fix is the pattern this follows: the shape belongs in one place, not in fifty-nine catches.
+  Build: `server/src/middleware/errorHandler.js`, a four-argument Express handler mounted last in `createApp`, mapping a
+  Mongoose `ValidationError` to 400 `{ error: 'VALIDATION_FAILED', fields: [<schema paths>] }` (our own path names,
+  which are safe and are what a client needs to show), duplicate key 11000 to 409 `{ error: 'DUPLICATE', fields: […] }`,
+  an error carrying an explicit `status` and `code` to those, and anything else to 500 `{ error: 'INTERNAL', ref }`
+  where `ref` is a short random id also written to the server log beside the real stack — so a user can quote the ref
+  and nothing about the deployment leaves the box. Tiered `ERROR_LOG_LEVEL = off | light | normal | verbose` (default
+  light): light logs one line per handled error with the route, the status it chose, the `ref` and *which rule* chose
+  it, so the log says the source of the mapping and not just the status. Then the sweep: each leaking `catch` becomes
+  `catch (err) { next(err) }`, while every 400/403/404 a route answers on purpose with a written sentence stays exactly
+  as it is. Files: `server/src/middleware/errorHandler.js` (new), `server/src/app.js`, the twelve routers, the two
+  middleware files, and an `## Errors` section in `docs/api.md` listing the codes. Verify: a new
+  `server/tests/http/errorShape.test.js` — a write that fails schema validation is 400 `VALIDATION_FAILED` and the body
+  contains neither `validation failed` nor a model name; a duplicate unique value is 409 `DUPLICATE`; a route forced to
+  throw is 500 `INTERNAL` with a `ref` and no `message`; that same `ref` appears in the captured log; and a source-level
+  assertion that no file under `server/src/routes/` or `server/src/middleware/` still passes `err.message` into a
+  response body, so the sweep cannot quietly regress. `cd server && yarn test` green; the client is untouched. Out of
+  scope: `server/src/routes/bridge.js` and `mcp.js`, which answer JSON-RPC error objects on their own protocol and are
+  KOL-047's subject; request-id propagation into the client's own logs; and changing any status code a route chooses
+  deliberately today.
 - [x] **(KOL-080) Backlog audit: file new candidates under Proposed** (routine 2026-10-15, 8fa06f4)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
