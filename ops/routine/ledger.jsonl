@@ -355,3 +355,4 @@
 {"event":"ack","items":["KOL-085"],"by":"daniel","source":"dashboard","atUtc":"2026-10-15T04:53:35.779Z"}
 {"event":"ack","items":["KOL-086"],"by":"daniel","source":"dashboard","atUtc":"2026-10-15T04:53:35.779Z"}
 {"event":"note","text":"resupply: unparked KOL-080 (was not-before 2026-10-19) so the next fire files new proposals","source":"dashboard","item":"KOL-080","atUtc":"2026-10-15T04:54:26.995Z"}
+{"event":"note","text":"bridge queue.promote moved KOL-077 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-077","atUtc":"2026-10-15T04:57:39.724Z"}
