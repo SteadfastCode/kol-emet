@@ -152,6 +152,64 @@ export async function changePasswordWithPasskey(newPassword, { source } = {}) {
   return postPasswordChange({ newPassword, passkey }, { source, confirmedWith: 'a passkey' });
 }
 
+/**
+ * Tiered debug logging for signing out everywhere (KOL-076): set
+ * localStorage.SESSION_REVOKE_LOG_LEVEL to off | light | normal | verbose
+ * (default light). The server logs the same revocation, and every session it
+ * then ends, on its own SESSION_REVOKE_LOG_LEVEL. No credential is ever logged.
+ *   light   — every revocation sent from here and how it ended, naming what
+ *             asked and which credential confirmed it
+ *   normal  — light, plus the passkey challenge being fetched
+ *   verbose — normal, plus the status a refusal carried
+ */
+const REVOKE_LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function logRevoke(level, msg) {
+  let configured;
+  try { configured = localStorage.getItem('SESSION_REVOKE_LOG_LEVEL'); } catch { configured = null; }
+  const active = REVOKE_LEVELS[configured] ?? REVOKE_LEVELS.light;
+  if (active >= REVOKE_LEVELS[level]) console.log(`[auth/sessions:${level}] ${msg}`);
+}
+
+/** Sends one revocation and logs how it ended; `confirmedWith` names the credential. */
+async function postRevokeAll(body, { source, confirmedWith }) {
+  const asked = `source: ${source ?? 'POST /auth/sessions/revoke-all'}, confirmed with ${confirmedWith}`;
+  try {
+    const result = await accountReq('/auth/sessions/revoke-all', { method: 'POST', body: JSON.stringify(body) });
+    logRevoke('light', `every other session revoked, as of ${result?.revokedAt ?? 'now'}; this one was re-stamped and stays signed in (${asked})`);
+    return result;
+  } catch (err) {
+    logRevoke('light', `revocation refused: ${err.message} (${asked})`);
+    logRevoke('verbose', `the refusal carried status ${err.status ?? 'none'} (${asked})`);
+    throw err;
+  }
+}
+
+/**
+ * Ends every *other* session on the signed-in account — the borrowed laptop, the
+ * lost phone — re-authenticating with the current password. This browser stays
+ * signed in: the server re-stamps the calling session.
+ *
+ * Session only — a connector token is refused — and a wrong password is 403
+ * rather than 401, so a client must not read it as a sign-out
+ * (see docs/api.md#sessions). Through accountReq, because the server's own
+ * sentence is what Settings shows.
+ */
+export const revokeOtherSessions = ({ password }, { source } = {}) =>
+  postRevokeAll({ password }, { source, confirmedWith: 'the password' });
+
+/**
+ * The same revocation, re-authenticated with a passkey instead: a challenge of
+ * this route's own (never the sign-in, deletion or password-change one),
+ * asserted once.
+ */
+export async function revokeOtherSessionsWithPasskey({ source } = {}) {
+  logRevoke('normal', `fetching a passkey challenge to revoke other sessions (source: ${source ?? 'POST /auth/sessions/revoke-all'})`);
+  const options = await accountReq('/auth/sessions/passkey-challenge', { method: 'POST' });
+  const passkey = await startAuthentication({ optionsJSON: options });
+  return postRevokeAll({ passkey }, { source, confirmedWith: 'a passkey' });
+}
+
 export const deleteAccount = ({ email, password }) =>
   accountReq('/auth/account', { method: 'DELETE', body: JSON.stringify({ email, password }) });
 

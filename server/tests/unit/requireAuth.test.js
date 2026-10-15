@@ -25,11 +25,17 @@
  * the bearer path.
  *
  * These are direct calls with hand-built `req`/`res` objects, not HTTP. The
- * function is synchronous, touches no database, and reads exactly two things
- * (`req.session?.userId` and the `authorization` header) — driving it through a
- * server would add a mount, a route and a body parser to a test whose subject
- * is a four-line comparison, and would make the failure harder to read, not
- * easier.
+ * bearer path reads exactly two things (`req.session?.userId` and the
+ * `authorization` header) and touches no database — driving it through a server
+ * would add a mount, a route and a body parser to a test whose subject is a
+ * four-line comparison, and would make the failure harder to read, not easier.
+ *
+ * The *session* path does touch the database since KOL-076: it reads the
+ * account's `credentialsChangedAt` to end a session issued before the account
+ * last signed everything out. So the middleware is async, every call here is
+ * awaited, and the one session case below stubs that single read — it is a
+ * positive control for the bearer refusals, not a test of the revocation rule,
+ * which `tests/http/sessionRevocation.test.js` drives over the real stack.
  *
  * `process.env.BEARER_TOKEN` is read per call rather than at module load, so
  * each group sets it in `before` and restores the ambient value in `after`;
@@ -51,6 +57,7 @@ import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { requireAuth } from '../../src/middleware/auth.js';
+import User from '../../src/models/User.js';
 
 /** Minimal `res` double recording only what `requireAuth` uses. */
 function fakeRes() {
@@ -65,11 +72,11 @@ function fakeRes() {
  * `header === undefined` sends no Authorization header at all; any string is
  * sent verbatim, so the malformed shapes below reach the parser as written.
  */
-function callRequireAuth({ header, session } = {}) {
+async function callRequireAuth({ header, session } = {}) {
   const req = { headers: header === undefined ? {} : { authorization: header }, session };
   const res = fakeRes();
   let passed = false;
-  requireAuth(req, res, () => { passed = true; });
+  await requireAuth(req, res, () => { passed = true; });
   return { passed, status: res.statusCode, body: res.body };
 }
 
@@ -95,8 +102,8 @@ describe('requireAuth with BEARER_TOKEN unset', () => {
     else process.env.BEARER_TOKEN = saved;
   });
 
-  test('no Authorization header is refused', () => {
-    assertRefused(callRequireAuth(), 'a request with no Authorization header');
+  test('no Authorization header is refused', async () => {
+    assertRefused(await callRequireAuth(), 'a request with no Authorization header');
   });
 
   /**
@@ -117,17 +124,28 @@ describe('requireAuth with BEARER_TOKEN unset', () => {
   ];
 
   for (const [what, header] of CANNOT_MATCH) {
-    test(`${what} is refused`, () => {
-      assertRefused(callRequireAuth({ header }), `${what} (${JSON.stringify(header)})`);
+    test(`${what} is refused`, async () => {
+      assertRefused(await callRequireAuth({ header }), `${what} (${JSON.stringify(header)})`);
     });
   }
 
-  test('a session still authenticates, so the refusals above are the bearer path', () => {
+  test('a session still authenticates, so the refusals above are the bearer path', async () => {
     // Without this the group would also pass if requireAuth refused
     // everything unconditionally.
-    const result = callRequireAuth({ session: { userId: 'abc123' } });
-    assert.equal(result.passed, true, 'a session-bearing request must reach next()');
-    assert.equal(result.status, null, 'an authenticated request must not get a status');
+    //
+    // The one read the session path makes, stubbed: an account that has never
+    // revoked anything (no `credentialsChangedAt`), which is the state every
+    // account registered before KOL-076 is in. There is no mongod in a unit
+    // test, and what this case is for is the bearer refusals above.
+    const realFindById = User.findById;
+    User.findById = () => ({ select: () => ({ lean: async () => ({ _id: 'abc123' }) }) });
+    try {
+      const result = await callRequireAuth({ session: { userId: 'abc123' } });
+      assert.equal(result.passed, true, 'a session-bearing request must reach next()');
+      assert.equal(result.status, null, 'an authenticated request must not get a status');
+    } finally {
+      User.findById = realFindById;
+    }
   });
 });
 
@@ -148,16 +166,16 @@ describe('requireAuth with BEARER_TOKEN set to an empty string', () => {
     else process.env.BEARER_TOKEN = saved;
   });
 
-  test('a bearer with an empty token is refused', () => {
-    assertRefused(callRequireAuth({ header: 'Bearer ' }), 'an empty token against an empty BEARER_TOKEN');
+  test('a bearer with an empty token is refused', async () => {
+    assertRefused(await callRequireAuth({ header: 'Bearer ' }), 'an empty token against an empty BEARER_TOKEN');
   });
 
-  test('no Authorization header is refused', () => {
-    assertRefused(callRequireAuth(), 'a request with no Authorization header');
+  test('no Authorization header is refused', async () => {
+    assertRefused(await callRequireAuth(), 'a request with no Authorization header');
   });
 
-  test('a non-empty token is refused', () => {
-    assertRefused(callRequireAuth({ header: 'Bearer anything' }), 'a token against an empty BEARER_TOKEN');
+  test('a non-empty token is refused', async () => {
+    assertRefused(await callRequireAuth({ header: 'Bearer anything' }), 'a token against an empty BEARER_TOKEN');
   });
 });
 
@@ -174,22 +192,22 @@ describe('requireAuth with BEARER_TOKEN configured', () => {
     else process.env.BEARER_TOKEN = saved;
   });
 
-  test('the exact token authenticates', () => {
+  test('the exact token authenticates', async () => {
     // The other half of the proof: the unset-token group above is refusing
     // because there is nothing to match, not because this path never works.
-    const result = callRequireAuth({ header: `Bearer ${REAL_TOKEN}` });
+    const result = await callRequireAuth({ header: `Bearer ${REAL_TOKEN}` });
     assert.equal(result.passed, true, 'the configured token must reach next()');
   });
 
-  test('a prefix of the token is refused', () => {
-    assertRefused(callRequireAuth({ header: `Bearer ${REAL_TOKEN.slice(0, -1)}` }), 'a truncated token');
+  test('a prefix of the token is refused', async () => {
+    assertRefused(await callRequireAuth({ header: `Bearer ${REAL_TOKEN.slice(0, -1)}` }), 'a truncated token');
   });
 
-  test('the token with anything appended is refused', () => {
-    assertRefused(callRequireAuth({ header: `Bearer ${REAL_TOKEN}x` }), 'an extended token');
+  test('the token with anything appended is refused', async () => {
+    assertRefused(await callRequireAuth({ header: `Bearer ${REAL_TOKEN}x` }), 'an extended token');
   });
 
-  test('the literal string undefined is still refused', () => {
-    assertRefused(callRequireAuth({ header: 'Bearer undefined' }), 'the literal string undefined');
+  test('the literal string undefined is still refused', async () => {
+    assertRefused(await callRequireAuth({ header: 'Bearer undefined' }), 'the literal string undefined');
   });
 });
