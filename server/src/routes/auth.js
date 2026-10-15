@@ -8,7 +8,7 @@ import {
 } from '@simplewebauthn/server';
 import User from '../models/User.js';
 import Workspace from '../models/Workspace.js';
-import { requireAuth, requireActor } from '../middleware/auth.js';
+import { logSessions, requireAuth, requireActor, stampSession } from '../middleware/auth.js';
 import {
   DEFAULT_WORKSPACE_NAME,
   WORKSPACE_NAME_MAX,
@@ -109,6 +109,28 @@ const usableEmail = (email) => typeof email === 'string' && email.trim() !== '';
 
 /** Likewise a password: only a non-empty string is something bcrypt can be handed. */
 const usablePassword = (password) => typeof password === 'string' && password !== '';
+
+/**
+ * Puts `user` in a fresh session and answers `{ ok: true }`. Every sign-in here
+ * ends in this one function — the password login, the passkey login and
+ * registration — so the `issuedAt` stamp that `POST /auth/sessions/revoke-all`
+ * is measured against cannot be forgotten by one of the three (KOL-076).
+ *
+ * `regenerate` first, as all three did before: a new session id for a new
+ * sign-in is what keeps a pre-login id from being usable afterwards.
+ */
+function startSession(req, res, user, { status = 200, source }) {
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: 'Session error' });
+    req.session.userId = user._id.toString();
+    const issuedAt = stampSession(req.session);
+    req.session.save((saveErr) => {
+      if (saveErr) return res.status(500).json({ error: 'Session save error' });
+      logSessions('normal', `session ${req.sessionID} issued for user ${user._id} at ${new Date(issuedAt).toISOString()} (source: ${source})`);
+      res.status(status).json({ ok: true });
+    });
+  });
+}
 
 // POST /auth/register
 router.post('/register', async (req, res) => {
@@ -211,14 +233,7 @@ router.post('/register', async (req, res) => {
   const seed = await seedWorkspace(workspace._id, template);
   if (!seed.ok) console.error(`[auth] workspace ${workspace._id} seeded partially:`, seed.error);
 
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).json({ error: 'Session error' });
-    req.session.userId = user._id.toString();
-    req.session.save((saveErr) => {
-      if (saveErr) return res.status(500).json({ error: 'Session save error' });
-      res.status(201).json({ ok: true });
-    });
-  });
+  startSession(req, res, user, { status: 201, source: SIGNUP_SOURCE });
 });
 
 // POST /auth/login
@@ -257,14 +272,7 @@ router.post('/login', async (req, res) => {
   // limit for every other account tried from the same place.
   limiter(req).reset({ email: keys.email }, PASSWORD_LOGIN_SOURCE);
 
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).json({ error: 'Session error' });
-    req.session.userId = user._id.toString();
-    req.session.save((saveErr) => {
-      if (saveErr) return res.status(500).json({ error: 'Session save error' });
-      res.json({ ok: true });
-    });
-  });
+  startSession(req, res, user, { source: PASSWORD_LOGIN_SOURCE });
 });
 
 // POST /auth/logout
@@ -563,14 +571,7 @@ router.post('/webauthn/login/complete', async (req, res) => {
     return res.status(500).json({ error: 'Could not complete sign-in' });
   }
 
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).json({ error: 'Session error' });
-    req.session.userId = user._id.toString();
-    req.session.save((saveErr) => {
-      if (saveErr) return res.status(500).json({ error: 'Session save error' });
-      res.json({ ok: true });
-    });
-  });
+  startSession(req, res, user, { source: LOGIN_SOURCE });
 });
 
 // ─── Passkey management ───────────────────────────────────────────────────────
@@ -713,18 +714,21 @@ function refusedBearer(req, res, source) {
 }
 
 // ─── Re-authentication ───────────────────────────────────────────────────────
-// Two routes demand a *fresh* proof of the account from a caller who is already
-// signed in: DELETE /auth/account and POST /auth/password. Both take the current
-// password or a passkey assertion, and the passkey half of both is the two
-// functions here — one verification, so the weaker of two copies cannot be the
-// one guarding the irreversible route.
+// Three routes demand a *fresh* proof of the account from a caller who is
+// already signed in: DELETE /auth/account, POST /auth/password and
+// POST /auth/sessions/revoke-all. All three take the current password or a
+// passkey assertion, and the passkey half of all three is the two functions
+// here — one verification, so the weaker of three copies cannot be the one
+// guarding the irreversible route.
 //
 // Each route names its own session key for the challenge. A challenge minted to
-// confirm a deletion must not be spendable on changing a password, nor either of
-// them on signing in (`currentChallenge`), and a use spends exactly one.
+// confirm a deletion must not be spendable on changing a password or on signing
+// every other device out, nor any of them on signing in (`currentChallenge`),
+// and a use spends exactly one.
 
 const DELETE_CHALLENGE_KEY   = 'accountDeleteChallenge';
 const PASSWORD_CHALLENGE_KEY = 'passwordChangeChallenge';
+const REVOKE_CHALLENGE_KEY   = 'sessionRevokeChallenge';
 
 /**
  * The WebAuthn options for a re-authentication challenge, left in the session
@@ -1049,6 +1053,167 @@ router.post('/password', requireAuth, async (req, res) => {
   } catch (err) {
     logPassword('light', `${CHANGE_PASSWORD_SOURCE} failed for user ${userId}: ${err.message}`);
     res.status(500).json({ error: 'Could not change your password' });
+  }
+});
+
+// ─── Signing out everywhere ──────────────────────────────────────────────────
+// POST /auth/sessions/revoke-all ends every session this account holds except
+// the one that asked. It is the answer to a laptop left signed in at a library
+// and to a stolen phone: until KOL-076 there was none at all, because
+// POST /auth/logout destroys only the session it is called from and the session
+// store cannot be searched by user (see GET /auth/me above).
+//
+// What it writes is a timestamp — `User.credentialsChangedAt` — against which
+// the `issuedAt` every sign-in stamps into its session is compared on each
+// request, in middleware/auth.js. That module carries the reasoning for the
+// design and the SESSION_REVOKE_LOG_LEVEL knob both halves log on. The short
+// version: a second place that *lists* sessions is a second thing that has to
+// stay true, and the store cannot populate it anyway.
+//
+// Re-authentication is DELETE /auth/account's, for the same reason that route
+// has one: a session is a thing a borrowed laptop also has, and the premise of
+// signing every other device out is that one of them may not be in its owner's
+// hands. The body carries the current password, or a passkey assertion against
+// a single-use challenge from POST /auth/sessions/passkey-challenge, under this
+// route's own session key. A failed one is **403, not 401** — the session is
+// still good, and a 401 reads to a client as "you have been signed out", which
+// would be a particularly confusing answer from this route. Failed attempts are
+// counted on the account's own key, the one the deletion and password routes
+// count under: the same guess at the same secret.
+//
+// Deliberately **no typed email**, unlike the deletion route: that confirmation
+// exists because deletion is irreversible, and this is undone by signing in
+// again. POST /auth/password took the same reading (KOL-074).
+//
+// Session only, and not for the bearer token: a connector does not get to sign
+// an account's devices out, with or without the password — as at passkey
+// management and the password change.
+//
+// What this does NOT do: list the sessions it ends, with device, address or
+// location. The store cannot enumerate them by user — that is precisely why
+// this is a timestamp. Nor does it touch the MCP bearer token or OAuth grants
+// (KOL-014 owns per-connector identity), and nothing bumps the timestamp
+// automatically when a password changes or a passkey is removed; those routes
+// say so where they answer.
+
+const REVOKE_SOURCE           = 'POST /auth/sessions/revoke-all';
+const REVOKE_CHALLENGE_SOURCE = 'POST /auth/sessions/passkey-challenge';
+
+/** Answers 403 and returns true when the caller is the bearer token rather than a session. */
+function refusedBearerRevoke(req, res, source) {
+  if (req.actor.type === 'user') return false;
+  logSessions('light', `${source} refused for user ${req.actor.userId}: bearer token, not a session`);
+  res.status(403).json({ error: 'Signing out everywhere needs a signed-in browser session' });
+  return true;
+}
+
+// POST /auth/sessions/passkey-challenge
+router.post('/sessions/passkey-challenge', requireActor, async (req, res) => {
+  if (refusedBearerRevoke(req, res, REVOKE_CHALLENGE_SOURCE)) return;
+  try {
+    const options = await issuePasskeyChallenge(req, {
+      userId: req.actor.userId,
+      challengeKey: REVOKE_CHALLENGE_KEY,
+    });
+    if (!options) {
+      logSessions('light', `${REVOKE_CHALLENGE_SOURCE} refused for user ${req.actor.userId}: the account holds no passkey to challenge`);
+      return res.status(400).json({ error: 'This account has no passkey' });
+    }
+    logSessions('normal', `passkey challenge issued to user ${req.actor.userId} (source: ${REVOKE_CHALLENGE_SOURCE})`);
+    res.json(options);
+  } catch (err) {
+    logSessions('light', `${REVOKE_CHALLENGE_SOURCE} failed for user ${req.actor.userId}: ${err.message}`);
+    res.status(500).json({ error: 'Could not start passkey confirmation' });
+  }
+});
+
+// POST /auth/sessions/revoke-all
+router.post('/sessions/revoke-all', requireActor, async (req, res) => {
+  if (refusedBearerRevoke(req, res, REVOKE_SOURCE)) return;
+  const { userId } = req.actor;
+
+  try {
+    const { password, passkey } = req.body ?? {};
+    const byPassword = usablePassword(password);
+    const byPasskey  = !byPassword && passkey !== null && typeof passkey === 'object';
+    if (!byPassword && !byPasskey) {
+      logSessions('light', `${REVOKE_SOURCE} refused for user ${userId}: no password and no passkey assertion, so nothing was revoked`);
+      return res.status(400).json({ error: 'Confirm with your password or a passkey' });
+    }
+
+    // Before the bcrypt compare and the signature check, keyed by the account:
+    // the caller is signed in, so who is guessing is known.
+    const keys = { user: String(userId) };
+    const block = limiter(req).blocked(keys, REVOKE_SOURCE);
+    if (block) {
+      logSessions('light', `${REVOKE_SOURCE} refused for user ${userId}: too many failed confirmations, retry after ${block.retryAfter}s`);
+      return limiter(req).refuse(res, block);
+    }
+
+    const user = await User.findById(userId).select('passwordHash passkeys');
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    let refusal = null;
+    if (byPasskey) {
+      refusal = await passkeyRefusal(req, user, passkey, {
+        challengeKey: REVOKE_CHALLENGE_KEY,
+        source: REVOKE_SOURCE,
+      });
+    } else if (!user.passwordHash) {
+      refusal = 'the account has no password to confirm with';
+    } else if (!await bcrypt.compare(password, user.passwordHash)) {
+      refusal = 'the password is wrong';
+    }
+    if (refusal) {
+      limiter(req).recordFailure(keys, REVOKE_SOURCE);
+      logSessions('light', `${REVOKE_SOURCE} refused for user ${userId}: ${refusal}, so nothing was revoked`);
+      return res.status(403).json({ error: byPassword ? 'Incorrect password' : 'Passkey confirmation failed' });
+    }
+    limiter(req).reset(keys, REVOKE_SOURCE);
+
+    // The calling session is re-stamped *before* the account is bumped, and
+    // both with the same millisecond. The order is what decides who is signed
+    // out when half of it fails: a stamp that is saved and never bumped revokes
+    // nothing, while a bump saved before a failed stamp would sign out the very
+    // device that asked — the one outcome this route promises not to produce.
+    // Equal timestamps stand, which is what lets the two be the same instant
+    // (see sessionOutlivedCredentials in middleware/auth.js).
+    const revokedAt = Date.now();
+    stampSession(req.session, revokedAt);
+    try {
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+    } catch (err) {
+      logSessions('light', `${REVOKE_SOURCE} failed for user ${userId}: this session could not be re-stamped (${err.message}), so nothing was revoked`);
+      return res.status(500).json({ error: 'Could not sign your other devices out; nothing was changed' });
+    }
+
+    const result = await User.updateOne(
+      { _id: userId },
+      { $set: { credentialsChangedAt: new Date(revokedAt) } },
+    );
+    if (!result.matchedCount) {
+      // Deleted between the lookup and the write. Nothing was stored, and the
+      // account's sessions are refused by the id check KOL-038 added anyway.
+      logSessions('light', `${REVOKE_SOURCE} failed for user ${userId}: the account was gone by the time the timestamp was written`);
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Every live /events stream this account holds in this process, the
+    // caller's own included. A revoked session is not noticed until its browser
+    // next asks the API for something, and an SSE stream has already asked: it
+    // would go on receiving this workspace's entity documents until the
+    // broadcaster's sweep found the session gone from the store (KOL-062). The
+    // caller's client reconnects within seconds and is accepted, because its
+    // session was re-stamped above.
+    const closedStreams = closeStreamsForUser(userId, REVOKE_SOURCE);
+
+    logSessions('light', `user ${userId}: every session issued before ${new Date(revokedAt).toISOString()} is revoked, re-authenticated with ${byPassword ? 'the password' : 'a passkey'}; session ${req.sessionID} was re-stamped and stays signed in, and ${closedStreams} live /events stream(s) were closed (source: ${REVOKE_SOURCE})`);
+    res.json({ ok: true, revokedAt: new Date(revokedAt).toISOString() });
+  } catch (err) {
+    logSessions('light', `${REVOKE_SOURCE} failed for user ${userId}: ${err.message}`);
+    res.status(500).json({ error: 'Could not sign your other devices out' });
   }
 });
 

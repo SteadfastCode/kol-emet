@@ -152,6 +152,55 @@
         <div class="settings-group">
           <div class="settings-group-title">Account</div>
           <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
+          <!-- Beside Log Out on purpose (KOL-076): the two ways out of an account sit together —
+               this browser, or every other one. Two steps, because it is not a thing to do by
+               mis-tapping the row below Log Out: the button arms a form, and the form
+               re-authenticates, which is what the server demands anyway. -->
+          <button
+            v-if="!revokeArmed"
+            class="settings-row danger"
+            @click="armRevoke"
+          >Sign out everywhere else</button>
+          <form v-else class="revoke-all" autocomplete="on" @submit.prevent="revokeSessions">
+            <p class="settings-note">
+              Ends every other signed-in browser and device on this account — a borrowed laptop, a
+              lost phone. This browser stays signed in. Anything signed in elsewhere is signed out
+              the next time it asks for anything.
+            </p>
+            <label class="password-label" for="settings-revoke-password">Your password</label>
+            <input
+              id="settings-revoke-password"
+              v-model="revokePassword"
+              class="workspace-input"
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              :disabled="revokeSaving"
+            />
+            <button
+              type="submit"
+              class="settings-row danger"
+              :disabled="revokeSaving || !revokePassword"
+            >{{ revokeSaving ? 'Signing out…' : 'Sign out everywhere else' }}</button>
+            <!-- For an account signed in with a passkey, which is the case where the password is
+                 the thing its owner does not have to hand. -->
+            <button
+              type="button"
+              class="settings-row"
+              :disabled="revokeSaving"
+              @click="revokeSessionsWithPasskey"
+            >Confirm with a passkey instead</button>
+            <button
+              type="button"
+              class="settings-row"
+              :disabled="revokeSaving"
+              @click="cancelRevoke"
+            >Cancel</button>
+          </form>
+          <p v-if="revokeError" class="settings-error" role="alert">{{ revokeError }}</p>
+          <p v-else-if="revokeDone" class="settings-done" role="status">
+            Signed out everywhere else. This browser is still signed in.
+          </p>
         </div>
         <!-- Beside the passkey settings on purpose (KOL-074): the two ways into an account sit
              together. A form of its own with the standard autocomplete attributes, so a credential
@@ -315,6 +364,8 @@ import {
   changePasswordWithPasskey,
   PASSWORD_MIN_LENGTH,
   passwordTooShort,
+  revokeOtherSessions,
+  revokeOtherSessionsWithPasskey,
 } from '../api/auth.js';
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport } from '../api/export.js';
@@ -554,6 +605,73 @@ const savePassword = () => runPasswordChange(() => changePassword(
 const savePasswordWithPasskey = () => runPasswordChange(() => changePasswordWithPasskey(
   newPassword.value,
   { source: 'Settings → Password, confirmed with a passkey' },
+));
+
+// ─── Settings → Account → Sign out everywhere else (KOL-076) ─────────────────
+// Armed by a button rather than shown outright: the row sits under Log Out, and
+// the cost of a mis-tap is every other device having to sign in again. The
+// server re-authenticates it either way, and re-stamps this session so this
+// browser is the one that stays.
+const revokeArmed    = ref(false);
+const revokePassword = ref('');
+const revokeSaving   = ref(false);
+const revokeError    = ref('');
+const revokeDone     = ref(false);
+
+function armRevoke() {
+  revokeArmed.value = true;
+  revokeError.value = '';
+  revokeDone.value = false;
+}
+
+function cancelRevoke() {
+  revokeArmed.value = false;
+  revokePassword.value = '';
+  revokeError.value = '';
+}
+
+/** What Settings says about a refusal. The server's own sentence, where it has one. */
+function revokeMessageFor(err) {
+  // 403 is a failed re-authentication, not a dead session: the wrong password,
+  // or a passkey that did not confirm. 401 is the dead session — and from this
+  // route it means this browser's own session had already been revoked.
+  if (err.status === 400 || err.status === 403) return err.message;
+  if (err.status === 429) return err.message;   // the throttle says how long to wait
+  if (err.status === 401) return 'Your session has expired. Sign in again to sign your other devices out.';
+  return 'Could not sign your other devices out. Please try again.';
+}
+
+async function runRevoke(attempt) {
+  if (revokeSaving.value) return;
+  revokeError.value = '';
+  revokeDone.value = false;
+  revokeSaving.value = true;
+  try {
+    await attempt();
+    revokePassword.value = '';
+    revokeArmed.value = false;
+    revokeDone.value = true;
+    addToast({
+      message: 'Signed out everywhere else',
+      actorType: 'system',
+      actorLabel: 'Account',
+    });
+  } catch (err) {
+    // The passkey prompt was dismissed: not a failure to report, as at sign-in.
+    if (err.name === 'NotAllowedError') return;
+    revokeError.value = revokeMessageFor(err);
+  } finally {
+    revokeSaving.value = false;
+  }
+}
+
+const revokeSessions = () => runRevoke(() => revokeOtherSessions(
+  { password: revokePassword.value },
+  { source: 'Settings → Account → Sign out everywhere else' },
+));
+
+const revokeSessionsWithPasskey = () => runRevoke(() => revokeOtherSessionsWithPasskey(
+  { source: 'Settings → Account → Sign out everywhere else, confirmed with a passkey' },
 ));
 
 function onChatClose() {
@@ -1029,7 +1147,8 @@ provide('openSnapshot', openSnapshot);
   color: #e07070;
 }
 
-.password-change {
+.password-change,
+.revoke-all {
   display: flex;
   flex-direction: column;
   gap: 6px;

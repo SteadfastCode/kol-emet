@@ -79,12 +79,16 @@ vi.mock('../api/export.js', () => ({
 // should prompt an authenticator. The two policy exports are the real thing rather than stubs —
 // the rule is not network, and a stub returning undefined would let the form send a password the
 // server would refuse. What api/auth.js itself does with a response is its own concern.
-const { changePassword, changePasswordWithPasskey } = vi.hoisted(() => ({
+// The Sign out everywhere row posts through the two below (KOL-076), on the same terms.
+const { changePassword, changePasswordWithPasskey, revokeOtherSessions, revokeOtherSessionsWithPasskey } = vi.hoisted(() => ({
   changePassword: vi.fn(async () => ({ ok: true })),
   changePasswordWithPasskey: vi.fn(async () => ({ ok: true })),
+  revokeOtherSessions: vi.fn(async () => ({ ok: true, revokedAt: '2026-10-15T12:00:00.000Z' })),
+  revokeOtherSessionsWithPasskey: vi.fn(async () => ({ ok: true, revokedAt: '2026-10-15T12:00:00.000Z' })),
 }));
 vi.mock('../api/auth.js', () => ({
   changePassword, changePasswordWithPasskey,
+  revokeOtherSessions, revokeOtherSessionsWithPasskey,
   PASSWORD_MIN_LENGTH: 12,
   passwordTooShort: (value) => [...(value ?? '')].length < 12,
   login: vi.fn(), register: vi.fn(), logout: vi.fn(), getSession: vi.fn(), getTemplates: vi.fn(),
@@ -498,6 +502,133 @@ describe('WikiLayout password group', () => {
 
     expect(group(wrapper).find('.settings-error').exists()).toBe(false);
     expect(group(wrapper).find('.settings-done').exists()).toBe(false);
+  });
+});
+
+/**
+ * Sign out everywhere else (KOL-076): in the Account group beside Log Out, because the two ways out
+ * of an account belong together. Two steps on purpose — the row sits under Log Out, and the cost of
+ * a mis-tap is every other device having to sign in again — so what is pinned here is that nothing
+ * is posted until the form is armed *and* confirmed, that the password typed is what goes out, and
+ * that a refusal keeps the server's own sentence. What the route itself does is pinned in
+ * server/tests/http/sessionRevocation.test.js.
+ */
+describe('WikiLayout sign out everywhere', () => {
+  beforeEach(() => {
+    revokeOtherSessions.mockReset();
+    revokeOtherSessionsWithPasskey.mockReset();
+    revokeOtherSessions.mockResolvedValue({ ok: true, revokedAt: '2026-10-15T12:00:00.000Z' });
+    revokeOtherSessionsWithPasskey.mockResolvedValue({ ok: true, revokedAt: '2026-10-15T12:00:00.000Z' });
+  });
+
+  const group = (wrapper) =>
+    wrapper.findAll('.mobile-settings-panel .settings-group')
+      .find((g) => g.get('.settings-group-title').text() === 'Account');
+
+  const row = (wrapper) =>
+    group(wrapper).findAll('button').find((b) => b.text() === 'Sign out everywhere else');
+
+  async function openSettings() {
+    const wrapper = shallowMount(WikiLayout);
+    await settingsTab(wrapper).trigger('click');
+    await flushPromises();
+    expect(revokeOtherSessions).not.toHaveBeenCalled();   // nothing is posted on open
+    return wrapper;
+  }
+
+  /** Arms the confirmation and answers with its password input. */
+  async function arm(wrapper) {
+    expect(group(wrapper).find('form.revoke-all').exists()).toBe(false);
+    await row(wrapper).trigger('click');
+    const form = group(wrapper).get('form.revoke-all');
+    // Arming alone posts nothing: that is what makes this two steps rather than one.
+    expect(revokeOtherSessions).not.toHaveBeenCalled();
+    return form;
+  }
+
+  it('asks for the password before it posts, then names what asked and says it landed', async () => {
+    const wrapper = await openSettings();
+    const form = await arm(wrapper);
+
+    const input = form.get('input[autocomplete="current-password"]');
+    expect(input.attributes('type')).toBe('password');
+    // Held until something is typed: the server refuses an empty one anyway.
+    expect(form.get('button[type="submit"]').attributes('disabled')).toBeDefined();
+
+    await input.setValue('correct-horse-battery-staple');
+    expect(form.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+    await form.trigger('submit');
+    await flushPromises();
+
+    expect(revokeOtherSessions).toHaveBeenCalledTimes(1);
+    expect(revokeOtherSessions.mock.calls[0][0]).toEqual({ password: 'correct-horse-battery-staple' });
+    // The light tier names the source of a change, not just that one happened.
+    expect(revokeOtherSessions.mock.calls[0][1]).toMatchObject({ source: expect.stringContaining('Settings') });
+
+    expect(group(wrapper).get('.settings-done').text()).toContain('still signed in');
+    expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+    // The form closes and keeps no password: the row is back to one tap from armed.
+    expect(group(wrapper).find('form.revoke-all').exists()).toBe(false);
+    expect(row(wrapper).exists()).toBe(true);
+  });
+
+  it('the passkey button confirms the same revocation without a password', async () => {
+    const wrapper = await openSettings();
+    const form = await arm(wrapper);
+
+    await form.findAll('button').find((b) => b.text().includes('passkey')).trigger('click');
+    await flushPromises();
+
+    expect(revokeOtherSessions).not.toHaveBeenCalled();
+    expect(revokeOtherSessionsWithPasskey).toHaveBeenCalledTimes(1);
+    expect(revokeOtherSessionsWithPasskey.mock.calls[0][0]).toMatchObject({ source: expect.stringContaining('Settings') });
+    expect(group(wrapper).get('.settings-done').exists()).toBe(true);
+  });
+
+  it('cancelling the confirmation posts nothing and leaves the row armed again', async () => {
+    const wrapper = await openSettings();
+    const form = await arm(wrapper);
+    await form.get('input[autocomplete="current-password"]').setValue('correct-horse-battery-staple');
+
+    await form.findAll('button').find((b) => b.text() === 'Cancel').trigger('click');
+
+    expect(revokeOtherSessions).not.toHaveBeenCalled();
+    expect(group(wrapper).find('form.revoke-all').exists()).toBe(false);
+    expect(group(wrapper).find('.settings-done').exists()).toBe(false);
+
+    // And the password typed before cancelling is not still sitting in the re-armed form.
+    await row(wrapper).trigger('click');
+    expect(group(wrapper).get('form.revoke-all').get('input[autocomplete="current-password"]').element.value).toBe('');
+  });
+
+  it("a refused revocation shows the server's sentence and keeps the form open", async () => {
+    // 403: the re-authentication failed, the session did not (docs/api.md#sessions).
+    revokeOtherSessions.mockRejectedValue(Object.assign(new Error('Incorrect password'), { status: 403 }));
+    const wrapper = await openSettings();
+    const form = await arm(wrapper);
+    await form.get('input[autocomplete="current-password"]').setValue('wrong-horse-battery-staple');
+
+    await form.trigger('submit');
+    await flushPromises();
+
+    expect(group(wrapper).get('.settings-error').text()).toBe('Incorrect password');
+    expect(group(wrapper).find('.settings-done').exists()).toBe(false);
+    // Still armed, with the typed password left in place: the correction is one field away.
+    expect(group(wrapper).get('form.revoke-all').get('input[autocomplete="current-password"]').element.value)
+      .toBe('wrong-horse-battery-staple');
+  });
+
+  it('a dismissed passkey prompt is not an error', async () => {
+    revokeOtherSessionsWithPasskey.mockRejectedValue(Object.assign(new Error('cancelled'), { name: 'NotAllowedError' }));
+    const wrapper = await openSettings();
+    const form = await arm(wrapper);
+
+    await form.findAll('button').find((b) => b.text().includes('passkey')).trigger('click');
+    await flushPromises();
+
+    expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+    expect(group(wrapper).find('.settings-done').exists()).toBe(false);
+    expect(group(wrapper).find('form.revoke-all').exists()).toBe(true);
   });
 });
 

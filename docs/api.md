@@ -282,6 +282,8 @@ row; the reasoning is the KOL-060 Decision Log entry in `kol_emet_spec.md`.
 | POST | `/auth/register` | Create account (open registration). Body `{ email, password, template?, workspaceName? }`: `template` is a key from [`GET /templates`](#templates) and decides what the new workspace is seeded with; left out, it is `worldbuilding`. `workspaceName` names the new workspace (trimmed, 1–80 characters, the same rule as [`PATCH /workspace`](#workspace)); left out, it is `My Workspace`, and an unusable one is 400 `INVALID_WORKSPACE_NAME` creating no user or workspace. 201 `{ ok: true }` and a session; 400 missing email or password; 400 `Unknown template` for a `template` that names none (including `null` or a non-string), creating no user or workspace; 409 email already registered. Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once a client address has created its limit of accounts (default 10 per 60 minutes — its own counter and its own window, not the sign-in one), checked before the duplicate lookup and the password hash and creating no user or workspace. The slot is *reserved* at that check rather than counted after the writes, so the ceiling holds for requests that arrive together and not only for a sequence of them; a 400 is refused before the reservation and a 409 hands it back, so only a *created* account spends the budget ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
 | POST | `/auth/login` | Password login → session. 401 `Invalid email or password` for both a wrong password and an unknown address (byte-identical). Throttled: 429 `Too many attempts. Try again later.` with a `Retry-After` once an email or a client address is over its failure limit, checked before the password is compared and identical for known and unknown addresses; a successful sign-in clears that email's counter ([`lib/attemptLimiter.js`](../server/src/lib/attemptLimiter.js)) |
 | POST | `/auth/logout` | End session (`requireAuth`) |
+| POST | `/auth/sessions/revoke-all` | End every *other* session on the signed-in account — the borrowed laptop, the lost phone (see [Sessions](#sessions)). `requireActor`, session only; a bearer token is 403. Body `{ password }` or `{ passkey }`; no typed email, unlike the deletion route. 200 `{ ok: true, revokedAt }` and the calling session is re-stamped so this device stays signed in; 400 no credential offered; 403 wrong password or failed passkey — not 401, the session is still good; 429 once the account is over its failed-confirmation limit, which it shares with `DELETE /auth/account` and `POST /auth/password` |
+| POST | `/auth/sessions/passkey-challenge` | WebAuthn challenge for confirming `POST /auth/sessions/revoke-all` with a passkey (`requireActor`, session only). One use, under its own session key: not the sign-in challenge, not the deletion one and not the password-change one. 400 when the account holds no passkey |
 | GET | `/auth/me` | Current session user |
 | DELETE | `/auth/account` | Hard-delete the signed-in account: the user, every workspace they solely own and everything in it ([`accountDeleter.js`](../server/src/lib/accountDeleter.js)). `requireActor`, session only; a bearer token is 403. Body `{ email, password }` or `{ email, passkey }`: the account's email as a typed confirmation, plus a fresh credential. 204 and the session is destroyed; 400 missing or mismatched email; 403 wrong password or failed passkey; 429 once the account is over its failed-confirmation limit; 409 `{ error, memberships }` while the user belongs to a workspace they don't solely own, deleting nothing |
 | POST | `/auth/password` | Replace the signed-in account's password (see [Password](#password)). Session only; a bearer token is 403. Body `{ currentPassword, newPassword }` or `{ newPassword, passkey }`. 200 `{ ok: true }` and the caller stays signed in; 400 a new password under the minimum (the policy's own sentence) or no credential offered; 403 wrong current password or failed passkey — not 401, the session is still good; 429 once the account is over its failed-confirmation limit, which it shares with `DELETE /auth/account` |
@@ -329,13 +331,76 @@ shared with an AI connector, and a connector does not get to change someone's pa
 without the old one. A bearer caller is 403, as at passkey management.
 
 A successful change leaves **the caller signed in** and does **not** end the account's other
-sessions; KOL-076 owns that. Also out of scope today: password reset by email (it needs a mail
-credential), breach-list or zxcvbn scoring, and forcing a rotation on existing accounts.
+sessions — that is [`POST /auth/sessions/revoke-all`](#sessions), asked for separately and on
+purpose: a password changed because it was weak is not the same event as a device out of its owner's
+hands, and a change that silently signed every other browser out would be the more surprising of the
+two. Also out of scope today: password reset by email (it needs a mail credential), breach-list or
+zxcvbn scoring, and forcing a rotation on existing accounts.
 
 `PASSWORD_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) traces the route: every
 refusal with its reason and the user id, every password actually changed and which credential
 confirmed it, each challenge issued at `normal`. Neither password is ever logged, nor its length. The
 client logs its own side on `localStorage.PASSWORD_LOG_LEVEL`.
+
+## Sessions
+
+A session is a row in the session store keyed by its own id, and that store **cannot be searched by
+user**: `connect-mongo` holds each session serialized, so "end every session this account has" is
+not a query the API can write. `POST /auth/logout` therefore ends only the session it is called
+from — which left a session on a borrowed laptop, or one on a stolen phone, with no way for its
+owner to end it at all.
+
+`POST /auth/sessions/revoke-all` is that way, and it is **a timestamp rather than a session table**:
+
+- Every sign-in stamps the session it creates with `issuedAt`, epoch milliseconds —
+  `POST /auth/login`, `POST /auth/register` and `POST /auth/webauthn/login/complete`, all three
+  through one function in [`routes/auth.js`](../server/src/routes/auth.js) so none can be forgotten.
+- The account carries `credentialsChangedAt` ([`models/User.js`](../server/src/models/User.js)),
+  written at creation and bumped by this route.
+- `requireAuth` and `requireActor` ([`middleware/auth.js`](../server/src/middleware/auth.js))
+  compare the two on every session request. A session that **predates** the bump is destroyed in the
+  store, has its cookie cleared with the attributes it was set with, and is answered **401**. Equal
+  stands, which is how the calling session survives: the route re-stamps it with the very
+  millisecond it writes to the account.
+
+A table of live sessions would be a second register of the same fact — one that has to stay true
+through every expiry, every store swap and every instance — and the store could not populate it
+anyway. The cost of the timestamp instead is one indexed read per session request, in middleware
+that already runs on all of them.
+
+Two asymmetries, both deliberate:
+
+- **No `credentialsChangedAt` means nothing was ever revoked**, so the session stands. Accounts
+  registered before this feature have no such field, and reading its absence as "revoked at the dawn
+  of time" would sign every existing user out on deploy.
+- **A session with no `issuedAt`, on an account that *has* revoked, is over.** It was issued before
+  the stamp existed, so it cannot be shown to postdate the revocation — and the premise of the
+  feature is that the device holding it may not be in its owner's hands.
+
+Re-authentication is [`DELETE /auth/account`](#auth)'s, for the same reason that route has one: a
+session is a thing a borrowed laptop also has. The body carries the current **password**, or a
+**passkey assertion** against a single-use challenge from `POST /auth/sessions/passkey-challenge`.
+A failed one is **403, not 401** — a 401 from this route would read as "you have been signed out",
+which is precisely what it promises not to do to the caller. There is **no typed email**: that
+confirmation exists on the deletion route because deletion is irreversible, and this is undone by
+signing in again.
+
+Every live [`GET /events`](#events-sse) stream the account holds in the process is closed too, the
+caller's own included: a revoked session is not noticed until its browser next asks for something,
+and an SSE stream has already asked. The caller's client reconnects within seconds and is accepted.
+
+Out of scope, and not accidents: **listing** active sessions with device, address or location (the
+store cannot enumerate them by user — that is the whole reason this is a timestamp), notifying the
+account by email, revoking the MCP bearer token or OAuth grants (KOL-014 owns per-connector
+identity), and bumping the timestamp automatically when a password changes or a passkey is removed.
+A deleted account's sessions are not bumped either; they are refused by the id check in
+`GET /auth/me` and `requireActor`.
+
+`SESSION_REVOKE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) traces both halves:
+every session the check ends, naming the user, the session and both timestamps; every revocation and
+every session stamped at a sign-in at `normal`; each accepted session's comparison at `verbose`. Ids
+and timestamps only — never an email or a credential. The client logs its own side on
+`localStorage.SESSION_REVOKE_LOG_LEVEL`.
 
 ## Templates
 
