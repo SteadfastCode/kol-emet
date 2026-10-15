@@ -38,7 +38,7 @@ registration, or removes a feature.
   in `server/package.json`); no major bumps. Verify: `yarn audit --level high` count drops, both `yarn test` suites and `yarn build`
   green, `yarn start` boots. Proposed because an unattended dependency refresh deserves one explicit nod from Daniel even with tests.
 
-- [ ] **(KOL-080) Backlog audit: file new candidates under Proposed**
+- [x] **(KOL-080) Backlog audit: file new candidates under Proposed**
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
   the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
