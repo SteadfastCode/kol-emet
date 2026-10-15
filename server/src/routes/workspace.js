@@ -51,7 +51,7 @@ const describeName = (value) =>
   typeof value === 'string' ? `a ${[...value].length}-character string` : `a ${value === null ? 'null' : typeof value}`;
 
 // GET /workspace — the caller's workspace, and their role in it.
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const workspace = await Workspace.findById(req.workspaceId)
       .select('_id name createdAt')
@@ -65,12 +65,12 @@ router.get('/', async (req, res) => {
     res.json(workspaceBody(workspace, req.workspaceRole));
   } catch (err) {
     log('light', `failed to read workspace ${req.workspaceId} (source: GET /workspace by user ${req.actingUserId}): ${err.message}`);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /workspace — rename it. Owners only.
-router.patch('/', requireWorkspaceRole('owner'), async (req, res) => {
+router.patch('/', requireWorkspaceRole('owner'), async (req, res, next) => {
   const name = workspaceName(req.body?.name);
   if (!name) {
     log('light', `refused rename of workspace ${req.workspaceId} (source: PATCH /workspace by user ${req.actingUserId}, role ${req.workspaceRole}): ${describeName(req.body?.name)} is not a name of 1–${WORKSPACE_NAME_MAX} characters`);
@@ -93,7 +93,7 @@ router.patch('/', requireWorkspaceRole('owner'), async (req, res) => {
     res.json(workspaceBody({ ...before, name }, req.workspaceRole));
   } catch (err) {
     log('light', `failed to rename workspace ${req.workspaceId} to "${name}" (source: PATCH /workspace by user ${req.actingUserId}): ${err.message}`);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

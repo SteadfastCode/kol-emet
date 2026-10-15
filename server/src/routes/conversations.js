@@ -19,7 +19,7 @@ function sessionUserId(req, res) {
 
 // ─── GET /conversations ───────────────────────────────────────────────────────
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, async (req, res, next) => {
   const userId = sessionUserId(req, res);
   if (!userId) return;
   try {
@@ -31,13 +31,13 @@ router.get('/', requireAuth, async (req, res) => {
     const withCount = list.map(c => ({ ...c, messageCount: undefined }));
     res.json(withCount);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ─── POST /conversations ──────────────────────────────────────────────────────
 
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, async (req, res, next) => {
   const userId = sessionUserId(req, res);
   if (!userId) return;
   const { provider, model } = req.body;
@@ -49,13 +49,13 @@ router.post('/', requireAuth, async (req, res) => {
     const conv = await Conversation.create({ userId, provider, model, workspaceId: req.workspaceId });
     res.status(201).json(conv);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ─── GET /conversations/:id ───────────────────────────────────────────────────
 
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', requireAuth, async (req, res, next) => {
   const userId = sessionUserId(req, res);
   if (!userId) return;
   try {
@@ -63,14 +63,14 @@ router.get('/:id', requireAuth, async (req, res) => {
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     res.json(conv);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ─── PATCH /conversations/:id ─────────────────────────────────────────────────
 // Allows renaming. Setting title manually locks autoTitle = false.
 
-router.patch('/:id', requireAuth, async (req, res) => {
+router.patch('/:id', requireAuth, async (req, res, next) => {
   const userId = sessionUserId(req, res);
   if (!userId) return;
   const { title } = req.body;
@@ -84,13 +84,13 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     res.json({ _id: conv._id, title: conv.title, autoTitle: conv.autoTitle });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // ─── DELETE /conversations/:id ────────────────────────────────────────────────
 
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res, next) => {
   const userId = sessionUserId(req, res);
   if (!userId) return;
   try {
@@ -98,7 +98,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     if (!conv) return res.status(404).json({ error: 'Conversation not found' });
     res.status(204).end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -123,7 +123,7 @@ function titleRefreshPrompt(existingTitle) {
   );
 }
 
-router.post('/:id/title', requireAuth, async (req, res) => {
+router.post('/:id/title', requireAuth, async (req, res, next) => {
   const userId = sessionUserId(req, res);
   if (!userId) return;
   try {
@@ -176,7 +176,7 @@ router.post('/:id/title', requireAuth, async (req, res) => {
 
     res.json({ title: conv.title });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

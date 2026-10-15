@@ -86,6 +86,41 @@ got wrong. Previously these reached Mongoose and came back as 500 carrying the d
 message. `OBJECT_ID_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) names every
 refusal with the parameter, the URL and the mount it came from.
 
+## Errors
+
+Anything a route does not answer deliberately reaches one error middleware,
+[`middleware/errorHandler.js`](../server/src/middleware/errorHandler.js), mounted last in
+`createApp`. Every router's catches end in `next(err)`, so the driver's own text never reaches a
+caller: no `E11000 duplicate key error collection: … index: …`, no `Entity validation failed:
+category: …`, no pool error carrying a connection string.
+
+| Status | Body | When |
+|--------|------|------|
+| 400 | `{ "error": "VALIDATION_FAILED", "fields": ["category", "summary"] }` | A write failed schema validation. `fields` are this API's own schema paths — what a client needs to mark the offending inputs. Never the values. |
+| 400 | `{ "error": "INVALID_VALUE", "fields": ["workspaceId"] }` | A value could not be cast to the type its field holds. |
+| 409 | `{ "error": "DUPLICATE", "fields": ["email"] }` | A unique index rejected the write. `fields` are the index's key names, never the colliding values. |
+| 500 | `{ "error": "INTERNAL", "ref": "a1b2c3d4" }` | Anything else. `ref` is a short id written to the server log beside the real stack — quote it in a bug report; nothing about the deployment is in the body. |
+
+A route may also raise a refusal of its own as a status with a code (`httpError(503,
+'EXPORT_NOT_CONFIGURED')`), which is answered as `{ "error": "<code>" }` at that status. The codes
+in use: `INVALID_ID` (see [Route parameters](#route-parameters)), `INVALID_WORKSPACE_NAME`,
+`NOT_WORKSPACE_OWNER` / `NOT_WORKSPACE_EDITOR` / `NOT_WORKSPACE_VIEWER`, `EXPORT_NOT_CONFIGURED`.
+
+Everything documented per-route below is unchanged: a 400/403/404/409 a route answers on purpose
+carries the sentence it has always carried, because that wording is part of its contract. Only the
+catch-all was replaced.
+
+`ERROR_LOG_LEVEL` (`off | light | normal | verbose`, default `light`). The light tier logs one line
+per handled error with the route, the status it chose, the code, the `ref` when there is one, and
+*which rule* chose it — plus, for a 500, the real stack prefixed with that same `ref`. `off` means
+nothing at all, the stack included.
+
+Out of scope here: `/mcp` and `/bridge/mcp` answer JSON-RPC error objects on their own protocol, and
+the SSE routes report failures as stream events because their headers went out first — see
+[Events](#events-sse) and [`POST /drafts`](#post-drafts-sse).
+
+---
+
 ---
 
 ## Entities

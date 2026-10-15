@@ -113,7 +113,7 @@ function findOwn(req) {
 }
 
 // GET /entity-types
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const types = await EntityType.find({ workspaceId: req.workspaceId }).sort({ order: 1, name: 1 });
 
@@ -129,12 +129,12 @@ router.get('/', async (req, res) => {
 
     res.json(types);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /entity-types
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { name, icon = null, color = null, order } = req.body ?? {};
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -164,12 +164,12 @@ router.post('/', async (req, res) => {
     res.status(201).json(response);
   } catch (err) {
     if (isDuplicateKey(err)) return res.status(409).json({ error: 'Entity type already exists' });
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /entity-types/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req, res, next) => {
   try {
     const type = await findOwn(req);
     if (!type) return res.status(404).json({ error: 'Not found' });
@@ -217,20 +217,24 @@ router.put('/:id', async (req, res) => {
       relabelled = await relabel(req.workspaceId, from, to);
     } catch (err) {
       log('light', `renamed entity type "${from}" → "${to}" but relabelling what used it failed: ${err.message} (source: ${source}; rename it back to repair)`);
+      // A deliberate 500 with a sentence the route wrote, kept as it is: the
+      // workspace is half-renamed and the only useful answer is how to repair
+      // it. Only `err.message` goes (KOL-075) — the reason the relabel failed
+      // is the driver's, and it is on the log line above with the same facts.
       return res.status(500).json({
-        error: `Renamed "${from}" to "${to}", but moving what used "${from}" failed: ${err.message}. Rename it back to "${from}" to restore a consistent state, then retry.`,
+        error: `Renamed "${from}" to "${to}", but moving what used "${from}" failed. Rename it back to "${from}" to restore a consistent state, then retry.`,
       });
     }
     log('light', `renamed entity type "${from}" → "${to}": relabelled ${relabelled.entities} entities, ${relabelled.sourceCategories} relationship-type source and ${relabelled.targetCategories} target categories (source: ${source})`);
     res.json({ ...updated.toObject(), relabelled });
   } catch (err) {
     if (isDuplicateKey(err)) return res.status(409).json({ error: 'Entity type already exists' });
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /entity-types/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const type = await findOwn(req);
     if (!type) return res.status(404).json({ error: 'Not found' });
@@ -246,7 +250,7 @@ router.delete('/:id', async (req, res) => {
     log('normal', `deleted entity type ${type._id} "${type.name}" in workspace ${req.workspaceId} (source: DELETE /entity-types)`);
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

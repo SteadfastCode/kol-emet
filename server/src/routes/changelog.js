@@ -89,7 +89,7 @@ function log(level, msg) {
 const DELETED_LIMIT = 50;
 
 // GET /entities/:id/history — list change log for an entity, newest first
-router.get('/entities/:id/history', async (req, res) => {
+router.get('/entities/:id/history', async (req, res, next) => {
   try {
     const logs = await ChangeLog.find({
       entityId: req.params.id,
@@ -116,12 +116,12 @@ router.get('/entities/:id/history', async (req, res) => {
     log(flagged ? 'normal' : 'verbose', `GET /entities/${req.params.id}/history → ${logs.length} entr${logs.length === 1 ? 'y' : 'ies'}, ${flagged} with a snapshot category the workspace no longer has (source: registry read for workspace ${req.workspaceId})`);
     res.json(logs);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /deleted — the deleted entities this workspace can still put back
-router.get('/deleted', async (req, res) => {
+router.get('/deleted', async (req, res, next) => {
   try {
     const entries = await ChangeLog.find({
       workspaceId: req.workspaceId,
@@ -175,12 +175,12 @@ router.get('/deleted', async (req, res) => {
     log('normal', `GET /deleted → ${deleted.length} restorable of ${entries.length} deleted entr${entries.length === 1 ? 'y' : 'ies'} in workspace ${req.workspaceId} (source: ${live.size} id(s) live again, ${deleted.filter(d => d.snapshotCategoryMissing).length} with a snapshot category the workspace no longer has)`);
     res.json(deleted);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /entities/:id/rollback/:logId — restore entity from a snapshot
-router.post('/entities/:id/rollback/:logId', requireActor, async (req, res) => {
+router.post('/entities/:id/rollback/:logId', requireActor, async (req, res, next) => {
   try {
     const entry = await ChangeLog.findOne({
       _id: req.params.logId,
@@ -307,7 +307,7 @@ router.post('/entities/:id/rollback/:logId', requireActor, async (req, res) => {
         entityId: req.params.id,
       });
     }
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

@@ -5,7 +5,7 @@ import { similarity, findSimilar } from '../lib/similarity.js';
 const router = Router();
 
 // GET /relationship-types
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const filter = { workspaceId: req.workspaceId };
     const types = await RelationshipType.find(filter).sort({ name: 1 });
@@ -24,12 +24,12 @@ router.get('/', async (req, res) => {
 
     res.json(types);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /relationship-types
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { name, sourceCategory = null, targetCategory = null } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -54,12 +54,12 @@ router.post('/', async (req, res) => {
     if (similar.length) response.warning = `Similar types exist: ${similar.join(', ')}`;
     res.status(201).json(response);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /relationship-types/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req, res, next) => {
   try {
     const { name, sourceCategory, targetCategory } = req.body;
     const update = {};
@@ -77,12 +77,12 @@ router.put('/:id', async (req, res) => {
     if (!type) return res.status(404).json({ error: 'Not found' });
     res.json(type);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /relationship-types/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const type = await RelationshipType.findOneAndDelete({
       _id: req.params.id,
@@ -91,7 +91,7 @@ router.delete('/:id', async (req, res) => {
     if (!type) return res.status(404).json({ error: 'Not found' });
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

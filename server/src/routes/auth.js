@@ -415,7 +415,14 @@ router.post('/webauthn/register/complete', requireAuth, async (req, res) => {
       requireUserVerification: false,
     });
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    // @simplewebauthn throws for a response it cannot verify — a mismatched
+    // origin, a stale challenge, a malformed attestation. That is the caller's
+    // mistake, so 400 stays (KOL-075 does not move a status a route chose);
+    // what goes is the library's own sentence, which named this deployment's
+    // expected origin and RP id. Same answer as the `!verified` branch below,
+    // because to a client they are the same failure.
+    logPasskey('normal', `passkey registration refused for user ${user._id}: ${err.message} (source: POST /auth/webauthn/register/complete)`);
+    return res.status(400).json({ error: 'Passkey verification failed' });
   }
 
   if (!verification.verified) {
@@ -530,7 +537,11 @@ router.post('/webauthn/login/complete', async (req, res) => {
   } catch (err) {
     limiter(req).recordFailure(keys, LOGIN_SOURCE);
     logPasskey('normal', `passkey sign-in refused for user ${user._id}: ${err.message} (source: ${LOGIN_SOURCE})`);
-    return res.status(400).json({ error: err.message });
+    // 400 as before — a thrown assertion is the caller's, not ours — but with
+    // this route's own sentence rather than the library's, which spelled out
+    // the expected origin and RP id. Deliberately the same wording as the
+    // `!verified` 401 below: the status tells the two apart, the body need not.
+    return res.status(400).json({ error: 'Passkey authentication failed' });
   }
 
   if (!verification.verified) {
