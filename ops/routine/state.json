@@ -76,25 +76,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-087": {
-      "order": 5,
-      "title": "An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-087",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-10-14T16:17:46.704Z",
-      "runId": "2026-10-14T16:11:29.030Z",
-      "lastFail": null
-    },
     "KOL-014": {
-      "order": 6,
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 7,
+      "order": 6,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -130,7 +113,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 8,
+      "order": 7,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +130,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 9,
+      "order": 8,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 10,
+      "order": 9,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +164,7 @@
       "lastFail": null
     },
     "KOL-075": {
-      "order": 11,
+      "order": 10,
       "title": "One error shape for the API, instead of the database's own error text",
       "status": "pending",
       "attempts": 0,
@@ -198,7 +181,7 @@
       "lastFail": null
     },
     "KOL-076": {
-      "order": 12,
+      "order": 11,
       "title": "Sign out everywhere, so a session on a lost device can be ended",
       "status": "pending",
       "attempts": 0,
@@ -215,7 +198,7 @@
       "lastFail": null
     },
     "KOL-077": {
-      "order": 13,
+      "order": 12,
       "title": "`POST /import`: a canonical export round-trips back into an empty workspace",
       "status": "pending",
       "attempts": 0,
@@ -232,7 +215,7 @@
       "lastFail": null
     },
     "KOL-078": {
-      "order": 14,
+      "order": 13,
       "title": "`GET /health`: liveness and database readiness without a session",
       "status": "pending",
       "attempts": 0,
@@ -249,7 +232,7 @@
       "lastFail": null
     },
     "KOL-079": {
-      "order": 15,
+      "order": 14,
       "title": "Three stale \"not built\" lists that make a backlog audit re-propose shipped work",
       "status": "pending",
       "attempts": 0,
@@ -263,6 +246,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-087": {
+      "order": null,
+      "title": "An operation whose tags is not a sequence crashes the parse: toJS(...) returns a string (or plain…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-087",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-14T16:17:46.704Z",
+      "runId": "2026-10-14T16:11:29.030Z",
       "lastFail": null
     },
     "KOL-086": {
