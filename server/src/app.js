@@ -32,6 +32,7 @@ import relationshipGroupsRouter from './routes/relationshipGroups.js';
 import chatRouter from './routes/chat.js';
 import conversationsRouter from './routes/conversations.js';
 import exportRouter from './routes/export.js';
+import importRouter, { importJsonBody } from './routes/import.js';
 import workspaceRouter from './routes/workspace.js';
 import './models/User.js';
 import './models/Conversation.js';
@@ -69,6 +70,12 @@ export function createApp({ sessionStore, authLimits } = {}) {
     origin: process.env.CLIENT_ORIGIN,
     credentials: true,
   }));
+  // Ahead of the app-wide parser, and path-scoped: an import carries a whole
+  // workspace graph, which does not fit the 100 kB default, and its parse
+  // failure is the caller's 400 rather than a 500 (routes/import.js). The first
+  // parser to run sets body-parser's own `req._body`, so the one below skips a
+  // request this has already read.
+  app.use('/import', importJsonBody);
   app.use(express.json());
   // No app-wide express.urlencoded on purpose (KOL-058): a form-encoded POST is
   // a CORS-*simple* request, so an attacker's page can send one cross-site with
@@ -147,6 +154,10 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // the same two middlewares as every other tenant-content route, so the
   // workspace exported is the caller's own and cannot be named in a parameter.
   app.use('/export', requireAuth, resolveWorkspace, exportRouter);
+  // And the way back in (KOL-077): one export document into an empty
+  // workspace. Same two middlewares, so the workspace written is the caller's
+  // own; the owner-only gate is in the route.
+  app.use('/import', requireAuth, resolveWorkspace, importRouter);
   // The workspace itself: its name, and the caller's role in it (KOL-071).
   // Same two middlewares again — the role PATCH gates on is the one
   // resolveWorkspace read from the caller's own membership, so a rename cannot

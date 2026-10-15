@@ -280,6 +280,29 @@
           <p v-if="exportError" class="settings-error" role="alert">{{ exportError }}</p>
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">Import workspace</div>
+          <!-- The way back in (KOL-077): one exported file into an empty workspace. The file is
+               read here and posted as the request body; the server refuses anything but an empty
+               workspace (409 WORKSPACE_NOT_EMPTY), which is the message below. -->
+          <label class="settings-row" :class="{ busy: importing }">
+            {{ importing ? 'Importing…' : 'Import workspace from JSON' }}
+            <input
+              type="file"
+              class="settings-file-input"
+              accept="application/json,.json"
+              :disabled="importing"
+              @change="importWorkspace"
+            />
+          </label>
+          <p class="settings-note">
+            Reads a file from Export workspace back into this one. It has to be empty first —
+            no entities, relationships or open questions — so nothing can be overwritten. Only
+            the workspace owner can import.
+          </p>
+          <p v-if="importSummary" class="settings-note">{{ importSummary }}</p>
+          <p v-if="importError" class="settings-error" role="alert">{{ importError }}</p>
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">Tags</div>
           <!-- Counts come from the entity list already loaded here, not a route of their own;
                a rename or removal touches many entities, so the list is refetched after one. -->
@@ -368,7 +391,7 @@ import {
   revokeOtherSessionsWithPasskey,
 } from '../api/auth.js';
 import { searchEntities } from '../api/entities.js';
-import { downloadWorkspaceExport } from '../api/export.js';
+import { downloadWorkspaceExport, importWorkspaceFile } from '../api/export.js';
 import { getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
@@ -486,6 +509,41 @@ async function exportWorkspace() {
     exportError.value = err.message || 'Export failed';
   } finally {
     exporting.value = false;
+  }
+}
+
+/**
+ * The Import workspace row (KOL-077): the file from the row above, read back
+ * into this workspace. The server only writes into an empty one, so most of
+ * what this has to do is say why it refused — api/export.js turns each code
+ * into a sentence. On success the sidebar is reloaded, since every entity in
+ * it was just created.
+ */
+const importing = ref(false);
+const importError = ref('');
+const importSummary = ref('');
+
+async function importWorkspace(event) {
+  const file = event?.target?.files?.[0];
+  // Reset the input either way, so choosing the same file twice fires `change`
+  // again — a failed import is usually retried with the same file.
+  const clear = () => { if (event?.target) event.target.value = ''; };
+  if (!file || importing.value) return clear();
+
+  importing.value = true;
+  importError.value = '';
+  importSummary.value = '';
+  try {
+    const result = await importWorkspaceFile(file, { source: 'Settings → Import workspace' });
+    const counts = result.imported ?? {};
+    importSummary.value = `Imported ${counts.entities ?? 0} entities, ${counts.relationshipGroups ?? 0} relationships and ${counts.openQuestions ?? 0} open questions.`;
+    addToast({ message: importSummary.value, actorType: 'system', actorLabel: 'Import' });
+    loadEntities('Settings → Import workspace');
+  } catch (err) {
+    importError.value = err.message || 'Import failed';
+  } finally {
+    importing.value = false;
+    clear();
   }
 }
 
@@ -1078,6 +1136,10 @@ provide('openSnapshot', openSnapshot);
 }
 
 .settings-group { margin-bottom: 32px; }
+
+/* The label is the button (.settings-row); the input itself is never shown. */
+.settings-file-input { display: none; }
+.settings-row.busy { opacity: 0.6; cursor: default; }
 
 .settings-group-title {
   font-size: 10px;

@@ -68,12 +68,17 @@ vi.mock('../api/entities.js', () => ({
 }));
 // The Export workspace row calls this; nothing in a test should fetch, and nothing should try to
 // save a file. What the real module does with the response is its own concern (api/export.js).
-const { downloadWorkspaceExport } = vi.hoisted(() => ({ downloadWorkspaceExport: vi.fn() }));
+// The Import workspace row posts through importWorkspaceFile (KOL-077), on the same terms.
+const { downloadWorkspaceExport, importWorkspaceFile } = vi.hoisted(() => ({
+  downloadWorkspaceExport: vi.fn(), importWorkspaceFile: vi.fn(),
+}));
 vi.mock('../api/export.js', () => ({
   downloadWorkspaceExport,
   default: downloadWorkspaceExport,
+  importWorkspaceFile,
   filenameFromDisposition: vi.fn(),
   FALLBACK_FILENAME: 'workspace-export.json',
+  IMPORT_MESSAGES: {},
 }));
 // The Password group posts through these (KOL-074); nothing in a test should fetch, and nothing
 // should prompt an authenticator. The two policy exports are the real thing rather than stubs —
@@ -178,9 +183,10 @@ describe('WikiLayout settings', () => {
     const wrapper = shallowMount(WikiLayout);
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
+    // Import sits directly under Export: they are the two halves of one file format (KOL-077).
     expect(titles).toEqual([
-      'Workspace', 'Account', 'Password', 'Passkeys', 'Recently deleted', 'Export workspace', 'Tags',
-      'Delete account',
+      'Workspace', 'Account', 'Password', 'Passkeys', 'Recently deleted', 'Export workspace',
+      'Import workspace', 'Tags', 'Delete account',
     ]);
   });
 
@@ -283,6 +289,62 @@ describe('WikiLayout settings', () => {
     expect(wrapper.get('.settings-error').text()).toBe('No workspace for this user');
     // And the row is usable again, so a transient failure is not a dead end.
     expect(exportRow(wrapper).attributes('disabled')).toBeUndefined();
+  });
+
+  // The way back in (KOL-077). The file is read and posted by api/export.js, whose own behaviour
+  // is pinned on the server (server/tests/http/import.test.js); what matters here is that choosing
+  // a file reaches the API, that the sidebar is reloaded afterwards — every entity in it was just
+  // created — and that a refusal (409 WORKSPACE_NOT_EMPTY, most of the time) stays in Settings.
+  const fileInput = (wrapper) => wrapper.find('.mobile-settings-panel input[type="file"]');
+  const chooseFile = async (wrapper) => {
+    const input = fileInput(wrapper);
+    // A plain object, not a File: the api module is mocked, so nothing reads it.
+    Object.defineProperty(input.element, 'files', { value: [{ name: 'my-workspace-2026-10-15.json' }], configurable: true });
+    await input.trigger('change');
+  };
+
+  it('the Import workspace row sends the chosen file and reloads the entities', async () => {
+    importWorkspaceFile.mockClear();
+    importWorkspaceFile.mockResolvedValue({
+      version: 'kol-emet/workspace-export@1',
+      imported: { entityTypes: 0, relationshipTypes: 1, entities: 3, relationshipGroups: 2, openQuestions: 1 },
+      skipped: { entityTypes: 6, relationshipTypes: 4 },
+      dropped: { members: 0, questionEntries: 0 },
+    });
+    const wrapper = shallowMount(WikiLayout);
+
+    await settingsTab(wrapper).trigger('click');
+    expect(importWorkspaceFile).not.toHaveBeenCalled();
+
+    const beforeReload = loadEntities.mock.calls.length;
+    await chooseFile(wrapper);
+    expect(importWorkspaceFile).toHaveBeenCalledTimes(1);
+    expect(importWorkspaceFile.mock.calls[0][0]).toMatchObject({ name: 'my-workspace-2026-10-15.json' });
+    // Every light-tier log line names what started the import, so the source is part of the call.
+    expect(importWorkspaceFile.mock.calls[0][1]).toMatchObject({ source: expect.stringContaining('Settings') });
+
+    await flushPromises();
+    expect(wrapper.find('.settings-error').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Imported 3 entities');
+    expect(loadEntities.mock.calls.length).toBe(beforeReload + 1);
+  });
+
+  it('a refused import says why in Settings, and the entities are left alone', async () => {
+    importWorkspaceFile.mockClear();
+    importWorkspaceFile.mockRejectedValue(
+      Object.assign(new Error('This workspace already has content.'), { status: 409, code: 'WORKSPACE_NOT_EMPTY' }),
+    );
+    const wrapper = shallowMount(WikiLayout);
+
+    await settingsTab(wrapper).trigger('click');
+    const beforeReload = loadEntities.mock.calls.length;
+    await chooseFile(wrapper);
+    await flushPromises();
+
+    expect(wrapper.get('.settings-error').text()).toBe('This workspace already has content.');
+    expect(loadEntities.mock.calls.length).toBe(beforeReload, 'a refused import must not refetch');
+    // And the input is usable again: the same file is the one you retry with.
+    expect(fileInput(wrapper).attributes('disabled')).toBeUndefined();
   });
 });
 

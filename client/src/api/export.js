@@ -97,4 +97,73 @@ export async function downloadWorkspaceExport({ source = 'unknown' } = {}) {
   return { filename, bytes: blob.size };
 }
 
+/**
+ * The sentence Settings shows for each refusal the import can answer with
+ * (KOL-077). The server sends a code and keeps the reason in its own log, so
+ * the wording is the client's job — and a code with no entry here would
+ * otherwise reach a user as `WORKSPACE_NOT_EMPTY`.
+ */
+export const IMPORT_MESSAGES = Object.freeze({
+  WORKSPACE_NOT_EMPTY: 'This workspace already has content. An import only writes into an empty one — delete what is here first, or import into a new workspace.',
+  UNSUPPORTED_VERSION: 'That file was not written by a version of the export format this app reads.',
+  MALFORMED_JSON: 'That file is not JSON.',
+  MALFORMED_DOCUMENT: 'That file is JSON, but not a workspace export this app can read.',
+  IMPORT_TOO_LARGE: 'That file is too large to import in one request.',
+  NOT_WORKSPACE_OWNER: 'Only the owner of a workspace can import into it.',
+  Unauthorized: 'Your session has ended. Sign in again to import.',
+});
+
+/**
+ * `POST /import` → a chosen file's graph in the current workspace (KOL-077).
+ *
+ * The other half of the row above. The file is read in the browser and posted
+ * as the request body rather than as a multipart upload: the server reads one
+ * JSON document (`routes/import.js`), and a file that is not JSON is worth
+ * saying so about before spending the upload.
+ *
+ * The bytes posted are the file's own, not a re-serialization of the parsed
+ * object — the parse here is a check, so nothing this module does can change
+ * what the server is asked to import.
+ *
+ * @param {File|{ text: () => Promise<string>, name?: string }} file
+ * @param {object} [options]
+ * @param {string} [options.source] what asked for it, for the log line.
+ * @returns {Promise<{ version: string, imported: object, skipped: object, dropped: object }>}
+ * @throws {Error & { status?: number, code?: string }} with a sentence for Settings.
+ */
+export async function importWorkspaceFile(file, { source = 'unknown' } = {}) {
+  const name = file?.name ?? 'the chosen file';
+  const text = await file.text();
+
+  try {
+    JSON.parse(text);
+  } catch {
+    log('light', `refused "${name}" before sending: not JSON (source: ${source})`);
+    throw Object.assign(new Error(IMPORT_MESSAGES.MALFORMED_JSON), { code: 'MALFORMED_JSON' });
+  }
+
+  log('normal', `posting "${name}", ${text.length} bytes (source: ${source})`);
+  const res = await fetch(`${BASE_URL}/import`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: text,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const code = body?.error ?? `${res.status}`;
+    log('light', `import of "${name}" refused ${res.status} ${code} (source: ${source})`);
+    throw Object.assign(
+      new Error(IMPORT_MESSAGES[code] ?? `Import failed (${code}).`),
+      { status: res.status, code },
+    );
+  }
+
+  const result = await res.json();
+  const counts = Object.entries(result.imported ?? {}).map(([key, n]) => `${key} ${n}`).join(', ');
+  log('light', `imported "${name}" as ${result.version}: ${counts} (source: ${source})`);
+  return result;
+}
+
 export default downloadWorkspaceExport;

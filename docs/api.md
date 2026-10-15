@@ -680,8 +680,76 @@ slug of the workspace name, falling back to `workspace`, and the day is the expo
   names the workspace, the per-collection counts, the byte size and the **source** — this route, or
   a script that calls the same function.
 
-The import side (`POST /import`) does not exist yet: it needs an id-collision and merge policy of
-its own. Nor does streaming, so a workspace is serialized in one go.
+Streaming does not exist, so a workspace is serialized in one go.
+
+## Import
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/import` | One export document into the caller's **empty** workspace. Owner only. |
+
+The other end of `GET /export`, and the half that makes the export provable: a graph exported,
+imported and exported again is byte-identical but for the ids (KOL-077).
+`server/src/lib/graphImporter.js` writes the documents, `server/src/routes/import.js` is the HTTP
+skin on it. The body is the export document itself — `Content-Type: application/json`, not a
+multipart upload — and the answer is **201** with what it wrote:
+
+```jsonc
+{
+  "version": "kol-emet/workspace-export@1",
+  "imported": { "entityTypes": 0, "relationshipTypes": 1, "entities": 18, "relationshipGroups": 7, "openQuestions": 3 },
+  "skipped":  { "entityTypes": 6, "relationshipTypes": 4 },   // already in the workspace, by name
+  "dropped":  { "members": 0, "questionEntries": 0 }          // references with no target in the file
+}
+```
+
+- **Empty workspace only.** No entities, no relationship groups and no open questions, or it is
+  **409 `WORKSPACE_NOT_EMPTY`** and writes nothing. That refusal is the design and not a gap:
+  merging a graph into one that already exists needs an id-collision policy — does a colliding id
+  mean "the same thing" or "a different thing"? — and that is a product decision this endpoint
+  deliberately does not make. Registration seeds starter content, so an owner clears a workspace (or
+  uses a new one) before importing. The **type registries are exempt**: a seeded workspace always
+  has types, and a rule that counted them could never import anything.
+- **Every id is new.** Entity types, relationship types, entities, relationship groups and open
+  questions each get a fresh `ObjectId` and every reference is rewritten to it — a group's
+  `members[].refId` (with its `refModel` discriminator and its **array order**, which is meaning the
+  reorder route writes), a question's `entry_ids`, and `Entity.relationships` /
+  `Entity.open_questions`, which are **rebuilt** from the groups and the questions rather than copied
+  from the file, since they are a cache of what those say. A reference to a row the document does not
+  carry is **dropped** rather than written: an id this import did not mint could name another
+  tenant's row. Block `_id`s are Mongoose's; nothing references a block.
+- **The workspace comes from the mount, never the body.** `requireAuth` + `resolveWorkspace` like
+  every other tenant-content route, then `requireWorkspaceRole('owner')` — an import writes a whole
+  graph, so it is the owner's call, not an editor's (**403 `NOT_WORKSPACE_OWNER`**). A `workspaceId`
+  anywhere in the uploaded file is never read, so a hand-edited document cannot write into another
+  tenant. Unauthenticated is **401**.
+- **A type already present by name is kept**, case-insensitively — the unique index on
+  (`workspaceId`, `name`) is — and counted under `skipped`. Since `Entity.category` holds a type's
+  *name*, the categories of imported entities are rewritten to the name the workspace actually
+  holds: a workspace whose type is `worlds` importing a file whose type is `Worlds` ends with one
+  type and every entity filed under `worlds`.
+- **Refusals**, all of which write nothing: **400 `MALFORMED_JSON`** (the bytes are not JSON),
+  **400 `MALFORMED_DOCUMENT`** (a row is not what it must be), **400 `UNSUPPORTED_VERSION`** (a
+  `version` this server does not read — checked first, before any shape),
+  **409 `WORKSPACE_NOT_EMPTY`**, **413 `IMPORT_TOO_LARGE`** (over a per-collection cap, or over the
+  body limit). The *reason* — which field, which count, which version — stays in the server log: a
+  response that narrated the document back would be an oracle for a hand-edited one.
+- **Caps.** Per collection, so one upload cannot write an unbounded graph: 200 entity types, 1000
+  relationship types, 5000 entities, 10 000 relationship groups, 5000 open questions, each
+  overridable with `IMPORT_MAX_ENTITY_TYPES`, `IMPORT_MAX_RELATIONSHIP_TYPES`, `IMPORT_MAX_ENTITIES`,
+  `IMPORT_MAX_RELATIONSHIP_GROUPS`, `IMPORT_MAX_OPEN_QUESTIONS`. The body limit is
+  `IMPORT_BODY_LIMIT` (default `8mb`) — `/import` has a parser of its own, mounted ahead of the
+  app-wide 100 kB one, which is also what turns a parse failure into a 400 instead of a 500.
+- Logging is `IMPORT_LOG_LEVEL` (`off | light | normal | verbose`, default `light`): the light tier
+  names the document's version, the per-collection counts, the **source** and the reason behind
+  every refusal.
+
+Not imported: `ChangeLog` and `Draft` (history waits on KOL-019 settling whether it is permanent),
+and nothing about the account or the workspace itself — an import never renames a workspace. There
+is no transaction (the deployment is a single mongod), so every question that can be settled from the
+document is settled before the first insert; a write failing midway leaves a partial graph whose
+owner has to clear it before retrying. YAML and Markdown input, streaming, and merging into a
+non-empty workspace are each their own item.
 
 ## Events (SSE)
 
