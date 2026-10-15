@@ -140,6 +140,26 @@ registration, or removes a feature.
   `ChangeLog` or `Draft` (KOL-019 has to settle whether history is permanent first), YAML or Markdown input, the Git
   connector itself, and streaming for very large files.
 
+- [ ] **(KOL-078) `GET /health`: liveness and database readiness without a session**
+  Every route in `createApp` is behind `requireAuth` except `/auth/*`, `/oauth`, `/templates`, `/mcp` and the bridge, so
+  there is no way to ask a deployed instance whether it is working. The repo runbook's deploy signal is Railway's own
+  commit status, which says a container started — not that it can reach Mongo. The failure that leaves invisible is the
+  likeliest one in production: the API answering while `mongoose.connection.readyState` is 0, which every tenant route
+  turns into a stall that reads to a user as their own connection. Build: `server/src/routes/health.js` — `GET /health`
+  returning `{ status, db, uptimeSeconds }`, where `status` is `ok` with 200 when `readyState` is 1 and `degraded` with
+  503 otherwise, and `db` is `up` or `down`. Deliberately nothing else in the body: no version, no commit, no
+  collection counts, no environment or provider names. It is the one unauthenticated route whose whole job is to be
+  polled, and a status endpoint that describes the deployment is a reconnaissance endpoint. Mounted ahead of
+  `requireAuth` in `createApp`; it needs no origin-guard exemption, because `originGuard` checks only unsafe methods
+  (`server/src/middleware/originGuard.js:148`). Files: `server/src/routes/health.js` (new), `server/src/app.js` (one
+  mount), and a `## Health` section in `docs/api.md`. Verify: a new `server/tests/http/health.test.js` — 200
+  `{ status: 'ok', db: 'up' }` with no session and no cookie; `degraded` / `down` with 503 when the connection is forced
+  to a non-ready state; the body carries exactly the three documented keys and no others, so adding a fourth has to be a
+  deliberate change to the assertion; a cross-origin `GET` is not refused; and `HEAD /health` answers for a monitor that
+  sends one. `cd server && yarn test` green; the client is untouched. Out of scope: checking the AI providers or any
+  outbound dependency, Prometheus or OpenTelemetry metrics, a status page, and pointing Railway's own healthcheck
+  setting at it — that is a dashboard change for Daniel, to be flagged in the PR.
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -165,25 +185,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-078) `GET /health`: liveness and database readiness without a session** [proposed]
-  Every route in `createApp` is behind `requireAuth` except `/auth/*`, `/oauth`, `/templates`, `/mcp` and the bridge, so
-  there is no way to ask a deployed instance whether it is working. The repo runbook's deploy signal is Railway's own
-  commit status, which says a container started — not that it can reach Mongo. The failure that leaves invisible is the
-  likeliest one in production: the API answering while `mongoose.connection.readyState` is 0, which every tenant route
-  turns into a stall that reads to a user as their own connection. Build: `server/src/routes/health.js` — `GET /health`
-  returning `{ status, db, uptimeSeconds }`, where `status` is `ok` with 200 when `readyState` is 1 and `degraded` with
-  503 otherwise, and `db` is `up` or `down`. Deliberately nothing else in the body: no version, no commit, no
-  collection counts, no environment or provider names. It is the one unauthenticated route whose whole job is to be
-  polled, and a status endpoint that describes the deployment is a reconnaissance endpoint. Mounted ahead of
-  `requireAuth` in `createApp`; it needs no origin-guard exemption, because `originGuard` checks only unsafe methods
-  (`server/src/middleware/originGuard.js:148`). Files: `server/src/routes/health.js` (new), `server/src/app.js` (one
-  mount), and a `## Health` section in `docs/api.md`. Verify: a new `server/tests/http/health.test.js` — 200
-  `{ status: 'ok', db: 'up' }` with no session and no cookie; `degraded` / `down` with 503 when the connection is forced
-  to a non-ready state; the body carries exactly the three documented keys and no others, so adding a fourth has to be a
-  deliberate change to the assertion; a cross-origin `GET` is not refused; and `HEAD /health` answers for a monitor that
-  sends one. `cd server && yarn test` green; the client is untouched. Out of scope: checking the AI providers or any
-  outbound dependency, Prometheus or OpenTelemetry metrics, a status page, and pointing Railway's own healthcheck
-  setting at it — that is a dashboard change for Daniel, to be flagged in the PR.
 - [ ] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work** [proposed]
   This audit found three documents describing work that has already shipped, which is exactly the input that makes the
   next audit file a duplicate. (1) `docs/generator-v1-plan.md` "Remaining work" still lists **account-deletion hard
