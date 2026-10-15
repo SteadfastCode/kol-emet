@@ -83,6 +83,32 @@ registration, or removes a feature.
   KOL-047's subject; request-id propagation into the client's own logs; and changing any status code a route chooses
   deliberately today.
 
+- [ ] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended**
+  A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
+  the Decision Log says so where it lists what account deletion cannot reach: "the user's *other* sessions cannot be
+  found by user in the store, so they outlive the account holding a dangling id". For a public product the consequence
+  is that a session left on a borrowed laptop, or one on a stolen phone, cannot be ended by its owner at all:
+  `POST /auth/logout` destroys only the session that called it, and KOL-038 taught just `GET /auth/me` to notice a
+  session whose user is gone. Build: `credentialsChangedAt` on `User` (set at creation alongside the existing
+  `timestamps`), an `issuedAt` written into the session at every sign-in — `/login`, the WebAuthn completion and
+  `/register` — and one check inside `requireAuth` and `requireActor`: a session whose `issuedAt` predates its user's
+  `credentialsChangedAt` is destroyed and answered 401. `POST /auth/sessions/revoke-all` re-authenticates the way
+  `DELETE /auth/account` does, bumps `credentialsChangedAt` to now, and re-stamps the calling session's `issuedAt` so
+  the device that asked stays signed in. A timestamp rather than a session table on purpose: the store cannot be queried
+  by user, and a second place that lists sessions is a second thing that has to stay true. Files:
+  `server/src/models/User.js`, `server/src/middleware/auth.js`, `server/src/routes/auth.js`, `client/src/api/auth.js`,
+  the Settings area that already holds the passkey list in `client/src/components/WikiLayout.vue`, `docs/api.md`, and a
+  Decision Log line in `kol_emet_spec.md` (it supersedes the "other sessions outlive the account" gap recorded there).
+  Verify: a new `server/tests/http/sessionRevocation.test.js` — two agents signed in as one user, revoke from the first,
+  and the second's next `/entities` request is 401 with its session gone from the store while the first still reads
+  `/entities`; a second user's session is untouched; a wrong password on the revoke is 403 and bumps nothing; an
+  unauthenticated call is 401; a session issued after the bump is accepted; and the MCP bearer token, which carries no
+  session, keeps working. Plus a `client/src/components/WikiLayout.test.js` case for the button and its confirmation.
+  `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of scope: listing active sessions
+  with device, IP or location (the store cannot enumerate them by user — that is precisely why this is a timestamp),
+  notifying the account by email, revoking the MCP bearer or OAuth tokens (KOL-014 owns per-connector identity), and
+  bumping the timestamp automatically when a passkey is removed.
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -108,31 +134,6 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
-- [ ] **(KOL-076) Sign out everywhere, so a session on a lost device can be ended** [proposed]
-  A session is a row in the Mongo session store keyed by its own id, and nothing in that store can be found *by user* —
-  the Decision Log says so where it lists what account deletion cannot reach: "the user's *other* sessions cannot be
-  found by user in the store, so they outlive the account holding a dangling id". For a public product the consequence
-  is that a session left on a borrowed laptop, or one on a stolen phone, cannot be ended by its owner at all:
-  `POST /auth/logout` destroys only the session that called it, and KOL-038 taught just `GET /auth/me` to notice a
-  session whose user is gone. Build: `credentialsChangedAt` on `User` (set at creation alongside the existing
-  `timestamps`), an `issuedAt` written into the session at every sign-in — `/login`, the WebAuthn completion and
-  `/register` — and one check inside `requireAuth` and `requireActor`: a session whose `issuedAt` predates its user's
-  `credentialsChangedAt` is destroyed and answered 401. `POST /auth/sessions/revoke-all` re-authenticates the way
-  `DELETE /auth/account` does, bumps `credentialsChangedAt` to now, and re-stamps the calling session's `issuedAt` so
-  the device that asked stays signed in. A timestamp rather than a session table on purpose: the store cannot be queried
-  by user, and a second place that lists sessions is a second thing that has to stay true. Files:
-  `server/src/models/User.js`, `server/src/middleware/auth.js`, `server/src/routes/auth.js`, `client/src/api/auth.js`,
-  the Settings area that already holds the passkey list in `client/src/components/WikiLayout.vue`, `docs/api.md`, and a
-  Decision Log line in `kol_emet_spec.md` (it supersedes the "other sessions outlive the account" gap recorded there).
-  Verify: a new `server/tests/http/sessionRevocation.test.js` — two agents signed in as one user, revoke from the first,
-  and the second's next `/entities` request is 401 with its session gone from the store while the first still reads
-  `/entities`; a second user's session is untouched; a wrong password on the revoke is 403 and bumps nothing; an
-  unauthenticated call is 401; a session issued after the bump is accepted; and the MCP bearer token, which carries no
-  session, keeps working. Plus a `client/src/components/WikiLayout.test.js` case for the button and its confirmation.
-  `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of scope: listing active sessions
-  with device, IP or location (the store cannot enumerate them by user — that is precisely why this is a timestamp),
-  notifying the account by email, revoking the MCP bearer or OAuth tokens (KOL-014 owns per-connector identity), and
-  bumping the timestamp automatically when a passkey is removed.
 - [ ] **(KOL-077) `POST /import`: a canonical export round-trips back into an empty workspace** [proposed]
   KOL-070 shipped `GET /export` and `server/src/lib/graphExporter.js` — one deterministic JSON document stamped
   `version: 'kol-emet/workspace-export@1'` — and left the other half open: nothing reads it back. So the export is a
