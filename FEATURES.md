@@ -180,6 +180,22 @@ registration, or removes a feature.
   code change at all — a line that turns out to describe something genuinely unbuilt is left alone and becomes its own
   queue item.
 
+- [ ] **(KOL-094) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-22]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -205,6 +221,173 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+
+- [ ] **(KOL-088) OAuth logs the authorization code, the PKCE verifier, and every code still outstanding** [proposed]
+  `server/src/routes/oauth.js` is the one router with no tiered logging, and it prints credentials unconditionally.
+  `POST /oauth/token` logs its whole form body at `:133` — the one-time `code` and the `code_verifier`, which is the
+  PKCE secret — and a miss at `:148` logs the submitted code plus `[...authCodes.keys()]`, every code still outstanding
+  for every user, while `:156` logs the computed and the stored challenge. Each of those codes is redeemable for
+  `MCP_BEARER_TOKEN`, the workspace-wide write token, by anyone who can read the log, and on a hosted deployment the log
+  is the deploy console. `GET /authorize` (`:44`) and `POST /authorize` (`:99`) print their whole query and body too, so
+  `redirect_uri` and `state` land there as well. Second defect, same file: `authCodes` (`:25`) is a `Map` whose
+  `expiresAt` is only ever read at redemption, so a code nobody redeems is never removed and `POST /authorize` grows the
+  map without bound. Build: `OAUTH_LOG_LEVEL = off | light | normal | verbose` (default light) in the shape the rest of
+  the server uses (`middleware/workspace.js`, `routes/changelog.js`), with no secret at any tier. Light says the source
+  of each decision — the route, the grant type, the rule that refused it, and a code's first 8 hex of SHA-256 rather
+  than the code, so two lines can be tied to one exchange without either being redeemable; normal adds issue and redeem
+  with that fingerprint and the outstanding count; verbose adds `redirect_uri` and `resource`, and still never a code, a
+  verifier or a challenge. Plus the sweep: drop expired entries whenever one is issued, and cap the map, refusing a new
+  authorization with 503 rather than growing past it. Files: `server/src/routes/oauth.js`,
+  `server/tests/http/oauth.test.js` (extend), and the `/oauth` rows in `docs/api.md`. Verify: in
+  `server/tests/http/oauth.test.js`, capture `console.log` across a full authorize-then-token exchange and assert the
+  captured text contains neither the code, the verifier nor the challenge, while the fingerprint and the chosen rule are
+  present; a second pending code is not printed by a failed exchange; an expired code is gone after the next issue,
+  asserted through the refusal rather than an exported internal; and the happy path still returns the token, so logging
+  cannot have changed the protocol. `cd server && yarn test` green; the client is untouched. Out of scope:
+  `server/src/routes/bridge.js`, which runs its own issuer and its own token and is not edited here — oauth.js's
+  existing resource branch keeps its behaviour; per-connector tokens and the shared `MCP_BEARER_TOKEN` (KOL-014's
+  subject); the ten-year `expires_in`; and a `redirect_uri` allowlist or client registration, which needs a
+  deployment-config decision nobody has made.
+
+- [ ] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft** [proposed]
+  `docs/roadmap.md` Phase 7 names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built compose, KOL-051
+  built OpenAPI and put k8s out of scope, and `server/src/models/Draft.js:114` marks the seam — "drift / repo / k8s
+  become new enum values here rather than new collections". Like both existing producers this is deterministic: no model
+  call, so no allowance check and no generation lock, which is the property that makes a producer safe to re-run. Build
+  `server/src/lib/producers/kubernetes.js` exporting the contract `fileProducerRoute` already takes
+  (`server/src/routes/drafts.js:291`) — `PRODUCER`, `PRODUCER_VERSION`, `parse`, a `ParseError` and a character cap —
+  mapping into the Software Architecture vocabulary (`server/src/config/templates.js`): a `Deployment`, `StatefulSet` or
+  `DaemonSet` becomes a Service, or a Data Store when its image matches the known-image list the compose producer
+  already has (imported from it, not copied); a `Service` object becomes an "Exposes" group between the workload its
+  selector matches and an API titled for the port; a `PersistentVolumeClaim` becomes a Data Store; an env var or
+  `envFrom` whose URL host names another workload becomes "Calls", and one that names nothing in the file becomes an
+  External Dependency plus "Depends on". Multi-document YAML (`---`) is the normal shape of a manifest and is the unit
+  of iteration. Evidence quote and source offsets per item as both other producers do, and `redactSecrets` before the
+  source text is stored — a `Secret`'s `stringData` is exactly what must not reach a corpus that has no TTL. Register
+  it: `'kubernetes'` in the `source.producer` enum (`server/src/models/Draft.js:117`), one `fileProducerRoute` call for
+  `POST /drafts/kubernetes`, `createKubernetesDraft` in `client/src/api/drafts.js`, and a third branch in `producerFor`
+  (`client/src/lib/importFile.js:73`) keyed on `apiVersion` plus `kind`, because a manifest and a compose file are both
+  `.yaml` and the extension cannot choose. Files: the new producer, `server/src/routes/drafts.js`,
+  `server/src/models/Draft.js`, `client/src/api/drafts.js`, `client/src/lib/importFile.js`,
+  `client/src/components/generator/BraindumpInput.vue` (the accept list and its copy), a new
+  `server/tests/fixtures/kubernetes.yaml`, `docs/api.md`, and a Decision Log line for the mapping. Verify: a new
+  `server/tests/unit/kubernetes.test.js` — the fixture's workloads, services and claims map as documented; a file with
+  several `---` documents yields items from every one of them; a `Secret`'s values never appear in the draft's stored
+  text; a document whose `kind` is unrecognised is a recorded drop reason and not a 500; and the same file parsed twice
+  yields the same items, with the second run dedupping against the graph. A new
+  `server/tests/http/kubernetesDraft.test.js` mirroring `openApiDraft.test.js` — 201 with a `ready` draft, no allowance
+  spent, an over-size body refused, and no workspace nameable but the caller's own. `cd server && yarn test` and `cd
+  client && yarn test --run && yarn build` green. Out of scope: Helm charts and kustomize overlays, which are templated
+  input and their own problem; reading a live cluster or any kubeconfig; the repo and DB-schema producers; drift
+  detection; and any change to either existing producer's mapping.
+
+- [ ] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly** [proposed]
+  `resolveWorkspace` picks the acting workspace with `Workspace.findOne({ 'members.userId': userId })` and no sort
+  (`server/src/middleware/workspace.js:97`), under a comment that says it plainly: "A user may later belong to several;
+  today registration creates exactly one." For a product whose roadmap has collaborator invites next, that line is the
+  gate in front of them — the moment a user is in two workspaces every request resolves to whichever document the server
+  happened to return first, so one session can read workspace A and then write workspace B, and `GET /workspace` can
+  report a name the content did not come from. Nothing lists a user's workspaces either, so a client cannot show the
+  choice, let alone change it. Build: `GET /workspaces`, every workspace the caller is a member of in the existing
+  `workspaceBody` shape (`_id`, `name`, `role`, `createdAt`), sorted by `createdAt` then `_id` so the order is total.
+  Make the choice explicit session state: `POST /workspaces/:id/select` checks membership and writes
+  `req.session.workspaceId`; `resolveWorkspace` prefers that id and re-checks the membership on every request, and when
+  the id is stale — the membership was revoked — it falls back to the default rather than answering 403, so losing
+  access to one workspace cannot lock a user out of their own. The default is deterministic: the oldest workspace the
+  caller owns, else the oldest they are a member of. The MCP path keeps `resolveUserId`'s bearer identity and takes that
+  same default, since a connector carries no session to hold a choice in. Files: `server/src/middleware/workspace.js`,
+  `server/src/routes/workspace.js`, `server/src/app.js` (the `/workspaces` mount), `client/src/api/workspace.js`, the
+  Settings area of `client/src/components/WikiLayout.vue` (a switcher, shown only when there is more than one),
+  `docs/api.md`, and a Decision Log line recording that the choice is session state and the fallback is
+  ownership-then-age. Verify: a new `server/tests/http/workspaceSelect.test.js` — a user seeded into two workspaces
+  resolves the same one on twenty consecutive requests; selecting the second moves `GET /entities`, `GET /workspace` and
+  a write together; selecting one the caller is not a member of is 404 and changes nothing; a selection whose membership
+  is then removed falls back instead of refusing every request; one user's selection does not affect another's; and
+  `server/tests/http/tenancy.test.js` passes unchanged, because isolation is the thing this must not weaken. Plus a
+  `WikiLayout.test.js` case that the switcher is absent for a one-workspace user. `cd server && yarn test` and `cd
+  client && yarn test --run && yarn build` green. Out of scope: inviting or removing members and the email delivery that
+  needs — the roadmap's own next step; creating a second workspace from the UI (the tests seed the second directly, and
+  this item is the prerequisite rather than the feature); per-workspace billing; and any change to what a role may do,
+  so `requireWorkspaceRole` is untouched.
+
+- [ ] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together** [proposed]
+  `GET /conversations` lists by `userId` alone (`server/src/routes/conversations.js:26`) even though the router is
+  mounted behind `resolveWorkspace`, and `POST /chat` loads a conversation by `{ _id, userId }`
+  (`server/src/routes/chat.js:343`) and then answers it out of the caller's *current* `req.workspaceId`: the graph tools
+  read that workspace (`chat.js:189,206`) and the spend is billed to it (`:422`). `Conversation.workspaceId` is stamped
+  at creation and read by nothing — `conversations.js:47` says as much. `UserMemory` has no workspace at all
+  (`server/src/models/UserMemory.js:7`), so a fact extracted from one workspace's chat is loaded into another's system
+  prompt (`memoryExtractor.js:130,148`). None of this is visible today, because every user has exactly one workspace; it
+  becomes visible the moment KOL-090's switcher exists, which is why it is filed alongside it rather than after the bug
+  report. Build: filter the conversation list and every by-id lookup on `workspaceId` as well as `userId`, so a chat is
+  reachable only from the workspace it was created in; add `workspaceId` to `UserMemory` with the `ownerGuard` the other
+  scoped models carry (`{ path: 'workspaceId', owner: Workspace }`), write it in `extractAndSaveMemories`, and filter
+  `loadMemories` by it. Rows written before this carry `workspaceId: null`: read a null as belonging to the caller's
+  current workspace so nobody loses their history, and record that rule in the Decision Log rather than shipping a
+  migration that has to guess which workspace a row meant. Files: `server/src/routes/conversations.js`,
+  `server/src/routes/chat.js`, `server/src/models/UserMemory.js`, `server/src/lib/memoryExtractor.js`,
+  `server/src/lib/accountDeleter.js` (`UserMemory` joins the workspace-scoped list, whose completeness its own test
+  already asserts), `docs/data-model.md`, `docs/api.md`, and the Decision Log line. Verify: a new
+  `server/tests/http/conversationScope.test.js` — for one user in two workspaces, a conversation created in the first is
+  absent from the list in the second and answers 404 to `GET`, `PATCH`, `DELETE` and `POST /chat` there; a memory
+  extracted in the first does not reach the second's prompt; a legacy row with `workspaceId: null` is still readable and
+  still listed; and the account-deletion sweep still removes both models. `cd server && yarn test` green; the client
+  changes only if a 404 it did not expect needs handling. Out of scope: moving a conversation between workspaces,
+  sharing one with another member, per-workspace memory limits, and pagination of the conversation list, which no item
+  owns yet.
+
+- [ ] **(KOL-092) Two list routes still answer with the whole workspace** [proposed]
+  KOL-061 stopped `GET /entities` shipping every block and KOL-067 gave it keyset pages, but `GET /relationship-groups`
+  still returns every group in the workspace with its full `members` array
+  (`server/src/routes/relationshipGroups.js:78`) and `GET /open-questions` returns every question with `entry_ids`
+  populated (`server/src/routes/openQuestions.js:18`) — one query, no limit, and for the second a populate per row. At
+  the size this product is built for those are the two slowest responses in the API, and the graph view asks for the
+  whole group list the moment it opens. The caps elsewhere are the pattern to follow: `changelog.js:99` takes 50,
+  `drafts.js:90` takes 50, and `/entities` pages. Build: the same keyset contract `/entities` answers with
+  (`server/src/routes/entities.js:98-132`) on both routes — `?limit=` clamped to the route's own minimum and maximum,
+  `?after=` carrying the previous page's last `_id`, and `{ items, nextAfter }` — ordered by `_id`, so no new database
+  index is needed, and keeping the bare-array answer for a request that sends no `limit` exactly as `/entities` kept it,
+  so no existing caller breaks. Then the two client callers page until `nextAfter` is null and concatenate, with the
+  partial-failure surface KOL-083 added for the sidebar: a page that fails leaves a visible "stopped partway" state
+  rather than a silently short list. Files: `server/src/routes/relationshipGroups.js`,
+  `server/src/routes/openQuestions.js`, `client/src/api/relationshipGroups.js`, the open-question and graph callers
+  (`client/src/composables/useEntities.js`, `client/src/components/GraphView.vue`), `docs/api.md`, and the tests below.
+  Verify: new `server/tests/http/relationshipGroupList.test.js` and `server/tests/http/openQuestionList.test.js`
+  mirroring `entityList.test.js` — a page is never longer than its limit; pages concatenate to the whole set with no row
+  served twice and none skipped when a write lands mid-walk; an `after` naming another workspace's id yields nothing; a
+  limit under the minimum or over the maximum is clamped rather than refused; and a request with no `limit` still gets
+  the bare array. Client-side, a Vitest case that the graph's loader pages to the end and one that a failed second page
+  surfaces the partial state. `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of
+  scope: `GET /conversations`, which is per-user and short and whose filter KOL-091 is already changing; a MongoDB text
+  index on block data, which is a change to the deployed database; the `/tags` aggregate; and re-opening `/entities`'
+  own contract.
+
+- [ ] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM** [proposed]
+  `server/src/index.js` connects, listens, and installs no signal handler, so the SIGTERM a host sends at every deploy
+  takes the process down mid-request: a write caught between its Mongo call and its `ChangeLog` append is cut in half,
+  and every open `GET /events` stream dies at the socket with no close frame, which
+  `client/src/composables/useEvents.js` can only read as a network error rather than a planned end. The broadcaster
+  already has the pieces for a clean ending — `endStream` writes a reason and `closeStreamsForSession` and
+  `closeStreamsForUser` use it (`server/src/lib/broadcaster.js:166,196,218`) — there is simply nothing that ends them
+  all. Build `server/src/lib/shutdown.js`: one function taking the HTTP server, a stream-closer and a disconnect,
+  running them in order — stop accepting connections (`server.close`), end every open stream with a reason a client can
+  reconnect on, wait for in-flight requests up to `SHUTDOWN_GRACE_MS` (default 10000), disconnect Mongoose, resolve —
+  and force-exit when the grace period expires, because one hung request must not hold a deploy open. Add
+  `closeAllStreams(reason)` to the broadcaster beside the two closers it already has. `index.js` wires SIGTERM and
+  SIGINT to it idempotently, so a second signal cannot start a second shutdown. Tiered `SHUTDOWN_LOG_LEVEL = off | light
+  | normal | verbose` (default light): light names what started it — which signal — and the result of each stage,
+  because a shutdown leaves nothing behind to inspect afterwards. Files: `server/src/lib/shutdown.js` (new),
+  `server/src/lib/broadcaster.js`, `server/src/index.js`, a paragraph in `docs/architecture.md`, and a Decision Log line
+  for the force-exit. Verify: a new `server/tests/unit/shutdown.test.js` — the stages run in order and each is awaited;
+  an in-flight request that finishes inside the grace period is waited for and one that does not is abandoned at the
+  deadline with the force-exit path taken; a second signal is ignored while the first shutdown is running; and a stage
+  that throws does not stop the stages after it, since a failed disconnect must not be what keeps the process alive.
+  Plus a broadcaster case that `closeAllStreams` writes its reason to every open stream and leaves the registry empty.
+  All of it driven through injected fakes — no real listener, no real signal, nothing that could end the test runner's
+  own process. `cd server && yarn test` green; the client is untouched. Out of scope: zero-downtime handover or any
+  overlap between an old and a new instance, which is the platform's concern and not the app's; the host's healthcheck
+  setting; draining a generation run already in flight, whose budget lock already goes stale on its own after ten
+  minutes; and `process.on('uncaughtException')`.
 
 ## Blocked Items
 
