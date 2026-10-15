@@ -297,7 +297,13 @@ describe("CRUD in the caller's workspace", () => {
 
     const foreign = await postEntity(bob, 'Vehicles');
     assert.equal(foreign.status, 400, "alice's type opens the name in her workspace only");
-    assert.match(foreign.body.error, /not an entity type/);
+    // The gate is the registry validator on `category`, which is what `fields`
+    // names. Since KOL-075 the validator's own sentence is logged rather than
+    // published — see tests/http/errorShape.test.js — so the path is what the
+    // body carries, and it is the same claim: this request was refused for its
+    // category and not for anything else it sent.
+    assert.equal(foreign.body.error, 'VALIDATION_FAILED', JSON.stringify(foreign.body));
+    assert.deepEqual(foreign.body.fields, ['category']);
   });
 
   test('a missing or blank name is 400', async () => {
@@ -358,7 +364,10 @@ describe('the registry gates the category names data can hold', () => {
 
     const refused = await postEntity(bob, 'Lore & Mechanics');
     assert.equal(refused.status, 400);
-    assert.match(refused.body.error, /not an entity type/);
+    // `fields: ['category']` rather than the validator's sentence: see the note
+    // in the previous group and tests/http/errorShape.test.js.
+    assert.equal(refused.body.error, 'VALIDATION_FAILED', JSON.stringify(refused.body));
+    assert.deepEqual(refused.body.fields, ['category']);
     assert.equal((await postEntity(alice, 'Lore & Mechanics')).status, 201, "alice still has the type; bob's registry must not decide for her");
 
     const worlds = await postEntity(bob, 'Worlds');

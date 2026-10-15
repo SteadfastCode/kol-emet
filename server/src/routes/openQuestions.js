@@ -11,7 +11,7 @@ const router = Router();
 router.param('id', objectIdParam('id'));
 
 // GET /open-questions — all questions, optional ?status=open|resolved
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const filter = { workspaceId: req.workspaceId };
     if (req.query.status) filter.status = req.query.status;
@@ -20,24 +20,24 @@ router.get('/', async (req, res) => {
       .populate(entriesIn(req.workspaceId));
     res.json(questions);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /open-questions/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const q = await OpenQuestion.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
       .populate(entriesIn(req.workspaceId));
     if (!q) return res.status(404).json({ error: 'Not found' });
     res.json(q);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /open-questions
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { question, entry_ids: requested = [] } = req.body;
     // Only this workspace's entities are kept, so another tenant's entity id is
@@ -60,12 +60,12 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(oq);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /open-questions/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', async (req, res, next) => {
   try {
     const { question, status, entry_ids: requested } = req.body;
     const scope = { _id: req.params.id, workspaceId: req.workspaceId };
@@ -107,12 +107,12 @@ router.put('/:id', async (req, res) => {
     if (!oq) return res.status(404).json({ error: 'Not found' });
     res.json(oq);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /open-questions/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const oq = await OpenQuestion.findOneAndDelete({
       _id: req.params.id,
@@ -128,7 +128,7 @@ router.delete('/:id', async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

@@ -32,7 +32,7 @@ import { exportWorkspace, exportFilename, exportLog as log } from '../lib/graphE
 const router = Router();
 
 // GET /export — the whole workspace graph as an attachment.
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const doc = await exportWorkspace(req.workspaceId, { source: 'GET /export' });
     const body = JSON.stringify(doc, null, 2);
@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
   } catch (err) {
     log('light', `failed for workspace ${req.workspaceId} (source: GET /export): ${err.message}`);
     if (err.code === 'WORKSPACE_NOT_FOUND') return res.status(404).json({ error: 'Not found' });
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

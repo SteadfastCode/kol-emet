@@ -24,6 +24,7 @@ import {
 } from '../lib/producers/openApi.js';
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
 import { objectIdParam } from '../middleware/objectId.js';
+import { errorLog } from '../middleware/errorHandler.js';
 
 const router = Router();
 
@@ -78,7 +79,7 @@ async function expireStuckGenerations(workspaceId) {
 
 // GET /drafts — newest first. Items are omitted; the list view only needs
 // counts, and a draft's items can be large.
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     await expireStuckGenerations(req.workspaceId);
     const drafts = await Draft.find({
@@ -91,16 +92,16 @@ router.get('/', async (req, res) => {
       .lean();
     res.json(drafts);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /drafts/quota — remaining AI allowance for this workspace.
-router.get('/quota', async (req, res) => {
+router.get('/quota', async (req, res, next) => {
   try {
     res.json(await getBudget(req.workspaceId));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -116,7 +117,7 @@ router.get('/quota', async (req, res) => {
  * has already been paid for the tokens by then, so abandoning the work would
  * bill the user for nothing.
  */
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   const { text, provider, roleStyle } = req.body ?? {};
 
   // Validate before opening the stream, so failures are ordinary JSON errors
@@ -171,7 +172,10 @@ router.post('/', async (req, res) => {
     // The lock is already held at this point; releasing it here stops a failed
     // create from locking the workspace out until the 10-minute staleness sweep.
     await releaseGeneration(req.workspaceId);
-    return res.status(500).json({ error: `Could not start generation: ${err.message}` });
+    // Still ahead of flushHeaders, so this is an ordinary JSON error rather
+    // than a stream event — the error middleware can have it (KOL-075). What
+    // it carried before was the driver's own text for a failed insert.
+    return next(err);
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -289,7 +293,7 @@ router.post('/', async (req, res) => {
  * @param {Function} spec.log            this producer's tiered logger
  */
 function fileProducerRoute({ route, producer, producerVersion, parse, ParseError, maxChars, defaultTitle, needs, log }) {
-  return async (req, res) => {
+  return async (req, res, next) => {
     const { text, filename } = req.body ?? {};
     const refuse = (status, error, extra = {}) => {
       log('normal', `refused POST ${route} for workspace ${req.workspaceId} (file ${JSON.stringify(filename ?? null)}): ${status} ${error}`);
@@ -404,7 +408,7 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
     } catch (err) {
       if (err instanceof ParseError) return refuse(400, err.message, { line: err.line });
       console.error(`[drafts] ${producer} draft failed:`, err.message);
-      res.status(500).json({ error: err.message });
+      next(err);
     }
   };
 }
@@ -457,7 +461,7 @@ const SYSTEM_KEYS = ['applyState', 'resultId', 'changeLogId', 'applyError', 'app
  * first: a decision must not be able to change out from under an item that is
  * already being applied.
  */
-router.patch('/:id/items/:itemId', async (req, res) => {
+router.patch('/:id/items/:itemId', async (req, res, next) => {
   try {
     const { decision, payload, note } = req.body ?? {};
 
@@ -506,7 +510,7 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 
     res.json({ item: draft.items.id(req.params.itemId), counts: draft.counts });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -517,7 +521,7 @@ router.patch('/:id/items/:itemId', async (req, res) => {
  * This is the manual resolution of a `duplicate_candidate`: fuzzy matches are
  * flagged and never merged automatically, so a person decides.
  */
-router.post('/:id/items/:itemId/retarget', async (req, res) => {
+router.post('/:id/items/:itemId/retarget', async (req, res, next) => {
   try {
     const { targetEntityId } = req.body ?? {};
 
@@ -555,7 +559,7 @@ router.post('/:id/items/:itemId/retarget', async (req, res) => {
 
     res.json({ item: draft.items.id(req.params.itemId) });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -567,7 +571,7 @@ router.post('/:id/items/:itemId/retarget', async (req, res) => {
  * be a rubber stamp, which is exactly what the human-approval requirement
  * exists to prevent.
  */
-router.post('/:id/decide-clean', async (req, res) => {
+router.post('/:id/decide-clean', async (req, res, next) => {
   try {
     const draft = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
     if (!draft) return res.status(404).json({ error: 'Not found' });
@@ -602,7 +606,7 @@ router.post('/:id/decide-clean', async (req, res) => {
         : `Accepted ${accepted}.`,
     });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
@@ -613,7 +617,7 @@ router.post('/:id/decide-clean', async (req, res) => {
  * applyingAt with a conditional update, so check-and-claim is atomic and two
  * simultaneous applies cannot both run and double-write.
  */
-router.post('/:id/apply', requireActor, async (req, res) => {
+router.post('/:id/apply', requireActor, async (req, res, next) => {
   const STALE_APPLY_MS = 5 * 60 * 1000;
   const cutoff = new Date(Date.now() - STALE_APPLY_MS);
 
@@ -634,7 +638,7 @@ router.post('/:id/apply', requireActor, async (req, res) => {
       { new: true }
     );
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return next(err);
   }
 
   if (!claimed) {
@@ -662,7 +666,7 @@ router.post('/:id/apply', requireActor, async (req, res) => {
     res.json({ ...summary, status: claimed.status, counts: claimed.counts });
   } catch (err) {
     console.error('[drafts] apply failed:', err.message);
-    res.status(500).json({ error: err.message });
+    next(err);
   } finally {
     await Draft.updateOne({ _id: req.params.id }, { $set: { applyingAt: null } })
       .catch(e => console.error('[drafts] could not clear apply lock:', e.message));
@@ -680,13 +684,18 @@ router.post('/:id/apply', requireActor, async (req, res) => {
  * Runs no query beyond fetching the draft: if this ever needs a join, the
  * Draft schema is missing something and that is the bug to fix.
  */
-router.get('/:id/export', async (req, res) => {
+router.get('/:id/export', async (req, res, next) => {
   try {
     let pseudonym;
     try {
       pseudonym = makePseudonymizer(process.env.EXPORT_HMAC_SECRET);
     } catch (err) {
-      return res.status(503).json({ error: err.message });
+      // 503 as before — the endpoint is unconfigured, not the request wrong —
+      // but as a code rather than the thrown sentence, which named the
+      // environment variable the deployment is missing (KOL-075). The reason
+      // is worth saying once, to the log, where the operator can act on it.
+      errorLog('light', `GET /drafts/${req.params.id}/export → 503 EXPORT_NOT_CONFIGURED (source: makePseudonymizer refused: ${err.message})`);
+      return res.status(503).json({ error: 'EXPORT_NOT_CONFIGURED' });
     }
 
     const draft = await Draft.findOne({ _id: req.params.id, workspaceId: req.workspaceId }).lean();
@@ -704,12 +713,12 @@ router.get('/:id/export', async (req, res) => {
     // A tripwire hit lands here. 500 is right: the record could not be produced
     // safely, and returning a partial one would be worse than failing.
     console.error('[drafts] export failed:', err.message);
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /drafts/:id — the full draft including items and source text.
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const draft = await Draft.findOne({
       _id: req.params.id,
@@ -720,14 +729,14 @@ router.get('/:id', async (req, res) => {
     if (!draft) return res.status(404).json({ error: 'Not found' });
     res.json(draft);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /drafts/:id — soft. The row is the training corpus; discarding is
 // a UI concern, and a discarded draft that was reviewed still carries a
 // complete set of human labels.
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req, res, next) => {
   try {
     const draft = await Draft.findOneAndUpdate(
       { _id: req.params.id, workspaceId: req.workspaceId },
@@ -737,7 +746,7 @@ router.delete('/:id', async (req, res) => {
     if (!draft) return res.status(404).json({ error: 'Not found' });
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

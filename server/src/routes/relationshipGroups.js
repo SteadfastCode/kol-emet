@@ -73,29 +73,29 @@ function rejectForeign(ids, present) {
 }
 
 // GET /relationship-groups — all groups (lean, for graph construction)
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const groups = await RelationshipGroup.find({ workspaceId: req.workspaceId }).lean();
     res.json(groups);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /relationship-groups/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const group = await fetchPopulated(req.params.id, req.workspaceId);
     if (!group) return res.status(404).json({ error: 'Not found' });
     res.json(group);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /relationship-groups — create group with initial entity members
 // Body: { label?, members: [{ entityId, label?, notes? }] }
-router.post('/', requireActor, async (req, res) => {
+router.post('/', requireActor, async (req, res, next) => {
   try {
     const { label = null, members = [] } = req.body;
 
@@ -128,12 +128,12 @@ router.post('/', requireActor, async (req, res) => {
     const populated = await fetchPopulated(group._id, req.workspaceId);
     res.status(201).json(populated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /relationship-groups/:id — update group label
-router.patch('/:id', requireActor, async (req, res) => {
+router.patch('/:id', requireActor, async (req, res, next) => {
   try {
     const { label } = req.body;
     const updated = await RelationshipGroup.findOneAndUpdate(
@@ -145,13 +145,13 @@ router.patch('/:id', requireActor, async (req, res) => {
     const populated = await populateMembers(updated, req.workspaceId);
     res.json(populated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /relationship-groups/:id/members — add one or more entity members
 // Body: { members: [{ entityId, label?, notes? }] }
-router.post('/:id/members', requireActor, async (req, res) => {
+router.post('/:id/members', requireActor, async (req, res, next) => {
   try {
     const { members } = req.body;
     if (!Array.isArray(members) || members.length === 0) {
@@ -189,14 +189,14 @@ router.post('/:id/members', requireActor, async (req, res) => {
     const populated = await fetchPopulated(group._id, req.workspaceId);
     res.status(201).json(populated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /relationship-groups/:id/members/reorder — reorder all members
 // Must be defined BEFORE /:id/members/:entityId to prevent "reorder" matching as entityId.
 // Body: { orderedMembers: [{ refModel, refId }] } — full list in new order
-router.patch('/:id/members/reorder', requireActor, async (req, res) => {
+router.patch('/:id/members/reorder', requireActor, async (req, res, next) => {
   try {
     const { orderedMembers } = req.body;
     if (!Array.isArray(orderedMembers)) {
@@ -222,12 +222,12 @@ router.patch('/:id/members/reorder', requireActor, async (req, res) => {
     const populated = await fetchPopulated(group._id, req.workspaceId);
     res.json(populated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PATCH /relationship-groups/:id/members/:entityId — update an entity member's label or notes
-router.patch('/:id/members/:entityId', requireActor, async (req, res) => {
+router.patch('/:id/members/:entityId', requireActor, async (req, res, next) => {
   try {
     const { label, notes } = req.body;
     const group = await RelationshipGroup.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
@@ -245,12 +245,12 @@ router.patch('/:id/members/:entityId', requireActor, async (req, res) => {
     const populated = await fetchPopulated(group._id, req.workspaceId);
     res.json(populated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /relationship-groups/:id/members/:entityId — remove an entity member
-router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
+router.delete('/:id/members/:entityId', requireActor, async (req, res, next) => {
   try {
     const group = await RelationshipGroup.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
     if (!group) return res.status(404).json({ error: 'Not found' });
@@ -278,13 +278,13 @@ router.delete('/:id/members/:entityId', requireActor, async (req, res) => {
     await group.save();
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /relationship-groups/:id/subgroups — link an existing group as a sub-group
 // Body: { groupId, label? }
-router.post('/:id/subgroups', requireActor, async (req, res) => {
+router.post('/:id/subgroups', requireActor, async (req, res, next) => {
   try {
     const { groupId, label = null } = req.body;
     if (!groupId) return res.status(400).json({ error: 'groupId is required' });
@@ -311,13 +311,13 @@ router.post('/:id/subgroups', requireActor, async (req, res) => {
     const populated = await fetchPopulated(parent._id, req.workspaceId);
     res.status(201).json(populated);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /relationship-groups/:id/subgroups/:subGroupId — unlink a sub-group
 // Any entity members of the sub-group not already in the parent are re-added.
-router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res) => {
+router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res, next) => {
   try {
     const parent = await RelationshipGroup.findOne({ _id: req.params.id, workspaceId: req.workspaceId });
     if (!parent) return res.status(404).json({ error: 'Parent group not found' });
@@ -355,12 +355,12 @@ router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res) => {
     await parent.save();
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /relationship-groups/:id — delete entire group and clean up all entity member entries
-router.delete('/:id', requireActor, async (req, res) => {
+router.delete('/:id', requireActor, async (req, res, next) => {
   try {
     const group = await RelationshipGroup.findOneAndDelete({
       _id: req.params.id,
@@ -376,7 +376,7 @@ router.delete('/:id', requireActor, async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

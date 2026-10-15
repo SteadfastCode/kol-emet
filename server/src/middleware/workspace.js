@@ -112,7 +112,7 @@ export async function resolveWorkspace(req, res, next) {
     workspaceLog('verbose', `membership read: ${JSON.stringify(membership ?? null)}`);
     next();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 }
 

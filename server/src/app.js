@@ -42,6 +42,7 @@ import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
 import { originGuard, logOriginGuardStartup } from './middleware/originGuard.js';
 import { resolveWorkspace } from './middleware/workspace.js';
+import { errorHandler } from './middleware/errorHandler.js';
 import { createAuthLimiter } from './lib/attemptLimiter.js';
 import { sessionCookieOptions } from './lib/sessionCookie.js';
 
@@ -151,6 +152,14 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // resolveWorkspace read from the caller's own membership, so a rename cannot
   // be aimed at another tenant's workspace or performed by a non-owner.
   app.use('/workspace', requireAuth, resolveWorkspace, workspaceRouter);
+
+  // Last, and it has to be last: Express walks error middleware in mount order,
+  // so one mounted before a router can never see that router's errors. Every
+  // router above now ends its catches in `next(err)` and this is the single
+  // place that turns an error into a response — so nothing Mongoose or the
+  // driver says reaches a caller verbatim. See middleware/errorHandler.js for
+  // the rules and ERROR_LOG_LEVEL.
+  app.use(errorHandler);
 
   return app;
 }

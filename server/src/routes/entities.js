@@ -155,7 +155,7 @@ function listCursor(raw) {
 }
 
 // GET /entities
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const filter = { workspaceId: req.workspaceId };
     // Every filter value goes through searchTerm: the extended query parser
@@ -241,12 +241,12 @@ router.get('/', async (req, res) => {
 
     res.json({ items, nextAfter, total });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // GET /entities/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const entity = await Entity.findOne({ _id: req.params.id, workspaceId: req.workspaceId })
       .populate(openQuestionsIn(req.workspaceId))
@@ -264,12 +264,12 @@ router.get('/:id', async (req, res) => {
 
     res.json({ ...entity, relationships });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // POST /entities
-router.post('/', requireActor, async (req, res) => {
+router.post('/', requireActor, async (req, res, next) => {
   try {
     const data = stripTenancy(req.body);
 
@@ -284,12 +284,12 @@ router.post('/', requireActor, async (req, res) => {
     logCreate(entity.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logCreate failed:', err));
     res.status(201).json(entity);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /entities/:id
-router.put('/:id', requireActor, async (req, res) => {
+router.put('/:id', requireActor, async (req, res, next) => {
   try {
     const data = stripTenancy(req.body);
 
@@ -314,12 +314,12 @@ router.put('/:id', requireActor, async (req, res) => {
     logUpdate(before, after.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logUpdate failed:', err));
     res.json(after);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /entities/:id
-router.delete('/:id', requireActor, async (req, res) => {
+router.delete('/:id', requireActor, async (req, res, next) => {
   try {
     const entity = await Entity.findOneAndDelete({
       _id: req.params.id,
@@ -352,7 +352,7 @@ router.delete('/:id', requireActor, async (req, res) => {
     logDelete(entity.toObject(), req.actor, clientId).catch(err => console.error('[changelog] logDelete failed:', err));
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

@@ -116,18 +116,18 @@ async function logEach(req, before, action, tag) {
 }
 
 // GET /tags — all unique tags across entries
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const tags = await Entity.distinct('tags', { workspaceId: req.workspaceId });
     res.json(tags.sort());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // PUT /tags/:tag — rename a tag everywhere in the workspace, merging into an
 // existing one. Body: { to }.
-router.put('/:tag', requireActor, async (req, res) => {
+router.put('/:tag', requireActor, async (req, res, next) => {
   try {
     const from = req.params.tag;
     const raw = req.body?.to;
@@ -161,12 +161,12 @@ router.put('/:tag', requireActor, async (req, res) => {
     log('light', `renamed "${from}" → "${to}" on ${docs.length} ${docs.length === 1 ? 'entity' : 'entities'} in workspace ${req.workspaceId} (source: ${req.actor.label})`);
     res.json({ renamed: docs.length, from, to });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 
 // DELETE /tags/:tag — remove a tag from every entity in the workspace.
-router.delete('/:tag', requireActor, async (req, res) => {
+router.delete('/:tag', requireActor, async (req, res, next) => {
   try {
     const tag = req.params.tag;
 
@@ -183,7 +183,7 @@ router.delete('/:tag', requireActor, async (req, res) => {
     log('light', `removed "${tag}" from ${docs.length} ${docs.length === 1 ? 'entity' : 'entities'} in workspace ${req.workspaceId} (source: ${req.actor.label})`);
     res.json({ removed: docs.length, tag });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 });
 

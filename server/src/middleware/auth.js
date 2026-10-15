@@ -48,6 +48,6 @@ export async function requireActor(req, res, next) {
     };
     next();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 }
