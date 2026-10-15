@@ -62,7 +62,7 @@
     "KOL-076": {
       "order": 4,
       "title": "Sign out everywhere, so a session on a lost device can be ended",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-076",
