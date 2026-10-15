@@ -1,0 +1,81 @@
+{
+  "item": "KOL-085",
+  "repo": "kol-emet",
+  "mergeSha": "c7e56a097c406e5388222a988839801991a7112d",
+  "completedAtUtc": "2026-10-14T11:12:09.136Z",
+  "completeRunId": "2026-10-14T09:07:28.985Z",
+  "reviewRunId": "2026-10-15T07:01:32.131Z",
+  "reviewedAtUtc": "2026-10-15T07:15:22.410Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 10326,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/ChatPanel.vue",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 10326,
+      "contextBytes": 0,
+      "promptTokens": 3109,
+      "completionTokens": 135,
+      "latencyMs": 15419,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/ChatPanel.vue",
+      "line": 29,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "Escape key event does not stop propagation, leading to unintended behavior.",
+      "scenario": "When the user presses the Escape key while renaming a conversation, the rename is canceled and the event propagates to the global listener, which closes the entire chat panel. This results in one press performing two actions: canceling the rename and closing the chat panel.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `@keydown.escape.prevent` binding on the input element does not include `stopPropagation`, allowing the event to propagate to the global listener, which closes the entire chat panel."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One real defect found.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 9279,
+    "completionTokens": 313
+  },
+  "latencyMs": 41414
+}

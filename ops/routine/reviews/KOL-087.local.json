@@ -1,0 +1,86 @@
+{
+  "item": "KOL-087",
+  "repo": "kol-emet",
+  "mergeSha": "518e614dc1113852c277ab84a064b2ca30f0d9c6",
+  "completedAtUtc": "2026-10-14T16:26:01.939Z",
+  "completeRunId": "2026-10-14T16:11:29.030Z",
+  "reviewRunId": "2026-10-15T07:01:32.131Z",
+  "reviewedAtUtc": "2026-10-15T07:19:28.663Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 17324,
+  "contextFiles": 4,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/producers/openApi.js",
+        "server/tests/http/openApiDraft.test.js"
+      ],
+      "part": null,
+      "bytes": 11614,
+      "contextBytes": 0,
+      "promptTokens": 3554,
+      "completionTokens": 181,
+      "latencyMs": 19052,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/openApi.test.js"
+      ],
+      "part": null,
+      "bytes": 5710,
+      "contextBytes": 9118,
+      "promptTokens": 4455,
+      "completionTokens": 330,
+      "latencyMs": 29808,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change aims to handle malformed `tags` in OpenAPI documents more gracefully by checking if `tags` is an array before filtering. However, the implementation does not fully address the issue of non-sequence values, which can still lead to errors. · The change introduces tests for malformed tags in OpenAPI documents but does not address the underlying issue that causes a TypeError when `tags` is not a sequence. The server should handle this case gracefully by returning a 400 status code with an appropriate error message instead of crashing.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 24076,
+    "completionTokens": 868
+  },
+  "latencyMs": 113367
+}

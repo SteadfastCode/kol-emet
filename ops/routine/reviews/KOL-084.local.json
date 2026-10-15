@@ -1,0 +1,68 @@
+{
+  "item": "KOL-084",
+  "repo": "kol-emet",
+  "mergeSha": "9b08c2cbc0b59fc73f7df39de086eaa6a8e955f1",
+  "completedAtUtc": "2026-10-14T10:57:29.949Z",
+  "completeRunId": "2026-10-14T09:07:28.985Z",
+  "reviewRunId": "2026-10-15T07:01:32.131Z",
+  "reviewedAtUtc": "2026-10-15T07:14:40.924Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 4753,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/generator/GeneratorOverlay.vue"
+      ],
+      "part": null,
+      "bytes": 4753,
+      "contextBytes": 10049,
+      "promptTokens": 4325,
+      "completionTokens": 217,
+      "latencyMs": 23352,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "Escape inside GeneratorOverlay closes two layers at once: the overlay's own @keydown.esc=\"tryClose\" emits 'close', which synchronously sets `generatorOpen = false`, and the same event then bubbles on to the window listener, so `closeTopLayer` sees the generator already closed and falls through to close the chat or the detail panel underneath.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 12942,
+    "completionTokens": 379
+  },
+  "latencyMs": 56642
+}

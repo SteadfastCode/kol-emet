@@ -1,0 +1,133 @@
+{
+  "item": "KOL-081",
+  "repo": "kol-emet",
+  "mergeSha": "fb2150d4f3486fb190b0a85ce5b693463c4ed798",
+  "completedAtUtc": "2026-10-13T07:26:34.359Z",
+  "completeRunId": "2026-10-13T07:08:27.208Z",
+  "reviewRunId": "2026-10-15T07:01:32.131Z",
+  "reviewedAtUtc": "2026-10-15T07:08:31.455Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 49694,
+  "contextFiles": 6,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 13924,
+      "contextBytes": 0,
+      "promptTokens": 3935,
+      "completionTokens": 183,
+      "latencyMs": 20081,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/attemptLimiter.js"
+      ],
+      "part": null,
+      "bytes": 13946,
+      "contextBytes": 0,
+      "promptTokens": 4250,
+      "completionTokens": 181,
+      "latencyMs": 21484,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/auth.js",
+        "server/tests/http/auth.test.js"
+      ],
+      "part": null,
+      "bytes": 10321,
+      "contextBytes": 0,
+      "promptTokens": 3276,
+      "completionTokens": 165,
+      "latencyMs": 17470,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/attemptLimiter.test.js"
+      ],
+      "part": null,
+      "bytes": 11503,
+      "contextBytes": 0,
+      "promptTokens": 3954,
+      "completionTokens": 168,
+      "latencyMs": 19702,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 148,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "Signup gate is read before the work and recorded only after it, allowing concurrent requests to bypass the per-address ceiling.",
+      "scenario": "A script opens N connections at once, each reading a count of zero before any writes occur, thus passing the `blocked` check while the counter remains 0. This results in creating ~N accounts per window instead of adhering to the `perSignupIp` limit.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The signup gate is read before the work and recorded only after it, allowing concurrent requests to bypass the per-address ceiling."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:148"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:166"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The signup gate is read before the work and recorded only after it, allowing concurrent requests to bypass the per-address ceiling. This can lead to a large number of accounts being created in a short period, potentially overwhelming the system or violating rate limiting policies. · One high-severity issue found in the `reserve` function of `attemptLimiter.js`. The function does not handle concurrent requests correctly when a key is at its maximum count, leading to potential race conditions and violation of rate limits. · The signup gate is read before the work and recorded only after it, allowing multiple simultaneous signups to bypass the per-address ceiling. · The signup gate is read before the work and recorded only after it, allowing concurrent requests to bypass the per-address ceiling.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 46081,
+    "completionTokens": 1437
+  },
+  "latencyMs": 205817
+}

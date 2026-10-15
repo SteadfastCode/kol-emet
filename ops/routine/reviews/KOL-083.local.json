@@ -1,0 +1,154 @@
+{
+  "item": "KOL-083",
+  "repo": "kol-emet",
+  "mergeSha": "f6a98550f6aacc13062712912f20517426e1eeb9",
+  "completedAtUtc": "2026-10-14T10:48:58.792Z",
+  "completeRunId": "2026-10-14T09:07:28.985Z",
+  "reviewRunId": "2026-10-15T07:01:32.131Z",
+  "reviewedAtUtc": "2026-10-15T07:13:44.221Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 30247,
+  "contextFiles": 7,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntitySidebar.test.js",
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 12822,
+      "contextBytes": 0,
+      "promptTokens": 3985,
+      "completionTokens": 176,
+      "latencyMs": 20379,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEntities.js",
+        "client/src/composables/useEntities.test.js"
+      ],
+      "part": null,
+      "bytes": 12257,
+      "contextBytes": 0,
+      "promptTokens": 3709,
+      "completionTokens": 316,
+      "latencyMs": 26176,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 5168,
+      "contextBytes": 8312,
+      "promptTokens": 3697,
+      "completionTokens": 152,
+      "latencyMs": 18004,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/composables/useEntities.js",
+      "line": 104,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Logging of page failures may not be accurate due to missing total count.",
+      "scenario": "If a page fails before the total count is known, the log will show '?' for the total number of rows on screen.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code logs 'total ??' which defaults to '?' if `total` is not set."
+      }
+    },
+    {
+      "file": "client/src/composables/useEntities.js",
+      "line": 141,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Logging of page failures may not be accurate due to missing total count.",
+      "scenario": "If a page fails before the total count is known, the log will show '?' for the total number of rows on screen.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code logs 'total ??' which defaults to '?' if `total` is null or undefined."
+      }
+    },
+    {
+      "file": "client/src/composables/useEntities.js",
+      "line": 164,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Logging of page failures may not be accurate due to missing total count.",
+      "scenario": "If a page fails before the total count is known, the log will show '?' for the total number of rows on screen.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code logs 'total ??' which defaults to '?' if `total` is null or undefined."
+      }
+    },
+    {
+      "file": "client/src/composables/useEntities.js",
+      "line": 52,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "A page failure mid-walk leaves the sidebar showing a silently truncated workspace: `sidebarLoading` is already false, the rejection has no catch anywhere.",
+      "scenario": "If a page fails during loading, the sidebar will show a silently truncated workspace because `sidebarLoading` is set to false after the first page and there is no global error/unhandledrejection handler in the client.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`sidebarLoading` is set to false after the first page, and there is no global error/unhandledrejection handler."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/composables/useEntities.js:40"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/composables/useEntities.js:29"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified: The retry-load event is emitted with a string argument, but the loadEntities function does not accept any arguments. · The change introduces logging for entity loading but does not handle cases where the total count is unknown, which can lead to inaccurate logs. · Found one real defect related to handling of page failures mid-walk.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 41357,
+    "completionTokens": 1248
+  },
+  "latencyMs": 160599
+}

@@ -1,0 +1,107 @@
+{
+  "item": "KOL-082",
+  "repo": "kol-emet",
+  "mergeSha": "d7dda3c9a1fa4d2d7c2f3412379ffdb69a4c6224",
+  "completedAtUtc": "2026-10-14T10:39:24.155Z",
+  "completeRunId": "2026-10-14T09:07:28.985Z",
+  "reviewRunId": "2026-10-15T07:01:32.131Z",
+  "reviewedAtUtc": "2026-10-15T07:11:03.477Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 36829,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/entities.js",
+        "client/src/api/entities.test.js",
+        "client/src/components/EntitySidebar.test.js",
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 14491,
+      "contextBytes": 0,
+      "promptTokens": 4546,
+      "completionTokens": 157,
+      "latencyMs": 21264,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "client/src/composables/useFilters.js"
+      ],
+      "part": null,
+      "bytes": 8426,
+      "contextBytes": 0,
+      "promptTokens": 2724,
+      "completionTokens": 201,
+      "latencyMs": 17347,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useFilters.test.js",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 13912,
+      "contextBytes": 0,
+      "promptTokens": 4104,
+      "completionTokens": 192,
+      "latencyMs": 21289,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/api/entities.js:80"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified: The `searchEntities` function does not handle cases where the server returns fewer items than requested, which can lead to confusion for users. · The change introduces a new parameter `search-truncation` to handle truncated search results, but it does not address the issue of unbounded GET requests in `searchEntities`. The description promises that the change will prevent unbounded reads, but the diff only adds handling for truncated results without modifying the request to include a limit. · The change introduces a limit parameter to the searchEntities function to prevent unbounded GET requests, but it does not address the underlying issue of the search box triggering these requests on every keystroke. This can lead to performance issues and potential denial of service for other tenants sharing the same event loop.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 33985,
+    "completionTokens": 1082
+  },
+  "latencyMs": 151834
+}
