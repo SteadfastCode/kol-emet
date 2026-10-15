@@ -1,0 +1,69 @@
+{
+  "item": "KOL-081",
+  "repo": "kol-emet",
+  "mergeSha": "fb2150d4f3486fb190b0a85ce5b693463c4ed798",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:27:15.361Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It restates the pre-fix bug as if still present: the merged route calls `limiter(req).reserve(signupKeys, ...)` at server/src/routes/auth.js:165, and `reserve` in attemptLimiter.js checks and increments in one synchronous step with no await, so the N-th of N simultaneous callers sees its predecessors' slots (and the 409 path hands the slot back via `release`)."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change is entirely in the signup throttle of POST /auth/register and the shared auth limiter."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env secret handling is added or altered."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing- or pricing-related is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "Nothing in the diff deletes or migrates data — line 166 is the 429 refusal; the pre-existing `User.deleteOne` rollback is only re-commented, not changed."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are involved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only server source, tests, and docs change; no deploy, version, or release configuration."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review produced a single finding that is simply the item's own problem statement read back as a live defect, missing that the merged diff is the fix for it, and its triage was right on five of six categories (wrongly flagging 'destructive' on the refusal line).",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 0.916386,
+  "numTurns": 8,
+  "durationMs": 120890,
+  "sessionId": "6b0c74d3-6520-4972-942a-a19c60ce988c"
+}

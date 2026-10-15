@@ -1,0 +1,79 @@
+{
+  "item": "KOL-082",
+  "repo": "kol-emet",
+  "mergeSha": "d7dda3c9a1fa4d2d7c2f3412379ffdb69a4c6224",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:25:14.425Z",
+  "independent": [
+    {
+      "file": "server/src/routes/entities.js",
+      "line": 236,
+      "severity": "low",
+      "summary": "Opting the search into the envelope adds a second full scan per keystroke-word: the unpaged path returned before any count, but the paged path runs `countDocuments(filter)` with the keyword `$or` (an unindexable regex over title/summary/`blocks.data.markdown`) in addition to the limited `find`, so each 250ms-debounced search now costs two workspace-wide scans instead of one — the event-loop serialization is fixed, the per-search DB work roughly doubles."
+    },
+    {
+      "file": "client/src/api/entities.test.js",
+      "line": 52,
+      "severity": "low",
+      "summary": "The test named 'asks for no more than the route will serve' only asserts `SEARCH_RESULT_LIMIT === 200` against a hardcoded literal, with no link to the server's `LIST_LIMIT_MAX`; if the route's cap were lowered the client would silently over-ask and this test would still pass, so it does not test the cross-boundary claim in its name."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, passkey or permission code is touched — only the search client, the filters composable, the sidebar and tests."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env/config values appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or AI-spend code is involved; the change is a query-string limit and a UI caveat line."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations or data-mutating paths — the diff only changes a read request and its presentation."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Correct: `searchEntities` now sends `?limit=` and consumes the route's `{items, nextAfter, total}` envelope, changing the request/response contract with the REST API."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Correct: nothing release-gated changes — `readAnswer` keeps the bare-array path so client and API can deploy independently without coordination."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local model reported nothing on a genuinely clean, well-tested change and got all six triage categories right, so its only shortfall is missing two low-severity nits (the extra per-search `countDocuments` scan and a tautological limit assertion).",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.2813389999999998,
+  "numTurns": 17,
+  "durationMs": 161610,
+  "sessionId": "c5f811bc-8c6a-4214-b16b-54d3249b5737"
+}

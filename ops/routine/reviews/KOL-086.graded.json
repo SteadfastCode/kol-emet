@@ -1,0 +1,83 @@
+{
+  "item": "KOL-086",
+  "repo": "kol-emet",
+  "mergeSha": "066deedd9ec94338ecfb1680e08b2fc0494803b6",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:16:00.939Z",
+  "independent": [
+    {
+      "file": "server/src/lib/draftApplier.js",
+      "line": 272,
+      "severity": "low",
+      "summary": "The new drop log names the payload source with `item.accepted ? 'edited' : 'proposed'`, but PATCH /drafts/:id/items/:itemId and the bulk-accept route both copy `proposed` verbatim into `accepted` on a plain accept (routes/drafts.js:487, :588), so `item.accepted` is truthy for every applied item. The line therefore always prints 'the edited payload', erasing exactly the distinction it exists to make — a stale id from the generator (human removed a member) is reported as a reviewer edit. The condition should be `item.decision === 'edited'`."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The quoted comment no longer exists in the merged code — line 307 now reads 'unreachable: holdsAll gated every path to here', and `holdsAll` gates both the id-targeted and members paths, so the described skip-plus-back-reference outcome cannot occur."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "Same claim as #1 (and thus also a duplicate of it): the merged `findOrCreateGroup` re-checks `holdsAll(target)` before honouring `p.targetGroupId`, drops the id with a `target_group_changed` flag otherwise, and the suite at tests/lib/draftApplier.test.js asserts the back-reference invariant — the finding restates the already-fixed pre-merge bug."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, passkey or permission code is touched; workspace scoping on the queries is unchanged."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env-based secrets appear in the diff (only APPLY_LOG_LEVEL, a log tier)."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or model-cost path is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The diff adds no destructive operation — it only adds a containment check and creates a group instead of mis-updating one; the cited line 103 is `Draft.create` in a fixture, and the only deletions are the pre-existing in-memory test harness."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP, model-provider or third-party call is added or changed."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No package manifests, deploy config, migrations or version bumps — only a lib file, a new test, and the spec's decision log."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "Both findings simply re-describe the pre-merge bug that this change fixes, so the review surfaced no real defect and also mis-triaged the destructive category with irrelevant evidence.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.3939409999999999,
+  "numTurns": 16,
+  "durationMs": 152372,
+  "sessionId": "2b8e067d-6de2-4640-894f-d021aafae3d3"
+}

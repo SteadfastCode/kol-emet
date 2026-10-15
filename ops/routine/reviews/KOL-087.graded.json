@@ -1,0 +1,63 @@
+{
+  "item": "KOL-087",
+  "repo": "kol-emet",
+  "mergeSha": "518e614dc1113852c277ab84a064b2ca30f0d9c6",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:13:28.527Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff changes only OpenAPI tag parsing and its tests; no session, passkey, workspace-resolution or permission logic is altered."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential handling changes, and the echoed document values in drop reasons come from text already passed through redactSecrets in the route."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The producer is deterministic with no model call, so no budget, pricing or token-cost path is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Nothing deletes or overwrites data — the change only adds drop reasons and a guard during draft generation."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Parsing an OpenAPI document is local text parsing; no outbound request or third-party client is involved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, dependency, migration or deploy configuration appears in the diff (PRODUCER_VERSION is unchanged)."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model found nothing and so did my cold read — the Array.isArray guard, the null/empty exemptions, the capped describeNotASequence and the tests all hold up, so \"no defects\" plus six correct triage answers is the right outcome, albeit one reached with no stated evidence.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.8597505,
+  "numTurns": 10,
+  "durationMs": 108832,
+  "sessionId": "2e3719e4-7ae0-4e75-93f6-fa5bc76696ab"
+}

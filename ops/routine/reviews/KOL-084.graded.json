@@ -1,0 +1,63 @@
+{
+  "item": "KOL-084",
+  "repo": "kol-emet",
+  "mergeSha": "9b08c2cbc0b59fc73f7df39de086eaa6a8e955f1",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:19:24.075Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only removes a `@keydown.esc` binding in GeneratorOverlay.vue and adds a layout keyboard test; no session, login, passkey or permission code is involved."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear in either changed file."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The only cost-related content is a test stub of `getAllowance` returning fixed fake dollar/micro values; no allowance, pricing or spend logic is changed."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Nothing deletes or overwrites data — a template event binding is dropped and a test case added."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No external provider call is added or altered; `api/drafts.js` is the app's own REST client and here it is merely mocked out in tests."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, build, deploy or packaging files are touched."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no findings, which matches my own read: the fix correctly removes the overlay's duplicate Escape binding so the layout's single global listener (useKeyboardShortcuts.js, closeTopLayer at WikiLayout.vue:690) closes exactly one layer, and the new test genuinely reproduces the double-close by mounting GeneratorOverlay for real and pressing Escape from its focused braindump textarea (the full 43-test file passes), so the zero-finding result and all six triage answers are right — though the model offered no evidence it verified any of this.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.8598915,
+  "numTurns": 15,
+  "durationMs": 107226,
+  "sessionId": "17e0d8eb-bf0a-4251-84ca-ca820a0e4f5b"
+}

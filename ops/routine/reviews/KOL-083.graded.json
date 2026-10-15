@@ -1,0 +1,93 @@
+{
+  "item": "KOL-083",
+  "repo": "kol-emet",
+  "mergeSha": "f6a98550f6aacc13062712912f20517426e1eeb9",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:22:32.775Z",
+  "independent": [
+    {
+      "file": "client/src/components/EntitySidebar.vue",
+      "line": 121,
+      "severity": "low",
+      "summary": "The `isFiltered` empty state is ordered ahead of the new `loadError` empty state, so after a truncated load a category/tag pill that matches none of the rows that arrived asserts \"Nothing here matches your current search or filters\" — which is the same wrong attribution of cause the item set out to remove (rows of that category may live in the pages that never came). The header `.load-failed` banner still shows, so the failure is not hidden, which is why this is low and not medium."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`total ?? '?'` in a debug log line is the deliberate, documented behaviour when no page landed (the same case the test pins as `total: null`), it is console-only and user-invisible, and line 104 is `sidebarLoading.value = false`, not a log call."
+    },
+    {
+      "index": 2,
+      "verdict": "duplicate",
+      "reason": "Verbatim restatement of finding 1 at a different (also unrelated) line number, and not a defect for the same reason."
+    },
+    {
+      "index": 3,
+      "verdict": "duplicate",
+      "reason": "Verbatim restatement of finding 1 at a third unrelated line (inside the composable's return block), and not a defect for the same reason."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "This is the pre-existing bug the diff fixes, and the claim is untrue in the merged code: `loadEntities` now wraps the walk in `catch` (useEntities.js:112) and records `loadError`, which WikiLayout.vue:15 passes to the sidebar's banner and empty state, so nothing rejects and the truncation is on screen."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "No authentication or authorization logic changes — the only auth-adjacent line is a 401-conditional message string reusing the client's existing session-expired wording, which does not alter sessions, access control, or any auth path."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or config secrets appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, quota, or model-cost code is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only adds error state and UI; no deletes, migrations, or data-overwriting paths."
+    },
+    {
+      "key": "externalApi",
+      "correct": false,
+      "reason": "No API call, request shape, or endpoint changes — `getEntityPage` is called exactly as before and line 29 is `const entities = ref([])`."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, version, or env configuration is touched (the only non-source file is the spec's decision log)."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All four findings are worthless: three are the same non-defect about a debug log's `?` placeholder pinned at unrelated line numbers, and the fourth parrots the item's own bug description as if the fix it reviews were absent, while the triage over-flags auth and externalApi on evidence lines that are unrelated declarations.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 2,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 4
+  },
+  "costUsd": 1.2843225,
+  "numTurns": 16,
+  "durationMs": 188662,
+  "sessionId": "5e9a24e8-7a87-4969-9e14-96924fad9240"
+}

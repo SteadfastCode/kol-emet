@@ -1,0 +1,69 @@
+{
+  "item": "KOL-085",
+  "repo": "kol-emet",
+  "mergeSha": "c7e56a097c406e5388222a988839801991a7112d",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-15T08:11:37.133Z",
+  "gradedAtUtc": "2026-10-15T08:17:36.816Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "In the merged tree the input binds `@keydown.escape=\"onRenameEscape\"`, which calls `event.stopPropagation()` (ChatPanel.vue:280-282), so the press never reaches the window listener — the finding restates the pre-fix bug the diff removes, and the new WikiLayout test (which dispatches a bubbling Escape from the focused input) passes, confirming the panel stays open."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "Only chat-panel rename key handling, a template ref, logging and a test changed; no session, passkey or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials or env/token handling; the only storage read is the `CHAT_PANEL_LOG_LEVEL` debug tier."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or usage-metering code is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletions or migrations; the cancel path explicitly avoids saving, and an empty title still returns early."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No external/third-party call is added or altered — `renameConversation` is the app's own endpoint and is only mocked in the test."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, build, deploy or dependency changes in the diff."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review produced a single finding that is just the item's own pre-fix description re-reported against the fixed code, and its triage, while correct on all six categories, required no real analysis.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.6503639999999999,
+  "numTurns": 10,
+  "durationMs": 95844,
+  "sessionId": "8703241f-11c5-49ed-b69c-1334b0a1b89f"
+}
