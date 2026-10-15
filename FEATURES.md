@@ -41,7 +41,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-077) `POST /import`: a canonical export round-trips back into an empty workspace**
+- [x] **(KOL-077) `POST /import`: a canonical export round-trips back into an empty workspace**
   KOL-070 shipped `GET /export` and `server/src/lib/graphExporter.js` — one deterministic JSON document stamped
   `version: 'kol-emet/workspace-export@1'` — and left the other half open: nothing reads it back. So the export is a
   file nobody can prove is complete, `docs/wishlist.md`'s "Bulk import endpoint" has no answer, and the roadmap's
