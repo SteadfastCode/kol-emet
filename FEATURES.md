@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-096) The editor-403 test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but t…**
+- [x] **(KOL-096) The editor-403 test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but t…**
   Found by the grader of KOL-077 (medium, server/tests/http/import.test.js:262). The editor-403
   test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but that title is
   nowhere in the document under test (alice's export holds the seeded 'Example Character'/'Example
