@@ -121,6 +121,40 @@ the SSE routes report failures as stream events because their headers went out f
 
 ---
 
+## Health
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/health` | Liveness and database readiness. **200** `{ "status": "ok", "db": "up", "uptimeSeconds": 1234 }` when `mongoose.connection.readyState` is `1`; **503** `{ "status": "degraded", "db": "down", "uptimeSeconds": 1234 }` for every other state. No auth, and it establishes no session (no `Set-Cookie`), so a monitor can poll it. `HEAD /health` answers the same status with no body. Sent `Cache-Control: no-store`. |
+
+The only route whose job is to be polled, and the only one mounted ahead of `requireAuth` for that
+reason ([`routes/health.js`](../server/src/routes/health.js)). The deploy signal available until now
+was the host's own commit status, which says a container started — not that it can still reach
+Mongo. Note which failure that leaves invisible: `index.js` listens only *after* the first connect
+succeeds, so a boot with no database never serves at all; what happens in production is the
+connection dropping **later**. Mongoose keeps the process up and reconnects in the background, so
+the API goes on answering 200 while `readyState` is `0` or `2`, and every tenant route turns that
+window into a stall a user reads as their own connection. Only `1` is `up` here.
+
+The body is those three keys and deliberately nothing else — no version, no commit, no collection
+counts, no environment or provider names. This endpoint is unauthenticated and meant to be polled,
+and a status endpoint that describes its deployment is a reconnaissance endpoint; what it publishes
+is "working / not working", which is what a monitor needs. `server/tests/http/health.test.js`
+asserts the exact key set, so a fourth key is a deliberate change to that assertion rather than
+something that arrives in passing.
+
+A cross-origin `GET /health` is **not** refused: `originGuard` checks unsafe methods only (see
+[Authentication](#authentication)), so the route needs no exemption from it.
+
+`HEALTH_LOG_LEVEL` (`off | light | normal | verbose`, default `light`). A monitor polls every few
+seconds, so the light tier logs only the *transitions* — one line each time the answer changes,
+naming the previous answer, the new one and the `readyState` behind it. `normal` logs every answer;
+`verbose` adds the caller's method and path.
+
+Out of scope: the AI providers and every other outbound dependency (an instance whose OpenRouter key
+is wrong is not *down*), Prometheus/OpenTelemetry metrics and a status page. Pointing the host's own
+healthcheck setting at `/health` is a dashboard change, not a repo one.
+
 ---
 
 ## Entities
