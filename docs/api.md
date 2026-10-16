@@ -56,7 +56,7 @@ Mount points and their guards:
 | `/auth` | mixed | Login/registration; individual routes guard themselves |
 | `/templates` | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
 | `/mcp` | self | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
-| `/` (oauth) | none | OAuth discovery/authorize/token for the MCP connector |
+| `/` (oauth) | mixed | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
 | `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
 | `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
@@ -427,6 +427,10 @@ Out of scope, and not accidents: **listing** active sessions with device, addres
 store cannot enumerate them by user — that is the whole reason this is a timestamp), notifying the
 account by email, revoking the MCP bearer token or OAuth grants (KOL-014 owns per-connector
 identity), and bumping the timestamp automatically when a password changes or a passkey is removed.
+That connector carve-out is about a *token already issued* outliving the bump until it is rotated.
+It never meant a revoked session could mint a **new** grant: both OAuth approval forms require a
+live session, so the revoked device cannot re-point `Settings.mcpUserId` or get a code
+([OAuth](#oauth-mcp-connector), KOL-098).
 A deleted account's sessions are not bumped either; they are refused by the id check in
 `GET /auth/me` and `requireActor`.
 
@@ -820,13 +824,20 @@ authorization-code with PKCE):
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/.well-known/oauth-authorization-server` | Discovery document |
-| GET | `/authorize` | Approval page |
-| POST | `/authorize` | Approve → issue auth code. `application/x-www-form-urlencoded` (the approval page's form) |
+| GET | `/authorize` | Approval page. Offers the Allow button only to a signed-in visitor; otherwise it says to sign in first, because the POST below would refuse |
+| POST | `/authorize` | Approve → set `Settings.mcpUserId` to the signed-in user, issue auth code. `application/x-www-form-urlencoded` (the approval page's form). **Requires a live login session** — 401 for a revoked session (which it also ends), for an anonymous caller and for a bearer token |
 | POST | `/oauth/token` | Exchange code for token. `application/x-www-form-urlencoded` |
 
 These two and the bridge's own `POST /bridge/authorize` and `POST /bridge/oauth/token` are the only
 endpoints that parse a form body, and each mounts `express.urlencoded` itself — see the
 [origin guard](#authentication). Every other route takes JSON.
+
+Approving a connector is the one place the MCP bearer identity is *created*, so both approval forms
+sit behind `requireLoginSession` (KOL-098): a live, unrevoked session and nothing else. A bearer
+caller is deliberately not enough — a connector that could re-point the identity it acts as is a
+connector whose revocation does not hold. This is not in tension with the connector carve-out in
+[Sessions](#sessions): that carve-out is about a bearer token
+surviving a revocation until it is rotated, never about a revoked *session* minting a new grant.
 
 ## MCP transport
 

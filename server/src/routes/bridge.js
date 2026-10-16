@@ -50,6 +50,9 @@ import RoutineRepo from '../models/RoutineRepo.js';
 import RoutineItem, { ROUTINE_ITEM_STATES } from '../models/RoutineItem.js';
 import { mcpWorkspaceId } from '../lib/mcpWorkspace.js';
 import { setMcpUser } from '../lib/mcpUserStore.js';
+// The approval form binds the MCP identity, so it is behind a live-session
+// guard rather than reading `req.session.userId` itself (KOL-098).
+import { requireLoginSession, resolveLoginSession } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -107,12 +110,18 @@ const authCodes = new Map(); // code -> { codeChallenge, redirectUri, expiresAt 
 // the bridge stays self-contained — see the header.
 const form = express.urlencoded({ extended: false });
 
-router.get(`${ISSUER_PATH}/authorize`, (req, res) => {
+router.get(`${ISSUER_PATH}/authorize`, async (req, res) => {
   const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state } = req.query;
   if (response_type !== 'code') return res.status(400).send('unsupported_response_type');
   if (code_challenge_method !== 'S256') return res.status(400).send('code_challenge_method must be S256');
   if (!code_challenge || !redirect_uri) return res.status(400).send('missing required parameters');
-  log('normal', `GET ${ISSUER_PATH}/authorize for client ${client_id ?? 'unknown'}`);
+  // Who the page would approve as; the POST below refuses without a live
+  // session, so offering the button anyway would send the one user allowed to
+  // do this into a bare 401. Fails open on a lookup that did not answer — the
+  // POST is the gate, this is only what the page says.
+  const signedIn = await resolveLoginSession(req);
+  const mayApprove = signedIn.reason === 'live' || signedIn.reason === 'lookup-failed';
+  log('normal', `GET ${ISSUER_PATH}/authorize for client ${client_id ?? 'unknown'} — serving the ${mayApprove ? 'Allow' : 'sign-in'} page (source: login session ${signedIn.reason})`);
   res.send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Authorize — Steadfast bridge</title>
@@ -122,32 +131,33 @@ router.get(`${ISSUER_PATH}/authorize`, (req, res) => {
   .center { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
   .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 2rem; max-width: 420px; width: 90%; text-align: center; }
   h1 { font-size: 1.25rem; margin: 0 0 0.5rem; } p { color: #aaa; font-size: 0.9rem; margin: 0 0 1.5rem; }
-  .client { font-weight: 600; color: #eee; } .warn { color: #f59e0b; }
+  .client { font-weight: 600; color: #eee; } .warn { color: #f59e0b; } .notice { color: #f59e0b; margin: 0; }
   button { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 0.75rem 2rem; font-size: 1rem; cursor: pointer; width: 100%; }
 </style></head>
 <body><div class="center"><div class="card">
   <h1>Authorize the Steadfast bridge</h1>
   <p><span class="client">${escapeHtml(client_id ?? 'Unknown client')}</span> wants to send messages to, and run commands on, the Claude Code sessions on your steadfast-ai box. <span class="warn">This is a remote-execution channel.</span></p>
-  <form method="POST" action="${ISSUER_PATH}/authorize">
+  ${mayApprove ? `<form method="POST" action="${ISSUER_PATH}/authorize">
     <input type="hidden" name="client_id" value="${escapeHtml(client_id ?? '')}">
     <input type="hidden" name="redirect_uri" value="${escapeHtml(redirect_uri)}">
     <input type="hidden" name="code_challenge" value="${escapeHtml(code_challenge)}">
     <input type="hidden" name="state" value="${escapeHtml(state ?? '')}">
     <button type="submit">Allow</button>
-  </form>
+  </form>` : `<p class="notice">Sign in to Kol Emet in this browser first — the bridge acts as the signed-in account, so there is nothing to approve as yet. Sign in, then start the connector's setup again.</p>`}
 </div></div></body></html>`);
 });
 
-router.post(`${ISSUER_PATH}/authorize`, form, async (req, res) => {
+// `requireLoginSession` ahead of the handler (KOL-098): approving the bridge
+// binds the MCP identity exactly as the wiki connector's form does, and on an
+// endpoint whose token runs commands on the box. A revoked session is refused
+// and ended; an anonymous caller gets 401 and no code, rather than a code that
+// redeems for BRIDGE_TOKEN under whatever identity was last set.
+router.post(`${ISSUER_PATH}/authorize`, form, requireLoginSession, async (req, res) => {
   const { redirect_uri, code_challenge, state } = req.body;
   if (!redirect_uri || !code_challenge) return res.status(400).send('missing required parameters');
   // Same identity as the wiki connector, on purpose (see the header).
-  if (req.session?.userId) {
-    await setMcpUser(req.session.userId);
-    log('light', `bridge authorized by user ${req.session.userId}; MCP identity set (source: POST ${ISSUER_PATH}/authorize with a login session)`);
-  } else {
-    log('light', `POST ${ISSUER_PATH}/authorize with no login session — tools will refuse until the connector is authorized by a logged-in user`);
-  }
+  await setMcpUser(req.loginUserId);
+  log('light', `bridge authorized by user ${req.loginUserId}; MCP identity set (source: POST ${ISSUER_PATH}/authorize with a live login session)`);
   const code = randomUUID();
   authCodes.set(code, { codeChallenge: code_challenge, redirectUri: redirect_uri, expiresAt: Date.now() + 5 * 60 * 1000 });
   const url = new URL(redirect_uri);

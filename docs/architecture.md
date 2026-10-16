@@ -52,6 +52,12 @@ The MCP server is **not** a standalone stdio process — it is a Streamable-HTTP
 can authorize. Writes are attributed to `Settings.mcpUserId` and recorded in the changelog with
 `actorType: 'mcp'`.
 
+Approving the connector (`POST /authorize`) is what *binds* `Settings.mcpUserId`, so it requires a
+live, unrevoked login session (`requireLoginSession`, KOL-098) — not a bearer token, and not nothing.
+A device signed out by `POST /auth/sessions/revoke-all` keeps its cookie until a guarded route
+notices, and this route used to read `req.session.userId` itself: the lost laptop could re-point the
+identity and read and write the whole workspace through `/mcp`.
+
 The endpoint has its own bearer gate (`MCP_BEARER_TOKEN`), read once at process start:
 configured → the token is required; unset outside production → open, so a local Claude Code session
 needs no secret; unset **in** production → the endpoint is disabled and every request answers
@@ -101,6 +107,8 @@ Claude.ai authorizes it with the same authorization-code + PKCE shape as the wik
 `BRIDGE_TOKEN`, reachable two ways: a 401 names `/.well-known/oauth-protected-resource/bridge/mcp`,
 which points at the path-based issuer `/bridge` (own RFC 8414 document, `/bridge/authorize`,
 `/bridge/oauth/token`); or the origin's `/authorize` with `resource=…/bridge/mcp` (RFC 8707).
+Either path's approval form takes a live login session (`requireLoginSession`, KOL-098) — the same
+gate as the wiki connector's, on an endpoint whose token runs commands on the box.
 
 | Tool | Purpose |
 |------|---------|
