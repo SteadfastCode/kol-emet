@@ -26,7 +26,8 @@
  *   3. duplicate key (11000)           → 409 { error: 'DUPLICATE', fields }
  *   4. Mongoose `CastError`            → 400 { error: 'INVALID_VALUE', fields }
  *   5. explicit `status` *and* `code`  → that status, { error: code }
- *   6. anything else                   → 500 { error: 'INTERNAL', ref }
+ *   6. body-parser's own `type`        → that type's status, { error: code }
+ *   7. anything else                   → 500 { error: 'INTERNAL', ref }
  *
  * `fields` is always schema paths or index key names — *our own* names, which
  * are safe to publish and are the one thing a client actually needs in order to
@@ -46,7 +47,32 @@
  * `ECONNREFUSED`) with no `status`, and neither must be able to talk its way
  * into becoming the body of a 4xx.
  *
- * Rule 6 publishes nothing. The caller gets a short `ref`; the same `ref` is
+ * Rule 6 is the half of rule 5 that demand left out (KOL-099). Requiring a
+ * string `code` keeps a Mongo error out, but it also kept out the one kind of
+ * error that arrives with a *correct* status and no code at all: body-parser's.
+ * A malformed JSON body is `{ name: 'SyntaxError', status: 400, type:
+ * 'entity.parse.failed' }`; an over-limit one `{ status: 413, type:
+ * 'entity.too.large' }`. Neither carries a `code`, so both fell through to the
+ * last rule and answered 500 `INTERNAL` — with a `ref` and a logged stack per
+ * bad request — where Express's own finalhandler had honoured the 400 and the
+ * 413 before this file existed. Two client mistakes reported as server faults,
+ * on every route but `/import`, which had already noticed and answers its own
+ * 400/413 from a path-scoped handler (`routes/import.js`). That handler is
+ * mounted ahead of the app-wide parser and still runs first, so `/import` keeps
+ * its own `MALFORMED_JSON` / `IMPORT_TOO_LARGE` and this rule never sees it.
+ *
+ * The status is the table's and not the error's: a status read off an arbitrary
+ * error object is a status that object got to choose, and rule 5 exists because
+ * that matters. The code is ours for a different reason — a client branches on
+ * `MALFORMED_JSON`, not on a `type` string owned by a dependency. Every type
+ * body-parser and raw-body can raise below 500 is in the table (asserted
+ * against their source in tests/http/errorShape.test.js, so a dependency
+ * upgrade that adds one is named rather than silently answered as a 500); the
+ * two that *are* 500s — `stream.encoding.set`, `stream.not.readable` — mean a
+ * stream was misconfigured by this code, so they stay with the last rule, where
+ * a 500 is the truth.
+ *
+ * Rule 7 publishes nothing. The caller gets a short `ref`; the same `ref` is
  * written to the server log beside the real stack, so a user can quote eight
  * characters and nothing about the deployment leaves the box.
  *
@@ -134,6 +160,40 @@ function duplicateFields(dup) {
 }
 
 /**
+ * body-parser's failures, by the `type` it hangs on them — rule 6.
+ *
+ * Keyed by `type` rather than by status because the type is the only stable
+ * thing on the error: the message is English prose from a dependency and the
+ * status, on an error object that could be anything, is not ours to trust.
+ *
+ * Everything body-parser and raw-body can raise under 500 is here. `/import`
+ * answers its own codes for the first two before this is reached; the rest are
+ * reachable through the app-wide `express.json()` and through the two
+ * form-encoded OAuth endpoints that mount `express.urlencoded` themselves.
+ */
+export const BODY_PARSER_RULES = Object.freeze({
+  // raw-body and body-parser, JSON and form-encoded alike
+  'entity.parse.failed': { status: 400, code: 'MALFORMED_JSON' },
+  'entity.too.large': { status: 413, code: 'BODY_TOO_LARGE' },
+  'request.size.invalid': { status: 400, code: 'BODY_SIZE_MISMATCH' },
+  'request.aborted': { status: 400, code: 'REQUEST_ABORTED' },
+  'encoding.unsupported': { status: 415, code: 'UNSUPPORTED_ENCODING' },
+  'charset.unsupported': { status: 415, code: 'UNSUPPORTED_CHARSET' },
+  // form-encoded only: the OAuth issuers' /authorize and /oauth/token
+  'parameters.too.many': { status: 413, code: 'TOO_MANY_PARAMETERS' },
+  'querystring.parse.rangeError': { status: 400, code: 'MALFORMED_BODY' },
+  // only with a `verify` option, which nothing here passes today
+  'entity.verify.failed': { status: 403, code: 'BODY_VERIFY_FAILED' },
+});
+
+/**
+ * The two types that are this code's own bug rather than the caller's, so they
+ * stay a 500. Named here so the dependency sweep in errorShape.test.js can tell
+ * "deliberately unmapped" from "nobody noticed it was added".
+ */
+export const BODY_PARSER_OURS = Object.freeze(['stream.encoding.set', 'stream.not.readable']);
+
+/**
  * Which rule an error falls under, or null for "none — this is a 500".
  *
  * Separated from the handler so it can be asserted directly, and so the mapping
@@ -174,6 +234,18 @@ export function classify(err) {
       status: err.status,
       rule: 'explicit status and code',
       body: { error: err.code, ...fields },
+    };
+  }
+
+  // Disjoint from rule 5 by construction, so the order between them does not
+  // matter: body-parser hangs no `code` on its errors and `httpError()` hangs
+  // no `type` on its own.
+  const parser = typeof err?.type === 'string' ? BODY_PARSER_RULES[err.type] : undefined;
+  if (parser) {
+    return {
+      status: parser.status,
+      rule: `body-parser ${err.type}`,
+      body: { error: parser.code },
     };
   }
 
@@ -218,7 +290,7 @@ export function errorHandler(err, req, res, next) {
   // Short on purpose: it is meant to be read off a screen and typed into a
   // support message, and it indexes a log line rather than identifying anything.
   const ref = randomBytes(4).toString('hex');
-  errorLog('light', `${where} → 500 INTERNAL ref=${ref} (source: rule 6, no rule matched — not a ValidationError, a duplicate key, a CastError, or an error carrying both status and code)`);
+  errorLog('light', `${where} → 500 INTERNAL ref=${ref} (source: rule 7, no rule matched — not a ValidationError, a duplicate key, a CastError, a body-parser failure, or an error carrying both status and code)`);
   errorLog('normal', `${where} ref=${ref}: ${describe(err)}`);
   // The stack beside the ref, at the light tier, is the whole trade: the body
   // says nothing, so the log has to say everything.
