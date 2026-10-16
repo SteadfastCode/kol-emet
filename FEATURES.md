@@ -62,6 +62,48 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-096) The editor-403 test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but t…**
+  Found by the grader of KOL-077 (medium, server/tests/http/import.test.js:262). The editor-403
+  test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but that title is
+  nowhere in the document under test (alice's export holds the seeded 'Example Character'/'Example
+  World' plus 'Alice Only' — 'Zephyr Line' belongs to the unit-test fixture), so the assertion
+  passes unconditionally and would still pass if the 403 gate were removed and the whole graph
+  written into alice's workspace.
+- [ ] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…**
+  Found by the grader of KOL-077 (medium, server/src/lib/graphImporter.js:288). planIds validates
+  only `refModel`/`refId` on group members and nothing on a group's `label` or a member's
+  `label`/`notes`, so a hand-edited document with a non-string there (e.g.
+  `relationshipGroups[0].label = {}`) passes every pre-write check, the
+  EntityType/RelationshipType/Entity insertMany calls all succeed, and the RelationshipGroup
+  insert then throws a CastError — a 500 that leaves a partially written graph which the emptiness
+  rule refuses to let the owner retry, contradicting the module's documented "nothing is written
+  until everything has been checked".
+- [ ] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…**
+  Found by the grader of KOL-076 (medium, server/src/routes/oauth.js:103). A revoked session keeps
+  a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read
+  `req.session.userId` directly with no `requireAuth`/`requireActor`, so the device that was
+  signed out can still call `setMcpUser(userId)` and complete the connector grant — binding the
+  MCP bearer identity to the account and regaining full read/write through `/mcp`. The middleware
+  header claims the check runs on "every request a browser makes", and the docs' carve-out is
+  about *revoking existing* connector tokens (KOL-014), not about a revoked session minting a new
+  grant.
+- [ ] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…**
+  Found by the grader of KOL-075 (medium, server/src/middleware/errorHandler.js:171). Rule 5
+  requires a string `code`, but body-parser's errors (`entity.parse.failed`, `entity.too.large`)
+  carry only `status`/`statusCode`/`type` — so a malformed JSON body or an over-100kB body on any
+  endpoint except `/import` now falls to rule 6 and answers 500 `INTERNAL` where Express's
+  finalhandler previously honoured the 400/413. `src/routes/import.js:63` states this outright ('a
+  `SyntaxError` answered as the caller's 400 instead of falling through to the error handler's
+  500'), so every other router now reports a client mistake as a server fault, with a `ref` and a
+  logged stack per bad request.
+- [ ] **(KOL-100) draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…**
+  Found by the grader of KOL-075 (medium, server/src/routes/drafts.js:234).
+  `draft.diagnostics.error = err.message` persists the raw generation error, and `GET /drafts/:id`
+  (line 730) returns the whole lean document — so the driver's/provider's verbatim text (a Mongo
+  pool error from a grounding read included) still reaches a caller in a plain JSON response body,
+  contradicting docs/api.md's 'the driver's own text never reaches a caller'. The source sweep
+  cannot see it because the leak is a stored field, not an `err.message` in a `res.json(...)`
+  statement, and SSE scoping does not cover this non-SSE route.
 - [ ] **(KOL-095) KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…**
   Found by the grader of KOL-080 (medium, FEATURES.md:218). KOL-092 names a client open-question
   caller that does not exist: nothing under client/src fetches `/open-questions` (grep for

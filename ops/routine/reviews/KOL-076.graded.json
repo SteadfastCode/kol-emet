@@ -1,0 +1,135 @@
+{
+  "item": "KOL-076",
+  "repo": "kol-emet",
+  "mergeSha": "3a12e997945bc786e5939aa6b598ee820cc6ec0d",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-16T09:26:35.756Z",
+  "gradedAtUtc": "2026-10-16T09:36:29.302Z",
+  "independent": [
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 103,
+      "severity": "medium",
+      "summary": "A revoked session keeps a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read `req.session.userId` directly with no `requireAuth`/`requireActor`, so the device that was signed out can still call `setMcpUser(userId)` and complete the connector grant — binding the MCP bearer identity to the account and regaining full read/write through `/mcp`. The middleware header claims the check runs on \"every request a browser makes\", and the docs' carve-out is about *revoking existing* connector tokens (KOL-014), not about a revoked session minting a new grant."
+    },
+    {
+      "file": "server/src/routes/auth.js",
+      "line": 310,
+      "severity": "low",
+      "summary": "`GET /auth/me` is not behind `requireAuth` and only checks `User.exists`, so a revoked browser is answered `{authenticated:true}` and App.vue shows it a signed-in wiki until the first tenant request 401s — the same \"signed in to a wiki that answers 401 to everything\" state KOL-038 closed for deleted accounts, now reachable for revoked ones."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "`runRevoke` returns early while `revokeSaving` is true and the submit button is `:disabled=\"revokeSaving || !revokePassword\"`, so a double click cannot send a second request; the stated scenario (no way to cancel) also ignores the Cancel button."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The invalidation logic is implemented in the same diff (`sessionOutlivedCredentials` plus the checks in `requireAuth`/`requireActor` in server/src/middleware/auth.js), and the scenario described (account deletion signing other devices out) is not what the spec line claims."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The route is implemented in the same diff at server/src/routes/auth.js:1129 and is covered end-to-end by server/tests/http/sessionRevocation.test.js."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "`refuseRevoked` passes a callback to `destroy`, logs the failure and deliberately still answers 401 — documented and correct, since an unauthenticated caller must not be told it is signed in because the store write failed."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "The call is inside a `try` whose `catch` logs and answers 500; a deliberately generic message is the codebase's error-shape rule (tests/http/errorShape.test.js), not missing handling."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "`passkeyRefusal` catches its own verification errors and returns a reason string, and the whole handler is wrapped in try/catch; nothing is unhandled."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "`User.updateOne` is inside the handler's try/catch, and its `matchedCount` miss is handled explicitly with a 401."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "`closeStreamsForUser` is synchronous and inside the same try/catch; a generic 500 body is the required error shape, not a defect."
+    },
+    {
+      "index": 9,
+      "verdict": "false-positive",
+      "reason": "The test does exactly that — `assert.equal(await storedSession(other.sid), null, 'the revoked session must be destroyed, not merely refused')` — using a MemoryStore held by the suite."
+    },
+    {
+      "index": 10,
+      "verdict": "false-positive",
+      "reason": "These are test-process logs of ephemeral in-memory-mongod ids at a configurable level defaulting off in CI, and the production logs deliberately carry ids rather than emails; no sensitive data is exposed."
+    },
+    {
+      "index": 11,
+      "verdict": "false-positive",
+      "reason": "The stub is restored in a `finally` block, and `node --test` gives each file its own process, so no other test can see it."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change is entirely about session authentication — new re-authenticated route, new checks in both auth middlewares, and a new User field."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret, key or credential material is added or changed; the new env vars are log-level knobs only."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches billing, quotas or AI spend."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change does destroy state irreversibly — every other session is destroyed in the store by `req.session.destroy` in `refuseRevoked`, and the account timestamp bump cannot be undone."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls to any third-party service; WebAuthn verification is a local library."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, migration script or release artifact is touched."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "All 11 local findings are false positives — four are generic \"no error handling\" complaints about calls already inside try/catch, two assert the diff lacks code it plainly contains, and one claims a store assertion the test actually makes — while the two real residual gaps (revoked sessions can still bind the MCP connector identity via `POST /authorize`, and `GET /auth/me` ignores the revocation) were missed.}",
+  "counts": {
+    "findings": 11,
+    "confirmed": 0,
+    "falsePositive": 11,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.266925,
+  "numTurns": 24,
+  "durationMs": 303995,
+  "sessionId": "83423792-5d31-43b0-a4cb-1f62dae20fd8"
+}

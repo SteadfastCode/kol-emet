@@ -1,0 +1,107 @@
+{
+  "item": "KOL-077",
+  "repo": "kol-emet",
+  "mergeSha": "cfe4e7d3f41960c6aa78ea9599886028cb376ce0",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-16T09:26:35.756Z",
+  "gradedAtUtc": "2026-10-16T09:31:25.265Z",
+  "independent": [
+    {
+      "file": "server/tests/http/import.test.js",
+      "line": 262,
+      "severity": "medium",
+      "summary": "The editor-403 test's \"writes nothing\" check asserts no entity titled 'Zephyr Line' exists, but that title is nowhere in the document under test (alice's export holds the seeded 'Example Character'/'Example World' plus 'Alice Only' — 'Zephyr Line' belongs to the unit-test fixture), so the assertion passes unconditionally and would still pass if the 403 gate were removed and the whole graph written into alice's workspace."
+    },
+    {
+      "file": "server/src/lib/graphImporter.js",
+      "line": 288,
+      "severity": "medium",
+      "summary": "planIds validates only `refModel`/`refId` on group members and nothing on a group's `label` or a member's `label`/`notes`, so a hand-edited document with a non-string there (e.g. `relationshipGroups[0].label = {}`) passes every pre-write check, the EntityType/RelationshipType/Entity insertMany calls all succeed, and the RelationshipGroup insert then throws a CastError — a 500 that leaves a partially written graph which the emptiness rule refuses to let the owner retry, contradicting the module's documented \"nothing is written until everything has been checked\"."
+    },
+    {
+      "file": "server/src/lib/graphImporter.js",
+      "line": 400,
+      "severity": "low",
+      "summary": "The emptiness check and the five inserts are a read-then-write with no transaction, lock or unique guard, so two imports issued concurrently (two tabs, a retried request, an MCP/script caller) both see an empty workspace and both write, doubling every entity, group and question — a state the endpoint otherwise exists to prevent and which can then only be cleared by hand."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The error path already does `res.json().catch(() => null)` and falls back to `Import failed (${code})`, and the success path consumes the server's own 201 JSON, so the described failure does not exist."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The version is logged: `refusal('UNSUPPORTED_VERSION', ...)` interpolates the document's version into the reason that `importWorkspace`'s `fail()` logs at the light tier, and the quoted 'the body is not JSON' line belongs only to the malformed-JSON parser branch."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The dedicated 409 test (import.test.js:236-249) reads the entity list before and after and asserts the ids are identical; only the trivial \"second import\" case omits it, and that workspace was just legitimately populated by the previous test."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "graphImporter.test.js's 'a seeded type registry does not make a workspace non-empty' test seeds `worlds` against the document's `Worlds`, asserts `skipped.entityTypes === 2`, that only one type row remains, and that categories were rewritten to the registry's casing."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The new mount adds requireAuth + resolveWorkspace and the route adds requireWorkspaceRole('owner'), so authn/authz is genuinely touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or secret material is read, stored or logged by the change."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the change touches billing, budgets or the AI cost path."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The import only inserts, and the 409 emptiness rule exists precisely so nothing existing is deleted or overwritten; the cited graphImporter.js:10 is a doc comment, not a destructive operation."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The change calls no third-party service — the only HTTP involved is the app's own /import endpoint."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, CI, deploy or migration change; the new IMPORT_* knobs are optional env overrides documented in docs/api.md."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "All four local findings are false positives — each describes a check or log line the diff already contains — and the review missed the vacuous assertion in the editor-403 test and the unvalidated group label/notes fields that can leave a half-written workspace.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.121102,
+  "numTurns": 18,
+  "durationMs": 286895,
+  "sessionId": "63daea4a-dc75-48c3-8fdc-39fb82f950a8"
+}
