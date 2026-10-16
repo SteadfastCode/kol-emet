@@ -22,6 +22,10 @@
  *   - **A planted foreign `workspaceId`** — a hand-edited document naming
  *     another tenant — lands in the caller's workspace and nowhere else.
  *   - **A document over the caps is refused with nothing written.**
+ *   - **A non-string in a nullable string field is refused by its path** —
+ *     a group's `label`, a member's `label` or `notes`, an entity type's
+ *     `icon` or colours — rather than reaching Mongoose as a `CastError` on an
+ *     insert that is no longer the first one (KOL-097).
  *   - The emptiness rule: a workspace holding content is `WORKSPACE_NOT_EMPTY`
  *     and unchanged, and a reference that resolves to nothing is dropped rather
  *     than written as an id this import never minted.
@@ -39,6 +43,8 @@
  *   - sort a group's `members` -> the subgroup/order test fails
  *   - read `doc.workspaceId` anywhere -> the planted-tenant test fails
  *   - drop `{ timestamps: false }` from the inserts -> the round trip fails
+ *   - drop the nullable-string checks from planIds -> the non-string-field test
+ *     fails with a CastError and a half-written workspace
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_GRAPH_IMPORT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -391,6 +397,57 @@ describe('a document that cannot be trusted', () => {
     doubled.entities[1]._id = doubled.entities[0]._id;
 
     assert.equal((await refusal(doubled, destination)).code, 'MALFORMED_DOCUMENT');
+  });
+
+  test('a non-string in a nullable string field is refused by its path, not cast on insert', async () => {
+    const destination = await emptyWorkspace('non-string-field');
+
+    // The hole the grader of KOL-077 found (KOL-097): these five fields are
+    // copied straight into the documents, and nothing checked them, so a
+    // hand-edited `relationshipGroups[0].label = {}` passed every id and
+    // reference check here and failed as a `CastError` on the *fourth* of the
+    // five inserts — a 500 over a graph whose types and entities were already
+    // written, which the emptiness rule then refused to let the owner retry.
+    // A number is refused too: Mongoose would cast `7` to `"7"` silently, and
+    // the re-export of that graph would not match the file it came from.
+    const cases = [
+      ['relationshipGroups[0].label', doc => { doc.relationshipGroups[0].label = {}; }],
+      ['relationshipGroups[0].label', doc => { doc.relationshipGroups[0].label = 7; }],
+      ['relationshipGroups[0].members[0].label', doc => { doc.relationshipGroups[0].members[0].label = { en: 'Home World' }; }],
+      ['relationshipGroups[0].members[0].notes', doc => { doc.relationshipGroups[0].members[0].notes = ['a', 'note']; }],
+      ['entityTypes[0].icon', doc => { doc.entityTypes[0].icon = {}; }],
+      ['entityTypes[0].color.bg', doc => { doc.entityTypes[0].color.bg = ['#123456']; }],
+    ];
+
+    for (const [field, edit] of cases) {
+      const broken = JSON.parse(JSON.stringify(exported));
+      edit(broken);
+
+      const err = await refusal(broken, destination);
+      assert.equal(err.code, 'MALFORMED_DOCUMENT', `${field} should be a refusal, not a write error`);
+      assert.deepEqual(err.fields, [field]);
+
+      // The point of checking it here: the refusal is still before the first
+      // insert, so the owner can fix the file and retry into this workspace.
+      assert.deepEqual(await workspaceContentCounts(destination), { entities: 0, relationshipGroups: 0, openQuestions: 0 }, field);
+      assert.equal(await EntityType.countDocuments({ workspaceId: destination }), 0, `${field}: nothing is written until everything has been checked`);
+    }
+
+    // And absent stays as legal as null: the exporter writes `null` for all
+    // five, and a hand-written document that omits the key means the same.
+    const sparse = JSON.parse(JSON.stringify(exported));
+    delete sparse.relationshipGroups[0].label;
+    delete sparse.relationshipGroups[0].members[0].label;
+    delete sparse.relationshipGroups[0].members[0].notes;
+    delete sparse.entityTypes[0].icon;
+    delete sparse.entityTypes[0].color;
+
+    const ok = await importWorkspace(sparse, destination, { source: 'tests/graphImporter' });
+    assert.deepEqual(ok.dropped, { members: 0, questionEntries: 0 });
+    const groups = await RelationshipGroup.find({ workspaceId: destination }).sort({ _id: 1 }).lean();
+    assert.equal(groups[0].label, null);
+    assert.equal(groups[0].members[0].label, null);
+    assert.equal(groups[0].members[0].notes, null);
   });
 });
 
