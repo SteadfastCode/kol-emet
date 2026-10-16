@@ -51,25 +51,33 @@
 > and proves the graph+agent loop cheaply; **software/system architecture** is the commercial
 > expansion, and the generalization work below is what carries the engine from one to the other.
 
-## Phase 6 — Generalize the engine (next)
-- **User-defined entity types per workspace** — replace the hardcoded `category` enum (in the Entity
+## Phase 6 — Generalize the engine ✅
+- ✅ **User-defined entity types per workspace** — replace the hardcoded `category` enum (in the Entity
   schema, MCP tools, and client config) with per-workspace types. A type = name + icon/color now; an
-  optional light field-schema later. This single change unblocks every vertical.
-- **Templates** — a workspace is seeded from a template = a bundle of entity types + relationship
+  optional light field-schema later. This single change unblocks every vertical. **Shipped
+  2026-09-10 → 2026-09-17**: the `EntityType` registry and `/entity-types` routes (KOL-020), the
+  in-use guard (KOL-022), the `Entity` category enum dropped so the registry alone gates every
+  category write (KOL-027), MCP and chat reading the registry (KOL-028), and the client's pills,
+  filters and pickers (KOL-029).
+- ✅ **Templates** — a workspace is seeded from a template = a bundle of entity types + relationship
   types (+ starter structure). `RelationshipType` is already data-driven, so this is mostly config.
   Ship two: **Worldbuilding** (today's defaults) and **Software Architecture** (Services, Data
-  Stores, APIs, Teams; relationships like *depends-on*, *owned-by*, *calls*).
+  Stores, APIs, Teams; relationships like *depends-on*, *owned-by*, *calls*). **Shipped 2026-09-17**
+  (KOL-030), with the template picker on signup (KOL-031).
 
-## Phase 7 — Assistant → Generator + continuous sync (the hook)
+## Phase 7 — Assistant → Generator + continuous sync (the hook) (next)
 - ✅ **Graph generation from unstructured input** — paste text / upload a `.txt`/`.md`/`.docx` →
   the agent proposes entities + relationships → the user reviews and accepts. **Never silent bulk
   writes** — always a reviewable diff (see approval model below). **Shipped 2026-09-06 as Generator
   v1**; design and remaining stretch items in [generator-v1-plan.md](generator-v1-plan.md).
 - **Vertical ingestion** — for architecture: repo / OpenAPI / docker-compose / k8s / DB-schema →
-  proposed system graph. ("Point it at your repo and watch it map your services.")
+  proposed system graph. ("Point it at your repo and watch it map your services.") Two producers are
+  built — docker-compose (**shipped 2026-09-17**, KOL-033) and OpenAPI (**shipped 2026-10-06**,
+  KOL-051); repo, k8s and DB-schema are **next**.
 - **Continuous sync / drift detection** — the graph is derived from connected sources; when a source
   changes, the system finds the delta and *proposes* an update. The promise: **the model never goes
-  stale.** This is the generator pointed at *changes* rather than a one-time import.
+  stale.** This is the generator pointed at *changes* rather than a one-time import. Not built;
+  **next**, alongside the remaining producers above.
 
 ## Versioning & Git-native (cross-cutting track, feeds Phases 7–8)
 The approval model, drift detection, and version control are **one mechanism**: a proposed change is
