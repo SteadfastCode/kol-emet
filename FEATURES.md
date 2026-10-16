@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-100) draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…**
+- [x] **(KOL-100) draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…**
   Found by the grader of KOL-075 (medium, server/src/routes/drafts.js:234).
   `draft.diagnostics.error = err.message` persists the raw generation error, and `GET /drafts/:id`
   (line 730) returns the whole lean document — so the driver's/provider's verbatim text (a Mongo
