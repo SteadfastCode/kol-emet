@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…**
+- [x] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…**
   Found by the grader of KOL-076 (medium, server/src/routes/oauth.js:103). A revoked session keeps
   a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read
   `req.session.userId` directly with no `requireAuth`/`requireActor`, so the device that was
