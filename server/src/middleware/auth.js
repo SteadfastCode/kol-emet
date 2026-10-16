@@ -11,8 +11,13 @@ import { clearSessionCookie } from '../lib/sessionCookie.js';
 // session carries the millisecond it was issued at and the account carries the
 // millisecond its credentials were last revoked (`User.credentialsChangedAt`).
 // A session issued before that moment is over, and this is where it is noticed:
-// one comparison on the session path of each middleware below, which is every
-// request a browser makes.
+// one comparison on the session path of each of the three guards below —
+// `requireAuth`, `requireActor` and `requireLoginSession`. Between them that is
+// every request a browser makes, but the claim is only ever true of the routes
+// that are actually behind a guard: a route that reads `req.session.userId`
+// itself is a route this check never runs for, which is how `POST /authorize`
+// kept honouring revoked sessions until KOL-098 put it behind one. Reach for a
+// guard, never for the session.
 //
 // So the store is never asked for anything it cannot answer, and the two facts
 // live exactly where the thing that needs them already looks.
@@ -206,4 +211,103 @@ export async function requireActor(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+// ─── Minting a connector grant (KOL-098) ─────────────────────────────────────
+// `requireAuth` and `requireActor` both accept a bearer token, and both are
+// about *using* an authorization that already exists. Creating one is a
+// different act: the two OAuth approval forms — `POST /authorize`
+// (routes/oauth.js) and `POST /bridge/authorize` (routes/bridge.js) — bind the
+// MCP bearer identity to an account by writing `Settings.mcpUserId`, which is
+// the account every `/mcp` and `/bridge/mcp` call then reads and writes as.
+//
+// They used to read `req.session.userId` straight off the request, behind no
+// guard at all, which cost the product two things:
+//
+//   - A **revoked** session still minted a grant. The device signed out by
+//     `POST /auth/sessions/revoke-all` keeps its cookie, and the session row
+//     survives in the store until a guarded route notices it — so the lost
+//     laptop could walk the approval form, re-point `mcpUserId` at the
+//     account, and read and write the whole workspace through `/mcp`. The
+//     carve-out in docs for connector tokens (KOL-014) is about *revoking* a
+//     grant the owner made, never about a revoked session making a new one.
+//   - An **anonymous** caller completed the flow too, and that is the same
+//     hole wearing a different hat: with `mcpUserId` already pointing at the
+//     account from an earlier, legitimate authorization, a caller who simply
+//     drops the cookie still redeems a code for `MCP_BEARER_TOKEN` and acts as
+//     that account. Refusing only the revoked session would have been theatre.
+//
+// So both forms now sit behind `requireLoginSession`: a live, unrevoked
+// *session*, and nothing else. A bearer caller is deliberately not enough — a
+// connector that can re-point the identity is a connector whose revocation
+// does not hold.
+
+const REQUIRE_LOGIN_SESSION_SOURCE = 'requireLoginSession';
+
+/**
+ * Whether this request carries a live login session, and when it does not, why.
+ *
+ * Never throws. A lookup that did not answer comes back as `'lookup-failed'`
+ * with the error, so each caller decides for itself what a database blip means
+ * — the same rule `requireAuth` follows: a 500 from the error handler, never a
+ * 401 claiming a session ended when nothing here ended it.
+ *
+ * @param {import('express').Request} req
+ * @returns {Promise<{userId: string|null, reason: 'live'|'no-session'|'no-account'|'revoked'|'lookup-failed', credentialsChangedAt?: Date, error?: Error}>}
+ */
+export async function resolveLoginSession(req) {
+  const userId = req.session?.userId;
+  if (!userId) return { userId: null, reason: 'no-session' };
+
+  let user;
+  try {
+    user = await User.findById(userId).select('credentialsChangedAt').lean();
+  } catch (error) {
+    return { userId: null, reason: 'lookup-failed', error };
+  }
+  // Unlike `requireAuth`, a session naming a deleted account is *not* waved
+  // through here. There, the dangling id is refused by every tenant route
+  // behind it (KOL-038); here there is no route behind — the grant would be
+  // written against an account that no longer exists.
+  if (!user) return { userId: null, reason: 'no-account' };
+
+  if (sessionOutlivedCredentials(req.session, user.credentialsChangedAt)) {
+    return { userId: null, reason: 'revoked', credentialsChangedAt: user.credentialsChangedAt };
+  }
+  return { userId: String(userId), reason: 'live' };
+}
+
+/**
+ * Requires a live, unrevoked login session — no bearer path, no anonymous
+ * path. Sets `req.loginUserId` and calls `next()`; otherwise answers the
+ * request itself, ending a revoked session on the way out exactly as the two
+ * middlewares above do (cookie cleared with the attributes it was set with,
+ * session destroyed, 401).
+ */
+export async function requireLoginSession(req, res, next) {
+  const resolved = await resolveLoginSession(req);
+
+  if (resolved.reason === 'live') {
+    req.loginUserId = resolved.userId;
+    logSessions('verbose', `session ${req.sessionID} for user ${resolved.userId} may mint a connector grant: ${req.method} ${req.originalUrl} (source: ${REQUIRE_LOGIN_SESSION_SOURCE})`);
+    return next();
+  }
+
+  if (resolved.reason === 'revoked') {
+    return refuseRevoked(req, res, {
+      userId: req.session.userId,
+      credentialsChangedAt: resolved.credentialsChangedAt,
+      source: REQUIRE_LOGIN_SESSION_SOURCE,
+    });
+  }
+
+  if (resolved.reason === 'lookup-failed') {
+    logSessions('light', `could not check whether session ${req.sessionID} for user ${req.session?.userId} is still valid: ${resolved.error.message} (source: ${REQUIRE_LOGIN_SESSION_SOURCE}, User.findById)`);
+    return next(resolved.error);
+  }
+
+  logSessions('light', `refused ${req.method} ${req.originalUrl} with 401 (source: ${REQUIRE_LOGIN_SESSION_SOURCE}, ${resolved.reason === 'no-account'
+    ? `the session names account ${req.session?.userId}, which no longer exists`
+    : 'the request carried no login session, and a connector grant may only be minted by a signed-in user'})`);
+  return res.status(401).json({ error: 'Unauthorized' });
 }

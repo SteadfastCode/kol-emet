@@ -1,6 +1,10 @@
 import express, { Router } from 'express';
 import { randomUUID, createHash } from 'crypto';
 import { setMcpUser } from '../lib/mcpUserStore.js';
+// Approving a connector binds the MCP bearer identity to an account, so the
+// approval form is behind a live-session guard rather than reading
+// `req.session.userId` itself (KOL-098). See middleware/auth.js.
+import { requireLoginSession, resolveLoginSession } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -40,7 +44,7 @@ router.get('/.well-known/oauth-authorization-server', (req, res) => {
 });
 
 // GET /authorize — show approval page
-router.get('/authorize', (req, res) => {
+router.get('/authorize', async (req, res) => {
   console.log('[oauth] GET /authorize query:', req.query);
   const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state, resource } = req.query;
 
@@ -57,7 +61,14 @@ router.get('/authorize', (req, res) => {
     return res.status(400).send('missing required parameters');
   }
 
-  console.log('[oauth] serving Allow page for client_id:', client_id);
+  // Who the page would approve as. `POST /authorize` refuses without a live
+  // session, so a page that offered the button anyway would send the one user
+  // who is allowed to do this into a bare 401. Fails *open* — a lookup that did
+  // not answer still gets the button, because the POST is the gate and this is
+  // only what the page says.
+  const signedIn = await resolveLoginSession(req);
+  const mayApprove = signedIn.reason === 'live' || signedIn.reason === 'lookup-failed';
+  console.log(`[oauth] serving ${mayApprove ? 'Allow' : 'sign-in'} page for client_id: ${client_id} (session: ${signedIn.reason})`);
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -73,6 +84,7 @@ router.get('/authorize', (req, res) => {
     h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
     p { color: #aaa; font-size: 0.9rem; margin: 0 0 1.5rem; }
     .client { font-weight: 600; color: #eee; }
+    .notice { color: #f59e0b; margin: 0; }
     button { background: #4f46e5; color: #fff; border: none; border-radius: 8px; padding: 0.75rem 2rem; font-size: 1rem; cursor: pointer; width: 100%; }
     button:hover { background: #4338ca; }
   </style>
@@ -81,36 +93,41 @@ router.get('/authorize', (req, res) => {
   <div class="center"><div class="card">
     <h1>Authorize Access</h1>
     <p><span class="client">${escapeHtml(client_id ?? 'Unknown client')}</span> wants to read and write your Kol Emet wiki.</p>
-    <form method="POST" action="/authorize">
+    ${mayApprove ? `<form method="POST" action="/authorize">
       <input type="hidden" name="client_id" value="${escapeHtml(client_id ?? '')}">
       <input type="hidden" name="redirect_uri" value="${escapeHtml(redirect_uri)}">
       <input type="hidden" name="code_challenge" value="${escapeHtml(code_challenge)}">
       <input type="hidden" name="state" value="${escapeHtml(state ?? '')}">
       <input type="hidden" name="resource" value="${escapeHtml(resource ?? '')}">
       <button type="submit">Allow</button>
-    </form>
+    </form>` : `<p class="notice">Sign in to Kol Emet in this browser first — the connector is granted access to the signed-in account, so there is nothing to approve as yet. Sign in, then start the connector's setup again.</p>`}
   </div></div>
 </body>
 </html>`);
 });
 
 // POST /authorize — issue code and redirect back
-router.post('/authorize', form, async (req, res) => {
+//
+// `requireLoginSession` ahead of the handler (KOL-098): this is where the MCP
+// bearer identity is bound to an account, so it takes a live, unrevoked login
+// session — not a bearer token, and not nothing. A revoked session is refused
+// *and ended* here; an anonymous caller gets 401 and no code, where it used to
+// get a code and, if `mcpUserId` was already set, a token that acted as that
+// account. See the KOL-098 note in middleware/auth.js.
+router.post('/authorize', form, requireLoginSession, async (req, res) => {
   console.log('[oauth] POST /authorize body:', req.body);
   const { redirect_uri, code_challenge, state, resource } = req.body;
 
-  // Associate the MCP connector with the currently logged-in user
-  if (req.session?.userId) {
-    await setMcpUser(req.session.userId);
-    console.log('[oauth] MCP user set to', req.session.userId);
-  } else {
-    console.log('[oauth] POST /authorize — no session, MCP writes will be rejected until re-authorized');
-  }
-
+  // Before the identity write, not after: a malformed approval must not
+  // re-point `Settings.mcpUserId` on its way to a 400.
   if (!redirect_uri || !code_challenge) {
     console.log('[oauth] POST /authorize missing params — body was:', req.body);
     return res.status(400).send('missing required parameters');
   }
+
+  // Associate the MCP connector with the user this request is signed in as.
+  await setMcpUser(req.loginUserId);
+  console.log('[oauth] MCP user set to', req.loginUserId, '(source: POST /authorize with a live login session)');
 
   const code = randomUUID();
   authCodes.set(code, {

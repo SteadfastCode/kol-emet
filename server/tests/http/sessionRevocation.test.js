@@ -35,6 +35,12 @@
  *   - Repeated wrong passwords are throttled on the account's own counter —
  *     the one the deletion and password-change confirmations share.
  *
+ * Not here, but part of the same mechanism: the two OAuth approval forms, which
+ * read `req.session.userId` themselves until KOL-098 put them behind
+ * `requireLoginSession` — a revoked session could mint a connector grant and
+ * get its workspace back through `/mcp`. Those refusals are driven where the
+ * routes live, in `tests/http/oauth.test.js` and `tests/http/bridge.test.js`.
+ *
  * Falsification checks: drop the comparison in `requireAuth` and the revoked
  * agent reads `/entities`; drop it in `requireActor` and it still writes; stamp
  * only `/login` and the registration-session case survives a revocation it

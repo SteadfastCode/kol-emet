@@ -51,12 +51,22 @@
  * Deliberately not covered: `requireActor`, which resolves the acting user for
  * writes and needs a database — `tests/http/tenancy.test.js` drives it over the
  * real stack.
+ *
+ * ─── And one rule of `requireLoginSession` (KOL-098) ─────────────────────────
+ * The guard the two OAuth approval forms now sit behind takes a live login
+ * session and refuses a bearer token outright. Its refusals are driven over the
+ * real stack in `tests/http/oauth.test.js` and `tests/http/bridge.test.js`; the
+ * group at the bottom of this file pins the one case HTTP cannot stage — the
+ * account lookup *failing*. A database blip must reach the error handler as a
+ * 500, never be answered as a 401, because a 401 here would claim a session had
+ * ended when nothing ended it and would have the user re-authorizing a
+ * connector that was never un-authorized.
  */
 
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { requireAuth } from '../../src/middleware/auth.js';
+import { requireAuth, requireLoginSession } from '../../src/middleware/auth.js';
 import User from '../../src/models/User.js';
 
 /** Minimal `res` double recording only what `requireAuth` uses. */
@@ -209,5 +219,80 @@ describe('requireAuth with BEARER_TOKEN configured', () => {
 
   test('the literal string undefined is still refused', async () => {
     assertRefused(await callRequireAuth({ header: 'Bearer undefined' }), 'the literal string undefined');
+  });
+});
+
+// ─── requireLoginSession (KOL-098) ───────────────────────────────────────────
+
+/** Calls the connector-grant guard once. */
+async function callRequireLoginSession({ header, session } = {}) {
+  const req = {
+    headers: header === undefined ? {} : { authorization: header },
+    session,
+    sessionID: 'test-session-id',
+    method: 'POST',
+    originalUrl: '/authorize',
+  };
+  const res = fakeRes();
+  let passed = false;
+  let forwarded;
+  await requireLoginSession(req, res, (err) => { passed = !err; forwarded = err; });
+  return { passed, forwarded, status: res.statusCode, body: res.body, loginUserId: req.loginUserId };
+}
+
+/** Replaces the one read the guard makes, and puts it back afterwards. */
+async function withFindById(impl, run) {
+  const real = User.findById;
+  User.findById = impl;
+  try { return await run(); } finally { User.findById = real; }
+}
+
+describe('requireLoginSession', () => {
+  let saved;
+
+  before(() => {
+    saved = process.env.BEARER_TOKEN;
+    process.env.BEARER_TOKEN = REAL_TOKEN;
+  });
+
+  after(() => {
+    if (saved === undefined) delete process.env.BEARER_TOKEN;
+    else process.env.BEARER_TOKEN = saved;
+  });
+
+  test('a lookup that did not answer is forwarded, not answered as a 401', async () => {
+    const blip = new Error('connection timed out');
+    const result = await withFindById(
+      () => ({ select: () => ({ lean: async () => { throw blip; } }) }),
+      () => callRequireLoginSession({ session: { userId: 'abc123', issuedAt: Date.now() } }),
+    );
+
+    assert.equal(result.forwarded, blip, 'the error must reach the error handler');
+    assert.equal(result.status, null, 'a database blip must not be reported as a refusal');
+    assert.equal(result.loginUserId, undefined, 'and must not be taken as authorization either');
+  });
+
+  test('a live session is passed through with its user id', async () => {
+    // The positive control: the refusals in this group are refusals of what
+    // they name, not of everything.
+    const result = await withFindById(
+      () => ({ select: () => ({ lean: async () => ({ _id: 'abc123' }) }) }),
+      () => callRequireLoginSession({ session: { userId: 'abc123', issuedAt: Date.now() } }),
+    );
+
+    assert.equal(result.passed, true, 'a live session must reach next()');
+    assert.equal(result.loginUserId, 'abc123', 'and name the account the grant binds to');
+  });
+
+  test('the configured bearer token is not enough, and reads no account', async () => {
+    // A connector that could re-point the identity it acts as is a connector
+    // whose revocation does not hold — so this guard has no bearer path, and
+    // the throwing stub proves it does not even look.
+    const result = await withFindById(
+      () => { throw new Error('requireLoginSession must not look an account up for a bearer caller'); },
+      () => callRequireLoginSession({ header: `Bearer ${REAL_TOKEN}` }),
+    );
+
+    assertRefused(result, 'the configured bearer token at a connector-grant route');
   });
 });

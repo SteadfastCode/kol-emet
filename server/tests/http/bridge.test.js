@@ -53,7 +53,7 @@ import Workspace from '../../src/models/Workspace.js';
 import BridgeMessage from '../../src/models/BridgeMessage.js';
 import BridgePresence from '../../src/models/BridgePresence.js';
 import RoutineItem from '../../src/models/RoutineItem.js';
-import { setMcpUser } from '../../src/lib/mcpUserStore.js';
+import { setMcpUser, getMcpUser } from '../../src/lib/mcpUserStore.js';
 
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = 'test-session-secret';
@@ -227,6 +227,48 @@ describe('discovery and token issuance', () => {
     assert.equal(ok.body.scope, 'bridge');
     const replay = await request(app).post('/bridge/oauth/token').type('form').send({ grant_type: 'authorization_code', code, code_verifier: 'v1' });
     assert.equal(replay.status, 400, 'a code is single-use');
+  });
+  test('only a live login session may approve the bridge (KOL-098)', async () => {
+    // The code this form mints redeems for BRIDGE_TOKEN, and the box executes
+    // what that token sends — so the form takes a live, unrevoked login
+    // session. It used to take whatever `req.session.userId` happened to say,
+    // which a device signed out by POST /auth/sessions/revoke-all still says
+    // until some guarded route looks. Anyone who completes this flow acts as
+    // whatever `Settings.mcpUserId` holds, so a refusal has to issue no code
+    // at all, not merely decline to re-point the identity.
+    const identityBefore = await getMcpUser();
+    // A second session on alice's account, so the destroyed one is not the one
+    // the rest of this suite drives.
+    const lost = originAgent(app);
+    assert.equal((await lost.post('/auth/login').send({ email: alice.email, password: PASSWORD })).status, 200);
+
+    try {
+      await actAs(bob);
+
+      const anonymous = await request(app).post('/bridge/authorize').type('form').send({ redirect_uri: REDIRECT, code_challenge: pkce('v4') });
+      assert.equal(anonymous.status, 401, 'an anonymous caller must be refused');
+      assert.equal(anonymous.headers.location, undefined, 'and issued no code');
+
+      // Revoked the way the real route does it — one timestamp on the account.
+      // POST /auth/sessions/revoke-all is driven end to end in
+      // tests/http/sessionRevocation.test.js; what matters here is that this
+      // endpoint is behind the comparison at all.
+      await User.updateOne({ _id: alice.userId }, { $set: { credentialsChangedAt: new Date(Date.now() + 1000) } });
+      const revoked = await lost.post('/bridge/authorize').type('form').send({ redirect_uri: REDIRECT, code_challenge: pkce('v5') });
+      assert.equal(revoked.status, 401, 'a revoked session must not be able to approve the bridge');
+      assert.equal(revoked.headers.location, undefined, 'and must be issued no code');
+      assert.equal(await getMcpUser(), bob.userId, 'and must re-point nothing');
+
+      // The page it would have posted from says so, rather than offering a
+      // button whose only outcome is a 401.
+      const page = await request(app).get('/bridge/authorize').query({ response_type: 'code', client_id: 'claude', redirect_uri: REDIRECT, code_challenge: pkce('v6'), code_challenge_method: 'S256' });
+      assert.equal(page.status, 200);
+      assert.doesNotMatch(page.text, /<form/);
+      assert.match(page.text, /Sign in to Kol Emet/);
+    } finally {
+      await User.updateOne({ _id: alice.userId }, { $unset: { credentialsChangedAt: '' } });
+      if (identityBefore) await setMcpUser(identityBefore);
+    }
   });
   test('the origin issuer hands out BRIDGE_TOKEN when resource names the bridge, MCP_BEARER_TOKEN otherwise', async () => {
     const forBridge = codeFrom(await alice.agent.post('/authorize').type('form').send({ redirect_uri: REDIRECT, code_challenge: pkce('v2'), resource: `${base}/bridge/mcp` }));

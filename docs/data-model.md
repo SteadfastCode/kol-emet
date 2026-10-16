@@ -549,6 +549,11 @@ A single global document. Always upsert with `_id: 'global'` — never create a 
 MCP connector from wiki settings; if it is unset, `requireActor` rejects MCP writes with a
 "re-authorize" error.
 
+Only a **live login session** can write it (`requireLoginSession` on both approval forms, KOL-098):
+a session already revoked by `POST /auth/sessions/revoke-all`, an anonymous caller and a bearer
+caller are each refused with no authorization code issued. Whoever completes an approval acts as
+whatever this field holds, so a refusal has to stop the grant, not merely decline to re-point it.
+
 ## BridgeMessage
 
 Collection `bridgemessages`. One message across the Steadfast bridge (architecture.md). Its own
