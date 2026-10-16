@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…**
+- [x] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…**
   Found by the grader of KOL-077 (medium, server/src/lib/graphImporter.js:288). planIds validates
   only `refModel`/`refId` on group members and nothing on a group's `label` or a member's
   `label`/`notes`, so a hand-edited document with a non-string there (e.g.
