@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…**
+- [x] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…**
   Found by the grader of KOL-075 (medium, server/src/middleware/errorHandler.js:171). Rule 5
   requires a string `code`, but body-parser's errors (`entity.parse.failed`, `entity.too.large`)
   carry only `status`/`statusCode`/`type` — so a malformed JSON body or an over-100kB body on any
