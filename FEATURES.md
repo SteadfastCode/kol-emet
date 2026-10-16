@@ -62,15 +62,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…**
-  Found by the grader of KOL-077 (medium, server/src/lib/graphImporter.js:288). planIds validates
-  only `refModel`/`refId` on group members and nothing on a group's `label` or a member's
-  `label`/`notes`, so a hand-edited document with a non-string there (e.g.
-  `relationshipGroups[0].label = {}`) passes every pre-write check, the
-  EntityType/RelationshipType/Entity insertMany calls all succeed, and the RelationshipGroup
-  insert then throws a CastError — a 500 that leaves a partially written graph which the emptiness
-  rule refuses to let the owner retry, contradicting the module's documented "nothing is written
-  until everything has been checked".
 - [ ] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…**
   Found by the grader of KOL-076 (medium, server/src/routes/oauth.js:103). A revoked session keeps
   a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read
@@ -300,6 +291,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…** (routine 2026-10-16, 2a310ea)
+  Found by the grader of KOL-077 (medium, server/src/lib/graphImporter.js:288). planIds validates
+  only `refModel`/`refId` on group members and nothing on a group's `label` or a member's
+  `label`/`notes`, so a hand-edited document with a non-string there (e.g.
+  `relationshipGroups[0].label = {}`) passes every pre-write check, the
+  EntityType/RelationshipType/Entity insertMany calls all succeed, and the RelationshipGroup
+  insert then throws a CastError — a 500 that leaves a partially written graph which the emptiness
+  rule refuses to let the owner retry, contradicting the module's documented "nothing is written
+  until everything has been checked".
 - [x] **(KOL-096) The editor-403 test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but t…** (routine 2026-10-16, 5ad04a2)
   Found by the grader of KOL-077 (medium, server/tests/http/import.test.js:262). The editor-403
   test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but that title is

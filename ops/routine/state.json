@@ -79,7 +79,7 @@
     "KOL-097": {
       "order": 5,
       "title": "planIds validates only refModel/refId on group members and nothing on a group's label or a member…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-097",
