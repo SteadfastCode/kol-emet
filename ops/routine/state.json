@@ -62,7 +62,7 @@
     "KOL-078": {
       "order": 4,
       "title": "`GET /health`: liveness and database readiness without a session",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-078",
