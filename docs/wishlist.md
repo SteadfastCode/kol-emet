@@ -13,10 +13,13 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 ## Frontend — Features
 - Gallery block — image hosting (currently placeholder)
 - Entry linking from sidebar — clicking a [[link]] from search results
-- Tag autocomplete on entry editor
-- Bulk tag operations
+- ✅ Tag autocomplete on entry editor — shipped 2026-09-18 (KOL-041)
+- ✅ Bulk tag operations — workspace-wide tag rename, merge and delete, shipped 2026-10-06 (KOL-053);
+  tagging several entities at once in one action is still open
 - Soft delete (archive instead of hard delete)
-- Entry revision history
+- ✅ Entry revision history — the `ChangeLog` API shipped with Phase 3; the per-entity history list
+  with snapshot rollback in the detail panel shipped 2026-10-07 (KOL-059), as did restoring a
+  deleted entity (KOL-060)
 
 ## Data & API
 - ✅ workspaceId enforcement in all queries (multi-tenancy) — shipped 2026-09-03; see roadmap Phase 8
