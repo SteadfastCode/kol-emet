@@ -24,6 +24,15 @@
  *   - a `CastError` is 400 `INVALID_VALUE` and not a 500, because those routes
  *     answered 400 for an uncastable value before this middleware existed and
  *     KOL-075 moves no status a route chose deliberately;
+ *   - a body **body-parser could not read** keeps the status body-parser chose
+ *     — 400 `MALFORMED_JSON`, 413 `BODY_TOO_LARGE`, 415
+ *     `UNSUPPORTED_ENCODING` — rather than the 500 `INTERNAL` it answered
+ *     between KOL-075 and KOL-099, because those errors carry a `status` and a
+ *     `type` but no string `code` for rule 5 to read;
+ *   - and that the table those statuses come from still covers **every failure
+ *     type body-parser and raw-body can raise**, asserted against their own
+ *     sources, so a dependency upgrade that adds one is named here instead of
+ *     quietly answering 500;
  *   - and, as a sweep over the source rather than over responses, that **no
  *     file under `src/routes/` or `src/middleware/` passes `err.message` into
  *     a response body** — so the sweep cannot quietly regress one catch at a
@@ -33,7 +42,9 @@
  * Falsification check: drop `app.use(errorHandler)` from `src/app.js` and the
  * first three groups fail (Express's own handler answers HTML and, outside
  * production, the stack). Put `err.message` back into any router's catch and
- * the source sweep fails naming the file and line.
+ * the source sweep fails naming the file and line. Delete a row from
+ * `BODY_PARSER_RULES` and two groups fail — one on the response, one on the
+ * coverage of the dependencies' own types.
  *
  * Why a second, bare app for three of the cases: a duplicate key, an explicit
  * coded error and an unmapped throw are all *reachable* in the deployment but
@@ -55,6 +66,7 @@
 import { describe, test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import express from 'express';
@@ -90,7 +102,8 @@ process.env.WORKSPACE_LOG_LEVEL ??= 'off';
 process.env.ERROR_LOG_LEVEL = 'light';
 
 const { createApp } = await import('../../src/app.js');
-const { errorHandler, httpError } = await import('../../src/middleware/errorHandler.js');
+const { errorHandler, httpError, classify, BODY_PARSER_RULES, BODY_PARSER_OURS } =
+  await import('../../src/middleware/errorHandler.js');
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -292,7 +305,7 @@ describe('an error nobody mapped', () => {
     // status — a 500 whose reason is only "500" is the defect, one tier down.
     const summary = withRef.find(line => line.includes('500 INTERNAL'));
     assert.ok(summary, `one line must carry the status and the code: ${JSON.stringify(withRef)}`);
-    assert.match(summary, /source: rule 6/, `the light tier names the rule that chose it: ${summary}`);
+    assert.match(summary, /source: rule 7/, `the light tier names the rule that chose it: ${summary}`);
     assert.match(summary, /GET \/probe\/opaque/, `and the route it came from: ${summary}`);
 
     // And the thing the body withheld is on the log, keyed by the same ref.
@@ -332,6 +345,133 @@ describe('an uncastable value', () => {
     assert.equal(res.body.error, 'INVALID_VALUE');
     assert.deepEqual(res.body.fields, ['workspaceId']);
     assert.doesNotMatch(JSON.stringify(res.body), /Cast to/, 'no cast path, no model name');
+  });
+});
+
+describe('a body the parser could not read', () => {
+  // Driven through the real app, not the probe app: the defect was in the
+  // app-wide `express.json()`, which runs ahead of every router — and ahead of
+  // the session middleware — so no probe route can stand in for it.
+  const MALFORMED = '{"title": "unterminated';
+
+  test('malformed JSON is 400 MALFORMED_JSON rather than 500 INTERNAL', async () => {
+    const res = await alice.agent.post('/entities').type('json').send(MALFORMED);
+
+    log('normal', `POST /entities (malformed JSON) → ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.status, 400,
+      `bytes the caller sent are the caller's mistake, and were a 400 before this middleware existed: ${JSON.stringify(res.body)}`);
+    assert.deepEqual(res.body, { error: 'MALFORMED_JSON' });
+    assert.equal(res.body.ref, undefined, 'a client mistake is not a server fault and gets no ref');
+  });
+
+  test('publishes neither the parser\'s sentence nor the bytes it choked on', async () => {
+    const res = await alice.agent.post('/entities').type('json').send(MALFORMED);
+    const body = JSON.stringify(res.body);
+
+    assert.doesNotMatch(body, /SyntaxError/i, body);
+    assert.doesNotMatch(body, /unexpected/i, `the parser's own sentence stays in the log: ${body}`);
+    assert.doesNotMatch(body, /position/i, body);
+    assert.doesNotMatch(body, /unterminated/, `nor the body it was handed: ${body}`);
+    assert.doesNotMatch(body, /entity\.parse\.failed/, `nor the dependency's type string: ${body}`);
+    assert.deepEqual(Object.keys(res.body), ['error'], `the shape is exactly { error }: ${body}`);
+  });
+
+  test('a body over the app-wide limit is 413 BODY_TOO_LARGE, and the limit is not published', async () => {
+    // Over `express.json()`'s 100 kB default. Valid JSON: the refusal happens
+    // while reading, before anything is parsed.
+    const oversized = JSON.stringify({ title: 'x'.repeat(200 * 1024), category: 'Characters', summary: 'big' });
+    const res = await alice.agent.post('/entities').type('json').send(oversized);
+
+    log('normal', `POST /entities (${oversized.length} bytes) → ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.status, 413, `an over-limit body is a 413, not a 500: ${JSON.stringify(res.body)}`);
+    assert.deepEqual(res.body, { error: 'BODY_TOO_LARGE' });
+    assert.doesNotMatch(JSON.stringify(res.body), /\d|limit/i,
+      'the configured limit is a deployment detail and stays out of the body');
+  });
+
+  test('an unsupported Content-Encoding is 415 UNSUPPORTED_ENCODING', async () => {
+    const res = await alice.agent.post('/entities').type('json').set('Content-Encoding', 'br').send('{}');
+
+    log('normal', `POST /entities (Content-Encoding: br) → ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.status, 415, `an encoding this server cannot read is a 415: ${JSON.stringify(res.body)}`);
+    assert.deepEqual(res.body, { error: 'UNSUPPORTED_ENCODING' });
+  });
+
+  test('the light tier names the parser type that chose the status', async () => {
+    const { result: res, lines } = await capturingLog(() =>
+      alice.agent.post('/entities').type('json').send(MALFORMED));
+
+    log('verbose', `captured ${lines.length} log line(s): ${JSON.stringify(lines, null, 2)}`);
+    assert.equal(res.status, 400);
+
+    const summary = lines.find(line => line.includes('400 MALFORMED_JSON'));
+    assert.ok(summary, `one line must carry the status and the code: ${JSON.stringify(lines)}`);
+    assert.match(summary, /source: body-parser entity\.parse\.failed/,
+      `and the source of the change, not just the number it produced: ${summary}`);
+    assert.match(summary, /POST \/entities/, `and the route it came from: ${summary}`);
+  });
+});
+
+/** body-parser's and raw-body's own sources, resolved rather than guessed at. */
+function parserSourceFiles() {
+  const resolve = createRequire(import.meta.url);
+  const files = [resolve.resolve('raw-body')];
+  const stack = [path.join(path.dirname(resolve.resolve('body-parser')), 'lib')];
+  while (stack.length) {
+    const dir = stack.pop();
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(abs);
+      else if (abs.endsWith('.js')) files.push(abs);
+    }
+  }
+  return files;
+}
+
+describe('the body-parser table', () => {
+  test('every entry answers its own status and code', () => {
+    for (const [type, expected] of Object.entries(BODY_PARSER_RULES)) {
+      // `status: 999` on purpose: the table's status must win over whatever the
+      // error object itself claims, which is the same reason rule 5 is strict.
+      const mapped = classify(Object.assign(new Error('a dependency\'s own sentence'), { type, status: 999 }));
+
+      assert.ok(mapped, `${type} must be mapped, or it is a 500`);
+      assert.equal(mapped.status, expected.status, `${type} answers the table's status, not the error's`);
+      assert.deepEqual(mapped.body, { error: expected.code }, `${type} answers our code, not the dependency's type`);
+      assert.equal(mapped.rule, `body-parser ${type}`, `the log line names the type: ${mapped.rule}`);
+    }
+  });
+
+  test('the types that mean this code misconfigured a stream stay a 500', () => {
+    for (const type of BODY_PARSER_OURS) {
+      const err = Object.assign(new Error('stream misconfigured'), { type, status: 500 });
+      assert.equal(classify(err), null, `${type} is this code's mistake, so 500 INTERNAL is the honest answer`);
+    }
+  });
+
+  test('covers every failure type body-parser and raw-body can raise', () => {
+    const found = new Set();
+    for (const file of parserSourceFiles()) {
+      for (const m of readFileSync(file, 'utf8').matchAll(/type:\s*(?:[\w.]+\s*\|\|\s*)?'([^']+)'/g)) {
+        found.add(m[1]);
+      }
+    }
+    log('light', `body-parser and raw-body raise ${found.size} type(s) (source: their own sources): ${[...found].sort().join(', ')}`);
+
+    // A sweep that matched nothing would pass forever.
+    assert.ok(found.size >= 8,
+      `the walk over the two dependencies' sources found ${found.size} type(s) — the walk is broken, not the table`);
+
+    const accounted = new Set([...Object.keys(BODY_PARSER_RULES), ...BODY_PARSER_OURS]);
+    const unaccounted = [...found].filter(type => !accounted.has(type)).sort();
+    assert.deepEqual(unaccounted, [],
+      'a body-parser upgrade raises a failure type nobody mapped, so it answers 500 INTERNAL with a ref for what is ' +
+      'probably the caller\'s mistake. Put it in BODY_PARSER_RULES with a status and a code of ours, or in ' +
+      'BODY_PARSER_OURS if it means this code misconfigured a stream:\n' + unaccounted.join('\n'));
+
+    const stale = Object.keys(BODY_PARSER_RULES).filter(type => !found.has(type)).sort();
+    assert.deepEqual(stale, [],
+      `the table maps a type the dependencies no longer raise: ${stale.join(', ')}`);
   });
 });
 

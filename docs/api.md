@@ -99,7 +99,17 @@ category: …`, no pool error carrying a connection string.
 | 400 | `{ "error": "VALIDATION_FAILED", "fields": ["category", "summary"] }` | A write failed schema validation. `fields` are this API's own schema paths — what a client needs to mark the offending inputs. Never the values. |
 | 400 | `{ "error": "INVALID_VALUE", "fields": ["workspaceId"] }` | A value could not be cast to the type its field holds. |
 | 409 | `{ "error": "DUPLICATE", "fields": ["email"] }` | A unique index rejected the write. `fields` are the index's key names, never the colliding values. |
+| 400 | `{ "error": "MALFORMED_JSON" }` | The body is not the JSON its `Content-Type` declared. |
+| 413 | `{ "error": "BODY_TOO_LARGE" }` | The body is over the parser's limit — 100 kB everywhere except [`POST /import`](#import), which allows `IMPORT_BODY_LIMIT` (default 8 MB) and answers its own `IMPORT_TOO_LARGE`. |
+| 415 | `{ "error": "UNSUPPORTED_ENCODING" }` / `{ "error": "UNSUPPORTED_CHARSET" }` | The `Content-Encoding` or `charset` the request declares is not one this server reads. |
 | 500 | `{ "error": "INTERNAL", "ref": "a1b2c3d4" }` | Anything else. `ref` is a short id written to the server log beside the real stack — quote it in a bug report; nothing about the deployment is in the body. |
+
+The three body rows above come from the body parser, which runs ahead of every router *and* ahead
+of the session middleware — so an unreadable body is answered as such even on an endpoint that
+would otherwise have refused the request as unauthenticated, and before any route sees it. Three rarer
+codes come from the same place: `BODY_SIZE_MISMATCH` (400, the body's length is not its
+`Content-Length`), `REQUEST_ABORTED` (400, the client hung up mid-body) and, on the two
+form-encoded OAuth endpoints only, `TOO_MANY_PARAMETERS` (413) and `MALFORMED_BODY` (400).
 
 A route may also raise a refusal of its own as a status with a code (`httpError(503,
 'EXPORT_NOT_CONFIGURED')`), which is answered as `{ "error": "<code>" }` at that status. The codes
