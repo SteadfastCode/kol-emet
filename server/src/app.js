@@ -34,6 +34,7 @@ import conversationsRouter from './routes/conversations.js';
 import exportRouter from './routes/export.js';
 import importRouter, { importJsonBody } from './routes/import.js';
 import workspaceRouter from './routes/workspace.js';
+import healthRouter from './routes/health.js';
 import './models/User.js';
 import './models/Conversation.js';
 import './models/OpenQuestion.js'; // ensure model is registered for population
@@ -125,6 +126,11 @@ export function createApp({ sessionStore, authLimits } = {}) {
   logOriginGuardStartup(process.env);
   app.use(originGuard);
 
+  // First of the mounts, and unauthenticated: whether this instance can reach
+  // Mongo is the one question a monitor must be able to ask without a session.
+  // Behind originGuard like everything else, which costs it nothing — the guard
+  // checks unsafe methods only. See routes/health.js.
+  app.use('/health', healthRouter);
   app.use('/', oauthRouter);
   // The Steadfast bridge: its own MCP endpoint (/bridge/mcp), token and OAuth
   // issuer, mounted at root for the /.well-known discovery paths. See routes/bridge.js.
