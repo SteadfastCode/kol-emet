@@ -76,42 +76,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-100": {
+    "KOL-095": {
       "order": 5,
-      "title": "draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…",
-      "status": "done",
+      "title": "KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-100",
+      "branch": "routine/item/KOL-095",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-16T12:10:37.825Z",
+      "claimedAtUtc": "2026-10-16T12:28:28.691Z",
       "runId": "2026-10-16T12:10:06.157Z",
       "lastFail": null
     },
-    "KOL-095": {
-      "order": 6,
-      "title": "KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 8,
+      "order": 7,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +130,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 9,
+      "order": 8,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 10,
+      "order": 9,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +164,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 11,
+      "order": 10,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -198,7 +181,7 @@
       "lastFail": null
     },
     "KOL-088": {
-      "order": 12,
+      "order": 11,
       "title": "OAuth logs the authorization code, the PKCE verifier, and every code still outstanding",
       "status": "pending",
       "attempts": 0,
@@ -215,7 +198,7 @@
       "lastFail": null
     },
     "KOL-089": {
-      "order": 13,
+      "order": 12,
       "title": "Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft",
       "status": "pending",
       "attempts": 0,
@@ -232,7 +215,7 @@
       "lastFail": null
     },
     "KOL-090": {
-      "order": 14,
+      "order": 13,
       "title": "Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly",
       "status": "pending",
       "attempts": 0,
@@ -249,7 +232,7 @@
       "lastFail": null
     },
     "KOL-091": {
-      "order": 15,
+      "order": 14,
       "title": "A chat belongs to a user but is answered from a workspace, and nothing ties the two together",
       "status": "pending",
       "attempts": 0,
@@ -266,7 +249,7 @@
       "lastFail": null
     },
     "KOL-092": {
-      "order": 16,
+      "order": 15,
       "title": "Two list routes still answer with the whole workspace",
       "status": "pending",
       "attempts": 0,
@@ -283,7 +266,7 @@
       "lastFail": null
     },
     "KOL-093": {
-      "order": 17,
+      "order": 16,
       "title": "A deploy kills in-flight requests and every live stream: handle SIGTERM",
       "status": "pending",
       "attempts": 0,
@@ -297,6 +280,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-100": {
+      "order": null,
+      "title": "draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-100",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-16T12:10:37.825Z",
+      "runId": "2026-10-16T12:10:06.157Z",
       "lastFail": null
     },
     "KOL-099": {

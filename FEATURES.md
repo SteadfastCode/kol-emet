@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-095) KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…**
+- [x] **(KOL-095) KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…**
   Found by the grader of KOL-080 (medium, FEATURES.md:218). KOL-092 names a client open-question
   caller that does not exist: nothing under client/src fetches `/open-questions` (grep for
   `open-questions` and for `question` in `client/src/composables/useEntities.js` returns nothing —
