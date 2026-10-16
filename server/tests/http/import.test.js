@@ -157,6 +157,23 @@ async function emptyWorkspace(who) {
   assert.deepEqual((await who.agent.get('/open-questions')).body, []);
 }
 
+/**
+ * The ids of everything an import writes, as the workspace reads today.
+ *
+ * An import mints fresh ids for the whole graph (the owner case above pins
+ * that), so an unchanged set of ids is the proof that a refused import wrote
+ * nothing — and the only one available when the document is an export of the
+ * very workspace being checked, where every *title* in it is already present.
+ */
+async function graphIds(who) {
+  const ids = async route => ((await who.agent.get(route)).body ?? []).map(doc => String(doc._id)).sort();
+  return {
+    entities: await ids('/entities'),
+    relationshipGroups: await ids('/relationship-groups'),
+    openQuestions: await ids('/open-questions'),
+  };
+}
+
 /** POSTs a document to /import as `who`, logging the answer. */
 async function importAs(who, body, label) {
   const res = await who.agent.post('/import').send(body);
@@ -254,12 +271,18 @@ describe('POST /import by someone who may not', () => {
     // The editor's workspace is alice's, which is non-empty — so a role gate
     // that ran *after* the emptiness check would answer 409 here and this test
     // would not be about the role at all. It is 403, before any read.
+    //
+    // The document is alice's own export, so the workspace the editor reads
+    // already holds every title in it: a title the import would have written
+    // cannot tell a refusal from a duplicate. The ids can — see graphIds.
+    const before = await graphIds(editor);
+    assert.ok(before.entities.length > 0, 'the editor reads alice\'s workspace, which holds her entities');
+
     const res = await importAs(editor, document, 'POST /import as the editor');
     assert.equal(res.status, 403);
     assert.equal(res.body.error, 'NOT_WORKSPACE_OWNER');
 
-    const listed = (await editor.agent.get('/entities')).body;
-    assert.ok(!listed.some(e => e.title === 'Zephyr Line'), 'nothing of the document may have been written');
+    assert.deepEqual(await graphIds(editor), before, 'nothing of the document may have been written');
   });
 
   test('an unauthenticated call is 401', async () => {
