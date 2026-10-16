@@ -42,7 +42,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-078) `GET /health`: liveness and database readiness without a session**
+- [x] **(KOL-078) `GET /health`: liveness and database readiness without a session**
   Every route in `createApp` is behind `requireAuth` except `/auth/*`, `/oauth`, `/templates`, `/mcp` and the bridge, so
   there is no way to ask a deployed instance whether it is working. The repo runbook's deploy signal is Railway's own
   commit status, which says a container started — not that it can reach Mongo. The failure that leaves invisible is the
