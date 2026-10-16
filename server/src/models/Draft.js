@@ -167,7 +167,16 @@ const draftSchema = new mongoose.Schema({
     dropReasons:     [{ type: String }],
     rawOutput:       { type: String, default: null },
     passes:          { type: Number, default: 0 },
+    // Why a failed run failed, in the three pieces lib/failureNote.js produces.
+    // `error` is a sentence for the person whose run it was and is never the
+    // caught error's own text: GET /drafts/:id returns this whole document, so
+    // a provider's HTTP body or a driver's pool error stored here would reach a
+    // caller as surely as it would from a response body (KOL-100). `errorCode`
+    // is what a client branches on; `errorRef` indexes the server log line that
+    // does hold the real error, and is set only when nothing classified it.
     error:           { type: String, default: null },
+    errorCode:       { type: String, default: null },
+    errorRef:        { type: String, default: null },
     generationMs:    { type: Number, default: null },
     // Token spend for this run, so cost per draft is measurable rather than
     // estimated — and so a cap can be set from data.
