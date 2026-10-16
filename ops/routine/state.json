@@ -79,7 +79,7 @@
     "KOL-095": {
       "order": 5,
       "title": "KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-095",
