@@ -62,15 +62,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…**
-  Found by the grader of KOL-075 (medium, server/src/middleware/errorHandler.js:171). Rule 5
-  requires a string `code`, but body-parser's errors (`entity.parse.failed`, `entity.too.large`)
-  carry only `status`/`statusCode`/`type` — so a malformed JSON body or an over-100kB body on any
-  endpoint except `/import` now falls to rule 6 and answers 500 `INTERNAL` where Express's
-  finalhandler previously honoured the 400/413. `src/routes/import.js:63` states this outright ('a
-  `SyntaxError` answered as the caller's 400 instead of falling through to the error handler's
-  500'), so every other router now reports a client mistake as a server fault, with a `ref` and a
-  logged stack per bad request.
 - [ ] **(KOL-100) draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…**
   Found by the grader of KOL-075 (medium, server/src/routes/drafts.js:234).
   `draft.diagnostics.error = err.message` persists the raw generation error, and `GET /drafts/:id`
@@ -282,6 +273,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…** (routine 2026-10-16, f3c8e62)
+  Found by the grader of KOL-075 (medium, server/src/middleware/errorHandler.js:171). Rule 5
+  requires a string `code`, but body-parser's errors (`entity.parse.failed`, `entity.too.large`)
+  carry only `status`/`statusCode`/`type` — so a malformed JSON body or an over-100kB body on any
+  endpoint except `/import` now falls to rule 6 and answers 500 `INTERNAL` where Express's
+  finalhandler previously honoured the 400/413. `src/routes/import.js:63` states this outright ('a
+  `SyntaxError` answered as the caller's 400 instead of falling through to the error handler's
+  500'), so every other router now reports a client mistake as a server fault, with a `ref` and a
+  logged stack per bad request.
 - [x] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…** (routine 2026-10-16, e7cee9b)
   Found by the grader of KOL-076 (medium, server/src/routes/oauth.js:103). A revoked session keeps
   a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read

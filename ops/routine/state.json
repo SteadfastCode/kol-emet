@@ -79,7 +79,7 @@
     "KOL-099": {
       "order": 5,
       "title": "Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-099",
