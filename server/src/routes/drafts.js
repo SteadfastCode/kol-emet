@@ -25,6 +25,7 @@ import {
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { errorLog } from '../middleware/errorHandler.js';
+import { describeFailure } from '../lib/failureNote.js';
 
 const router = Router();
 
@@ -71,7 +72,11 @@ async function expireStuckGenerations(workspaceId) {
     {
       $set: {
         status: 'failed',
+        // A sentence of ours about a run nobody caught an error for, so it
+        // needs no sanitising — but it carries a code like every other stored
+        // failure, so a client branches on one field whatever killed the run.
         'diagnostics.error': 'Generation did not complete (interrupted or timed out).',
+        'diagnostics.errorCode': 'GENERATION_INTERRUPTED',
       },
     }
   );
@@ -229,9 +234,22 @@ router.post('/', async (req, res, next) => {
       budget: await getBudget(req.workspaceId),
     });
   } catch (err) {
-    console.error('[drafts] generation failed:', err.message);
+    // Never `err.message`: this is persisted, and GET /drafts/:id hands the
+    // whole document back — so the provider's HTTP body, or a pool error from
+    // the grounding read carrying a connection string, would reach a caller in
+    // an ordinary JSON response, a request later (KOL-100). The real error goes
+    // to the log, with the ref the note quotes. See lib/failureNote.js.
+    const failure = describeFailure(err, `POST /drafts (draft ${draft._id})`);
     draft.status = 'failed';
-    draft.diagnostics = { ...(draft.diagnostics ?? {}), error: err.message };
+    // Path by path, not `diagnostics = { ...diagnostics, error }`: spreading
+    // the nested path yields a `usage` of undefined on a draft that never got
+    // as far as a usage total, and the save then died on
+    // `Cast to Object failed ... at path "diagnostics.usage"` — swallowed by
+    // the catch below, so the row stayed on 'generating' until the lazy sweep
+    // aged it out and no failure was ever recorded.
+    draft.diagnostics.error = failure.message;
+    draft.diagnostics.errorCode = failure.code;
+    draft.diagnostics.errorRef = failure.ref;
     // A failed save here would strand the row on 'generating'; the lazy sweep
     // in GET / is the backstop for exactly that.
     await draft.save().catch(e => console.error('[drafts] could not record failure:', e.message));
@@ -248,7 +266,11 @@ router.post('/', async (req, res, next) => {
       }).catch(e => console.error('[drafts] could not charge failed run:', e.message));
     }
 
-    send({ type: 'error', message: err.message, draftId: String(draft._id) });
+    // The same note the row now holds, rather than a second, franker account
+    // of the failure on the stream: the overlay prints this message, and a
+    // frame is as public as a response body. The code is what a client should
+    // branch on; the ref is what a person quotes in a bug report.
+    send({ type: 'error', message: failure.message, code: failure.code, ref: failure.ref, draftId: String(draft._id) });
   } finally {
     await releaseGeneration(req.workspaceId);
     if (open) res.end();

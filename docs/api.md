@@ -125,6 +125,16 @@ per handled error with the route, the status it chose, the code, the `ref` when 
 *which rule* chose it — plus, for a 500, the real stack prefixed with that same `ref`. `off` means
 nothing at all, the stack included.
 
+A failure that is **stored** rather than answered goes through the same rules, in
+[`lib/failureNote.js`](../server/src/lib/failureNote.js). `POST /drafts` writes why a run failed onto
+the draft and `GET /drafts/:id` returns the whole document, so an `err.message` kept there would
+reach a caller in a plain JSON body a request later — the driver's text with a delay (KOL-100). What
+is stored instead is a sentence of ours plus a code: `diagnostics.errorCode` (and `item.applyError`
+for an apply), with `diagnostics.errorRef` indexing the log line that holds the real error. A
+refusal this codebase wrote on purpose — `No AI provider is configured on the server` — is stored
+verbatim and has no `ref`, which is the same distinction a producer's parse error is published by.
+`ERROR_LOG_LEVEL` governs both.
+
 Out of scope here: `/mcp` and `/bridge/mcp` answer JSON-RPC error objects on their own protocol, and
 the SSE routes report failures as stream events because their headers went out first — see
 [Events](#events-sse) and [`POST /drafts`](#post-drafts-sse).
@@ -513,7 +523,7 @@ Event frames on the stream:
 | `created` | `{ draftId }` — emitted immediately, before any model call |
 | `stage` | `{ stage: 'entities' \| 'relationships' \| 'normalizing', chunk?, of? }` |
 | `done` | `{ draftId, counts, route, budget }` |
-| `error` | `{ message, draftId }` |
+| `error` | `{ message, code, ref, draftId }` — `message` is a sentence safe to show, `code` what to branch on, `ref` (an unmapped failure only, else `null`) the server log's index to the real error. Never the provider's own text — see [Errors](#errors) |
 
 Pre-stream failures are ordinary JSON errors, not SSE frames:
 

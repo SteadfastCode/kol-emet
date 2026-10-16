@@ -27,6 +27,7 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
 import { relationshipGroupMatcher } from './draftNormalizer.js';
+import { describeFailure, publicFailure } from './failureNote.js';
 
 // APPLY_LOG_LEVEL = off | light | normal | verbose (default light)
 //   light   — one line per draft, per item that failed or was blocked, and per
@@ -91,7 +92,7 @@ async function applyEntityCreate(item, ctx) {
   const p = payloadOf(item);
   const blocks = normalizeOrder(p.blocks ?? []);
   const err = validateBlocks(blocks);
-  if (err) throw new Error(err);
+  if (err) throw publicFailure('APPLY_INVALID_BLOCKS', err);
 
   const entity = await Entity.create({
     title: p.title,
@@ -123,7 +124,7 @@ async function applyEntityCreate(item, ctx) {
 async function applyEntityUpdate(item, ctx) {
   const p = payloadOf(item);
   const target = await Entity.findOne({ _id: item.targetEntityId, workspaceId: ctx.workspaceId });
-  if (!target) throw new Error(`Target entity ${item.targetEntityId} no longer exists`);
+  if (!target) throw publicFailure('APPLY_TARGET_MISSING', `Target entity ${item.targetEntityId} no longer exists`);
 
   const before = target.toObject();
 
@@ -133,7 +134,7 @@ async function applyEntityUpdate(item, ctx) {
 
   const newBlocks = normalizeOrder(p.blocks ?? []);
   const err = validateBlocks(newBlocks);
-  if (err) throw new Error(err);
+  if (err) throw publicFailure('APPLY_INVALID_BLOCKS', err);
 
   // Re-number appended blocks to sit after whatever is already there.
   const offset = target.blocks.length;
@@ -171,18 +172,14 @@ async function applyRelationship(item, ctx) {
       const reason = m.localKey
         ? `depends on "${m.localKey}", which was not applied`
         : `member "${m.name}" has no target`;
-      const e = new Error(reason);
-      e.blocked = true;
-      throw e;
+      throw publicFailure('APPLY_DEPENDENCY_MISSING', reason, { blocked: true });
     }
     members.push({ refId, refModel: m.refModel ?? 'Entity', label: m.label ?? null, notes: m.notes ?? null });
   }
 
   // Same floor the relationship routes enforce.
   if (members.length < 2) {
-    const e = new Error('Fewer than 2 resolvable members');
-    e.blocked = true;
-    throw e;
+    throw publicFailure('APPLY_TOO_FEW_MEMBERS', 'Fewer than 2 resolvable members', { blocked: true });
   }
 
   // Is this link already in the graph? Re-importing an unchanged source file is
@@ -251,7 +248,7 @@ async function findOrCreateGroup(p, members, ctx, item) {
   // that has since been deleted simply falls through to the search below.
   const proposedTarget = p.targetGroupId ?? null;
   if (proposedTarget && !ctx.usedGroups.has(String(proposedTarget))) {
-    if (!mongoose.isValidObjectId(proposedTarget)) throw new Error(`targetGroupId ${JSON.stringify(String(proposedTarget))} is not an id`);
+    if (!mongoose.isValidObjectId(proposedTarget)) throw publicFailure('APPLY_INVALID_TARGET_GROUP', `targetGroupId ${JSON.stringify(String(proposedTarget))} is not an id`);
     const target = await RelationshipGroup.findOne({ _id: proposedTarget, workspaceId: ctx.workspaceId });
     if (target && holdsAll(target)) {
       group = target;
@@ -407,7 +404,7 @@ export async function applyDraft(draft, { workspaceId, actor }) {
       else if (item.kind === 'entity')                          out = await applyEntityUpdate(item, applyCtx);
       else if (item.kind === 'relationship')                    out = await applyRelationship(item, applyCtx);
       else if (item.kind === 'open_question')                   out = await applyOpenQuestion(item, applyCtx);
-      else throw new Error(`Unknown item kind: ${item.kind}`);
+      else throw publicFailure('APPLY_UNKNOWN_KIND', `Unknown item kind: ${item.kind}`);
 
       item.applyState = 'applied';
       item.resultId = out.resultId;
@@ -422,7 +419,12 @@ export async function applyDraft(draft, { workspaceId, actor }) {
       // from 'failed' because a blocked item is a consequence of a decision,
       // not a fault to investigate.
       item.applyState = err.blocked ? 'blocked' : 'failed';
-      item.applyError = err.message;
+      // Stored and shown: the review UI prints applyError on the item's card
+      // and GET /drafts/:id hands it back, so what lands here is this module's
+      // own sentence (every throw above is a publicFailure) or, for anything
+      // Mongoose or the driver raised under those writes, a code and a log ref
+      // (KOL-100). The log line below still has the real one.
+      item.applyError = describeFailure(err, `apply draft ${draft._id} item ${item.localKey}`).message;
       if (err.blocked) blocked++; else failed++;
       log('light', `item ${item.localKey} ${item.applyState}: ${err.message}`);
     }

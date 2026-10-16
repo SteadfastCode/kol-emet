@@ -15,6 +15,7 @@ import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
 import { entityPrompt, relationshipPrompt, PROMPT_VERSION, ROLE_STYLES, DEFAULT_ROLE_STYLE } from './generatorPrompts.js';
 import { normalizeDraft } from './draftNormalizer.js';
 import { getCategories } from '../config/categories.js';
+import { publicFailure } from './failureNote.js';
 import Entity from '../models/Entity.js';
 import RelationshipType from '../models/RelationshipType.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
@@ -147,15 +148,20 @@ export async function generateDraft(opts) {
 async function runGeneration({ text, workspaceId, provider, roleStyle, onStage = () => {}, __spend }) {
   const started = Date.now();
   const source = String(text ?? '').trim();
-  if (!source) throw new Error('No text supplied');
+  // publicFailure, not new Error: a run's failure is stored on the draft and
+  // read back by GET /drafts/:id, so only a sentence this codebase wrote for
+  // the person who asked is published — everything else thrown under here (the
+  // provider's HTTP error, a pool error from the grounding reads below) becomes
+  // a code and a log ref. See lib/failureNote.js.
+  if (!source) throw publicFailure('GENERATOR_NO_TEXT', 'No text supplied');
   if (source.length > MAX_CHARS) {
-    throw new Error(`Input is ${source.length} characters; the limit is ${MAX_CHARS}.`);
+    throw publicFailure('GENERATOR_INPUT_TOO_LONG', `Input is ${source.length} characters; the limit is ${MAX_CHARS}.`);
   }
 
   const style = ROLE_STYLES.includes(roleStyle) ? roleStyle : DEFAULT_ROLE_STYLE;
 
   const route = pickRoute(provider);
-  if (!route) throw new Error('No AI provider is configured on the server');
+  if (!route) throw publicFailure('GENERATOR_NOT_CONFIGURED', 'No AI provider is configured on the server');
   if (__spend) { __spend.provider = route.provider; __spend.model = route.model; }
   log('light', `generating for workspace ${workspaceId} via ${route.provider}/${route.model} (${source.length} chars)`);
 

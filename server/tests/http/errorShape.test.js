@@ -38,6 +38,11 @@
  *     a response body** — so the sweep cannot quietly regress one catch at a
  *     time, which is the only way fifty-nine of them appeared in the first
  *     place.
+ *   - and that no file under `src/routes/`, `src/middleware/` or `src/lib/`
+ *     **writes a caught message into a field instead**, which is the same leak
+ *     with a delay: `POST /drafts` stored `err.message` on the draft and
+ *     `GET /drafts/:id` returns the whole document, so the provider's own HTTP
+ *     body reached a caller in a plain JSON response a request later (KOL-100).
  *
  * Falsification check: drop `app.use(errorHandler)` from `src/app.js` and the
  * first three groups fail (Express's own handler answers HTML and, outside
@@ -536,6 +541,49 @@ const A_MESSAGE = /\berr(?:or)?\s*(?:\?)?\.\s*message\b|\be\s*(?:\?)?\.\s*messag
  */
 const OUT_OF_SCOPE = new Set(['bridge.js', 'mcp.js']);
 
+/**
+ * A caught message being written INTO something rather than answered with:
+ * `item.applyError = err.message`, `{ error: err.message }`.
+ *
+ * The response sweep above cannot see this. `POST /drafts` stored
+ * `err.message` on the draft and `GET /drafts/:id` returns the whole
+ * document, so the provider's HTTP body reached a caller in a plain JSON
+ * response one request later — a leak made of an assignment, on a route the
+ * SSE exemption does not cover (KOL-100). Anything stored goes through
+ * `lib/failureNote.js`, which publishes a code and keeps the text for the log.
+ */
+const STORED_MESSAGE = /(?:\.\s*\w+|\b\w+)\s*(?:=|:)\s*(?:err(?:or)?|e)\s*\??\.\s*message\b/;
+
+/**
+ * The two places a caught message is still written into a value, each because
+ * it reaches no stored document and no response body:
+ *
+ *   - `routes/chat.js` puts it on an SSE `error` frame. Streamed failures are
+ *     the scope KOL-075 deliberately left alone, and chat stores nothing;
+ *     `POST /drafts` is in the sweep because its frame is *also* a row.
+ *   - `lib/workspaceSeeder.js` returns it to its one caller, `routes/auth.js`,
+ *     which hands it to console.error and answers 201 regardless.
+ *
+ * Listed rather than silently skipped, so a third is somebody's decision.
+ */
+const STORED_EXEMPT = new Set(['src/routes/chat.js', 'src/lib/workspaceSeeder.js']);
+
+/** Routers, middleware AND libs: the applier that writes `applyError` is a lib. */
+function writingFiles() {
+  const files = [];
+  for (const dir of ['src/routes', 'src/middleware', 'src/lib']) {
+    const abs = path.join(SERVER_ROOT, dir);
+    for (const entry of readdirSync(abs, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+      if (OUT_OF_SCOPE.has(entry.name)) continue;
+      const rel = `${dir}/${entry.name}`;
+      if (STORED_EXEMPT.has(rel)) continue;
+      files.push({ rel, source: readFileSync(path.join(abs, entry.name), 'utf8') });
+    }
+  }
+  return files;
+}
+
 function sourceFiles() {
   const files = [];
   for (const dir of ['src/routes', 'src/middleware']) {
@@ -586,6 +634,28 @@ describe('the sweep, asserted over the source', () => {
 
     assert.deepEqual(ungated, [],
       'a refusal built from a caught message must be gated on `err instanceof ParseError`:\n' + ungated.join('\n'));
+  });
+
+  test('no caught message is written into a field that outlives the request', () => {
+    const offenders = [];
+    for (const { rel, source } of writingFiles()) {
+      for (const statement of statements(source)) {
+        if (!STORED_MESSAGE.test(statement)) continue;
+        offenders.push(`${rel}: ${statement.trim().replace(/\s+/g, ' ').slice(0, 160)}`);
+      }
+    }
+
+    assert.deepEqual(offenders, [],
+      'a stored failure is as public as a response body — GET /drafts/:id hands the whole document back. ' +
+      'Store what src/lib/failureNote.js returns and let the log keep the error:\n' + offenders.join('\n'));
+  });
+
+  test('the stored-failure sweep reads the libs too, and the applier among them', () => {
+    const names = writingFiles().map(f => f.rel);
+    assert.ok(names.includes('src/lib/draftApplier.js'), `the applier writes applyError and must be swept: ${names.length} file(s) read`);
+    assert.ok(names.includes('src/lib/failureNote.js'), 'the helper itself is swept, so it cannot leak what it exists to withhold');
+    assert.ok(names.length >= 30, `expected the routers, middleware and libs, got ${names.length}`);
+    for (const exempt of STORED_EXEMPT) assert.ok(!names.includes(exempt), `${exempt} is exempt by name and must stay out`);
   });
 
   test('every router and middleware file was actually read', () => {
