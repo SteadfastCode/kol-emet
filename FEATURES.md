@@ -62,15 +62,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…**
-  Found by the grader of KOL-076 (medium, server/src/routes/oauth.js:103). A revoked session keeps
-  a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read
-  `req.session.userId` directly with no `requireAuth`/`requireActor`, so the device that was
-  signed out can still call `setMcpUser(userId)` and complete the connector grant — binding the
-  MCP bearer identity to the account and regaining full read/write through `/mcp`. The middleware
-  header claims the check runs on "every request a browser makes", and the docs' carve-out is
-  about *revoking existing* connector tokens (KOL-014), not about a revoked session minting a new
-  grant.
 - [ ] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…**
   Found by the grader of KOL-075 (medium, server/src/middleware/errorHandler.js:171). Rule 5
   requires a string `code`, but body-parser's errors (`entity.parse.failed`, `entity.too.large`)
@@ -291,6 +282,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-098) A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…** (routine 2026-10-16, e7cee9b)
+  Found by the grader of KOL-076 (medium, server/src/routes/oauth.js:103). A revoked session keeps
+  a real privilege: `POST /authorize` (and `POST /bridge/authorize`, bridge.js:145) read
+  `req.session.userId` directly with no `requireAuth`/`requireActor`, so the device that was
+  signed out can still call `setMcpUser(userId)` and complete the connector grant — binding the
+  MCP bearer identity to the account and regaining full read/write through `/mcp`. The middleware
+  header claims the check runs on "every request a browser makes", and the docs' carve-out is
+  about *revoking existing* connector tokens (KOL-014), not about a revoked session minting a new
+  grant.
 - [x] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…** (routine 2026-10-16, 2a310ea)
   Found by the grader of KOL-077 (medium, server/src/lib/graphImporter.js:288). planIds validates
   only `refModel`/`refId` on group members and nothing on a group's `label` or a member's

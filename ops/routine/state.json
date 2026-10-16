@@ -79,7 +79,7 @@
     "KOL-098": {
       "order": 5,
       "title": "A revoked session keeps a real privilege: POST /authorize (and POST /bridge/authorize, bridge.js:…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-098",
