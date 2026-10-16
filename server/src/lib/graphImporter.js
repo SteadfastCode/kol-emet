@@ -161,6 +161,34 @@ const HEX_ID = /^[0-9a-f]{24}$/i;
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const isNonEmptyString = (value) => typeof value === 'string' && value.trim() !== '';
 
+/**
+ * A field the schemas hold as a nullable `String`: absent, null, or a string.
+ *
+ * Checked here rather than left to Mongoose (KOL-097) because these are the
+ * fields nothing else looks at — a group's `label`, a member's `label` and
+ * `notes`, an entity type's `icon` and colours are copied straight from the
+ * file into the document — and Mongoose's string cast refuses a plain object
+ * or an array with a `CastError` *at insert time*. For a group's label that is
+ * the fourth of five inserts, so a hand-edited `relationshipGroups[0].label =
+ * {}` used to pass every check here and then take down a request that had
+ * already written the types and the entities: a 500 over a half-written graph
+ * which the emptiness rule then refuses to let the owner retry, against this
+ * module's promise that nothing is written until everything has been checked.
+ *
+ * A number or a boolean is refused too, though it would cast without
+ * complaint: `7` stored as `"7"` means the re-export of an imported graph no
+ * longer matches the file it came from, and a round trip that quietly rewrites
+ * a value is the one thing this module cannot do.
+ */
+const isNullableString = (value) => value == null || typeof value === 'string';
+
+/** Refuses `value` unless it is absent, null, or a string. @see isNullableString */
+function checkNullableString(value, at) {
+  if (!isNullableString(value)) {
+    throw refusal('MALFORMED_DOCUMENT', `${at} is ${Array.isArray(value) ? 'an array' : typeof value}, not a string or null`, [at]);
+  }
+}
+
 /** A name as the unique indexes see it: trimmed (both schemas trim) and case-folded. */
 const nameKey = (value) => String(value ?? '').trim().toLowerCase();
 
@@ -287,6 +315,7 @@ function planIds(collections, canonicalByKey) {
 
   collections.relationshipGroups.forEach((row, index) => {
     const where = `relationshipGroups[${index}]`;
+    checkNullableString(row.label, `${where}.label`);
     if (row.members != null && !Array.isArray(row.members)) {
       throw refusal('MALFORMED_DOCUMENT', `${where}.members is not an array`, [`${where}.members`]);
     }
@@ -299,6 +328,10 @@ function planIds(collections, canonicalByKey) {
       if (!HEX_ID.test(String(member.refId ?? ''))) {
         throw refusal('MALFORMED_DOCUMENT', `${at}.refId is ${JSON.stringify(member.refId ?? null)}, not an ObjectId`, [`${at}.refId`]);
       }
+      // Checked even on a member about to be dropped for a dangling refId: the
+      // shape of the file is the question here, not which rows survive it.
+      checkNullableString(member.label, `${at}.label`);
+      checkNullableString(member.notes, `${at}.notes`);
     });
   });
 
@@ -329,6 +362,17 @@ function planIds(collections, canonicalByKey) {
       }
     });
   }
+
+  // The same class of field on an entity type. Its insert is the first one, so
+  // a CastError there writes nothing — but the caller still deserves the path
+  // and a 400 rather than a 500 (KOL-097). `color` itself is read with `?.`,
+  // so a `color` that is not an object simply carries no colours.
+  collections.entityTypes.forEach((row, index) => {
+    const where = `entityTypes[${index}]`;
+    checkNullableString(row.icon, `${where}.icon`);
+    checkNullableString(row.color?.bg, `${where}.color.bg`);
+    checkNullableString(row.color?.text, `${where}.color.text`);
+  });
 
   collections.relationshipTypes.forEach((row, index) => {
     const where = `relationshipTypes[${index}]`;
