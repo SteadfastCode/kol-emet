@@ -1,0 +1,340 @@
+{
+  "item": "KOL-077",
+  "repo": "kol-emet",
+  "mergeSha": "cfe4e7d3f41960c6aa78ea9599886028cb376ce0",
+  "completedAtUtc": "2026-10-15T22:08:38.436Z",
+  "completeRunId": "2026-10-15T21:16:05.428Z",
+  "reviewRunId": "2026-10-16T07:02:09.379Z",
+  "reviewedAtUtc": "2026-10-16T07:38:43.291Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 103693,
+  "contextFiles": 10,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/export.js",
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 8679,
+      "contextBytes": 0,
+      "promptTokens": 3365,
+      "completionTokens": 148,
+      "latencyMs": 16641,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 10100,
+      "contextBytes": 0,
+      "promptTokens": 3763,
+      "completionTokens": 150,
+      "latencyMs": 15683,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/app.js"
+      ],
+      "part": null,
+      "bytes": 8025,
+      "contextBytes": 0,
+      "promptTokens": 3076,
+      "completionTokens": 111,
+      "latencyMs": 11602,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/graphImporter.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12247,
+      "contextBytes": 0,
+      "promptTokens": 4299,
+      "completionTokens": 163,
+      "latencyMs": 18062,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/graphImporter.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12264,
+      "contextBytes": 0,
+      "promptTokens": 4296,
+      "completionTokens": 1024,
+      "latencyMs": 65112,
+      "findings": 0,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": false,
+      "retry": false,
+      "error": "output truncated at 1024 tokens"
+    },
+    {
+      "files": [
+        "server/src/lib/graphImporter.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 6094,
+      "contextBytes": 6148,
+      "promptTokens": 4157,
+      "completionTokens": 288,
+      "latencyMs": 24281,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 2,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/import.js"
+      ],
+      "part": null,
+      "bytes": 5336,
+      "contextBytes": 0,
+      "promptTokens": 2578,
+      "completionTokens": 133,
+      "latencyMs": 13687,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/import.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12279,
+      "contextBytes": 0,
+      "promptTokens": 4318,
+      "completionTokens": 124,
+      "latencyMs": 16203,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/import.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3401,
+      "contextBytes": 6402,
+      "promptTokens": 3621,
+      "completionTokens": 127,
+      "latencyMs": 16626,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/graphImporter.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12270,
+      "contextBytes": 0,
+      "promptTokens": 4411,
+      "completionTokens": 114,
+      "latencyMs": 16145,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/graphImporter.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12271,
+      "contextBytes": 0,
+      "promptTokens": 4074,
+      "completionTokens": 160,
+      "latencyMs": 17378,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/graphImporter.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1746,
+      "contextBytes": 4426,
+      "promptTokens": 2559,
+      "completionTokens": 140,
+      "latencyMs": 11571,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/export.js",
+      "line": 105,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `importWorkspaceFile` function does not handle the case where the server response is not JSON.",
+      "scenario": "If the server responds with a non-JSON body, the `res.json()` call will throw an error, and the catch block will log the error but not provide a meaningful message to the user. This could lead to confusion for the user who initiated the import.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle non-JSON server responses in a way that provides a meaningful message to the user."
+      }
+    },
+    {
+      "file": "server/src/routes/import.js",
+      "line": 104,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The error handling for unsupported versions does not log the specific version that caused the issue.",
+      "scenario": "When an import document with an unsupported version is uploaded, the log entry only states 'refused POST /import: the body is not JSON', which does not provide enough information to identify the problematic version.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The error handling for unsupported versions logs a generic message without specifying the version."
+      }
+    },
+    {
+      "file": "server/tests/http/import.test.js",
+      "line": 215,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "The test does not verify that the workspace is unchanged after a failed import.",
+      "scenario": "When an import fails due to the workspace not being empty, the test checks for a 409 status but does not assert that the workspace's content remains intact.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test checks for a 409 status but does not assert that the workspace's content remains intact."
+      }
+    },
+    {
+      "file": "server/tests/unit/graphImporter.test.js",
+      "line": 482,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the import process correctly handles case-insensitive unique constraints for entity types and relationship types.",
+      "scenario": "If an entity type or relationship type with a name that differs only by case already exists in the workspace, the import process should skip it without causing a write error. The current test does not explicitly check this behavior.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the import process correctly handles case-insensitive unique constraints for entity types and relationship types."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/import.js:138"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/lib/graphImporter.js:10"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One potential defect found in the code change. · One finding identified: potential issue with handling non-JSON files during import. · One high-severity finding identified. · The function `planIds` does not handle the mapping of `questionIds`, which is required for the import process. This could lead to potential data inconsistencies or errors during the import. · The code increments counters for dropped members and question entries but does not include these counts in the final result object, which could lead to confusion about the import process. · One finding identified in the code change. · One finding identified in the diff. · One real defect found in the diff. · One finding identified in the provided diff. · The test does not verify that the relationships and open questions are correctly rebuilt from the groups and questions. · One high-severity finding identified.",
+  "errors": [
+    "output truncated at 1024 tokens"
+  ],
+  "usage": {
+    "promptTokens": 128511,
+    "completionTokens": 4761
+  },
+  "latencyMs": 546818
+}

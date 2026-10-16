@@ -1,0 +1,116 @@
+{
+  "item": "KOL-078",
+  "repo": "kol-emet",
+  "mergeSha": "b854f699aa35808abcb52987d0f5a5ed94485419",
+  "completedAtUtc": "2026-10-16T03:16:59.710Z",
+  "completeRunId": "2026-10-16T03:09:06.128Z",
+  "reviewRunId": "2026-10-16T07:02:09.379Z",
+  "reviewedAtUtc": "2026-10-16T07:40:39.930Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 26466,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/app.js"
+      ],
+      "part": null,
+      "bytes": 11018,
+      "contextBytes": 0,
+      "promptTokens": 3548,
+      "completionTokens": 114,
+      "latencyMs": 15560,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/health.js"
+      ],
+      "part": null,
+      "bytes": 4857,
+      "contextBytes": 0,
+      "promptTokens": 2189,
+      "completionTokens": 128,
+      "latencyMs": 12164,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/health.test.js"
+      ],
+      "part": null,
+      "bytes": 10591,
+      "contextBytes": 0,
+      "promptTokens": 3628,
+      "completionTokens": 152,
+      "latencyMs": 15833,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/health.test.js",
+      "line": 205,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The test does not verify that the `HEAD /health` response has no body.",
+      "scenario": "When a monitor sends a HEAD request to `/health`, the test asserts that the status is 200 but does not check if the response body is empty. This could lead to incorrect monitoring behavior if the endpoint responds with a non-empty body.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test asserts that the HEAD request returns a 200 status code, but it does not verify that the response body is empty."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One high-severity finding identified in the diff. · One finding identified: the response body includes an undocumented 'uptimeSeconds' key. · One finding identified: The `HEAD /health` response body is not verified to be empty.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 27910,
+    "completionTokens": 897
+  },
+  "latencyMs": 116516
+}

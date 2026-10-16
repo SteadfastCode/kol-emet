@@ -1,0 +1,82 @@
+{
+  "item": "KOL-079",
+  "repo": "kol-emet",
+  "mergeSha": "c034b7de6c2af7c7091c9f0983e4e923354d0550",
+  "completedAtUtc": "2026-10-16T03:25:31.013Z",
+  "completeRunId": "2026-10-16T03:09:06.128Z",
+  "reviewRunId": "2026-10-16T07:02:09.379Z",
+  "reviewedAtUtc": "2026-10-16T07:41:35.255Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 6940,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/generator-v1-plan.md",
+        "docs/roadmap.md",
+        "docs/wishlist.md"
+      ],
+      "part": null,
+      "bytes": 6940,
+      "contextBytes": 6297,
+      "promptTokens": 4575,
+      "completionTokens": 132,
+      "latencyMs": 20059,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "docs/generator-v1-plan.md",
+      "line": 127,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The signup disclosure copy is marked as not built, but the description states it was shipped.",
+      "scenario": "The diff marks the signup disclosure copy as still unbuilt in the 'Remaining work' section, while the description claims it was shipped.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff marks the signup disclosure copy as still unbuilt in the 'Remaining work' section, while the description claims it was shipped."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified: The signup disclosure copy is incorrectly marked as not built in the documentation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 13660,
+    "completionTokens": 301
+  },
+  "latencyMs": 55254
+}

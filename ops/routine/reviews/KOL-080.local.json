@@ -1,0 +1,162 @@
+{
+  "item": "KOL-080",
+  "repo": "kol-emet",
+  "mergeSha": "8fa06f4dc3d5f5783baf7e88ec15efad65b02b11",
+  "completedAtUtc": "2026-10-15T14:21:07.710Z",
+  "completeRunId": "2026-10-15T14:09:29.049Z",
+  "reviewRunId": "2026-10-16T07:02:09.379Z",
+  "reviewedAtUtc": "2026-10-16T07:09:36.663Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 20521,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 2006,
+      "contextBytes": 11976,
+      "promptTokens": 4343,
+      "completionTokens": 131,
+      "latencyMs": 19020,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13978,
+      "contextBytes": 0,
+      "promptTokens": 4315,
+      "completionTokens": 277,
+      "latencyMs": 26538,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 4802,
+      "contextBytes": 9084,
+      "promptTokens": 4224,
+      "completionTokens": 473,
+      "latencyMs": 36296,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 3,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "FEATURES.md",
+      "line": 203,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The new item (KOL-094) is duplicated in the FEATURES.md file.",
+      "scenario": "The diff adds a new item (KOL-094) under '## Workqueue Items', but it already exists under '## Proposed'. This duplication can lead to confusion and potential double work.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The new item (KOL-094) is added under '## Workqueue Items' in the diff, while it already exists under '## Proposed' in the context."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 218,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "OAuth logs the authorization code, PKCE verifier, and every code still outstanding.",
+      "scenario": "An attacker who gains access to the log can redeem any of the outstanding authorization codes for a workspace-wide write token.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code logs the whole form body at `:133` which includes the one-time `code` and the `code_verifier`, and at `:148` logs every code still outstanding for every user."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 230,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "OAuth logs include sensitive information such as redirect_uri and state.",
+      "scenario": "An attacker who gains access to the log can use the redirect_uri and state information to perform phishing attacks or other malicious activities.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff shows that `GET /authorize` (`:44`) and `POST /authorize` (`:99`) print their whole query and body, so `redirect_uri` and `state` land there as well."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 235,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "authCodes Map grows without bound.",
+      "scenario": "The authCodes Map will continue to grow indefinitely, consuming memory and potentially leading to a denial of service.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "authCodes is a Map whose expiresAt is only ever read at redemption, so a code nobody redeems is never removed."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/oauth.js:133"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "1 finding found in the provided diff. · Three high-severity issues found in the OAuth logging implementation. · The proposed feature (KOL-092) addresses pagination and keyset pages for `GET /relationship-groups` and `GET /open-questions`, but it does not address several out-of-scope items mentioned in the description, including `GET /conversations`, MongoDB text index on block data, and re-opening `/entities`' own contract. These omissions could lead to performance issues, suboptimal search capabilities, and missed opportunities for improvement.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 55403,
+    "completionTokens": 1617
+  },
+  "latencyMs": 195624
+}
