@@ -1,0 +1,100 @@
+{
+  "item": "KOL-080",
+  "repo": "kol-emet",
+  "mergeSha": "8fa06f4dc3d5f5783baf7e88ec15efad65b02b11",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-16T08:08:06.003Z",
+  "gradedAtUtc": "2026-10-16T08:30:44.861Z",
+  "independent": [
+    {
+      "file": "FEATURES.md",
+      "line": 218,
+      "severity": "medium",
+      "summary": "KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches `/open-questions` (grep for `open-questions` and for `question` in `client/src/composables/useEntities.js` returns nothing — open questions reach the client populated on entities). So \"the two client callers page until `nextAfter` is null\" and the `useEntities.js` entry in the Files list send the implementer to code that isn't there; only the graph caller (`GraphView.vue` → `getAllGroups`) exists. This is exactly the grep-before-filing check the item is supposed to have done."
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 90,
+      "severity": "low",
+      "summary": "KOL-088's premise sentence is factually wrong: oauth.js is not \"the one router with no tiered logging\" — `chat.js`, `conversations.js`, `events.js`, `openQuestions.js`, `relationshipGroups.js`, `relationshipTypes.js` and `templates.js` also have no LOG_LEVEL logger. The credential-printing part of the claim is accurate (lines 44, 99, 133, 148, 157), but the uniqueness claim misstates the codebase an implementer will be told to match."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "KOL-094 appears exactly once in the file, at FEATURES.md:47 under `## Workqueue Items`; the filed Proposed ids are KOL-088–093, so there is no duplicate."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The code claim is true of pre-existing `server/src/routes/oauth.js`, but this diff only adds the backlog item that proposes fixing it — it introduces no logging and no defect."
+    },
+    {
+      "index": 3,
+      "verdict": "duplicate",
+      "reason": "Same oauth-logging defect as finding 2 (same file, same unconditional `console.log` calls), and like it, pre-existing rather than introduced by this doc-only change."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Correctly restates KOL-088's own second defect (authCodes is only pruned at redemption, oauth.js:163), but again it is pre-existing code this diff neither adds nor edits."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The diff touches only FEATURES.md; `server/src/routes/oauth.js:133` is unmodified, so no auth code or behavior is changed — describing auth work in a backlog item is not touching it."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential, token value or secret-handling code is added or changed; the text only discusses redaction as future work."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Spend/allowance code (`recordSpend`, generator budget) is only referenced in prose; no billing path changes."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change is purely additive text in FEATURES.md — no deletions, migrations or data-touching code."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound call, provider client or external endpoint is added or modified."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No deploy, CI or release configuration is edited, even though KOL-093 discusses deploy-time SIGTERM."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local review found nothing real: one hallucinated duplicate id and three restatements of pre-existing oauth.js issues that this doc-only filing proposes fixing, while missing the two factual errors inside the newly filed items.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 1,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.4034790000000001,
+  "numTurns": 21,
+  "durationMs": 246633,
+  "sessionId": "c3652873-4bba-435e-9698-463af97d47b6"
+}

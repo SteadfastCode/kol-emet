@@ -62,6 +62,14 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-095) KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…**
+  Found by the grader of KOL-080 (medium, FEATURES.md:218). KOL-092 names a client open-question
+  caller that does not exist: nothing under client/src fetches `/open-questions` (grep for
+  `open-questions` and for `question` in `client/src/composables/useEntities.js` returns nothing —
+  open questions reach the client populated on entities). So "the two client callers page until
+  `nextAfter` is null" and the `useEntities.js` entry in the Files list send the implementer to
+  code that isn't there; only the graph caller (`GraphView.vue` → `getAllGroups`) exists. This is
+  exactly the grep-before-filing check the item is supposed to have done.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

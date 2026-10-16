@@ -1,0 +1,69 @@
+{
+  "item": "KOL-079",
+  "repo": "kol-emet",
+  "mergeSha": "c034b7de6c2af7c7091c9f0983e4e923354d0550",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-16T08:08:06.003Z",
+  "gradedAtUtc": "2026-10-16T08:09:58.995Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The diff is right and the item's premise was wrong: the only signup line in `client/src/views/LoginView.vue` discloses account deletion (\"You can delete your account and all of its data at any time from Settings\"), not that reviewed generations may be used to improve the product with no free-tier opt-out, so marking that copy unbuilt is accurate and the item explicitly allows leaving a genuinely-unbuilt line unmarked."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "Diff is three markdown files only; no auth code, routes, or session/password logic changed (the LoginView/accountDeleter references are prose citations)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env/config material appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The allowance/pricing decision text in generator-v1-plan.md is untouched; only the retention bullet and Remaining-work list changed, and no billing or metering code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Nothing is deleted or migrated — the hard-delete cascade is only described in prose; `accountDeleter.js` is unchanged."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No network calls or provider integrations are added; the OpenAPI/docker-compose producers are merely cited as already shipped."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, build, deploy or release-notes artifact is touched; roadmap/wishlist are planning docs."
+    }
+  ],
+  "missed": [],
+  "summary": "The single finding is a false positive that trusted the item description over the code, and every other verifiable claim in the diff (Draft in WORKSPACE_SCOPED_MODELS, dropped Entity category enum, two built producers, tag autocomplete, TagSettings bulk ops, ChangeLog history/restore, scope limited to three docs) checks out, so the review found nothing real; triage was entirely correct.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.8672810000000001,
+  "numTurns": 17,
+  "durationMs": 110473,
+  "sessionId": "35b0e478-6b0c-4b4d-9dcc-f064e410e7f5"
+}
