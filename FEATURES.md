@@ -62,13 +62,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-096) The editor-403 test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but t…**
-  Found by the grader of KOL-077 (medium, server/tests/http/import.test.js:262). The editor-403
-  test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but that title is
-  nowhere in the document under test (alice's export holds the seeded 'Example Character'/'Example
-  World' plus 'Alice Only' — 'Zephyr Line' belongs to the unit-test fixture), so the assertion
-  passes unconditionally and would still pass if the 403 gate were removed and the whole graph
-  written into alice's workspace.
 - [ ] **(KOL-097) planIds validates only refModel/refId on group members and nothing on a group's label or a member…**
   Found by the grader of KOL-077 (medium, server/src/lib/graphImporter.js:288). planIds validates
   only `refModel`/`refId` on group members and nothing on a group's `label` or a member's
@@ -307,6 +300,13 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-096) The editor-403 test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but t…** (routine 2026-10-16, 5ad04a2)
+  Found by the grader of KOL-077 (medium, server/tests/http/import.test.js:262). The editor-403
+  test's "writes nothing" check asserts no entity titled 'Zephyr Line' exists, but that title is
+  nowhere in the document under test (alice's export holds the seeded 'Example Character'/'Example
+  World' plus 'Alice Only' — 'Zephyr Line' belongs to the unit-test fixture), so the assertion
+  passes unconditionally and would still pass if the 403 gate were removed and the whole graph
+  written into alice's workspace.
 - [x] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work** (routine 2026-10-15, c034b7d)
   This audit found three documents describing work that has already shipped, which is exactly the input that makes the
   next audit file a duplicate. (1) `docs/generator-v1-plan.md` "Remaining work" still lists **account-deletion hard

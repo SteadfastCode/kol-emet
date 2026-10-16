@@ -79,7 +79,7 @@
     "KOL-096": {
       "order": 5,
       "title": "The editor-403 test's \"writes nothing\" check asserts no entity titled 'Zephyr Line' exists, but t…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-096",
