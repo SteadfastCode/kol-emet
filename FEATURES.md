@@ -43,7 +43,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work**
+- [x] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work**
   This audit found three documents describing work that has already shipped, which is exactly the input that makes the
   next audit file a duplicate. (1) `docs/generator-v1-plan.md` "Remaining work" still lists **account-deletion hard
   delete** and the **signup disclosure copy** as not built: both shipped in KOL-021 — `Draft` is in the deleted-model

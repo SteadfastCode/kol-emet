@@ -59,42 +59,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-078": {
+    "KOL-079": {
       "order": 4,
-      "title": "`GET /health`: liveness and database readiness without a session",
-      "status": "done",
+      "title": "Three stale \"not built\" lists that make a backlog audit re-propose shipped work",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-078",
+      "branch": "routine/item/KOL-079",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-16T03:09:25.622Z",
+      "claimedAtUtc": "2026-10-16T03:18:11.769Z",
       "runId": "2026-10-16T03:09:06.128Z",
       "lastFail": null
     },
-    "KOL-079": {
-      "order": 5,
-      "title": "Three stale \"not built\" lists that make a backlog audit re-propose shipped work",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-094": {
-      "order": 6,
+      "order": 5,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 8,
+      "order": 7,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +130,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 9,
+      "order": 8,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 10,
+      "order": 9,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +164,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 11,
+      "order": 10,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -198,7 +181,7 @@
       "lastFail": null
     },
     "KOL-088": {
-      "order": 12,
+      "order": 11,
       "title": "OAuth logs the authorization code, the PKCE verifier, and every code still outstanding",
       "status": "pending",
       "attempts": 0,
@@ -215,7 +198,7 @@
       "lastFail": null
     },
     "KOL-089": {
-      "order": 13,
+      "order": 12,
       "title": "Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft",
       "status": "pending",
       "attempts": 0,
@@ -232,7 +215,7 @@
       "lastFail": null
     },
     "KOL-090": {
-      "order": 14,
+      "order": 13,
       "title": "Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly",
       "status": "pending",
       "attempts": 0,
@@ -249,7 +232,7 @@
       "lastFail": null
     },
     "KOL-091": {
-      "order": 15,
+      "order": 14,
       "title": "A chat belongs to a user but is answered from a workspace, and nothing ties the two together",
       "status": "pending",
       "attempts": 0,
@@ -266,7 +249,7 @@
       "lastFail": null
     },
     "KOL-092": {
-      "order": 16,
+      "order": 15,
       "title": "Two list routes still answer with the whole workspace",
       "status": "pending",
       "attempts": 0,
@@ -283,7 +266,7 @@
       "lastFail": null
     },
     "KOL-093": {
-      "order": 17,
+      "order": 16,
       "title": "A deploy kills in-flight requests and every live stream: handle SIGTERM",
       "status": "pending",
       "attempts": 0,
@@ -297,6 +280,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-078": {
+      "order": null,
+      "title": "`GET /health`: liveness and database readiness without a session",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-078",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-16T03:09:25.622Z",
+      "runId": "2026-10-16T03:09:06.128Z",
       "lastFail": null
     },
     "KOL-077": {
