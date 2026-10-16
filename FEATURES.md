@@ -62,14 +62,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-100) draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…**
-  Found by the grader of KOL-075 (medium, server/src/routes/drafts.js:234).
-  `draft.diagnostics.error = err.message` persists the raw generation error, and `GET /drafts/:id`
-  (line 730) returns the whole lean document — so the driver's/provider's verbatim text (a Mongo
-  pool error from a grounding read included) still reaches a caller in a plain JSON response body,
-  contradicting docs/api.md's 'the driver's own text never reaches a caller'. The source sweep
-  cannot see it because the leak is a stored field, not an `err.message` in a `res.json(...)`
-  statement, and SSE scoping does not cover this non-SSE route.
 - [ ] **(KOL-095) KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…**
   Found by the grader of KOL-080 (medium, FEATURES.md:218). KOL-092 names a client open-question
   caller that does not exist: nothing under client/src fetches `/open-questions` (grep for
@@ -273,6 +265,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-100) draft.diagnostics.error = err.message persists the raw generation error, and GET /drafts/:id (lin…** (routine 2026-10-16, e4439ab)
+  Found by the grader of KOL-075 (medium, server/src/routes/drafts.js:234).
+  `draft.diagnostics.error = err.message` persists the raw generation error, and `GET /drafts/:id`
+  (line 730) returns the whole lean document — so the driver's/provider's verbatim text (a Mongo
+  pool error from a grounding read included) still reaches a caller in a plain JSON response body,
+  contradicting docs/api.md's 'the driver's own text never reaches a caller'. The source sweep
+  cannot see it because the leak is a stored field, not an `err.message` in a `res.json(...)`
+  statement, and SSE scoping does not cover this non-SSE route.
 - [x] **(KOL-099) Rule 5 requires a string code, but body-parser's errors (entity.parse.failed, entity.too.large) c…** (routine 2026-10-16, f3c8e62)
   Found by the grader of KOL-075 (medium, server/src/middleware/errorHandler.js:171). Rule 5
   requires a string `code`, but body-parser's errors (`entity.parse.failed`, `entity.too.large`)
