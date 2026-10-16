@@ -43,25 +43,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work**
-  This audit found three documents describing work that has already shipped, which is exactly the input that makes the
-  next audit file a duplicate. (1) `docs/generator-v1-plan.md` "Remaining work" still lists **account-deletion hard
-  delete** and the **signup disclosure copy** as not built: both shipped in KOL-021 — `Draft` is in the deleted-model
-  list at `server/src/lib/accountDeleter.js:84`, and the disclosure is `client/src/views/LoginView.vue:85`. (2)
-  `docs/roadmap.md` still heads "Phase 5 — Polish (current)" and "Phase 6 — Generalize the engine (next)", although
-  Phase 6's steps all shipped (KOL-020, KOL-022, KOL-027 through KOL-031) and the `EntityType` registry now gates every
-  category write. (3) `docs/wishlist.md` still lists "Tag autocomplete on entry editor", "Bulk tag operations" and
-  "Entry revision history" as open; all three shipped (KOL-041, KOL-053, and the `ChangeLog` history view with
-  snapshot rollback). Build: mark each shipped line the way these same files already mark others — a ✅ with the item id
-  and the date — and move Phase 6 to shipped, naming what is actually next in its place (Phase 7's unbuilt halves:
-  vertical ingestion beyond the compose and OpenAPI producers, and drift detection). Nothing is deleted: a line that
-  now reads as history stays, because the goal is an accurate list rather than a shorter one. Files:
-  `docs/generator-v1-plan.md`, `docs/roadmap.md`, `docs/wishlist.md`. Verify: `git diff --name-only` names exactly those
-  three files, and `cd server && yarn test` and `cd client && yarn test --run && yarn build` are still green — this is
-  documentation only, so movement in either suite means the diff touched more than it should. Out of scope:
-  re-sequencing the roadmap or deciding what Phase 8 contains (Daniel's call), rewriting either plan's prose, and any
-  code change at all — a line that turns out to describe something genuinely unbuilt is left alone and becomes its own
-  queue item.
 
 - [ ] **(KOL-094) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-22]
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
@@ -276,6 +257,25 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-079) Three stale "not built" lists that make a backlog audit re-propose shipped work** (routine 2026-10-15, c034b7d)
+  This audit found three documents describing work that has already shipped, which is exactly the input that makes the
+  next audit file a duplicate. (1) `docs/generator-v1-plan.md` "Remaining work" still lists **account-deletion hard
+  delete** and the **signup disclosure copy** as not built: both shipped in KOL-021 — `Draft` is in the deleted-model
+  list at `server/src/lib/accountDeleter.js:84`, and the disclosure is `client/src/views/LoginView.vue:85`. (2)
+  `docs/roadmap.md` still heads "Phase 5 — Polish (current)" and "Phase 6 — Generalize the engine (next)", although
+  Phase 6's steps all shipped (KOL-020, KOL-022, KOL-027 through KOL-031) and the `EntityType` registry now gates every
+  category write. (3) `docs/wishlist.md` still lists "Tag autocomplete on entry editor", "Bulk tag operations" and
+  "Entry revision history" as open; all three shipped (KOL-041, KOL-053, and the `ChangeLog` history view with
+  snapshot rollback). Build: mark each shipped line the way these same files already mark others — a ✅ with the item id
+  and the date — and move Phase 6 to shipped, naming what is actually next in its place (Phase 7's unbuilt halves:
+  vertical ingestion beyond the compose and OpenAPI producers, and drift detection). Nothing is deleted: a line that
+  now reads as history stays, because the goal is an accurate list rather than a shorter one. Files:
+  `docs/generator-v1-plan.md`, `docs/roadmap.md`, `docs/wishlist.md`. Verify: `git diff --name-only` names exactly those
+  three files, and `cd server && yarn test` and `cd client && yarn test --run && yarn build` are still green — this is
+  documentation only, so movement in either suite means the diff touched more than it should. Out of scope:
+  re-sequencing the roadmap or deciding what Phase 8 contains (Daniel's call), rewriting either plan's prose, and any
+  code change at all — a line that turns out to describe something genuinely unbuilt is left alone and becomes its own
+  queue item.
 - [x] **(KOL-078) `GET /health`: liveness and database readiness without a session** (routine 2026-10-15, b854f69)
   Every route in `createApp` is behind `requireAuth` except `/auth/*`, `/oauth`, `/templates`, `/mcp` and the bridge, so
   there is no way to ask a deployed instance whether it is working. The repo runbook's deploy signal is Railway's own

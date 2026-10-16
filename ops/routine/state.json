@@ -62,7 +62,7 @@
     "KOL-079": {
       "order": 4,
       "title": "Three stale \"not built\" lists that make a backlog audit re-propose shipped work",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-079",
