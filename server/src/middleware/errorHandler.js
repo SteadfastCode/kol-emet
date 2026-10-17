@@ -25,7 +25,7 @@
  *   2. Mongoose `ValidationError`      → 400 { error: 'VALIDATION_FAILED', fields }
  *   3. duplicate key (11000)           → 409 { error: 'DUPLICATE', fields }
  *   4. Mongoose `CastError`            → 400 { error: 'INVALID_VALUE', fields }
- *   5. explicit `status` *and* `code`  → that status, { error: code }
+ *   5. an `httpError()` of ours        → that status, { error: code }
  *   6. body-parser's own `type`        → that type's status, { error: code }
  *   7. anything else                   → 500 { error: 'INTERNAL', ref }
  *
@@ -41,11 +41,26 @@
  * changing a status a route chose deliberately is out of scope — while dropping
  * a body that named the model and the driver's cast path.
  *
- * Rule 5 requires *both* an integer `status` and a string `code`, which is what
- * `httpError()` below produces. Demanding both is deliberate: a Mongo error
- * carries a numeric `code` and a Node system error a string one (`ENOENT`,
- * `ECONNREFUSED`) with no `status`, and neither must be able to talk its way
- * into becoming the body of a 4xx.
+ * Rule 5 requires the error to have been raised by `httpError()` below — which
+ * marks its own with a module-private Symbol nothing else can set — as well as
+ * carrying an integer `status` and a string `code`. Demanding the pair was
+ * deliberate from the start: a Mongo error carries a numeric `code` and a Node
+ * system error a string one (`ENOENT`, `ECONNREFUSED`) with no `status`, and
+ * neither must be able to talk its way into becoming the body of a 4xx.
+ *
+ * Demanding the *mark* is KOL-101, because a shape is not provenance and this
+ * particular shape is one a dependency produces by the thousand. The OpenAI
+ * client — which every AI provider in the registry is reached through,
+ * Anthropic and Google included — hangs exactly that pair on every API error
+ * it raises: `status` from the response, `code` straight out of the body
+ * (`invalid_api_key`, `insufficient_quota`, `context_length_exceeded`). So the
+ * commonest provider failures satisfied rule 5 and got the provider's own
+ * string published as if this codebase had chosen it — a code no client can
+ * safely branch on, since it changes with the provider and with the SDK
+ * version — and, being "mapped", they were logged a tier further up than an
+ * unmapped error and lost their stack at the tier a deployment runs. With the
+ * mark they fall to the last rule, which is what they always were: something
+ * nobody here mapped, answered with a `ref` and logged in full.
  *
  * Rule 6 is the half of rule 5 that demand left out (KOL-099). Requiring a
  * string `code` keeps a Mongo error out, but it also kept out the one kind of
@@ -114,6 +129,19 @@ export function errorLog(level, msg) {
 }
 
 /**
+ * The mark rule 5 looks for: this codebase raised the error on purpose.
+ *
+ * A module-private Symbol, so nothing can carry it by accident — not a
+ * dependency's error object, not a JSON body parsed into one, not a property
+ * copied across by `Object.assign`, and not anything that crossed a serialising
+ * boundary, since `JSON.stringify` drops symbol keys. `httpError()` is the only
+ * thing that sets it, the way `publicFailure()` in `lib/failureNote.js` is the
+ * only thing that sets `publicMessage`: in both places the claim being made is
+ * about who wrote the string, which only the author can assert.
+ */
+const RAISED_HERE = Symbol('errorHandler.raisedHere');
+
+/**
  * An error a route raises on purpose, for rule 5 to turn back into the status
  * and code it names.
  *
@@ -132,6 +160,7 @@ export function errorLog(level, msg) {
  */
 export function httpError(status, code, extra = {}) {
   const err = new Error(`${status} ${code}`);
+  err[RAISED_HERE] = true;
   err.status = status;
   err.code = code;
   if (extra.fields) err.fields = extra.fields;
@@ -228,18 +257,22 @@ export function classify(err) {
     };
   }
 
-  if (Number.isInteger(err?.status) && err.status >= 400 && err.status <= 599 && typeof err.code === 'string' && err.code) {
+  // The mark first: the status and the code are only ours to publish because
+  // `httpError()` raised this, and a provider SDK error carries the same pair.
+  if (err?.[RAISED_HERE] === true
+      && Number.isInteger(err.status) && err.status >= 400 && err.status <= 599
+      && typeof err.code === 'string' && err.code) {
     const fields = Array.isArray(err.fields) && err.fields.length ? { fields: err.fields } : {};
     return {
       status: err.status,
-      rule: 'explicit status and code',
+      rule: 'httpError status and code',
       body: { error: err.code, ...fields },
     };
   }
 
   // Disjoint from rule 5 by construction, so the order between them does not
-  // matter: body-parser hangs no `code` on its errors and `httpError()` hangs
-  // no `type` on its own.
+  // matter: body-parser's errors are raised by body-parser, so they carry no
+  // mark, and `httpError()` hangs no `type` on its own.
   const parser = typeof err?.type === 'string' ? BODY_PARSER_RULES[err.type] : undefined;
   if (parser) {
     return {
@@ -290,7 +323,7 @@ export function errorHandler(err, req, res, next) {
   // Short on purpose: it is meant to be read off a screen and typed into a
   // support message, and it indexes a log line rather than identifying anything.
   const ref = randomBytes(4).toString('hex');
-  errorLog('light', `${where} → 500 INTERNAL ref=${ref} (source: rule 7, no rule matched — not a ValidationError, a duplicate key, a CastError, a body-parser failure, or an error carrying both status and code)`);
+  errorLog('light', `${where} → 500 INTERNAL ref=${ref} (source: rule 7, no rule matched — not a ValidationError, a duplicate key, a CastError, a body-parser failure, or an httpError() of ours)`);
   errorLog('normal', `${where} ref=${ref}: ${describe(err)}`);
   // The stack beside the ref, at the light tier, is the whole trade: the body
   // says nothing, so the log has to say everything.

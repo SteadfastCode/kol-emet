@@ -23,12 +23,20 @@
  *     still reaches the person who asked, verbatim and with no `ref`, because
  *     sanitising it would be a worse answer than the sentence;
  *   - the row ends `failed` either way, with `errorCode` set, so a client
- *     branches on one field whatever killed the run.
+ *     branches on one field whatever killed the run;
+ *   - and that a provider failure *carrying its own `code`* — which is how the
+ *     commonest ones arrive, and what this suite's first stand-in did not send
+ *     — is answered the same way, rather than publishing the dependency's
+ *     string as a code of ours and logging nothing at the default tier
+ *     (KOL-101).
  *
  * Falsification check: put `err.message` back into either the `diagnostics`
  * assignment or the `error` frame in `src/routes/drafts.js` and the first test
  * fails naming the string it found. Drop the `publicMessage` rule from
- * `src/lib/failureNote.js` and the refusal test fails instead.
+ * `src/lib/failureNote.js` and the refusal test fails instead. Drop the
+ * `RAISED_HERE` test from rule 5 of `src/middleware/errorHandler.js` and the
+ * `invalid_api_key` group fails, because that failure becomes a "mapped" one:
+ * the provider's own code, no `ref`, and no log line holding the reason.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_DRAFT_FAILURE_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -91,6 +99,26 @@ const LEAK = 'MongoServerSelectionError: connect ECONNREFUSED mongodb://wiki:hun
 /** Fragments asserted separately, so a partial leak cannot pass as a clean run. */
 const LEAK_FRAGMENTS = ['hunter2', 'cluster0.internal.invalid', 'MongoServerSelectionError', 'ECONNREFUSED'];
 
+/**
+ * How the stand-in refuses. Two shapes, because the difference between them is
+ * the whole of KOL-101: the OpenAI client reads `error.code` out of the body
+ * onto the error it raises, beside the integer `status` it took from the
+ * response — and that pair is exactly what `classify()`'s rule 5 used to accept
+ * as "a refusal this codebase raised on purpose".
+ */
+const REFUSALS = Object.freeze({
+  /** A 500 with no `code`: the shape this suite was first written against. */
+  server_error: { status: 500, body: { error: { message: LEAK, type: 'server_error' } } },
+  /** A 401 that does carry one — a wrong or revoked key, the commonest of all. */
+  invalid_api_key: {
+    status: 401,
+    body: { error: { message: LEAK, type: 'invalid_request_error', code: 'invalid_api_key' } },
+  },
+});
+
+/** Which of the two the stand-in is currently answering with. */
+let refusal = REFUSALS.server_error;
+
 let app;
 let provider;
 let alice;
@@ -107,9 +135,9 @@ function startFailingProvider() {
   const server = http.createServer((req, res) => {
     req.resume();
     req.on('end', () => {
-      log('light', `stand-in provider refused ${req.method} ${req.url} with 500 (source: this suite)`);
-      res.writeHead(500, { 'Content-Type': 'application/json', 'x-should-retry': 'false' });
-      res.end(JSON.stringify({ error: { message: LEAK, type: 'server_error' } }));
+      log('light', `stand-in provider refused ${req.method} ${req.url} with ${refusal.status} (source: this suite's \`refusal\`)`);
+      res.writeHead(refusal.status, { 'Content-Type': 'application/json', 'x-should-retry': 'false' });
+      res.end(JSON.stringify(refusal.body));
     });
   });
   return new Promise((resolve, reject) => {
@@ -182,6 +210,7 @@ after(async () => {
 
 beforeEach(async () => {
   await Draft.deleteMany({});
+  refusal = REFUSALS.server_error;
 });
 
 describe('a generation that fails on the provider', () => {
@@ -260,5 +289,56 @@ describe('a refusal this codebase wrote on purpose', () => {
     } finally {
       process.env.STEADFAST_AI_API_KEY = key;
     }
+  });
+});
+
+describe('a provider failure that carries its own code', () => {
+  // The case the stand-in above could not produce: its body has a `type` and no
+  // `code`, so the error reached the last rule by accident rather than by the
+  // rules holding. `invalid_api_key`, `insufficient_quota` and
+  // `context_length_exceeded` all arrive with one.
+  const PROVIDER_CODE = 'invalid_api_key';
+
+  test('is INTERNAL with a ref, not the provider\'s string published as a code', async () => {
+    refusal = REFUSALS.invalid_api_key;
+    const { events, lines } = await generate(alice);
+
+    const created = events.find(e => e.type === 'created');
+    const failure = events.find(e => e.type === 'error');
+    assert.ok(failure, `expected an error frame: ${JSON.stringify(events)}`);
+
+    assert.equal(failure.code, 'INTERNAL',
+      `a code a client branches on is one this API chose, not one the provider's SDK read off a body: ${failure.code}`);
+    assert.match(failure.ref, /^[0-9a-f]{8}$/, 'a withheld failure is an indexed one');
+    assert.equal(failure.message, `Something went wrong on the server. (INTERNAL, ref ${failure.ref})`);
+
+    const single = await alice.agent.get(`/drafts/${created.draftId}`);
+    assert.equal(single.status, 200, `GET /drafts/:id failed: ${single.status} ${single.text}`);
+    assert.equal(single.body.status, 'failed');
+    assert.equal(single.body.diagnostics.errorCode, 'INTERNAL');
+    assert.equal(single.body.diagnostics.errorRef, failure.ref);
+    log('normal', `stored note: ${single.body.diagnostics.error} (${single.body.diagnostics.errorCode})`);
+
+    const list = await alice.agent.get('/drafts');
+    assert.equal(list.status, 200);
+
+    for (const [where, text] of [['the stream', JSON.stringify(events)], ['GET /drafts/:id', single.text], ['GET /drafts', list.text]]) {
+      assert.ok(!text.includes(PROVIDER_CODE),
+        `${where} published "${PROVIDER_CODE}" — a dependency's string is not this API's code: ${text.slice(0, 400)}`);
+      for (const fragment of [...LEAK_FRAGMENTS, LEAK]) {
+        assert.ok(!text.includes(fragment),
+          `${where} published "${fragment}": ${text.slice(0, 400)}`);
+      }
+    }
+
+    // The half this item was really about: a "mapped" failure logs the error
+    // only from `normal` up, so at the tier a deployment runs the commonest
+    // generation failure of all left no account of itself anywhere.
+    assert.ok(lines.some(l => l.includes(failure.ref)),
+      `the ref must be in the log: ${lines.join('\n')}`);
+    assert.ok(lines.some(l => l.includes('hunter2')),
+      `and the reason with it, at light: ${lines.join('\n')}`);
+    assert.ok(lines.some(l => l.includes('rule 3')),
+      `and the line must name the rule that chose it: ${lines.join('\n')}`);
   });
 });

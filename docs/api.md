@@ -116,6 +116,14 @@ A route may also raise a refusal of its own as a status with a code (`httpError(
 in use: `INVALID_ID` (see [Route parameters](#route-parameters)), `INVALID_WORKSPACE_NAME`,
 `NOT_WORKSPACE_OWNER` / `NOT_WORKSPACE_EDITOR` / `NOT_WORKSPACE_VIEWER`, `EXPORT_NOT_CONFIGURED`.
 
+It has to come from `httpError()` itself, which marks the errors it raises; carrying a `status` and
+a `code` is not enough (KOL-101). The OpenAI client — which every AI provider in the registry is
+reached through — hangs exactly that pair on every API error it raises, with `code` taken straight
+out of the response body (`invalid_api_key`, `insufficient_quota`, `context_length_exceeded`), and
+those are **500 `INTERNAL` with a `ref`**: a string owned by a provider's SDK is not a code this API
+chose, and not one a client can branch on, since it changes with the provider and with the SDK
+version. The reason goes to the log under that `ref`, as for any other 500.
+
 Everything documented per-route below is unchanged: a 400/403/404/409 a route answers on purpose
 carries the sentence it has always carried, because that wording is part of its contract. Only the
 catch-all was replaced.
