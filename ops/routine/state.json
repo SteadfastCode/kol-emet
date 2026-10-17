@@ -79,7 +79,7 @@
     "KOL-101": {
       "order": 5,
       "title": "Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-101",

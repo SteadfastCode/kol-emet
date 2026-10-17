@@ -62,17 +62,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-101) Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…**
-  Found by the grader of KOL-100 (medium, server/src/lib/failureNote.js:116). Rule 2 reuses
-  `classify()`, whose rule 5 ('explicit status and code') matches raw provider SDK errors: the
-  OpenAI client sets `status` (int) and `code` from the response body (`invalid_api_key`,
-  `insufficient_quota`, `context_length_exceeded`), so the commonest real generation failures are
-  treated as 'mapped' — stored with `errorRef: null`, the generic sentence 'Something went wrong
-  on the server. (<provider code>)', and, at the default `light` tier, no log of the error at all
-  (rule 2 logs the error only at `normal`/`verbose`). The item's own trade — 'the note says
-  nothing, so the log has to say everything' — is broken exactly where it matters, and the
-  published code is a dependency-owned string. The new suite misses this because its stand-in body
-  carries `type` but no `code` (draftFailure.test.js:112), so only rule 3 is exercised.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
@@ -275,6 +264,17 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-101) Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…** (routine 2026-10-17, 1234105)
+  Found by the grader of KOL-100 (medium, server/src/lib/failureNote.js:116). Rule 2 reuses
+  `classify()`, whose rule 5 ('explicit status and code') matches raw provider SDK errors: the
+  OpenAI client sets `status` (int) and `code` from the response body (`invalid_api_key`,
+  `insufficient_quota`, `context_length_exceeded`), so the commonest real generation failures are
+  treated as 'mapped' — stored with `errorRef: null`, the generic sentence 'Something went wrong
+  on the server. (<provider code>)', and, at the default `light` tier, no log of the error at all
+  (rule 2 logs the error only at `normal`/`verbose`). The item's own trade — 'the note says
+  nothing, so the log has to say everything' — is broken exactly where it matters, and the
+  published code is a dependency-owned string. The new suite misses this because its stand-in body
+  carries `type` but no `code` (draftFailure.test.js:112), so only rule 3 is exercised.
 - [x] **(KOL-095) KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…** (routine 2026-10-16, 1356ce4)
   Found by the grader of KOL-080 (medium, FEATURES.md:218). KOL-092 names a client open-question
   caller that does not exist: nothing under client/src fetches `/open-questions` (grep for
