@@ -1,0 +1,110 @@
+{
+  "item": "KOL-099",
+  "repo": "kol-emet",
+  "mergeSha": "f3c8e62f93ab45cb294042e3acbccad0bd3dc40b",
+  "completedAtUtc": "2026-10-16T10:47:31.854Z",
+  "completeRunId": "2026-10-16T10:10:06.140Z",
+  "reviewRunId": "2026-10-17T07:01:09.000Z",
+  "reviewedAtUtc": "2026-10-17T07:10:47.289Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 19597,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "server/src/middleware/errorHandler.js"
+      ],
+      "part": null,
+      "bytes": 8807,
+      "contextBytes": 0,
+      "promptTokens": 3100,
+      "completionTokens": 198,
+      "latencyMs": 18432,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/errorShape.test.js"
+      ],
+      "part": null,
+      "bytes": 10790,
+      "contextBytes": 0,
+      "promptTokens": 3481,
+      "completionTokens": 151,
+      "latencyMs": 17192,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/middleware/errorHandler.js",
+      "line": 171,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "body-parser's errors are not handled correctly according to Rule 5.",
+      "scenario": "When a malformed JSON body or an over-100kB body is received on any endpoint except `/import`, the error handler falls back to rule 6 and answers with a 500 `INTERNAL` status instead of the expected 400 or 413. This results in client mistakes being reported as server faults, with a `ref` and logged stack per bad request.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle body-parser's errors correctly according to Rule 5."
+      }
+    },
+    {
+      "file": "server/tests/http/errorShape.test.js",
+      "line": 305,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The test checks for 'source: rule 7' but the code only defines 'rule 6'.",
+      "scenario": "When running the test suite, the assertion `assert.match(summary, /source: rule 7/, ...)` will fail because the actual source is 'rule 6', not 'rule 7'. This discrepancy between the expected and actual values could lead to a false negative in the test.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code defines 'source: rule 6' but the test checks for 'source: rule 7', leading to a mismatch."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces new error handling rules for body-parser errors but fails to correctly handle them according to Rule 5, leading to incorrect status codes and logging of unnecessary information. · One finding identified.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 19695,
+    "completionTokens": 676
+  },
+  "latencyMs": 88273
+}

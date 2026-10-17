@@ -1,0 +1,137 @@
+{
+  "item": "KOL-100",
+  "repo": "kol-emet",
+  "mergeSha": "e4439ab4c72c0a817ed968b26cbc948bd9eb4e72",
+  "completedAtUtc": "2026-10-16T12:27:14.122Z",
+  "completeRunId": "2026-10-16T12:10:06.157Z",
+  "reviewRunId": "2026-10-17T07:01:09.000Z",
+  "reviewedAtUtc": "2026-10-17T07:14:16.111Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 50956,
+  "contextFiles": 10,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/draftApplier.js"
+      ],
+      "part": null,
+      "bytes": 11713,
+      "contextBytes": 0,
+      "promptTokens": 3544,
+      "completionTokens": 161,
+      "latencyMs": 17965,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/failureNote.js",
+        "server/src/lib/generator.js",
+        "server/src/models/Draft.js",
+        "server/src/routes/drafts.js"
+      ],
+      "part": null,
+      "bytes": 14548,
+      "contextBytes": 0,
+      "promptTokens": 4347,
+      "completionTokens": 214,
+      "latencyMs": 23447,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/draftFailure.test.js"
+      ],
+      "part": null,
+      "bytes": 12875,
+      "contextBytes": 0,
+      "promptTokens": 3935,
+      "completionTokens": 230,
+      "latencyMs": 22845,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/errorShape.test.js",
+        "server/tests/unit/failureNote.test.js"
+      ],
+      "part": null,
+      "bytes": 11820,
+      "contextBytes": 0,
+      "promptTokens": 3744,
+      "completionTokens": 169,
+      "latencyMs": 19094,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/drafts.js",
+      "line": 234,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "`draft.diagnostics.error = err.message` persists the raw generation error, which contradicts the documentation.",
+      "scenario": "When a draft fails and `err.message` is stored in `draft.diagnostics.error`, it can be exposed to the caller via `GET /drafts/:id`, potentially revealing sensitive information such as the driver's or provider's verbatim text.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`draft.diagnostics.error = err.message` persists the raw generation error, which can be exposed to the caller via `GET /drafts/:id`, contradicting the documentation."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/tests/http/draftFailure.test.js:104"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/tests/http/draftFailure.test.js:187"
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "server/tests/http/draftFailure.test.js:203"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces a potential security risk by storing raw error messages, which can be exposed to clients in plain JSON responses. · The change introduces a new file `failureNote.js` to handle failure descriptions and classification, but it does not address the issue of raw error messages being stored in the database and potentially exposed via API responses. The existing code still persists raw error messages in `draft.diagnostics.error`, which can lead to security vulnerabilities by exposing sensitive information. · The change introduces a test file that highlights a potential security issue where sensitive error messages are stored and exposed. The main defect is the persistence of raw generation errors in `draft.diagnostics.error`, which contradicts the documentation's claim that such information should not be exposed to callers. · One high-severity defect found.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 46620,
+    "completionTokens": 1504
+  },
+  "latencyMs": 208639
+}

@@ -1,0 +1,67 @@
+{
+  "item": "KOL-095",
+  "repo": "kol-emet",
+  "mergeSha": "1356ce440997d31f960c137850528dfd2d3efdf4",
+  "completedAtUtc": "2026-10-16T12:33:28.416Z",
+  "completeRunId": "2026-10-16T12:10:06.157Z",
+  "reviewRunId": "2026-10-17T07:01:09.000Z",
+  "reviewedAtUtc": "2026-10-17T07:15:08.527Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 3737,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": null,
+      "bytes": 3737,
+      "contextBytes": 10952,
+      "promptTokens": 4284,
+      "completionTokens": 146,
+      "latencyMs": 19747,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The description promises to build a client-side open-question list view, but the diff does not include any changes to implement this.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 12794,
+    "completionTokens": 305
+  },
+  "latencyMs": 52359
+}

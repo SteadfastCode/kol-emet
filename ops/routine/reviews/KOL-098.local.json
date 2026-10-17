@@ -1,0 +1,195 @@
+{
+  "item": "KOL-098",
+  "repo": "kol-emet",
+  "mergeSha": "e7cee9b8693e2307511ece3c6f42c0067d1af32f",
+  "completedAtUtc": "2026-10-16T10:36:26.960Z",
+  "completeRunId": "2026-10-16T10:10:06.140Z",
+  "reviewRunId": "2026-10-17T07:01:09.000Z",
+  "reviewedAtUtc": "2026-10-17T07:09:18.937Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 64754,
+  "contextFiles": 11,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/architecture.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 6679,
+      "contextBytes": 7474,
+      "promptTokens": 4084,
+      "completionTokens": 133,
+      "latencyMs": 18660,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11222,
+      "contextBytes": 0,
+      "promptTokens": 3187,
+      "completionTokens": 151,
+      "latencyMs": 16126,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/middleware/auth.js",
+        "server/src/routes/bridge.js"
+      ],
+      "part": null,
+      "bytes": 12291,
+      "contextBytes": 0,
+      "promptTokens": 3883,
+      "completionTokens": 230,
+      "latencyMs": 22462,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/oauth.js",
+        "server/tests/http/bridge.test.js"
+      ],
+      "part": null,
+      "bytes": 9465,
+      "contextBytes": 0,
+      "promptTokens": 3122,
+      "completionTokens": 170,
+      "latencyMs": 17107,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/oauth.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10801,
+      "contextBytes": 0,
+      "promptTokens": 3356,
+      "completionTokens": 180,
+      "latencyMs": 18273,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/oauth.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8710,
+      "contextBytes": 0,
+      "promptTokens": 2813,
+      "completionTokens": 167,
+      "latencyMs": 15920,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/sessionRevocation.test.js",
+        "server/tests/unit/requireAuth.test.js"
+      ],
+      "part": null,
+      "bytes": 5770,
+      "contextBytes": 8714,
+      "promptTokens": 4228,
+      "completionTokens": 142,
+      "latencyMs": 19137,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 103,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "A revoked session can still mint a new connector grant.",
+      "scenario": "An attacker with access to a device that was signed out can still call `setMcpUser(userId)` and complete the connector grant, binding the MCP bearer identity to the account and regaining full read/write through `/mcp`.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code directly reads `req.session.userId` without any authentication guard on routes like `POST /authorize`, allowing a revoked session to mint a new connector grant."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "docs/api.md:57"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/tests/http/oauth.test.js:78"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "Found a high-severity security issue where a revoked session can still bind the MCP identity. · The change introduces a security vulnerability where a revoked session can mint a new connector grant, allowing unauthorized access to the MCP bearer identity and associated resources. · The change introduces a new middleware `requireLoginSession` to ensure that only live, unrevoked login sessions can mint connector grants. However, the GET handler of `/authorize` in `bridge.js` still reads `req.session.userId` directly without using this middleware, allowing revoked sessions to complete the authorization flow. · The change introduces a security vulnerability where a revoked session can still mint a new grant, allowing unauthorized access. · The change introduces a security vulnerability where a revoked session can still complete the connector grant, allowing unauthorized access to the workspace through `/mcp`. · The change introduces tests for various scenarios related to OAuth authorization and token issuance. However, it does not address the security issue where a revoked session can still bind the MCP identity and gain full access. · Found one high-severity defect related to session revocation and authorization.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 73729,
+    "completionTokens": 2463
+  },
+  "latencyMs": 331986
+}

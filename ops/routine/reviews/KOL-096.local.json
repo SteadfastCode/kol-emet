@@ -1,0 +1,80 @@
+{
+  "item": "KOL-096",
+  "repo": "kol-emet",
+  "mergeSha": "5ad04a2aab388e2a320c27c7e2344dccaa89f8a6",
+  "completedAtUtc": "2026-10-16T10:14:49.336Z",
+  "completeRunId": "2026-10-16T10:10:06.140Z",
+  "reviewRunId": "2026-10-17T07:01:09.000Z",
+  "reviewedAtUtc": "2026-10-17T07:03:06.627Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 2435,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/tests/http/import.test.js"
+      ],
+      "part": null,
+      "bytes": 2435,
+      "contextBytes": 11455,
+      "promptTokens": 3907,
+      "completionTokens": 137,
+      "latencyMs": 16259,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/import.test.js",
+      "line": 271,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test does not verify that the import was refused due to lack of permissions.",
+      "scenario": "If the 403 gate is removed and the whole graph written into alice's workspace, the assertion will still pass because it only checks for unchanged ids, not actual permission checks.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test asserts that nothing of the document may have been written by comparing the graph IDs before and after the import attempt. If the 403 gate is removed, the assertion will still pass because it only checks for unchanged ids, not actual permission checks."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The test does not verify that the import was refused due to lack of permissions.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 11663,
+    "completionTokens": 331
+  },
+  "latencyMs": 46337
+}

@@ -1,0 +1,68 @@
+{
+  "item": "KOL-097",
+  "repo": "kol-emet",
+  "mergeSha": "2a310eaa8c1bbaf7dfafa12aa6cc90eeff3c61fa",
+  "completedAtUtc": "2026-10-16T10:21:21.421Z",
+  "completeRunId": "2026-10-16T10:10:06.140Z",
+  "reviewRunId": "2026-10-17T07:01:09.000Z",
+  "reviewedAtUtc": "2026-10-17T07:03:46.695Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 8804,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/src/lib/graphImporter.js",
+        "server/tests/unit/graphImporter.test.js"
+      ],
+      "part": null,
+      "bytes": 8804,
+      "contextBytes": 0,
+      "promptTokens": 2878,
+      "completionTokens": 191,
+      "latencyMs": 16678,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces validation for nullable string fields on group members and entity types, but it does not fully address the issue of non-string values causing a CastError during insertion. This can lead to a 500 error and a partially written graph.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 8597,
+    "completionTokens": 350
+  },
+  "latencyMs": 40004
+}
