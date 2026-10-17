@@ -79,18 +79,18 @@
     "KOL-101": {
       "order": 5,
       "title": "Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-101",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-17T21:27:13.567Z",
+      "runId": "2026-10-17T21:11:06.123Z",
       "lastFail": null
     },
     "KOL-014": {

@@ -62,7 +62,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-101) Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…**
+- [x] **(KOL-101) Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…**
   Found by the grader of KOL-100 (medium, server/src/lib/failureNote.js:116). Rule 2 reuses
   `classify()`, whose rule 5 ('explicit status and code') matches raw provider SDK errors: the
   OpenAI client sets `status` (int) and `code` from the response body (`invalid_api_key`,
