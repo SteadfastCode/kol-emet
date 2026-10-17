@@ -22,12 +22,26 @@
  *      file they uploaded. `publicFailure()` below is the only way to set it,
  *      so nothing can acquire one by accident.
  *   2. `classify()` maps it — a Mongoose ValidationError, a duplicate key, a
- *      CastError, an `httpError()`, a body-parser failure → that rule's code
- *      and a sentence of ours. The code is published; the error's text, the
- *      offending values and the index names are not.
+ *      CastError, an `httpError()` of ours, a body-parser failure → that
+ *      rule's code and a sentence of ours. The code is published; the error's
+ *      text, the offending values and the index names are not.
  *   3. anything else → `INTERNAL` and a `ref`, with the real error written to
  *      the server log beside that same ref. Rule 7's trade, for a field: the
  *      stored note says nothing, so the log has to say everything.
+ *
+ * A provider's own error is rule 3, and that took a second pass to be true
+ * (KOL-101). Rule 2 is `classify()`, whose rule 5 read "an integer `status` and
+ * a string `code`" as "raised on purpose" — and the OpenAI client, which every
+ * provider in the registry is reached through, hangs that exact pair on every
+ * API error it raises, `code` taken straight from the response body. So
+ * `invalid_api_key`, `insufficient_quota` and `context_length_exceeded` — the
+ * commonest ways a real generation dies — were stored as *mapped*: a
+ * dependency-owned code published as if this codebase had chosen it, no `ref`
+ * to quote, and, at the default `light` tier, no log of the error at all, since
+ * rule 2 logs it only from `normal` up. The trade below was broken exactly
+ * where it mattered most. `httpError()` now marks its own errors and
+ * `classify()` demands the mark, so a provider failure lands on rule 3, where
+ * the sentence says nothing *and the log says everything*.
  *
  * The rules come from `classify()` rather than a second table of the same
  * shape: one mapping, two destinations. What differs is only where the answer
@@ -125,7 +139,7 @@ export function describeFailure(err, where) {
   }
 
   const ref = randomBytes(4).toString('hex');
-  errorLog('light', `${where} → stored INTERNAL ref=${ref} (source: rule 3, no rule matched — the error was not raised by publicFailure and is not a ValidationError, a duplicate key, a CastError, a body-parser failure or an error carrying both status and code)`);
+  errorLog('light', `${where} → stored INTERNAL ref=${ref} (source: rule 3, no rule matched — the error was not raised by publicFailure or httpError and is not a ValidationError, a duplicate key, a CastError or a body-parser failure)`);
   errorLog('normal', `${where} ref=${ref}: ${describe(err)}`);
   // The stack beside the ref, at the light tier, for the same reason the
   // middleware does it: the note says nothing, so the log has to say it all.

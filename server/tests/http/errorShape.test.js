@@ -19,8 +19,12 @@
  *     with a `ref` and no `message` — and that same `ref` is in the captured
  *     server log, beside the real stack, which is the whole trade: the body
  *     says nothing, so the log has to say everything;
- *   - an error carrying an explicit `status` and `code` becomes exactly those,
- *     which is how a route raises a coded refusal from inside a helper;
+ *   - an `httpError()` becomes exactly the status and code it names, which is
+ *     how a route raises a coded refusal from inside a helper — and that the
+ *     mark it carries, not the shape, is what rule 5 reads: a **provider SDK
+ *     error** carrying the very same pair (the OpenAI client sets `status` from
+ *     the response and `code` from its body) is a 500 with a `ref`, not that
+ *     dependency's string published as a code of this API's (KOL-101);
  *   - a `CastError` is 400 `INVALID_VALUE` and not a 500, because those routes
  *     answered 400 for an uncastable value before this middleware existed and
  *     KOL-075 moves no status a route chose deliberately;
@@ -44,7 +48,10 @@
  *     `GET /drafts/:id` returns the whole document, so the provider's own HTTP
  *     body reached a caller in a plain JSON response a request later (KOL-100).
  *
- * Falsification check: drop `app.use(errorHandler)` from `src/app.js` and the
+ * Falsification check: drop the `RAISED_HERE` test from rule 5 and the provider
+ * group fails: `classify()` maps an error nobody here raised, and
+ * `/probe/provider` answers 401 `invalid_api_key`. Drop `app.use(errorHandler)`
+ * from `src/app.js` and the
  * first three groups fail (Express's own handler answers HTML and, outside
  * production, the stack). Put `err.message` back into any router's catch and
  * the source sweep fails naming the file and line. Delete a row from
@@ -75,6 +82,9 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import express from 'express';
+// The real client, so the error whose shape this suite turns on is built by the
+// dependency that produces it rather than guessed at with a literal.
+import { APIError } from 'openai';
 import mongoose from 'mongoose';
 import session from 'express-session';
 import request from 'supertest';
@@ -202,12 +212,40 @@ function buildProbeApp() {
     next(new Error(`connection pool destroyed for ${SECRET_URI}`));
   });
 
+  // An error from the AI client every provider in the registry is reached
+  // through, raised the way a wrong key really raises one. Reachable in the
+  // deployment but not on demand through a route, like the three above.
+  probeApp.get('/probe/provider', (req, res, next) => {
+    next(providerError(PROVIDER_FAILURES[0]));
+  });
+
   probeApp.use(errorHandler);
   return probeApp;
 }
 
 /** Stands in for the connection string a pool error would carry. */
 const SECRET_URI = 'mongodb+srv://kolemet:s3cr3t-pa55@cluster0.example.net/kol_emet';
+
+/**
+ * The three ways a generation really dies, as bodies the provider sends back.
+ * Every one carries a `code`, which is the half rule 5 used to read as proof
+ * that this codebase had raised the error itself.
+ */
+const PROVIDER_FAILURES = [
+  { status: 401, code: 'invalid_api_key', type: 'invalid_request_error', message: 'Incorrect API key provided: sk-live-TOPSECRET' },
+  { status: 429, code: 'insufficient_quota', type: 'insufficient_quota', message: 'You exceeded your current quota' },
+  { status: 400, code: 'context_length_exceeded', type: 'invalid_request_error', message: "This model's maximum context length is 8192 tokens" },
+];
+
+/** One of those bodies, turned into an error by the client that would raise it. */
+function providerError({ status, code, type, message }) {
+  const err = APIError.generate(status, { error: { message, type, code } }, undefined, new Headers());
+  // The premise of the group below: if an SDK upgrade stopped hanging this pair
+  // on its errors, those tests would pass without testing anything.
+  assert.equal(err.status, status, 'the client sets an integer status');
+  assert.equal(err.code, code, 'and a string code, read out of the response body');
+  return err;
+}
 
 before(async () => {
   await db.connect();
@@ -669,5 +707,50 @@ describe('the sweep, asserted over the source', () => {
       assert.ok(names.includes(expected), `${expected} must be in the sweep: ${names.join(', ')}`);
     }
     assert.ok(!names.some(n => n.endsWith('bridge.js') || n.endsWith('mcp.js')), 'the two out-of-scope routers stay out');
+  });
+});
+
+describe('an error from the AI client that carries the same status and code', () => {
+  test('is not rule 5 — a shape is not provenance', () => {
+    for (const failure of PROVIDER_FAILURES) {
+      const mapped = classify(providerError(failure));
+      assert.equal(mapped, null,
+        `${failure.code} must not be mapped: a provider's own string is not a code this API chose, and it changes with the provider and the SDK version (got ${JSON.stringify(mapped)})`);
+    }
+  });
+
+  test('while the same pair raised by httpError is mapped, because it is marked', () => {
+    const marked = classify(httpError(503, 'EXPORT_NOT_CONFIGURED'));
+    assert.ok(marked, 'httpError marks its own, which is what rule 5 reads');
+    assert.equal(marked.status, 503);
+    assert.deepEqual(marked.body, { error: 'EXPORT_NOT_CONFIGURED' });
+
+    // The same shape, hand-built and unmarked, is not: the mark is the claim.
+    const lookalike = Object.assign(new Error('a dependency\'s own sentence'), { status: 503, code: 'EXPORT_NOT_CONFIGURED' });
+    assert.equal(classify(lookalike), null,
+      'an error nobody here raised cannot acquire rule 5 by carrying the right two properties');
+  });
+
+  test('is 500 INTERNAL with a ref through the handler, publishing neither the code nor the key', async () => {
+    const { result: res, lines } = await capturingLog(() => request(probe).get('/probe/provider'));
+    const body = JSON.stringify(res.body);
+
+    log('normal', `GET /probe/provider → ${res.status} ${body}`);
+    assert.equal(res.status, 500,
+      `a provider the deployment cannot authenticate to is this deployment's fault, not the caller's: ${body}`);
+    assert.equal(res.body.error, 'INTERNAL');
+    assert.match(res.body.ref ?? '', /^[0-9a-f]{8}$/, body);
+    assert.doesNotMatch(body, /invalid_api_key/, `the dependency's code must not be published: ${body}`);
+    assert.doesNotMatch(body, /sk-live-TOPSECRET/, `nor the key it quoted back: ${body}`);
+
+    // And the trade holds where it matters most: a mapped error logs its cause
+    // only from `normal` up, so the commonest provider failure used to leave
+    // nothing behind at the tier a deployment runs.
+    const withRef = lines.filter(line => line.includes(res.body.ref));
+    const summary = withRef.find(line => line.includes('500 INTERNAL'));
+    assert.ok(summary, `one line must carry the status and the code: ${JSON.stringify(lines)}`);
+    assert.match(summary, /source: rule 7/, `and the rule that chose it: ${summary}`);
+    assert.ok(withRef.some(line => line.includes('sk-live-TOPSECRET')),
+      `the real error belongs in the log, beside the ref: ${JSON.stringify(withRef)}`);
   });
 });

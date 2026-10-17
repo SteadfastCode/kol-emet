@@ -10,10 +10,18 @@
  *   - only `publicFailure()` can mark a sentence as publishable, so an error
  *     cannot acquire one by carrying a likely-looking property;
  *   - a mapped error publishes its code and none of the error's own text;
+ *   - a *provider's* error is not a mapped one, however much it looks like it:
+ *     the OpenAI client hangs an integer `status` and a string `code` from the
+ *     response body on every API error it raises, which is the shape
+ *     `classify()`'s rule 5 used to read as "raised on purpose" (KOL-101);
  *   - everything else is INTERNAL with an eight-character ref, and the real
  *     error reaches the log under that same ref — at the light tier, which is
  *     what a deployment runs with;
  *   - no note ever contains the caught message, which is the whole point.
+ *
+ * Falsification check: drop the `RAISED_HERE` test from rule 5 of
+ * `src/middleware/errorHandler.js` and the provider group fails naming the
+ * dependency's own code in the note it found.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_FAILURE_NOTE_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -25,6 +33,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
+// The real client, not a hand-written stand-in: the whole point is the shape
+// *this dependency* produces, which a literal here would only be a guess at.
+import { APIError } from 'openai';
 
 // The module reads ERROR_LOG_LEVEL per call, so this is set before the first.
 process.env.ERROR_LOG_LEVEL = 'light';
@@ -141,5 +152,82 @@ describe('rule 3 — anything else', () => {
 
   test('each failure gets its own ref', () => {
     assert.notEqual(note(new Error('one')).ref, note(new Error('two')).ref);
+  });
+});
+
+/**
+ * The three ways a real generation dies, as the OpenAI client raises them —
+ * `status` off the response, `code` straight out of the body. Every provider in
+ * the registry is reached through this client, Anthropic and Google included,
+ * so this is not an OpenAI-only shape.
+ */
+const PROVIDER_FAILURES = [
+  { status: 401, code: 'invalid_api_key', type: 'invalid_request_error',
+    message: `Incorrect API key provided: sk-live-TOPSECRET. ${LEAK}` },
+  { status: 429, code: 'insufficient_quota', type: 'insufficient_quota',
+    message: `You exceeded your current quota. ${LEAK}` },
+  { status: 400, code: 'context_length_exceeded', type: 'invalid_request_error',
+    message: `This model's maximum context length is 8192 tokens. ${LEAK}` },
+];
+
+/** One error, built by the dependency from the body a provider really sends. */
+function providerError({ status, code, type, message }) {
+  const err = APIError.generate(status, { error: { message, type, code } }, undefined, new Headers());
+  // Guards the premise of the whole group: if a client upgrade stopped hanging
+  // this pair on its errors, these tests would pass for the wrong reason.
+  assert.equal(err.status, status, 'the client sets an integer status');
+  assert.equal(err.code, code, 'and a string code, from the response body');
+  return err;
+}
+
+describe('rule 3 — a provider error, which is not rule 2 however much it looks like one', () => {
+  for (const failure of PROVIDER_FAILURES) {
+    test(`${failure.code} is INTERNAL with a ref, not the provider's own code`, () => {
+      const n = note(providerError(failure));
+
+      assert.equal(n.code, 'INTERNAL',
+        `a dependency's string is not a code this API chose, and not one a client can branch on: ${n.code}`);
+      assert.match(n.ref, /^[0-9a-f]{8}$/, 'and the failure is indexed, because the note says nothing');
+      assert.equal(n.message, `Something went wrong on the server. (INTERNAL, ref ${n.ref})`);
+      assert.ok(!n.message.includes(failure.code), `the provider's code must not be published: ${n.message}`);
+    });
+
+    test(`${failure.code} keeps the provider's sentence out of the note and in the log`, () => {
+      const n = note(providerError(failure));
+
+      for (const fragment of ['hunter2', 'cluster0.internal.invalid', 'sk-live-TOPSECRET', 'context length']) {
+        assert.ok(!n.message.includes(fragment), `"${fragment}" must not be in ${n.message}`);
+      }
+
+      // The other half of the trade, and the half this item was really about:
+      // at the *light* tier — what a deployment runs — rule 2 logged nothing
+      // but a code, so the commonest real failure left no account of itself.
+      assert.ok(n.lines.some(l => l.includes(n.ref)), `the ref should be logged: ${n.lines.join('\n')}`);
+      assert.ok(n.lines.some(l => l.includes('hunter2')),
+        `the reason has to survive in the log, at light: ${n.lines.join('\n')}`);
+      assert.ok(n.lines.some(l => l.includes('rule 3')),
+        `and the light line names the rule that chose it: ${n.lines.join('\n')}`);
+    });
+  }
+
+  test('a connection error, which carries no status at all, is the same answer', () => {
+    // The other common one: the provider was unreachable. `APIConnectionError`
+    // has `status: undefined`, so it never satisfied rule 5 — asserted so the
+    // group covers both halves of what a dead provider produces.
+    const err = APIError.generate(undefined, undefined, LEAK, undefined);
+    const n = note(err);
+    assert.equal(n.code, 'INTERNAL');
+    assert.match(n.ref, /^[0-9a-f]{8}$/);
+  });
+});
+
+describe('a refusal this codebase raised with httpError still maps', () => {
+  test('because httpError marks its own, which is what rule 5 now reads', async () => {
+    const { httpError } = await import('../../src/middleware/errorHandler.js');
+    const n = note(httpError(503, 'EXPORT_NOT_CONFIGURED'));
+
+    assert.equal(n.code, 'EXPORT_NOT_CONFIGURED', 'a code of ours is still published');
+    assert.equal(n.ref, null, 'and it is mapped, so there is no log line to index');
+    assert.equal(n.message, 'Something went wrong on the server. (EXPORT_NOT_CONFIGURED)');
   });
 });
