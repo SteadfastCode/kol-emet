@@ -1,0 +1,63 @@
+{
+  "item": "KOL-095",
+  "repo": "kol-emet",
+  "mergeSha": "1356ce440997d31f960c137850528dfd2d3efdf4",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-17T13:11:29.014Z",
+  "gradedAtUtc": "2026-10-17T13:12:14.727Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "Docs-only edit to one FEATURES.md item description; no auth, session, or permission code or claim is changed."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, or quota logic is involved in this spec-text correction."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations, or data-mutating code — only Markdown prose changed."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The diff mentions internal routes in prose but changes no client, MCP, or third-party call site."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, packaging, deploy, or changelog surface is touched; FEATURES.md here is a planning spec entry."
+    }
+  ],
+  "missed": [],
+  "summary": "Reporting no findings was the right call on this docs-only correction — every factual claim it added checks out (no client fetch of `/open-questions`, `getAllGroups` at relationshipGroups.js:20 with its sole call site at GraphView.vue:341, `loadEntities` at useEntities.js:79-130, and mcp.js:260 querying `OpenQuestion` directly) — and all six triage answers are correct.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.39665249999999996,
+  "numTurns": 6,
+  "durationMs": 43075,
+  "sessionId": "84287ccd-5fae-4a99-aff7-5ad7ce365160"
+}
