@@ -1,0 +1,72 @@
+{
+  "item": "KOL-097",
+  "repo": "kol-emet",
+  "mergeSha": "2a310eaa8c1bbaf7dfafa12aa6cc90eeff3c61fa",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-17T21:11:29.048Z",
+  "gradedAtUtc": "2026-10-17T21:24:13.828Z",
+  "independent": [
+    {
+      "file": "server/src/lib/graphImporter.js",
+      "line": 475,
+      "severity": "low",
+      "summary": "Incomplete fix of the same 500-vs-400 class on entityTypes: `entityTypeDocs` is built at lines 474-493, before `planIds` validates `isPlainObject(row)` for entityTypes, so a hand-edited `entityTypes: [null]` (or `[\"Worlds\"]`) throws a raw TypeError on `row.name` instead of a `MALFORMED_DOCUMENT` refusal with a field path — routes/import.js then falls through to `next(err)` and answers 500 with no path, exactly the outcome the new entityTypes checks at lines 370-375 were added to prevent (nothing is written, so this is a response-quality defect, not data loss)."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only adds shape validation inside graphImporter's planIds plus a unit test; no auth, session, role or permission code is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env-var secrets or key handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, quota or payment logic is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only adds pre-write refusals; it adds no deletes, drops or overwrites (if anything it prevents a half-written graph)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP, third-party SDK or external service call is added or changed."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, migration, deploy config or dependency change is in the diff."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model found nothing and its all-'not touched' triage is correct, but it also missed the one (low-severity) hole left adjacent to this fix, so the review is accurate yet uninformative.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.9418025000000001,
+  "numTurns": 10,
+  "durationMs": 132329,
+  "sessionId": "e059cc4c-2338-450d-8313-b5c66437f1f5"
+}

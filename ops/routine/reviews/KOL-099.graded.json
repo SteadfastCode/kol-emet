@@ -1,0 +1,83 @@
+{
+  "item": "KOL-099",
+  "repo": "kol-emet",
+  "mergeSha": "f3c8e62f93ab45cb294042e3acbccad0bd3dc40b",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-17T21:11:29.048Z",
+  "gradedAtUtc": "2026-10-17T21:18:04.491Z",
+  "independent": [
+    {
+      "file": "server/src/middleware/errorHandler.js",
+      "line": 241,
+      "severity": "low",
+      "summary": "The new rule 6 is not actually disjoint from rule 5 as its comment claims: raw-body builds the `request.aborted` error with `code: 'ECONNABORTED'` and `status: 400` (node_modules/raw-body/index.js:245-252), so rule 5 matches first and the client/log gets `{ error: 'ECONNABORTED' }` instead of the `REQUEST_ABORTED` that BODY_PARSER_RULES and the new docs/api.md row promise — the table row is dead code, and the 'every entry answers its own status and code' test misses it because it classifies synthetic errors that carry no `code`."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "This is the pre-change defect the item fixes — the merged code adds the body-parser branch in `classify()` so malformed and over-limit bodies answer 400 MALFORMED_JSON / 413 BODY_TOO_LARGE, not 500."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "errorHandler.js:293 emits `source: rule 7` (the diff renumbered it), so the test's `/source: rule 7/` assertion matches the code."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "Only the error-mapping table, its docs and its tests change; no session, password, passkey or authorization logic is altered (the test merely reuses existing auth fixtures)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env-based secrets are read or added; the change deliberately keeps deployment details out of bodies."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches billing, pricing or paid-API usage."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations or data-mutating code paths — the diff only changes error status/body selection."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound third-party integration is involved; body-parser/raw-body are in-process dependencies whose error types are read, not called."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, dependency change or deploy/release configuration in the diff."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "Both local findings are false positives — one restates the pre-fix bug the diff repairs and the other misreads the renumbered log line — and while the all-'not touched' triage is right, the review found no real defect and missed the rule 5/rule 6 overlap on `request.aborted`.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.9018955,
+  "numTurns": 14,
+  "durationMs": 115928,
+  "sessionId": "d71c2993-31de-48d8-9042-b43293d19fd6"
+}

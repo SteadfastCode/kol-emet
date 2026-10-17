@@ -1,0 +1,69 @@
+{
+  "item": "KOL-098",
+  "repo": "kol-emet",
+  "mergeSha": "e7cee9b8693e2307511ece3c6f42c0067d1af32f",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-17T21:11:29.048Z",
+  "gradedAtUtc": "2026-10-17T21:22:01.469Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "This is exactly the hole the merged change closes: `POST /authorize` (oauth.js:117) and `POST /bridge/authorize` (bridge.js:155) now run `requireLoginSession` before the handler, which refuses (and destroys) a revoked session with 401, writes no `Settings.mcpUserId` and issues no code — the cited line 103 is now the sign-in notice, not an identity write."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds an authentication guard (`requireLoginSession`) and session-revocation handling to both OAuth approval forms."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret storage, exposure or configuration changes; only fake test tokens are set in test env, which is not secrets handling."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, quota- or AI-spend-related is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The change adds no destructive data operation — the session `destroy()` is the pre-existing `refuseRevoked` path it reuses — and the cited evidence (oauth.test.js:78) is just a `process.env.CLIENT_ORIGIN` assignment."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are added; the touched endpoints are inbound."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, dependency or deploy-config change — only server code, docs and tests."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review produced no real findings: its single finding restates the vulnerability the merged diff fixes (so it is a false positive), and one triage answer ('destructive') is wrong with irrelevant evidence.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.879362,
+  "numTurns": 22,
+  "durationMs": 236940,
+  "sessionId": "8e025d8a-c813-49d6-bfa5-683440113859"
+}

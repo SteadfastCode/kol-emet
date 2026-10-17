@@ -76,21 +76,21 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-095": {
+    "KOL-101": {
       "order": 5,
-      "title": "KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…",
-      "status": "done",
-      "attempts": 1,
+      "title": "Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-095",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-16T12:28:28.691Z",
-      "runId": "2026-10-16T12:10:06.157Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
     "KOL-014": {
@@ -280,6 +280,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-095": {
+      "order": null,
+      "title": "KOL-092 names a client open-question caller that does not exist: nothing under client/src fetches…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-095",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-16T12:28:28.691Z",
+      "runId": "2026-10-16T12:10:06.157Z",
       "lastFail": null
     },
     "KOL-100": {
