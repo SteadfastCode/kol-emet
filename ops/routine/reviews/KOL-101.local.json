@@ -1,0 +1,130 @@
+{
+  "item": "KOL-101",
+  "repo": "kol-emet",
+  "mergeSha": "1234105f37c31b7d46b68051f1f9dfbc33d99be9",
+  "completedAtUtc": "2026-10-17T21:38:21.066Z",
+  "completeRunId": "2026-10-17T21:11:06.123Z",
+  "reviewRunId": "2026-10-18T07:02:08.983Z",
+  "reviewedAtUtc": "2026-10-18T07:05:53.722Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 35664,
+  "contextFiles": 7,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/failureNote.js"
+      ],
+      "part": null,
+      "bytes": 8874,
+      "contextBytes": 0,
+      "promptTokens": 2954,
+      "completionTokens": 156,
+      "latencyMs": 14387,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/middleware/errorHandler.js",
+        "server/tests/http/draftFailure.test.js"
+      ],
+      "part": null,
+      "bytes": 13118,
+      "contextBytes": 0,
+      "promptTokens": 4226,
+      "completionTokens": 146,
+      "latencyMs": 18374,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/errorShape.test.js",
+        "server/tests/unit/failureNote.test.js"
+      ],
+      "part": null,
+      "bytes": 13672,
+      "contextBytes": 0,
+      "promptTokens": 4258,
+      "completionTokens": 297,
+      "latencyMs": 27898,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/middleware/errorHandler.js",
+      "line": 160,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `RAISED_HERE` symbol is not checked in the classify function, allowing external errors to be treated as internal.",
+      "scenario": "An external error with a status and code (e.g., from an OpenAI client) will pass the classify function's rule 5 check without the `RAISED_HERE` mark, leading to incorrect handling of the error.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The classify function checks for the RAISED_HERE symbol before treating an error as internal."
+      }
+    },
+    {
+      "file": "server/src/lib/failureNote.js",
+      "line": 116,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK errors.",
+      "scenario": "The OpenAI client sets `status` (int) and `code` from the response body (`invalid_api_key`, `insufficient_quota`, `context_length_exceeded`), so the commonest real generation failures are treated as 'mapped' — stored with `errorRef: null`, the generic sentence 'Something went wrong on the server. (<provider code>)', and, at the default `light` tier, no log of the error at all (rule 2 logs the error only at `normal`/`verbose`). The item's own trade — 'the note says nothing, so the log has to say everything' — is broken exactly where it matters, and the published code is a dependency-owned string.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The cited line in failureNote.js:116 does not handle provider SDK errors correctly, leading to them being treated as 'mapped' with errorRef: null and no log at the default `light` tier."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/tests/http/errorShape.test.js:210"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "server/src/lib/failureNote.js:139"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified: The error log message for rule 3 does not accurately reflect the current logic. · One high-severity defect found in errorHandler.js. · The change introduces tests for handling errors from provider SDKs, specifically focusing on how these errors are classified and logged. The main finding is that Rule 2 reuses `classify()`, which matches raw provider SDK errors, leading to potential issues with error mapping and logging at the default `light` tier.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 34286,
+    "completionTokens": 1160
+  },
+  "latencyMs": 152400
+}
