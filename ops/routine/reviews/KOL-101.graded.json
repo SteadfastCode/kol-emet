@@ -1,0 +1,83 @@
+{
+  "item": "KOL-101",
+  "repo": "kol-emet",
+  "mergeSha": "1234105f37c31b7d46b68051f1f9dfbc33d99be9",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-18T07:09:32.426Z",
+  "gradedAtUtc": "2026-10-18T07:13:14.397Z",
+  "independent": [
+    {
+      "file": "server/src/middleware/errorHandler.js",
+      "line": 136,
+      "severity": "low",
+      "summary": "The documented invariant for the new mark is false: the comment (and the spec entry, and the lookalike test at errorShape.test.js:730) claim the Symbol \"cannot arrive by `Object.assign`\" / \"nothing can carry it by accident\", but Object.assign and object spread both copy own enumerable symbol keys — verified in this tree: `classify(Object.assign(new Error('x'), httpError(503,'X'), {status:400, code:'Y'}))` returns `{status:400, rule:'httpError status and code', body:{error:'Y'}}`, and the same with `{...marked}`. No current call site spreads a caught error, so nothing leaks today (the JSON.stringify half of the claim is correct and is what keeps provider errors out), but the stated guarantee is the thing a future `Object.assign(new Error(wrapped), err)` would be written against, and the test that purports to prove it only builds a fresh unmarked literal rather than a copy of a marked error, so it cannot fail on this."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "Flatly untrue in the merged tree: `classify()` tests `err?.[RAISED_HERE] === true` as the first condition of rule 5 at errorHandler.js:262, which is the whole of this change."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "This is the pre-fix state restated verbatim from the item description — rule 5 now demands the mark, so provider errors land on rule 3 with a `ref` and a light-tier log, which I confirmed by running tests/unit/failureNote.test.js and tests/http/{errorShape,draftFailure}.test.js (all pass, including the `invalid_api_key`/`insufficient_quota`/`context_length_exceeded` groups built with the real `openai` client)."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No authentication, session, passkey or authorization code is touched; the diff is the error-classification table, the stored failure note, docs and tests."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The change is squarely about keeping credential-bearing provider error text out of published bodies and notes, and the tests add `sk-live-TOPSECRET` and a connection-string fixture asserted absent from every response."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Spend recording in routes/drafts.js and the budget path are unmodified and no failure branch keys off the error code, so no billing behaviour changes."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations, or schema/data rewrites — only error mapping and log lines, plus test-only fixtures."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The change exists because of the OpenAI client's error shape and the tests now import `APIError` from `openai` to build the real thing, so external-API error handling is directly in scope."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, dependency, build or deploy configuration changes; the only non-code edits are docs/api.md and the spec's decision log."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "Both findings are worthless — one asserts the absence of the exact check the diff adds, the other is the item's own pre-fix problem statement recycled as a live defect — while the triage, though it carries no real analytic weight, happens to be right on all six keys.",
+  "counts": {
+    "findings": 2,
+    "confirmed": 0,
+    "falsePositive": 2,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.56756,
+  "numTurns": 19,
+  "durationMs": 219439,
+  "sessionId": "477f910b-deff-418f-833d-42865d517b4f"
+}
