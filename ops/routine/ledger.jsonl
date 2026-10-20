@@ -437,3 +437,4 @@
 {"event":"ack","items":["KOL-100"],"by":"daniel","source":"dashboard","atUtc":"2026-10-20T18:29:31.067Z"}
 {"event":"ack","items":["KOL-095"],"by":"daniel","source":"dashboard","atUtc":"2026-10-20T18:29:31.067Z"}
 {"event":"ack","items":["KOL-101"],"by":"daniel","source":"dashboard","atUtc":"2026-10-20T18:29:31.067Z"}
+{"event":"note","text":"resupply: unparked KOL-094 (was not-before 2026-10-22) so the next fire files new proposals","source":"dashboard","item":"KOL-094","atUtc":"2026-10-20T18:30:10.579Z"}

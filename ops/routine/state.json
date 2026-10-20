@@ -71,7 +71,7 @@
       "proposed": false,
       "distribute": null,
       "coldReview": false,
-      "notBefore": "2026-10-22",
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
