@@ -61,7 +61,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-103) Nothing enforces a role on a content write: a viewer may edit, delete and spend**
+- [x] **(KOL-103) Nothing enforces a role on a content write: a viewer may edit, delete and spend**
   `Workspace.members[].role` is `owner | editor | viewer` (`server/src/models/Workspace.js:15`), `resolveWorkspace`
   reads it onto every request and `GET /workspace` hands it to the client "so it can hide what an editor or a viewer may
   not do" (`server/src/middleware/workspace.js:87`), and `requireWorkspaceRole` has existed since KOL-071 — gating
