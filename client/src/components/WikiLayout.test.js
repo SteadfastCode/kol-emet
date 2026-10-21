@@ -125,7 +125,7 @@ const { getAllowance } = vi.hoisted(() => ({
 vi.mock('../api/drafts.js', () => ({
   getAllowance, streamDraft: vi.fn(), listDrafts: vi.fn(), getDraft: vi.fn(), discardDraft: vi.fn(),
   decideItem: vi.fn(), retargetItem: vi.fn(), acceptClean: vi.fn(), applyDraft: vi.fn(),
-  createComposeDraft: vi.fn(), createOpenApiDraft: vi.fn(),
+  createComposeDraft: vi.fn(), createOpenApiDraft: vi.fn(), createKubernetesDraft: vi.fn(),
 }));
 // One Escape case below mounts the chat panel for real (KOL-085), and the panel asks for the
 // providers and the conversation list as it mounts; nothing in a test should fetch. The rename the

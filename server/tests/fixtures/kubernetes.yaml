@@ -1,0 +1,121 @@
+# Fixture for tests/unit/kubernetes.test.js and tests/http/kubernetesDraft.test.js.
+#
+# A `---` stream the way a real manifest arrives: two workloads, the Services in
+# front of them, a claim, a ConfigMap an envFrom pulls in, a Secret, and one
+# object this producer has no reading for. The credentials below are the point,
+# not an oversight: kubernetesDraft.test.js asserts that none of them reaches
+# the draft (see lib/producers/redactSecrets.js) — the Secret's `stringData`
+# above all, which is the shape a manifest keeps its passwords in.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/acme/web:1.4.2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: postgres://app:hunter2-fixture-secret@postgres:5432/app
+            - name: PAYMENTS_API
+              value: https://api.stripe.com/v1
+            - name: SESSION_SECRET
+              value: plain-fixture-session-secret
+          envFrom:
+            - configMapRef:
+                name: web-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  type: LoadBalancer
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  serviceName: postgres
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef:
+                name: db-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-config
+data:
+  SEARCH_ENDPOINT: https://search.internal.example/v1
+  LOG_LEVEL: info
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:
+  POSTGRES_USER: appuser
+  POSTGRES_PASSWORD: hunter2-fixture-secret
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+spec:
+  rules:
+    - host: acme.example

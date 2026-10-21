@@ -111,10 +111,10 @@ const draftSchema = new mongoose.Schema({
     default: 'generating',
   },
 
-  // The producer seam: drift / repo / k8s become new enum values here
+  // The producer seam: drift / repo / DB-schema become new enum values here
   // rather than new collections.
   source: {
-    producer:        { type: String, enum: ['braindump', 'docker-compose', 'openapi'], default: 'braindump' },
+    producer:        { type: String, enum: ['braindump', 'docker-compose', 'openapi', 'kubernetes'], default: 'braindump' },
     producerVersion: { type: String, default: 'braindump@1' },
     // Already redacted for a producer that ingests a file the person never
     // reads — see lib/producers/redactSecrets.js. Nothing downstream scrubs

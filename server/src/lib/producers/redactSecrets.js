@@ -41,7 +41,7 @@
  * of the file.
  */
 
-import { parseDocument, visit, isScalar } from 'yaml';
+import { parseAllDocuments, visit, isMap, isScalar } from 'yaml';
 
 /** What a redacted value is replaced with. A plain YAML scalar: no indicators. */
 export const REDACTED = 'REDACTED';
@@ -138,6 +138,37 @@ const SECRET_SHAPE_RE = new RegExp([
   'AIza[0-9A-Za-z_-]{30,}',                                       // Google API key
 ].join('|'), 'g');
 
+/**
+ * Kubernetes writes an environment variable as a two-key mapping —
+ *
+ *     - name: POSTGRES_PASSWORD
+ *       value: hunter2
+ *
+ * — so the credential's NAME is a sibling key and its value sits under a key
+ * called `value`, which `looksSecret` reads (correctly, in general) as
+ * innocent. Both compose syntaxes keep the name and the value together
+ * (`PASSWORD: x`, `- PASSWORD=x`); this is the third shape, and without it
+ * every env value in a manifest was stored verbatim — quoted as evidence and
+ * exported — which is the whole thing this seam exists to prevent.
+ *
+ * The pair is judged by the same `looksSecret` both other syntaxes ask: a
+ * `value:` beside `name: DATABASE_URL` keeps its host, one beside
+ * `name: SESSION_SECRET` does not.
+ */
+const K8S_ENV_VALUE_KEYS = new Set(['value']);
+
+/**
+ * A `kind: Secret`'s `data` and `stringData` are credentials whatever they are
+ * called: `POSTGRES_USER` is not a secret word, and in a Secret it is still a
+ * value nobody uploaded on purpose. So in that one document kind every value
+ * under those two keys goes, by position rather than by name.
+ *
+ * Deliberately NOT applied to a ConfigMap's `data`: that is where a manifest
+ * keeps the endpoints the producer's edges are made of, and redacting them
+ * would cost the graph exactly what the import is for.
+ */
+const SECRET_DATA_KEYS = ['data', 'stringData'];
+
 /** A PEM block anywhere in a value makes the whole value a private key. */
 const PEM_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
 
@@ -207,10 +238,16 @@ export function redactSecrets(text, { label = 'text' } = {}) {
   return { text: out.text, count: out.redactions.length, redactions: out.redactions, via };
 }
 
-/** Whether `text` is YAML the parser accepts. */
+/**
+ * Whether `text` is YAML the parser accepts — every document of it. A `---`
+ * stream is the normal shape of a Kubernetes manifest, and `parseDocument`
+ * calls one of those an error ("Source contains multiple documents"), which
+ * would have thrown away every splice in every manifest.
+ */
 function parses(text) {
   try {
-    return parseDocument(text, { merge: true, prettyErrors: false }).errors.length === 0;
+    const docs = parseAllDocuments(text, { merge: true, prettyErrors: false });
+    return docs.every(doc => doc.errors.length === 0);
   } catch {
     return false;
   }
@@ -224,42 +261,100 @@ function parses(text) {
  *   falls back to the line scanner rather than passing an unredacted file on
  */
 function astSpans(source) {
-  const doc = parseDocument(source, { merge: true, prettyErrors: false });
-  if (doc.errors.length) return null;
+  // Every document in the stream, not just the first: `parseDocument` reports
+  // a `---` stream as an error, so a Kubernetes manifest used to fail this
+  // pass outright and fall back to the line scanner — which cannot see that
+  // `value: hunter2` sits beside `name: POSTGRES_PASSWORD`.
+  const docs = parseAllDocuments(source, { merge: true, prettyErrors: false });
+  if (!docs.length || docs.some(doc => doc.errors.length)) return null;
 
   const spans = [];
   const push = (start, end, replacement, key, rule) => {
     if (typeof start !== 'number' || typeof end !== 'number' || end <= start) return;
     spans.push({ start, end, replacement, key, rule });
   };
+  const blockValue = (node, key, rule) => {
+    const [start, end] = valueRange(node, source);
+    push(start, end, blockedReplacement(source.slice(start, end)), key, rule);
+  };
 
-  visit(doc, {
-    Pair(_, pair) {
-      if (!isScalar(pair.key) || !isScalar(pair.value)) return;
-      const key = String(pair.key.value ?? '');
-      const [start, end] = valueRange(pair.value, source);
-      if (looksSecret(key)) {
-        push(start, end, blockedReplacement(source.slice(start, end)), key, 'key');
-        return;
-      }
-      if (typeof pair.value.value === 'string' && PEM_RE.test(pair.value.value)) {
-        push(start, end, blockedReplacement(source.slice(start, end)), key, 'pem');
-        return;
-      }
-      // Scanned here rather than in the Scalar visitor below so a log line can
-      // name the key the credential sat under — DATABASE_URL, not `postgres`.
-      for (const span of inlineSpans(source.slice(start, end), start, key)) spans.push(span);
-    },
-    // Scalars that are not a pair's value: a sequence item, which is how
-    // compose's list form of `environment` writes KEY=value.
-    Scalar(key, node) {
-      if (key === 'key' || key === 'value' || typeof node.value !== 'string') return;
-      const [start, end] = valueRange(node, source);
-      for (const span of inlineSpans(source.slice(start, end), start)) spans.push(span);
-    },
-  });
+  for (const doc of docs) {
+    // A Secret's values are taken by position, before the name rules run: an
+    // overlapping span inside one of them is dropped by applySpans, so this
+    // cannot leave half a value behind.
+    for (const pair of secretDataPairs(doc)) {
+      blockValue(pair.value, String(pair.key.value ?? ''), 'k8s-secret');
+    }
+
+    visit(doc, {
+      Pair(_, pair, path) {
+        if (!isScalar(pair.key) || !isScalar(pair.value)) return;
+        const key = String(pair.key.value ?? '');
+        const [start, end] = valueRange(pair.value, source);
+        if (looksSecret(key)) {
+          push(start, end, blockedReplacement(source.slice(start, end)), key, 'key');
+          return;
+        }
+        // Kubernetes' `{ name, value }` env shape: the name is a sibling key,
+        // so this pair is judged by it rather than by `value`.
+        if (K8S_ENV_VALUE_KEYS.has(key)) {
+          const name = siblingName(path);
+          if (name && looksSecret(name)) {
+            push(start, end, blockedReplacement(source.slice(start, end)), name, 'k8s-env');
+            return;
+          }
+        }
+        if (typeof pair.value.value === 'string' && PEM_RE.test(pair.value.value)) {
+          push(start, end, blockedReplacement(source.slice(start, end)), key, 'pem');
+          return;
+        }
+        // Scanned here rather than in the Scalar visitor below so a log line can
+        // name the key the credential sat under — DATABASE_URL, not `postgres`.
+        for (const span of inlineSpans(source.slice(start, end), start, key)) spans.push(span);
+      },
+      // Scalars that are not a pair's value: a sequence item, which is how
+      // compose's list form of `environment` writes KEY=value.
+      Scalar(key, node) {
+        if (key === 'key' || key === 'value' || typeof node.value !== 'string') return;
+        const [start, end] = valueRange(node, source);
+        for (const span of inlineSpans(source.slice(start, end), start)) spans.push(span);
+      },
+    });
+  }
 
   return spans;
+}
+
+/** The `name:` scalar of the mapping a pair sits in, or null. */
+function siblingName(path) {
+  const parent = path[path.length - 1];
+  if (!isMap(parent)) return null;
+  const pair = parent.items.find(p => isScalar(p.key) && String(p.key.value) === 'name' && isScalar(p.value));
+  const name = pair ? String(pair.value.value ?? '').trim() : '';
+  return name || null;
+}
+
+/**
+ * Every scalar pair under `data` / `stringData` of a document whose `kind` is
+ * `Secret`. A manifest keeps its passwords here, under keys the word lists have
+ * no reason to recognise (`POSTGRES_USER`), so in this one kind of document
+ * they go by position.
+ */
+function secretDataPairs(doc) {
+  const root = doc.contents;
+  if (!isMap(root)) return [];
+  const kindPair = root.items.find(p => isScalar(p.key) && String(p.key.value) === 'kind');
+  if (!kindPair || !isScalar(kindPair.value) || String(kindPair.value.value).trim() !== 'Secret') return [];
+
+  const out = [];
+  for (const name of SECRET_DATA_KEYS) {
+    const pair = root.items.find(p => isScalar(p.key) && String(p.key.value) === name);
+    if (!pair || !isMap(pair.value)) continue;
+    for (const entry of pair.value.items) {
+      if (isScalar(entry.key) && isScalar(entry.value)) out.push(entry);
+    }
+  }
+  return out;
 }
 
 /**

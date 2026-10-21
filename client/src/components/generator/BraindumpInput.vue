@@ -5,8 +5,8 @@
       <p>
         Paste or import rough notes — a character sketch, a session of worldbuilding, a chapter
         of background. Kol Emet reads them and proposes entities and relationships for you to
-        review. A docker-compose file or an OpenAPI document becomes a draft of its services,
-        APIs and what they depend on.
+        review. A docker-compose file, an OpenAPI document or a Kubernetes manifest becomes
+        a draft of its services, APIs and what they depend on.
         <strong>Nothing is saved until you approve it.</strong>
       </p>
     </div>
@@ -23,7 +23,7 @@
         ref="ta"
         v-model="text"
         class="dump"
-        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx, a docker-compose .yml or an OpenAPI .yml/.json file here."
+        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx, a docker-compose .yml, an OpenAPI .yml/.json or a Kubernetes manifest here."
         :disabled="busy || importing"
         @keydown.meta.enter="submit"
         @keydown.ctrl.enter="submit"
@@ -77,7 +77,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { extractAll, extractText, isProducerFile, producerFor, ACCEPT_ATTR } from '../../lib/importFile.js';
-import { createComposeDraft, createOpenApiDraft } from '../../api/drafts.js';
+import { createComposeDraft, createOpenApiDraft, createKubernetesDraft } from '../../api/drafts.js';
 
 const props = defineProps({
   maxChars:  { type: Number, default: 25000 },
@@ -140,23 +140,24 @@ async function ingest(files) {
 const PRODUCERS = {
   compose: createComposeDraft,
   openapi: createOpenApiDraft,
+  kubernetes: createKubernetesDraft,
 };
 
 /**
- * A docker-compose file or an OpenAPI document skips the textarea: its draft is
- * built from the file's structure, not generated from notes, so there is
- * nothing to edit first and no allowance spent. The finished draft goes
- * straight to review.
+ * A docker-compose file, an OpenAPI document or a Kubernetes manifest skips the
+ * textarea: its draft is built from the file's structure, not generated from
+ * notes, so there is nothing to edit first and no allowance spent. The finished
+ * draft goes straight to review.
  *
  * Which producer it goes to is decided by the file's content, not its
- * extension — both arrive as `.yaml`, and an OpenAPI document arrives as
- * `.json` as often as not. A file that is neither is refused here rather than
- * posted hopefully, so the message can name both things it could have been.
+ * extension — all three arrive as `.yaml`, and an OpenAPI document arrives as
+ * `.json` as often as not. A file that is none of them is refused here rather
+ * than posted hopefully, so the message can name every thing it could have been.
  */
 async function ingestStructured(list) {
   importErrors.value = [];
   if (list.length > 1) {
-    importErrors.value = ['Import a docker-compose or OpenAPI file on its own — it becomes a draft directly, not notes.'];
+    importErrors.value = ['Import a docker-compose, OpenAPI or Kubernetes file on its own — it becomes a draft directly, not notes.'];
     if (picker.value) picker.value.value = '';
     return;
   }
@@ -168,8 +169,9 @@ async function ingestStructured(list) {
     const producer = producerFor(source);
     if (!producer) {
       throw new Error(
-        `"${name}" doesn't look like an OpenAPI document or a docker-compose file — ` +
-        'it needs a top-level `openapi:`, `swagger:` or `services:` key.'
+        `"${name}" doesn't look like an OpenAPI document, a Kubernetes manifest or a ` +
+        'docker-compose file — it needs a top-level `openapi:`, `swagger:`, `services:` ' +
+        'or `apiVersion:` and `kind:` key.'
       );
     }
     const draft = await PRODUCERS[producer]({ text: source, filename: name });

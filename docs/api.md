@@ -542,6 +542,7 @@ the graph. Nothing here writes to `entities` or `relationshipgroups` except `POS
 | POST | `/drafts` | Generate, streaming progress over **SSE**. Body: `{ text, provider?, roleStyle? }`. |
 | POST | `/drafts/compose` | Build a draft from a docker-compose file — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | POST | `/drafts/openapi` | Build a draft from an OpenAPI 3.x or Swagger 2.0 document (JSON or YAML) — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
+| POST | `/drafts/kubernetes` | Build a draft from a `---` stream of Kubernetes manifests — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | GET | `/drafts/:id` | Full draft including `items` and the source text. |
 | PATCH | `/drafts/:id/items/:itemId` | Record one decision. Body: `{ decision: 'accepted' \| 'edited' \| 'rejected', payload?, note? }`. `payload` is required for `edited` and is validated against the same schema `POST /entities` accepts. |
 | POST | `/drafts/:id/items/:itemId/retarget` | Resolve a duplicate: `{ targetEntityId }` turns a create into an update against that entity; `null` reverts it to a create. Entity items only. |
@@ -599,6 +600,13 @@ values were removed.
 | `KEY=value` inside one scalar — `environment`'s list form, a `command` flag, a connection string | `- MYSQL_ROOT_PASSWORD=hunter2` | `- MYSQL_ROOT_PASSWORD=REDACTED` |
 | A URL's userinfo, wherever it appears | `postgres://app:app@postgres:5432/app` | `postgres://REDACTED@postgres:5432/app` |
 | A value shaped like a credential whatever it is called: JWT, `sk-…`, `ghp_…`, `xox?-…`, `AKIA…`, `AIza…`, a PEM block | `SETTINGS: AKIAIOSFODNN7EXAMPLE` | `SETTINGS: REDACTED` |
+
+Two shapes are Kubernetes' own. An env var is written as a two-key mapping, so the credential's name
+is a *sibling* key — `- name: SESSION_SECRET` / `value: …` — and the `value:` is judged by the `name:`
+beside it. And in a document whose `kind` is `Secret`, **every** value under `data` / `stringData` goes
+by position whatever it is called, because `POSTGRES_USER` is not a secret word and in a Secret it is
+still a value nobody uploaded on purpose. A `ConfigMap`'s `data` is deliberately *not* redacted: that
+is where a manifest keeps the endpoints the producer's edges are made of.
 
 A key that names an **address** (`*_URL`, `*_URI`, `*_HOST`, `*_ENDPOINT`, `*_DSN`, …) keeps its value
 and loses only its userinfo: the host is what the producer turns into an edge, and it is not the secret.
@@ -673,6 +681,59 @@ adding a second one. A near-miss is flagged `duplicate_candidate`, never merged.
 `OPENAPI_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers
 `COMPOSE_LOG_LEVEL` has and a separate setting, so one producer's lines can be read without the
 other's.
+
+### `POST /drafts/kubernetes`
+
+The third vertical-ingestion producer
+([`server/src/lib/producers/kubernetes.js`](../server/src/lib/producers/kubernetes.js)), and the same
+route as `/drafts/compose` and `/drafts/openapi` with a different parse: one request in, the finished
+draft out, no SSE, no allowance check, no generation lock, and the same decision and apply routes
+afterwards. Recorded on the draft: `source.producer: 'kubernetes'`, `source.producerVersion:
+'kubernetes@1'`, the same `source.textHash`, `grounding.categories`, and `route.strategy:
+'deterministic'`. **Credentials are stripped before the manifests are stored**, by the same
+`redactSecrets` pass — which for this producer also reads Kubernetes' `{ name, value }` env shape and
+a `Secret`'s `stringData` (see the table above).
+
+**Multi-document YAML is the unit of iteration.** A manifest arrives as a `---` stream — that is what
+`kubectl kustomize`, `helm template` and `kubectl get -o yaml` all emit — and every document in it is
+read, against one line counter, so an evidence offset and an error's line number are both into the
+whole file. A file in which *no* document declares both `apiVersion` and `kind` is a 400: that pair is
+how Kubernetes itself identifies an object, and `kind` alone is a word other formats use.
+
+| Manifest | Proposed |
+|----------|----------|
+| `Deployment`, `StatefulSet`, `DaemonSet` | Entity titled `metadata.name`: **Data Store** when the first container's image is one of the names the compose producer knows (postgres, mysql, redis, …; the same list, imported rather than copied); otherwise **Service**. An `attribute` block each for the kind and apiVersion (*Kind*), the container images (*Image*) and `spec.replicas` (*Replicas*); tag `kubernetes`. |
+| `Service` | One **API** per `spec.ports[]` entry, titled `<service name>:<port>`, with an `attribute` block for the port and protocol (*Port*, e.g. `80/TCP → 8080`) and one for `spec.type` (*Service type*). Joined by an `Exposes` group — Provider, Endpoint — to the workload whose pod labels match **all** of `spec.selector`, as Kubernetes itself matches them. |
+| `PersistentVolumeClaim` | One **Data Store**, with an `attribute` block each for the requested size (*Storage*), `accessModes` (*Access modes*) and `storageClassName` (*Storage class*) |
+| An `env[].value`, or a value of a `ConfigMap` an `envFrom[].configMapRef` names, holding a URL whose host is another workload — or a `Service` in front of one, including its `*.svc.cluster.local` form | `Calls` group — Caller, Callee. The edge reaches the **workload**, not the Service object, because that is what answers. |
+| Such a URL whose host is nothing in the file (loopback and `$(VAR)` / `${VAR}` hosts ignored) | One **External Dependency** per host, plus a `Depends on` group — Dependent, Dependency |
+
+A `kind` this mapping has no reading for — `Ingress`, `HorizontalPodAutoscaler`, a CRD — is a **drop
+reason** naming the kind, not a refusal: a namespace dump is mostly objects a graph has nothing to say
+about, and refusing the stream over one of them would cost a reviewer every workload in it.
+`ConfigMap`, `Secret`, `Namespace`, `ServiceAccount` and `List` are passed over silently — a
+ConfigMap's values are read, but a node per ConfigMap says nothing a reviewer wants, and a Secret is
+not read at all. A `Service` with no selector, one no workload matches, one with no ports, a workload
+with no `metadata.name` and a workload with no containers are each a drop reason too. `env[].valueFrom`
+and `envFrom[].secretRef` are not followed; neither are volume mounts, so a claim is proposed without
+an edge to the workload that mounts it.
+
+Titles and groups are deduplicated against the workspace exactly as the other two producers' are
+(`matchedBy: 'exact-normalized-title'` / `'same-members-and-label'`), so re-importing an unchanged
+stream proposes updates rather than a second copy of everything, and leaves out the blocks its targets
+already carry. A near-miss is flagged `duplicate_candidate`, never merged. YAML anchors and `<<` merge
+keys are followed, within the document that declares them.
+
+| Status | Meaning |
+|--------|---------|
+| 201 | The draft, `status: 'ready'` |
+| 400 | `text` missing or longer than 60,000 characters; invalid YAML in any document (`{ error, line }` — the line in the file as sent); no document declaring both `apiVersion` and `kind`; or the workspace lacks an entity type the manifests need (`{ error, missingCategories }`) — no draft is created |
+
+`KUBERNETES_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers and a
+separate setting again.
+
+**Out of scope:** Helm charts and kustomize overlays (templated input, and their own problem), reading
+a live cluster or any kubeconfig, and drift detection.
 
 ### Decisions vs. apply
 
