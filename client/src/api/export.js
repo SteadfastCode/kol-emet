@@ -1,3 +1,5 @@
+import { sseClientId } from '../composables/useEvents.js';
+
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
 /**
@@ -143,10 +145,17 @@ export async function importWorkspaceFile(file, { source = 'unknown' } = {}) {
   }
 
   log('normal', `posting "${name}", ${text.length} bytes (source: ${source})`);
+  // The same header every other write sends (api/entities.js and friends): the
+  // import broadcasts one `workspace:imported` frame, and this tab reloads on
+  // the 201 below, so it has to be excluded from its own frame or it reloads
+  // and toasts twice (KOL-102).
+  const headers = { 'Content-Type': 'application/json' };
+  if (sseClientId) headers['X-SSE-Client-Id'] = sseClientId;
+
   const res = await fetch(`${BASE_URL}/import`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: text,
   });
 

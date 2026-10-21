@@ -1,5 +1,7 @@
 import express, { Router } from 'express';
+import { requireActor } from '../middleware/auth.js';
 import { requireWorkspaceRole } from '../middleware/workspace.js';
+import { broadcast } from '../lib/broadcaster.js';
 import { importWorkspace, importCaps, importLog as log } from '../lib/graphImporter.js';
 
 /**
@@ -23,6 +25,15 @@ import { importWorkspace, importCaps, importLog as log } from '../lib/graphImpor
  *   - **201 with the counts**, since the request created documents and the
  *     counts are the only way a caller can tell a complete import from one that
  *     quietly dropped a collection.
+ *   - **One `workspace:imported` frame on `/events`** (KOL-102), carrying those
+ *     same counts and the actor. An import writes a whole graph in one request,
+ *     and the per-entity events the normal write path broadcasts are not
+ *     emitted here at all — so without this frame every *other* tab in the
+ *     workspace, and the member on the next desk, showed the empty workspace
+ *     until someone reloaded. One frame rather than a per-row burst for the
+ *     same reason a draft apply sends one (`lib/changeLogger.js`): the client
+ *     refetches. The originating client is excluded by `X-SSE-Client-Id` the
+ *     way every other write excludes it — that tab reloads on its own 201.
  *
  * `importJsonBody` below is why this file imports express itself. The app-wide
  * `express.json()` has the default 100 kB limit and turns a parse failure into
@@ -83,10 +94,24 @@ export const importJsonBody = [
 const router = Router();
 
 // POST /import — one export document into the caller's own empty workspace.
-router.post('/', requireWorkspaceRole('owner'), async (req, res, next) => {
+//
+// `requireActor` sits behind the role gate (so a role refusal still costs no
+// lookup) and ahead of the write, because the broadcast below names who
+// imported: `req.actingUserId` is an id, and a toast in someone else's tab
+// needs the label every other broadcast carries.
+router.post('/', requireWorkspaceRole('owner'), requireActor, async (req, res, next) => {
   const source = `POST /import by user ${req.actingUserId}`;
   try {
     const result = await importWorkspace(req.body, req.workspaceId, { source, caps: importCaps() });
+
+    const excludeClientId = req.headers['x-sse-client-id'] ?? null;
+    broadcast('workspace:imported', {
+      version:  result.version,
+      imported: result.imported,
+      actor:    { label: req.actor.label, type: req.actor.type },
+    }, { workspaceId: req.workspaceId, excludeClientId });
+    log('light', `told the workspace's other live clients: workspace:imported${excludeClientId ? ` (excluding client ${excludeClientId})` : ''} (source: ${source})`);
+
     res.status(201).json(result);
   } catch (err) {
     const status = STATUS_BY_CODE[err.code];

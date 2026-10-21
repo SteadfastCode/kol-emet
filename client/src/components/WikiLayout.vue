@@ -957,6 +957,46 @@ useEvents({
       changeType:  'deleted',
     });
   },
+
+  // ── The two bulk writes (KOL-102) ──
+  // A draft apply and an import each send ONE frame for a write that touched
+  // many rows (server/src/lib/changeLogger.js says why), and the frame cannot
+  // say which rows — so both reload the list rather than patching it. The
+  // client that did the write is excluded from its own frame by
+  // X-SSE-Client-Id, so reaching here always means another tab or the
+  // connector, and the toast names who.
+
+  onDraftApplied({ applied, failed, blocked, actor }) {
+    loadEntities('another client applied a generated draft');
+
+    const n = applied ?? 0;
+    const unfinished = (failed ?? 0) + (blocked ?? 0);
+    addToast({
+      actorLabel: actor?.label ?? 'Generator',
+      actorType:  actor?.type ?? 'generator',
+      message:    `applied ${n} item${n === 1 ? '' : 's'} from a draft${unfinished ? `, ${unfinished} not applied` : ''}`,
+      changeType: 'created',
+    });
+  },
+
+  onWorkspaceImported({ imported, actor }) {
+    loadEntities('another client imported a workspace');
+
+    const counts = imported ?? {};
+    addToast({
+      actorLabel: actor?.label ?? 'Import',
+      actorType:  actor?.type ?? 'system',
+      message:    `imported ${counts.entities ?? 0} entities, ${counts.relationshipGroups ?? 0} relationships and ${counts.openQuestions ?? 0} open questions`,
+      changeType: 'created',
+    });
+  },
+
+  // The server ended this stream for good — a session signed out elsewhere, or
+  // more tabs than EVENTS_MAX_STREAMS_PER_USER. Nothing will reconnect, so the
+  // one thing left is to say so: the sidebar is now a snapshot, not live.
+  onStreamEnded({ message }) {
+    addToast({ message, actorType: 'system', actorLabel: 'Live updates' });
+  },
 });
 
 provide('entities', entities);

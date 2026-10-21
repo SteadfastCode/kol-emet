@@ -155,8 +155,13 @@ vi.mock('../composables/useNavigation.js', async () => {
     useNavigation: () => ({ breadcrumbs: ref([]), startNavigation: vi.fn(), pushCrumb: vi.fn(), navigateToIndex: vi.fn() }),
   };
 });
-vi.mock('../composables/useEvents.js', () => ({ useEvents: vi.fn() }));
-vi.mock('../composables/useToasts.js', () => ({ useToasts: () => ({ addToast: vi.fn() }) }));
+// Mocked, and held onto: the live-sync group at the bottom reads the handlers the layout
+// registered and delivers a frame to them, which is how a bulk write from another tab is
+// driven without a socket (KOL-102). What the composable itself does with a frame is pinned in
+// composables/useEvents.test.js.
+const { useEvents, addToast } = vi.hoisted(() => ({ useEvents: vi.fn(), addToast: vi.fn() }));
+vi.mock('../composables/useEvents.js', () => ({ useEvents }));
+vi.mock('../composables/useToasts.js', () => ({ useToasts: () => ({ addToast }) }));
 const { loadEntityTypes } = vi.hoisted(() => ({ loadEntityTypes: vi.fn() }));
 vi.mock('../composables/useEntityTypes.js', async () => {
   const { ref } = await import('vue');
@@ -691,6 +696,83 @@ describe('WikiLayout sign out everywhere', () => {
     expect(group(wrapper).find('.settings-error').exists()).toBe(false);
     expect(group(wrapper).find('.settings-done').exists()).toBe(false);
     expect(group(wrapper).find('form.revoke-all').exists()).toBe(true);
+  });
+});
+
+/**
+ * Live sync's other half (KOL-102): the layout's answer to the two frames that stand for a write
+ * touching many rows at once — `draft:applied` and `workspace:imported`. Both are a single frame
+ * for a whole bulk write, so neither can say which rows moved and both have to refetch; and the
+ * server excludes the client that did the write, so a frame arriving here is always someone
+ * else's. The handlers are read off the mocked composable rather than delivered over a socket.
+ *
+ * Falsification: drop either handler from the `useEvents` call in WikiLayout.vue and the matching
+ * case fails on the refetch it never asked for.
+ */
+const sseHandlers = () => {
+  expect(useEvents).toHaveBeenCalled();
+  return useEvents.mock.calls[useEvents.mock.calls.length - 1][0];
+};
+
+describe('WikiLayout live sync', () => {
+  beforeEach(() => {
+    useEvents.mockClear();
+    loadEntities.mockClear();
+    addToast.mockClear();
+  });
+
+  it('reloads the sidebar and says who when another client applies a draft', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    const before = loadEntities.mock.calls.length;
+
+    sseHandlers().onDraftApplied({
+      draftId: 'd1', applied: 30, failed: 0, blocked: 0, skipped: 0,
+      actor: { label: 'alice@example.test', type: 'generator' },
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(loadEntities.mock.calls.length).toBe(before + 1);
+    // The reason names the source, as every other load here does.
+    expect(loadEntities.mock.calls.at(-1)[0]).toMatch(/draft/i);
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0]).toMatchObject({ actorLabel: 'alice@example.test' });
+    expect(addToast.mock.calls[0][0].message).toContain('30');
+  });
+
+  it('reloads the sidebar and says who when another client imports a workspace', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    const before = loadEntities.mock.calls.length;
+
+    sseHandlers().onWorkspaceImported({
+      version: 'kol-emet/workspace-export@1',
+      imported: { entities: 18, relationshipGroups: 7, openQuestions: 3 },
+      actor: { label: 'alice@example.test', type: 'user' },
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(loadEntities.mock.calls.length).toBe(before + 1);
+    expect(loadEntities.mock.calls.at(-1)[0]).toMatch(/import/i);
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toContain('18 entities');
+  });
+
+  it('says so when the server ends the stream for good', () => {
+    // Nothing will reconnect, so the sidebar is a snapshot from here on and the
+    // only thing left to do is tell the user.
+    shallowMount(WikiLayout);
+    const before = loadEntities.mock.calls.length;
+
+    sseHandlers().onStreamEnded({
+      reason: 'session-ended',
+      message: 'Live updates stopped: you were signed out in another window.',
+      limit: null,
+    });
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toMatch(/signed out in another window/);
+    // And it does not refetch: a stream that ended because the session did would
+    // answer that request with a 401.
+    expect(loadEntities.mock.calls.length).toBe(before);
   });
 });
 
