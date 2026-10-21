@@ -33,7 +33,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { escapeRegex, searchTerm, keywordFilter, boundedInteger, MAX_TERM_LENGTH } from '../../src/lib/searchFilter.js';
+import { escapeRegex, searchTerm, keywordFilter, boundedInteger, idCursor, MAX_TERM_LENGTH } from '../../src/lib/searchFilter.js';
 
 /** The title regex out of a filter, which is what the term compiled to. */
 function titleRegex(term) {
@@ -180,5 +180,38 @@ describe('boundedInteger', () => {
     for (const raw of [undefined, null, { $gt: 1 }, ['1', '2'], ['1'], 25, true, {}]) {
       assert.equal(boundedInteger(raw, BOUNDS), null, `${JSON.stringify(raw) ?? String(raw)} should be no page size`);
     }
+  });
+});
+
+describe('idCursor', () => {
+  const ID = '6ad932fb4ba13c8505ac7d9d';
+
+  test('reads the id a page handed out', () => {
+    assert.deepEqual(idCursor(ID), { after: ID });
+  });
+
+  test('no cursor at all, and the empty one a client built around a value it lacks', () => {
+    assert.deepEqual(idCursor(undefined), { after: null });
+    assert.deepEqual(idCursor(''), { after: null });
+  });
+
+  test('a value that is not an id this route issued is refused, not ignored', () => {
+    // Ignoring it would answer page 1 to a request for page 2, and a client
+    // that pages until nextAfter is null would then never stop.
+    for (const raw of ['nonsense', 'not-an-id', `${ID}x`, ID.slice(0, 23), 'abcdefghijkl', ' ', `  ${ID}  `]) {
+      assert.ok(idCursor(raw).error, `${JSON.stringify(raw)} should be refused`);
+    }
+  });
+
+  test('a non-string is refused too — the operator object and the repeated parameter', () => {
+    // The extended query parser hands `?after[$gt]=…` over as an object and
+    // `?after=a&after=b` as an array; neither is a position in a sort.
+    for (const raw of [null, { $gt: ID }, { _id: ID }, [ID, ID], [ID], 25, true, {}]) {
+      assert.ok(idCursor(raw).error, `${JSON.stringify(raw) ?? String(raw)} should be refused`);
+    }
+  });
+
+  test('the refusal names the parameter, since it is what the route answers 400 with', () => {
+    assert.match(idCursor('nonsense').error, /after/);
   });
 });

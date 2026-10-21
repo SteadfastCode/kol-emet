@@ -3,8 +3,48 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import Entity from '../models/Entity.js';
 import { requireActor } from '../middleware/auth.js';
 import { objectIdParam } from '../middleware/objectId.js';
+import { boundedInteger, idCursor } from '../lib/searchFilter.js';
 
 const router = Router();
+
+/**
+ * ─── Tiered debug logging ───────────────────────────────────────────────────
+ * GROUP_LIST_LOG_LEVEL = off | light | normal | verbose (default light)
+ *   off     — nothing
+ *   light   — every page of `GET /relationship-groups`: the limit and cursor it
+ *             ran with, how many rows came back, the cursor it hands out next,
+ *             and the query string all of that was read from. A page boundary
+ *             that drops or repeats a group leaves no other trace — the graph
+ *             concatenates pages and draws edges, so a missing group is a
+ *             missing edge between two nodes that are both still there. Also
+ *             every refused cursor.
+ *   normal  — light, plus the unpaged (bare array) reads, with their row count
+ *   verbose — normal, plus the first and last id on each page, which is what a
+ *             boundary bug is visible in
+ */
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  // Resolved per call, not at module load, so it can't depend on import order.
+  const active = LEVELS[process.env.GROUP_LIST_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[relationshipGroups:${level}] ${msg}`);
+}
+
+/**
+ * The page sizes `GET /relationship-groups` will serve. Below the minimum is no
+ * page size at all (see `boundedInteger`); above the maximum is clamped to it.
+ *
+ * The same 200 `GET /entities` serves, and for the same reason: the work this
+ * route does lands on the single event loop every tenant of this API shares,
+ * and a group carries its whole `members` array, so an unbounded
+ * `JSON.stringify` of one workspace's entire group set is time nobody else's
+ * request can run in. The graph view asks for every group the moment it opens,
+ * which is exactly the request that has to stop being unbounded. A caller who
+ * wants the whole workspace still gets it — by asking for pages, not by asking
+ * for one.
+ */
+export const GROUP_LIMIT_MIN = 1;
+export const GROUP_LIMIT_MAX = 200;
 
 // A malformed id is 400 INVALID_ID, not a CastError the catch turns into a 500.
 // Registered here rather than per handler so a later route inherits it.
@@ -72,11 +112,77 @@ function rejectForeign(ids, present) {
   return missing.length ? `Unknown entity: ${missing.join(', ')}` : null;
 }
 
-// GET /relationship-groups — all groups (lean, for graph construction)
+/**
+ * GET /relationship-groups — the workspace's groups (lean, for graph
+ * construction), a page at a time when a page is asked for.
+ *
+ * The contract is the one `GET /entities` answers (KOL-067), with the single
+ * difference that this sort is `_id` alone, so the cursor is a bare id rather
+ * than a title and a tie-break:
+ *
+ *   `?limit=` opts into the envelope `{ items, nextAfter }`. No `?limit=` — and
+ *   anything that is not a page size, so `0`, `-1`, `abc`, a repeated parameter
+ *   or `?limit[$gt]=1` — is the unbounded bare array this route has always
+ *   answered, which is what keeps the cap from being a breaking change: the
+ *   import and tenancy suites, and any script outside this repo, read the array.
+ *
+ *   `?after=` is the previous page's `nextAfter` verbatim. Keyset and not
+ *   `skip`, for the reason KOL-067 gives: a group created while a client is
+ *   paging shifts every later row forward one place under `skip`, so one row is
+ *   served twice and the one the shift pushed past the boundary never at all.
+ *   A cursor names a position in the sort instead, so an insert anywhere does
+ *   not move it. A present-but-unusable cursor is 400 rather than a silent
+ *   first page.
+ *
+ * `_id` is the sort because it is already unique (no tie-break to lose a row
+ * at a boundary) and because every collection indexes it — so this needs no new
+ * index on a live Atlas collection, which KOL-067 recorded as the cost of
+ * sorting `/entities` by title. Ascending `_id` is also insertion order, which
+ * is the order this route answered in before it sorted at all.
+ *
+ * `members` is *not* populated here, as it was not before: the graph resolves
+ * member ids against the entity list it already holds, and `GET
+ * /relationship-groups/:id` is where a labelled, populated group comes from.
+ */
 router.get('/', async (req, res, next) => {
   try {
-    const groups = await RelationshipGroup.find({ workspaceId: req.workspaceId }).lean();
-    res.json(groups);
+    const filter = { workspaceId: req.workspaceId };
+    // `?limit=` through the same typing rule the entity filters use: the
+    // extended query parser hands `?limit[$gt]=1` to the route as an object
+    // and `?limit=1&limit=2` as an array, and either reaching `.limit()` is a
+    // 500 rather than a page. Absent, unusable, or below the minimum all mean
+    // *no limit* — today's unpaged bare array, unchanged.
+    const limit = boundedInteger(req.query.limit, { min: GROUP_LIMIT_MIN, max: GROUP_LIMIT_MAX });
+
+    const source = req.originalUrl.includes('?') ? `?${req.originalUrl.split('?').slice(1).join('?')}` : '(no query string)';
+    const cursor = idCursor(req.query.after);
+    if (cursor.error) {
+      log('light', `refused 400 — ${cursor.error} (source: ${source}, after=${JSON.stringify(req.query.after)})`);
+      return res.status(400).json({ error: cursor.error });
+    }
+    const after = cursor.after;
+
+    const query = RelationshipGroup.find(after ? { ...filter, _id: { $gt: after } } : filter)
+      .sort({ _id: 1 });
+    // One row past the page, so whether a next page exists is a fact about what
+    // came back rather than something inferred from a second count query.
+    if (limit) query.limit(limit + 1);
+
+    const rows = await query.lean();
+
+    if (!limit) {
+      log('normal', `unpaged list → ${rows.length} group(s), bare array (source: ${source})`);
+      return res.json(rows);
+    }
+
+    const items = rows.slice(0, limit);
+    const last = items[items.length - 1];
+    const nextAfter = rows.length > limit && last ? String(last._id) : null;
+
+    log('light', `page → limit ${limit}, after ${after ?? '(none)'}, ${items.length} group(s), next ${nextAfter ?? '(none)'} (source: ${source})`);
+    log('verbose', `page ids: ${items.length ? `${items[0]._id} … ${last._id}` : '(empty)'}`);
+
+    res.json({ items, nextAfter });
   } catch (err) {
     next(err);
   }
