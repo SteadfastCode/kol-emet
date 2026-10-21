@@ -71,7 +71,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message**
+- [x] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message**
   `server/tests/http/errorShape.test.js` is the guard that no router, middleware or lib hands a caught error's text to a
   caller, and both of its file walks are non-recursive: `writingFiles()` (`:610`) and `sourceFiles()` (`:625`) read
   `src/routes`, `src/middleware` and `src/lib` with a plain `readdirSync` and skip anything that is not a top-level
