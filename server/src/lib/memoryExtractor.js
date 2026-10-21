@@ -8,6 +8,7 @@
 import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
 import { getCheapestExtractionModel } from './cheapModelFinder.js';
 import UserMemory from '../models/UserMemory.js';
+import { personalScope } from './personalScope.js';
 import { recordSpend } from './usageMeter.js';
 import { OwnerGoneError } from './ownerGuard.js';
 
@@ -15,8 +16,11 @@ import { OwnerGoneError } from './ownerGuard.js';
 // Extraction runs unattended after every exchange, so it needs to be
 // diagnosable after the fact rather than only reproducible live.
 //   off     — nothing
-//   light   — route chosen (and why), fact count, errors. Cheap; on by default.
-//   normal  — light, plus the facts themselves and per-attempt timing.
+//   light   — route chosen (and why), the workspace the facts are stamped with
+//             and where that came from, fact count, errors. Cheap; on by default.
+//   normal  — light, plus the facts themselves, per-attempt timing, and what
+//             each turn's prompt was loaded with (how many facts, how many of
+//             them pre-KOL-091 rows read as this workspace's).
 //   verbose — normal, plus raw model output. Noisy; short opt-in sessions only.
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -73,7 +77,7 @@ export async function extractAndSaveMemories(userId, conversationId, lastUserMsg
     const extractionProvider = route.provider;
     const model = route.model ?? (await getCheapestExtractionModel());
 
-    log('light', `route=${extractionProvider}/${model} (${route.why}) user=${userId}`);
+    log('light', `route=${extractionProvider}/${model} (${route.why}) user=${userId} workspace=${workspaceId ?? 'none'}`);
 
     const client = makeClient(extractionProvider);
 
@@ -127,28 +131,44 @@ export async function extractAndSaveMemories(userId, conversationId, lastUserMsg
 
     const docs = facts
       .filter(f => typeof f === 'string' && f.trim())
-      .map(f => ({ userId, fact: f.trim(), sourceId: conversationId }));
+      // Stamped with the workspace the exchange happened in (KOL-091), so a
+      // fact from one wiki cannot reach another's system prompt. `workspaceId`
+      // is the one resolveWorkspace set for the turn that produced it.
+      .map(f => ({ userId, workspaceId: workspaceId ?? null, fact: f.trim(), sourceId: conversationId }));
 
     if (docs.length > 0) {
       const saved = await UserMemory.insertMany(docs);
-      log('light', `saved ${saved.length} fact(s) (parse=${parsedVia}) ids=${saved.map(d => d._id).join(',')}`);
+      log('light', `saved ${saved.length} fact(s) in workspace ${workspaceId ?? 'none'} (source: the chat turn's resolved workspace, parse=${parsedVia}) ids=${saved.map(d => d._id).join(',')}`);
       log('normal', `facts: ${docs.map(d => d.fact).join(' | ')}`);
     }
   } catch (err) {
     // Expected, not a failure: the account was deleted while the model call ran,
     // and the insert removed itself.
     if (err instanceof OwnerGoneError) {
-      log('light', `facts discarded: user ${userId} was deleted during extraction (source: owner guard on UserMemory)`);
+      log('light', `facts discarded: user ${userId} or workspace ${workspaceId ?? 'none'} was deleted during extraction (source: owner guard on UserMemory, missing ${err.missing.join(', ')})`);
       return;
     }
     console.error('[memoryExtractor] failed:', err.message);
   }
 }
 
-export async function loadMemories(userId) {
-  const records = await UserMemory.find({ userId })
+/**
+ * The facts to put in this turn's system prompt: the caller's own, from the
+ * workspace they are acting in, newest first.
+ *
+ * Scoped on the workspace as well as the user since KOL-091 — see
+ * lib/personalScope.js, which also explains why a row written before that item
+ * (`workspaceId: null`) still counts as the caller's current workspace.
+ *
+ * @param {string|import('mongoose').Types.ObjectId} userId
+ * @param {string|import('mongoose').Types.ObjectId} workspaceId req.workspaceId
+ */
+export async function loadMemories(userId, workspaceId) {
+  const records = await UserMemory.find(personalScope(userId, workspaceId))
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
+  const legacy = records.filter(r => r.workspaceId == null).length;
+  log('normal', `loaded ${records.length} fact(s) for user ${userId} in workspace ${workspaceId ?? 'none'}${legacy ? `, ${legacy} of them written before KOL-091 and read as this workspace's` : ''}`);
   return records.map(r => r.fact);
 }

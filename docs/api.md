@@ -522,7 +522,7 @@ and timestamps only — never an email or a credential. The client logs its own 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/chat/providers` | Providers whose API key is configured on the server (`id`, `name`, `models`, `defaultModel`) |
-| POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Persists to the conversation when `conversationId` is supplied. |
+| POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Persists to the conversation when `conversationId` is supplied — which must belong to the caller **and to the workspace the request acted in**, or it is `404 Conversation not found` before the stream opens and before anything is billed (KOL-091). The system prompt is built from the caller's memories *in that workspace* only. |
 
 Providers are defined in [`lib/aiProviders.js`](../server/src/lib/aiProviders.js) and reached through
 an OpenAI-compatible client. Currently registered: **OpenRouter** (primary), the native **Claude
@@ -532,14 +532,25 @@ API key env var is set.
 
 ## Conversations
 
+A conversation belongs to a user **and** to the workspace it was held in, so every route here
+filters on both (KOL-091). A chat is reachable only from the workspace it was created in; from any
+other one it is absent from the list and `404 Conversation not found` by id — the same answer a
+chat that never existed gets. A row written before tenancy (`workspaceId: null`) reads as the
+caller's current workspace, so pre-switcher history is not lost; see
+[data-model.md](data-model.md#both-are-scoped-to-a-workspace-not-just-a-user-closed-2026-10-21-kol-091).
+
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/conversations` | List the current user's conversations |
-| POST | `/conversations` | Create a conversation |
+| GET | `/conversations` | List the caller's conversations in the acting workspace, newest first |
+| POST | `/conversations` | Create a conversation, stamped with the acting workspace |
 | GET | `/conversations/:id` | Single conversation with messages |
 | PATCH | `/conversations/:id` | Rename (sets `autoTitle: false`) or update |
 | DELETE | `/conversations/:id` | Delete |
 | POST | `/conversations/:id/title` | Auto-generate a title from the conversation |
+
+Set `CONVERSATION_LOG_LEVEL` (`off`/`light`/`normal`/`verbose`, default `light`) to trace a 404: the
+light tier says whether the row exists at all, belongs to another user, or is the caller's own in a
+different workspace — which is the one thing a 404 cannot say for itself.
 
 ## Drafts
 

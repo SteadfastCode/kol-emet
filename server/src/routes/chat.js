@@ -30,6 +30,7 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { getCategories } from '../config/categories.js';
 import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
+import { personalScope } from '../lib/personalScope.js';
 import { checkBudget, recordSpend } from '../lib/usageMeter.js';
 import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
@@ -181,7 +182,15 @@ const wikiTools = categories => [
 async function executeTool(name, args, ctx = {}) {
   if (name === 'save_memory') {
     if (!args.fact || !ctx.userId) return { error: 'Missing fact or user context' };
-    await UserMemory.create({ userId: ctx.userId, fact: args.fact, sourceId: ctx.conversationId });
+    // Scoped to the workspace this turn is answering from (KOL-091), the same
+    // one the search tools below read — a fact learned in one wiki is not a
+    // fact about another. See lib/personalScope.js.
+    await UserMemory.create({
+      userId: ctx.userId,
+      workspaceId: ctx.workspaceId ?? null,
+      fact: args.fact,
+      sourceId: ctx.conversationId,
+    });
     return { saved: true };
   }
 
@@ -336,18 +345,26 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
 
   const effectiveModel = model || providerCfg.defaultModel;
 
-  // Validate conversation ownership if provided
+  // Validate conversation ownership if provided. Scoped on the workspace as
+  // well as the user (KOL-091): the turn's graph tools read req.workspaceId and
+  // its spend is billed to it, so a chat started in another workspace must not
+  // be answerable — and continuable — from this one. Unreachable is 404, the
+  // same answer the conversation routes give, so the two cannot disagree about
+  // which chats exist here.
   const userId = req.session?.userId;
   let conversation = null;
   if (conversationId && userId) {
-    conversation = await Conversation.findOne({ _id: conversationId, userId });
+    conversation = await Conversation.findOne({
+      _id: conversationId,
+      ...personalScope(userId, req.workspaceId),
+    });
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
   }
 
   // Load memories and build system prompt (skip if caller supplied a custom one)
   let effectiveSystem = systemPrompt;
   if (!effectiveSystem) {
-    const memories = userId ? await loadMemories(userId) : [];
+    const memories = userId ? await loadMemories(userId, req.workspaceId) : [];
     effectiveSystem = buildSystemPrompt(memories);
   }
 

@@ -14,7 +14,8 @@ MongoDB collections:
 | `OpenQuestion` | `openquestions` | Unresolved questions, each linked to one or more entities |
 | `ChangeLog` | `changelogs` | Audit trail of entity writes (TTL 30 days) |
 | `Draft` | `drafts` | Generated changes awaiting human review; also the fine-tune corpus (**no TTL**) |
-| `Conversation` | `conversations` | Saved AI chat sessions per user |
+| `Conversation` | `conversations` | Saved AI chat sessions — one user, one workspace |
+| `UserMemory` | `usermemories` | Facts the assistant remembers about a user, per workspace |
 | `Workspace` | `workspaces` | Tenancy boundary + AI allowance |
 | `User` | `users` | Accounts: email + bcrypt hash + WebAuthn passkeys |
 | `Settings` | `settings` | Singleton global config (`_id: 'global'`) |
@@ -388,16 +389,18 @@ silently scrubbed, because a scrub would hide a field the mapper forgot.
 
 ## Conversation
 
-Saved AI chat sessions (the in-app ChatPanel). One document per conversation, scoped to a user.
+Saved AI chat sessions (the in-app ChatPanel). One document per conversation, scoped to a user **and
+to the workspace it was held in**.
 
 ```js
 {
-  _id:       ObjectId,
-  userId:    ObjectId,   // ref → User (indexed)
-  provider:  String,     // e.g. 'xai', 'openai', 'gemini'
-  model:     String,
-  title:     String,     // default ''
-  autoTitle: Boolean,    // true until the user manually renames (default true)
+  _id:         ObjectId,
+  workspaceId: ObjectId | null,  // ref → Workspace (indexed); null on pre-tenancy rows
+  userId:      ObjectId,         // ref → User (indexed)
+  provider:    String,           // e.g. 'xai', 'openai', 'gemini'
+  model:       String,
+  title:       String,           // default ''
+  autoTitle:   Boolean,          // true until the user manually renames (default true)
   messages: [{
     role:      'user' | 'assistant',
     content:   String,
@@ -407,6 +410,55 @@ Saved AI chat sessions (the in-app ChatPanel). One document per conversation, sc
   updatedAt: Date,
 }
 ```
+
+---
+
+## UserMemory
+
+Facts the assistant remembers about a user between sessions. Written in the background after each
+chat exchange by [`lib/memoryExtractor.js`](../server/src/lib/memoryExtractor.js), and by the
+`save_memory` tool when the user asks for something to be remembered; read back into the `POST /chat`
+system prompt (newest 50).
+
+```js
+{
+  _id:         ObjectId,
+  workspaceId: ObjectId | null,  // ref → Workspace (indexed); null on pre-KOL-091 rows
+  userId:      ObjectId,         // ref → User (indexed)
+  fact:        String,
+  sourceId:    ObjectId,         // ref → Conversation it was extracted from
+  createdAt: Date,
+  updatedAt: Date,
+}
+```
+
+### Both are scoped to a workspace, not just a user (closed 2026-10-21, KOL-091)
+
+A chat is answered out of exactly one workspace: `POST /chat`'s graph tools read `req.workspaceId`
+and the turn's spend is billed to it. But `GET /conversations` listed by `userId` alone, every by-id
+lookup matched on `userId` alone, and `UserMemory` had no workspace at all — so a chat about one wiki
+was listed, readable and continuable from another, and a fact extracted from one wiki's chat went
+into another's system prompt. Invisible while every user had one workspace; KOL-090's switcher is
+what made two of them ordinary.
+
+Every query on either model now goes through
+[`lib/personalScope.js`](../server/src/lib/personalScope.js), which returns **both** halves of the
+filter in one call — `{ userId, workspaceId: { $in: [workspaceId, null] } }` — because the forgotten
+half was the bug. A conversation is reachable (`GET`, `PATCH`, `DELETE`, `POST /:id/title`, and
+`POST /chat` with its id) only from the workspace it was created in; anywhere else it is a 404.
+
+**A `workspaceId: null` row reads as the caller's current workspace.** Rows written before this —
+chats from before tenancy, memories from before KOL-091 — carry no workspace, and `$in: [id, null]`
+matches them wherever the caller is acting, so nobody loses their history. There is no migration,
+because a migration would have to *guess* which workspace such a row meant and there is nothing in
+the row to guess from. Reading one does not adopt it either: a write that stamped it would make it
+vanish from the user's other workspace. New writes always carry a workspace, so the null set only
+shrinks. See the Decision Log entry for KOL-091.
+
+Tenancy is not weakened: both halves are required, so another user's row stays unreachable whatever
+workspace they share. What a null relaxes is only which of the caller's *own* workspaces one of
+their *own* rows appears in. Covered by
+[`tests/http/conversationScope.test.js`](../server/tests/http/conversationScope.test.js).
 
 ---
 
@@ -442,8 +494,9 @@ reshaping the schema later. Registration creates a personal workspace with the n
 ([`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js), behind
 [`DELETE /auth/account`](api.md#auth)). It removes the user,
 every workspace they *solely* own (they are `ownerId` and no other member holds `owner`), every
-document in those workspaces across every model carrying `workspaceId`, and their `UserMemory` and
-`Conversation` rows. It refuses, deleting nothing, while the user belongs to any workspace they
+document in those workspaces across every model carrying `workspaceId` — `UserMemory` and
+`Conversation` among them since KOL-091 — and then those two again by `userId`, which is the only
+pass that reaches a `workspaceId: null` row or an editor's chat in someone else's workspace. It refuses, deleting nothing, while the user belongs to any workspace they
 don't solely own, whether as editor, viewer or co-owner. A write that races the deletion cannot
 leave a row behind. Every model carrying `workspaceId` looks up its workspace after each insert, and
 `UserMemory` and `Conversation` look up their user. A row whose owner is gone deletes itself
