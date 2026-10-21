@@ -193,6 +193,30 @@ function checkNullableString(value, at) {
 const nameKey = (value) => String(value ?? '').trim().toLowerCase();
 
 /**
+ * The row shape both type registries share: an object carrying a name.
+ *
+ * Its own function because the two halves cannot run at the same moment
+ * (KOL-107). `relationshipTypes` is checked inside `planIds`, where the
+ * canonical-name map its `sourceCategory`/`targetCategory` are checked against
+ * already exists. `entityTypes` cannot wait for that: building the map *is* the
+ * loop that reads `row.name`, so a row that is `null` reached `row.name` as a
+ * raw `TypeError` — which `routes/import.js` hands to the error handler as a
+ * 500 `INTERNAL` with a ref, instead of the 400 naming the field every other
+ * malformed row answers with. So `importWorkspace` runs this over `entityTypes`
+ * before it reads a row, and the ordering is the whole of the fix: the checks
+ * and the messages are the ones KOL-097 wrote.
+ */
+function checkTypeRows(rows, key) {
+  rows.forEach((row, index) => {
+    const where = `${key}[${index}]`;
+    if (!isPlainObject(row)) throw refusal('MALFORMED_DOCUMENT', `${where} is not an object`, [where]);
+    if (!isNonEmptyString(row.name)) {
+      throw refusal('MALFORMED_DOCUMENT', `${where}.name is not a non-empty string`, [`${where}.name`]);
+    }
+  });
+}
+
+/**
  * Checks a parsed export document — version, shape, caps — without touching
  * the database, and returns the collections it carries.
  *
@@ -353,15 +377,13 @@ function planIds(collections, canonicalByKey) {
     });
   });
 
-  for (const key of ['entityTypes', 'relationshipTypes']) {
-    collections[key].forEach((row, index) => {
-      const where = `${key}[${index}]`;
-      if (!isPlainObject(row)) throw refusal('MALFORMED_DOCUMENT', `${where} is not an object`, [where]);
-      if (!isNonEmptyString(row.name)) {
-        throw refusal('MALFORMED_DOCUMENT', `${where}.name is not a non-empty string`, [`${where}.name`]);
-      }
-    });
-  }
+  // `entityTypes` has already been through this in `importWorkspace`, which has
+  // to check it before it builds `canonicalByKey` (KOL-107); run it again
+  // rather than trust the order, since planIds is what makes "a refused
+  // document wrote nothing" true and one extra pass over a capped array is
+  // nothing against a reordering that silently reopened a 500.
+  checkTypeRows(collections.entityTypes, 'entityTypes');
+  checkTypeRows(collections.relationshipTypes, 'relationshipTypes');
 
   // The same class of field on an entity type. Its insert is the first one, so
   // a CastError there writes nothing — but the caller still deserves the path
@@ -468,6 +490,20 @@ export async function importWorkspace(doc, workspaceId, { source = 'unknown', ca
   // that map: case-folded name → the exact name this workspace will hold.
   const existingTypes = await EntityType.find({ workspaceId }).select('name').lean();
   const canonicalByKey = new Map(existingTypes.map(type => [nameKey(type.name), type.name]));
+
+  // The shape of an `entityTypes` row is therefore the one check that cannot
+  // wait for planIds: the loop below reads `row.name` off every row, so
+  // `entityTypes: [null]` used to be a `TypeError` here — a 500 with a ref —
+  // and `[42]`, `["Worlds"]` or `[{}]` registered a nameless type and were then
+  // answered by whichever of planIds's later checks tripped first, which for a
+  // document whose entities are filed under the broken type was its *category*
+  // rather than the row the owner has to fix (KOL-107). Nothing was written
+  // either way; what was wrong was the answer.
+  try {
+    checkTypeRows(collections.entityTypes, 'entityTypes');
+  } catch (err) {
+    fail(err);
+  }
 
   const entityTypeDocs = [];
   let skippedEntityTypes = 0;
