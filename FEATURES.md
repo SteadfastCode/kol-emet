@@ -68,7 +68,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-092) Two list routes still answer with the whole workspace**
+- [x] **(KOL-092) Two list routes still answer with the whole workspace**
   KOL-061 stopped `GET /entities` shipping every block and KOL-067 gave it keyset pages, but `GET /relationship-groups`
   still returns every group in the workspace with its full `members` array
   (`server/src/routes/relationshipGroups.js:78`) and `GET /open-questions` returns every question with `entry_ids`
