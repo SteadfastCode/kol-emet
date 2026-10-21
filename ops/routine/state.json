@@ -79,7 +79,7 @@
     "KOL-105": {
       "order": 5,
       "title": "The assistant tells every workspace it is a world-building wiki",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-105",

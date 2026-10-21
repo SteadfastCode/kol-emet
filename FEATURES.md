@@ -70,34 +70,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-105) The assistant tells every workspace it is a world-building wiki**
-  `buildSystemPrompt` opens with "You are an AI assistant integrated into Kol Emet, a world-building wiki"
-  (`server/src/routes/chat.js:54`) and the rest of that prompt talks about lore and invented content. Phase 6 shipped
-  user-defined entity types and two templates, so a workspace seeded from Software Architecture
-  (`server/src/config/templates.js:209`) holds Services, Data Stores, APIs and Teams — and its assistant is still told
-  the subject is a wiki of worlds and warned not to invent lore. KOL-028 fixed the half of this that is data: the tool
-  schema's category enum is built per request from `getCategories(req.workspaceId)` (`chat.js:388`). The prose was left,
-  and the workspace's own name is not in the prompt either, though `PATCH /workspace` exists to set it. Build: derive
-  the domain sentence from the request — the workspace's name and its entity-type names, from the same
-  `getCategories(req.workspaceId)` call hoisted above the prompt build at `chat.js:351` and reused by the tool schema,
-  so it stays one query. Where a workspace records which template seeded it, the prompt may use that template's own
-  `description` (`templates.js:58,209`), which means persisting the key: `POST /auth/register` already receives it
-  (`server/src/routes/auth.js:137`) and hands it to `seedWorkspace` (`:233`), and it is thrown away afterwards — store
-  it as a nullable `Workspace.template` with no backfill, so a workspace from before this carries null and falls back to
-  its type names. The instructions that are true of every domain stay exactly as they are — search before answering,
-  never invent, cite names — and only the ones about fiction go. Files: `server/src/routes/chat.js`,
-  `server/src/models/Workspace.js`, `server/src/lib/workspaceSeeder.js`, `server/src/routes/auth.js` (the one line that
-  passes the key through), and a Decision Log line on the prompt being per-workspace. Verify:
-  `server/tests/http/chat.test.js` already points the `steadfast` provider at a fake OpenAI-compatible server that
-  records every request body, which is the only place the prompt is observable — add cases there: a workspace seeded as
-  Software Architecture gets a system prompt naming its own types and no longer containing "world-building"; a
-  worldbuilding workspace still reads as one; a renamed workspace appears under its new name; a workspace with no types
-  at all falls back without leaving an empty list in the sentence; and one tenant's prompt never carries another's type
-  names. `cd server && yarn test` green; the client is untouched. Out of scope:
-  `server/src/lib/generatorPrompts.js`, whose wording is equally worldbuilding-shaped ("an author's rough notes") but
-  whose only honest verification is a paid generation run; re-seeding or inferring a template for existing workspaces;
-  the `save_memory` and MCP tool descriptions; and a per-workspace prompt a user can edit, which is a product decision
-  nobody has made.
 
 - [ ] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message**
   `server/tests/http/errorShape.test.js` is the guard that no router, middleware or lib hands a caught error's text to a
@@ -199,6 +171,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-105) The assistant tells every workspace it is a world-building wiki** (routine 2026-10-21, bff791a)
+  `buildSystemPrompt` opens with "You are an AI assistant integrated into Kol Emet, a world-building wiki"
+  (`server/src/routes/chat.js:54`) and the rest of that prompt talks about lore and invented content. Phase 6 shipped
+  user-defined entity types and two templates, so a workspace seeded from Software Architecture
+  (`server/src/config/templates.js:209`) holds Services, Data Stores, APIs and Teams — and its assistant is still told
+  the subject is a wiki of worlds and warned not to invent lore. KOL-028 fixed the half of this that is data: the tool
+  schema's category enum is built per request from `getCategories(req.workspaceId)` (`chat.js:388`). The prose was left,
+  and the workspace's own name is not in the prompt either, though `PATCH /workspace` exists to set it. Build: derive
+  the domain sentence from the request — the workspace's name and its entity-type names, from the same
+  `getCategories(req.workspaceId)` call hoisted above the prompt build at `chat.js:351` and reused by the tool schema,
+  so it stays one query. Where a workspace records which template seeded it, the prompt may use that template's own
+  `description` (`templates.js:58,209`), which means persisting the key: `POST /auth/register` already receives it
+  (`server/src/routes/auth.js:137`) and hands it to `seedWorkspace` (`:233`), and it is thrown away afterwards — store
+  it as a nullable `Workspace.template` with no backfill, so a workspace from before this carries null and falls back to
+  its type names. The instructions that are true of every domain stay exactly as they are — search before answering,
+  never invent, cite names — and only the ones about fiction go. Files: `server/src/routes/chat.js`,
+  `server/src/models/Workspace.js`, `server/src/lib/workspaceSeeder.js`, `server/src/routes/auth.js` (the one line that
+  passes the key through), and a Decision Log line on the prompt being per-workspace. Verify:
+  `server/tests/http/chat.test.js` already points the `steadfast` provider at a fake OpenAI-compatible server that
+  records every request body, which is the only place the prompt is observable — add cases there: a workspace seeded as
+  Software Architecture gets a system prompt naming its own types and no longer containing "world-building"; a
+  worldbuilding workspace still reads as one; a renamed workspace appears under its new name; a workspace with no types
+  at all falls back without leaving an empty list in the sentence; and one tenant's prompt never carries another's type
+  names. `cd server && yarn test` green; the client is untouched. Out of scope:
+  `server/src/lib/generatorPrompts.js`, whose wording is equally worldbuilding-shaped ("an author's rough notes") but
+  whose only honest verification is a paid generation run; re-seeding or inferring a template for existing workspaces;
+  the `save_memory` and MCP tool descriptions; and a per-workspace prompt a user can edit, which is a product decision
+  nobody has made.
 - [x] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one** (routine 2026-10-21, d70e7cc)
   The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
   `?status=` filter, back-links maintained on both sides, two MCP tools (`add_open_question`, `list_open_questions`),
