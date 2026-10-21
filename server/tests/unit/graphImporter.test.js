@@ -22,6 +22,10 @@
  *   - **A planted foreign `workspaceId`** — a hand-edited document naming
  *     another tenant — lands in the caller's workspace and nowhere else.
  *   - **A document over the caps is refused with nothing written.**
+ *   - **An `entityTypes` row that is not a row is refused by its path** before
+ *     anything reads it (KOL-107) — `null`, a number or a bare name where a row
+ *     belongs names `entityTypes[n]`, not an entity's `category`, and never
+ *     reaches the build loop as a `TypeError`.
  *   - **A non-string in a nullable string field is refused by its path** —
  *     a group's `label`, a member's `label` or `notes`, an entity type's
  *     `icon` or colours — rather than reaching Mongoose as a `CastError` on an
@@ -45,6 +49,9 @@
  *   - drop `{ timestamps: false }` from the inserts -> the round trip fails
  *   - drop the nullable-string checks from planIds -> the non-string-field test
  *     fails with a CastError and a half-written workspace
+ *   - move the `entityTypes` shape check back behind the `entityTypeDocs` loop
+ *     -> the entityTypes-row test fails, on a TypeError for `null` and on the
+ *     wrong field for the rest
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_GRAPH_IMPORT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -448,6 +455,62 @@ describe('a document that cannot be trusted', () => {
     assert.equal(groups[0].label, null);
     assert.equal(groups[0].members[0].label, null);
     assert.equal(groups[0].members[0].notes, null);
+  });
+
+  test('an entityTypes row that is not a row at all is refused by its path, not read', async () => {
+    const destination = await emptyWorkspace('entity-type-row-shape');
+
+    // The hole the grader of KOL-097 found (KOL-107). The loop that builds the
+    // entity-type documents reads `row.name` off every row, and it ran *before*
+    // the checks KOL-097 added — so `entityTypes: [null]` was a raw `TypeError`
+    // there, which routes/import.js hands to the error handler as a 500
+    // `INTERNAL` with a ref rather than the 400 naming the field; and the
+    // shapes that did survive the read registered a nameless type and were
+    // answered by whichever later check tripped first, which for this document
+    // — whose entities are filed under both of its types — was an entity's
+    // *category* rather than the type row the owner has to fix.
+    const cases = [
+      ['entityTypes[0]', doc => { doc.entityTypes[0] = null; }],
+      ['entityTypes[0]', doc => { doc.entityTypes[0] = 42; }],
+      ['entityTypes[0]', doc => { doc.entityTypes[0] = 'Worlds'; }],
+      ['entityTypes[0]', doc => { doc.entityTypes[0] = ['Worlds']; }],
+      ['entityTypes[0].name', doc => { doc.entityTypes[0] = {}; }],
+      ['entityTypes[1].name', doc => { doc.entityTypes[1].name = '   '; }],
+    ];
+
+    for (const [field, edit] of cases) {
+      const broken = JSON.parse(JSON.stringify(exported));
+      edit(broken);
+
+      const err = await refusal(broken, destination);
+      assert.equal(err.code, 'MALFORMED_DOCUMENT', `${field} should be a refusal, not a TypeError: ${err.stack}`);
+      assert.deepEqual(err.fields, [field], `${field}: the refusal must name the row the owner has to fix`);
+
+      assert.deepEqual(await workspaceContentCounts(destination), { entities: 0, relationshipGroups: 0, openQuestions: 0 }, field);
+      assert.equal(await EntityType.countDocuments({ workspaceId: destination }), 0, `${field}: nothing is written until everything has been checked`);
+    }
+
+    // The collection checked after the map is built is unchanged: a
+    // relationshipTypes row of the same shapes is the same refusal, by its own
+    // path, which is what the move must not have cost.
+    for (const [field, edit] of [
+      ['relationshipTypes[0]', doc => { doc.relationshipTypes[0] = null; }],
+      ['relationshipTypes[1].name', doc => { doc.relationshipTypes[1] = {}; }],
+    ]) {
+      const broken = JSON.parse(JSON.stringify(exported));
+      edit(broken);
+
+      const err = await refusal(broken, destination);
+      assert.equal(err.code, 'MALFORMED_DOCUMENT', `${field} should be a refusal: ${err.stack}`);
+      assert.deepEqual(err.fields, [field]);
+      assert.equal(await EntityType.countDocuments({ workspaceId: destination }), 0, `${field}: the entity types are inserted first, and must not have been`);
+    }
+
+    // And the document the cases were edited from still imports: the move is
+    // an ordering, not a new rule about what a well-formed registry looks like.
+    const ok = await importWorkspace(JSON.parse(JSON.stringify(exported)), destination, { source: 'tests/graphImporter' });
+    assert.equal(ok.imported.entityTypes, 2);
+    assert.equal(ok.imported.entities, TITLES.length);
   });
 });
 

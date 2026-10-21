@@ -21,6 +21,9 @@
  *   - **malformed JSON** is **400 `MALFORMED_JSON`**, which is the path-scoped
  *     parser in app.js rather than the app-wide one (whose parse failure would
  *     be a 500);
+ *   - a **row that is not a row** — `entityTypes: [null]` and friends — is
+ *     **400 `MALFORMED_DOCUMENT`** carrying no `ref`, rather than the 500
+ *     `INTERNAL` a `TypeError` inside the importer would become here (KOL-107);
  *   - a successful import sends **one `workspace:imported` frame** down the
  *     live-sync channel (KOL-102) — to the workspace's *other* open streams,
  *     never to another tenant's, and never back to the client that asked. An
@@ -104,6 +107,7 @@ let port;
 let opened = [];   // every SSE stream this file holds open, destroyed in after()
 let alice;    // the graph being exported, and the non-empty workspace
 let carol;    // empties her workspace, then imports alice's graph into it
+let dave;     // empties his workspace and aims malformed documents at it
 let erin;     // same, with two live streams open while she imports
 let editor;   // a member of alice's workspace, role editor
 let document; // alice's export, the document under test
@@ -216,9 +220,11 @@ before(async () => {
 
   alice = await registerUser('alice@example.test');
   carol = await registerUser('carol@example.test');
+  dave = await registerUser('dave@example.test');
   erin = await registerUser('erin@example.test');
   editor = await addMember('editor@example.test', alice.workspaceId, 'editor');
   assert.notEqual(alice.workspaceId, carol.workspaceId);
+  assert.notEqual(alice.workspaceId, dave.workspaceId);
   assert.notEqual(alice.workspaceId, erin.workspaceId);
 
   await createEntity(alice, ALICE_TITLE);
@@ -364,6 +370,37 @@ describe('a document the server cannot read', () => {
 
     assert.equal(res.status, 400);
     assert.equal(res.body.error, 'UNSUPPORTED_VERSION', 'no version is an unsupported version, not a shape complaint');
+  });
+
+  test('an entityTypes row that is not a row is 400 MALFORMED_DOCUMENT, not a 500 with a ref', async () => {
+    // Dave's workspace, emptied: `MALFORMED_DOCUMENT` is settled *after* the
+    // emptiness rule (a caller aiming an import at the wrong workspace should
+    // not first be told about a field), so a shape complaint can only be seen
+    // from a workspace an import could otherwise have written into.
+    await emptyWorkspace(dave);
+    const before = await graphIds(dave);
+
+    // `entityTypes: [null]` used to reach the importer's build loop as a raw
+    // `TypeError`, which this route hands to `next(err)` — a 500 `INTERNAL`
+    // with a ref, the one answer that tells the owner nothing about the file
+    // they have to fix (KOL-107).
+    for (const row of [null, 42, 'Worlds', {}]) {
+      const broken = { ...document, entityTypes: [row, ...document.entityTypes.slice(1)] };
+      const res = await importAs(dave, broken, `POST /import with entityTypes[0] = ${JSON.stringify(row)}`);
+
+      assert.equal(res.status, 400, `entityTypes[0] = ${JSON.stringify(row)} is the caller's error, not the server's`);
+      assert.equal(res.body.error, 'MALFORMED_DOCUMENT');
+      // A refusal names only its code: the field is in the log, and a 500's
+      // `ref` is what must not be here.
+      assert.deepEqual(Object.keys(res.body), ['error']);
+      assert.deepEqual(await graphIds(dave), before, `entityTypes[0] = ${JSON.stringify(row)}: a refused document writes nothing`);
+    }
+
+    // And the unedited document still imports into that same workspace, which
+    // is the point of refusing before the first insert.
+    const ok = await importAs(dave, document, 'POST /import as dave, unedited');
+    assert.equal(ok.status, 201);
+    assert.equal(ok.body.imported.entities, document.entities.length);
   });
 });
 
