@@ -73,7 +73,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be**
+- [x] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be**
   `RAISED_HERE` is a module-private Symbol set by plain assignment in `httpError()`
   (`server/src/middleware/errorHandler.js:163`), and the comment above it (`:132`) states the guarantee the mark exists
   for: nothing can carry it by accident — "not a property copied across by `Object.assign`". `Object.assign` and object
