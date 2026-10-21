@@ -46,7 +46,14 @@
  *     **writes a caught message into a field instead**, which is the same leak
  *     with a delay: `POST /drafts` stored `err.message` on the draft and
  *     `GET /drafts/:id` returns the whole document, so the provider's own HTTP
- *     body reached a caller in a plain JSON response a request later (KOL-100).
+ *     body reached a caller in a plain JSON response a request later (KOL-100);
+ *   - and that both of those walks read **subdirectories too**. They used a
+ *     flat `readdirSync` and so skipped `src/lib/producers/` whole — the one
+ *     directory the ParseError gate below carves its exception out for, and
+ *     therefore the one place a caught `YAMLParseError` or a driver string
+ *     could have been published with both sweeps green. A floor on a file
+ *     count cannot notice a missing directory, so the coverage assertions name
+ *     the producers (KOL-106).
  *
  * Falsification check: drop the `RAISED_HERE` test from rule 5 and the provider
  * group fails: `classify()` maps an error nobody here raised, and
@@ -54,9 +61,11 @@
  * from `src/app.js` and the
  * first three groups fail (Express's own handler answers HTML and, outside
  * production, the stack). Put `err.message` back into any router's catch and
- * the source sweep fails naming the file and line. Delete a row from
- * `BODY_PARSER_RULES` and two groups fail — one on the response, one on the
- * coverage of the dependencies' own types.
+ * the source sweep fails naming the file and line; put a
+ * `res.json({ error: err.message })` in `src/lib/producers/openApi.js` and the
+ * stored sweep fails naming that path, which it could not do while the walk
+ * was flat. Delete a row from `BODY_PARSER_RULES` and two groups fail — one on
+ * the response, one on the coverage of the dependencies' own types.
  *
  * Why a second, bare app for three of the cases: a duplicate key, an explicit
  * coded error and an unmapped throw are all *reachable* in the deployment but
@@ -576,8 +585,12 @@ const A_MESSAGE = /\berr(?:or)?\s*(?:\?)?\.\s*message\b|\be\s*(?:\?)?\.\s*messag
  * JSON-RPC error objects on their own protocol, which is KOL-047's subject, and
  * neither calls `next(err)`. Listed here rather than silently skipped so that
  * adding a third exemption is a decision somebody makes on purpose.
+ *
+ * Matched on the path from the server root rather than on the bare filename,
+ * so an exemption written for a router cannot silently cover a same-named file
+ * in a subdirectory the walk now reaches (KOL-106).
  */
-const OUT_OF_SCOPE = new Set(['bridge.js', 'mcp.js']);
+const OUT_OF_SCOPE = new Set(['src/routes/bridge.js', 'src/routes/mcp.js']);
 
 /**
  * A caught message being written INTO something rather than answered with:
@@ -602,37 +615,53 @@ const STORED_MESSAGE = /(?:\.\s*\w+|\b\w+)\s*(?:=|:)\s*(?:err(?:or)?|e)\s*\??\.\
  *   - `lib/workspaceSeeder.js` returns it to its one caller, `routes/auth.js`,
  *     which hands it to console.error and answers 201 regardless.
  *
- * Listed rather than silently skipped, so a third is somebody's decision.
+ * Listed rather than silently skipped, so a third is somebody's decision, and
+ * matched on the same whole path as `OUT_OF_SCOPE`.
  */
 const STORED_EXEMPT = new Set(['src/routes/chat.js', 'src/lib/workspaceSeeder.js']);
 
-/** Routers, middleware AND libs: the applier that writes `applyError` is a lib. */
-function writingFiles() {
+/** The response sweep exempts nothing: chat.js is in it, only its frames are out. */
+const NO_EXEMPTIONS = new Set();
+
+/**
+ * Every `.js` file under `dirs`, recursively — the same walk
+ * `parserSourceFiles()` already does over body-parser's own `lib`, which is
+ * why this one being flat was one loop out of step with its neighbour.
+ *
+ * `rel` is the path from the server root and it is what both exemption sets
+ * are read with, so an exemption is a decision about one file and not about a
+ * name that a subdirectory could reuse.
+ */
+function walkSources(dirs, exempt) {
   const files = [];
-  for (const dir of ['src/routes', 'src/middleware', 'src/lib']) {
-    const abs = path.join(SERVER_ROOT, dir);
-    for (const entry of readdirSync(abs, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
-      if (OUT_OF_SCOPE.has(entry.name)) continue;
-      const rel = `${dir}/${entry.name}`;
-      if (STORED_EXEMPT.has(rel)) continue;
-      files.push({ rel, source: readFileSync(path.join(abs, entry.name), 'utf8') });
+  for (const dir of dirs) {
+    const stack = [dir];
+    while (stack.length) {
+      const relDir = stack.pop();
+      for (const entry of readdirSync(path.join(SERVER_ROOT, relDir), { withFileTypes: true })) {
+        const rel = `${relDir}/${entry.name}`;
+        if (entry.isDirectory()) { stack.push(rel); continue; }
+        if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+        if (OUT_OF_SCOPE.has(rel) || exempt.has(rel)) continue;
+        files.push({ rel, source: readFileSync(path.join(SERVER_ROOT, rel), 'utf8') });
+      }
     }
   }
   return files;
 }
 
+/**
+ * Routers, middleware AND libs: the applier that writes `applyError` is a lib,
+ * and so are the producers under `src/lib/producers/` that this walk reaching
+ * subdirectories finally reads (KOL-106).
+ */
+function writingFiles() {
+  return walkSources(['src/routes', 'src/middleware', 'src/lib'], STORED_EXEMPT);
+}
+
+/** What answers a request directly, and everything under it. */
 function sourceFiles() {
-  const files = [];
-  for (const dir of ['src/routes', 'src/middleware']) {
-    const abs = path.join(SERVER_ROOT, dir);
-    for (const name of readdirSync(abs)) {
-      if (!name.endsWith('.js')) continue;
-      if (OUT_OF_SCOPE.has(name)) continue;
-      files.push({ rel: `${dir}/${name}`, source: readFileSync(path.join(abs, name), 'utf8') });
-    }
-  }
-  return files;
+  return walkSources(['src/routes', 'src/middleware'], NO_EXEMPTIONS);
 }
 
 describe('the sweep, asserted over the source', () => {
@@ -690,10 +719,29 @@ describe('the sweep, asserted over the source', () => {
 
   test('the stored-failure sweep reads the libs too, and the applier among them', () => {
     const names = writingFiles().map(f => f.rel);
+    log('light', `the stored-failure sweep read ${names.length} file(s) (source: a recursive walk of ` +
+      `src/routes, src/middleware and src/lib)`);
+    log('verbose', `files read: ${[...names].sort().join(', ')}`);
+
     assert.ok(names.includes('src/lib/draftApplier.js'), `the applier writes applyError and must be swept: ${names.length} file(s) read`);
     assert.ok(names.includes('src/lib/failureNote.js'), 'the helper itself is swept, so it cannot leak what it exists to withhold');
+
+    // Named, not counted. The producers sat in a subdirectory this walk did not
+    // enter, and a `>= 30` floor could not notice: they are the one place whose
+    // parse message a route may publish, so an unswept one could have returned
+    // a YAMLParseError or a driver string with both sweeps green (KOL-106).
+    for (const producer of [
+      'src/lib/producers/dockerCompose.js',
+      'src/lib/producers/openApi.js',
+      'src/lib/producers/kubernetes.js',
+      'src/lib/producers/redactSecrets.js',
+    ]) {
+      assert.ok(names.includes(producer),
+        `${producer} is in the one directory the ParseError gate makes an exception for, so it must be swept: ${names.join(', ')}`);
+    }
+
     assert.ok(names.length >= 30, `expected the routers, middleware and libs, got ${names.length}`);
-    for (const exempt of STORED_EXEMPT) assert.ok(!names.includes(exempt), `${exempt} is exempt by name and must stay out`);
+    for (const exempt of STORED_EXEMPT) assert.ok(!names.includes(exempt), `${exempt} is exempt by path and must stay out`);
   });
 
   test('every router and middleware file was actually read', () => {
@@ -703,6 +751,9 @@ describe('the sweep, asserted over the source', () => {
     const files = sourceFiles();
     assert.ok(files.length >= 14, `expected the routers and middleware, got ${files.length}`);
     const names = files.map(f => f.rel);
+    log('light', `the response sweep read ${names.length} file(s) (source: a recursive walk of ` +
+      `src/routes and src/middleware)`);
+    log('verbose', `files read: ${[...names].sort().join(', ')}`);
     for (const expected of ['src/routes/entities.js', 'src/routes/drafts.js', 'src/middleware/auth.js', 'src/middleware/workspace.js']) {
       assert.ok(names.includes(expected), `${expected} must be in the sweep: ${names.join(', ')}`);
     }
