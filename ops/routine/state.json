@@ -79,7 +79,7 @@
     "KOL-088": {
       "order": 5,
       "title": "OAuth logs the authorization code, the PKCE verifier, and every code still outstanding",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-088",

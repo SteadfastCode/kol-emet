@@ -62,32 +62,6 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [x] **(KOL-088) OAuth logs the authorization code, the PKCE verifier, and every code still outstanding**
-  `server/src/routes/oauth.js` is the one router with no tiered logging, and it prints credentials unconditionally.
-  `POST /oauth/token` logs its whole form body at `:133` — the one-time `code` and the `code_verifier`, which is the
-  PKCE secret — and a miss at `:148` logs the submitted code plus `[...authCodes.keys()]`, every code still outstanding
-  for every user, while `:156` logs the computed and the stored challenge. Each of those codes is redeemable for
-  `MCP_BEARER_TOKEN`, the workspace-wide write token, by anyone who can read the log, and on a hosted deployment the log
-  is the deploy console. `GET /authorize` (`:44`) and `POST /authorize` (`:99`) print their whole query and body too, so
-  `redirect_uri` and `state` land there as well. Second defect, same file: `authCodes` (`:25`) is a `Map` whose
-  `expiresAt` is only ever read at redemption, so a code nobody redeems is never removed and `POST /authorize` grows the
-  map without bound. Build: `OAUTH_LOG_LEVEL = off | light | normal | verbose` (default light) in the shape the rest of
-  the server uses (`middleware/workspace.js`, `routes/changelog.js`), with no secret at any tier. Light says the source
-  of each decision — the route, the grant type, the rule that refused it, and a code's first 8 hex of SHA-256 rather
-  than the code, so two lines can be tied to one exchange without either being redeemable; normal adds issue and redeem
-  with that fingerprint and the outstanding count; verbose adds `redirect_uri` and `resource`, and still never a code, a
-  verifier or a challenge. Plus the sweep: drop expired entries whenever one is issued, and cap the map, refusing a new
-  authorization with 503 rather than growing past it. Files: `server/src/routes/oauth.js`,
-  `server/tests/http/oauth.test.js` (extend), and the `/oauth` rows in `docs/api.md`. Verify: in
-  `server/tests/http/oauth.test.js`, capture `console.log` across a full authorize-then-token exchange and assert the
-  captured text contains neither the code, the verifier nor the challenge, while the fingerprint and the chosen rule are
-  present; a second pending code is not printed by a failed exchange; an expired code is gone after the next issue,
-  asserted through the refusal rather than an exported internal; and the happy path still returns the token, so logging
-  cannot have changed the protocol. `cd server && yarn test` green; the client is untouched. Out of scope:
-  `server/src/routes/bridge.js`, which runs its own issuer and its own token and is not edited here — oauth.js's
-  existing resource branch keeps its behaviour; per-connector tokens and the shared `MCP_BEARER_TOKEN` (KOL-014's
-  subject); the ten-year `expires_in`; and a `redirect_uri` allowlist or client registration, which needs a
-  deployment-config decision nobody has made.
 
 - [ ] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM**
   `server/src/index.js` connects, listens, and installs no signal handler, so the SIGTERM a host sends at every deploy
@@ -434,6 +408,32 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-088) OAuth logs the authorization code, the PKCE verifier, and every code still outstanding** (routine 2026-10-21, 71cce48)
+  `server/src/routes/oauth.js` is the one router with no tiered logging, and it prints credentials unconditionally.
+  `POST /oauth/token` logs its whole form body at `:133` — the one-time `code` and the `code_verifier`, which is the
+  PKCE secret — and a miss at `:148` logs the submitted code plus `[...authCodes.keys()]`, every code still outstanding
+  for every user, while `:156` logs the computed and the stored challenge. Each of those codes is redeemable for
+  `MCP_BEARER_TOKEN`, the workspace-wide write token, by anyone who can read the log, and on a hosted deployment the log
+  is the deploy console. `GET /authorize` (`:44`) and `POST /authorize` (`:99`) print their whole query and body too, so
+  `redirect_uri` and `state` land there as well. Second defect, same file: `authCodes` (`:25`) is a `Map` whose
+  `expiresAt` is only ever read at redemption, so a code nobody redeems is never removed and `POST /authorize` grows the
+  map without bound. Build: `OAUTH_LOG_LEVEL = off | light | normal | verbose` (default light) in the shape the rest of
+  the server uses (`middleware/workspace.js`, `routes/changelog.js`), with no secret at any tier. Light says the source
+  of each decision — the route, the grant type, the rule that refused it, and a code's first 8 hex of SHA-256 rather
+  than the code, so two lines can be tied to one exchange without either being redeemable; normal adds issue and redeem
+  with that fingerprint and the outstanding count; verbose adds `redirect_uri` and `resource`, and still never a code, a
+  verifier or a challenge. Plus the sweep: drop expired entries whenever one is issued, and cap the map, refusing a new
+  authorization with 503 rather than growing past it. Files: `server/src/routes/oauth.js`,
+  `server/tests/http/oauth.test.js` (extend), and the `/oauth` rows in `docs/api.md`. Verify: in
+  `server/tests/http/oauth.test.js`, capture `console.log` across a full authorize-then-token exchange and assert the
+  captured text contains neither the code, the verifier nor the challenge, while the fingerprint and the chosen rule are
+  present; a second pending code is not printed by a failed exchange; an expired code is gone after the next issue,
+  asserted through the refusal rather than an exported internal; and the happy path still returns the token, so logging
+  cannot have changed the protocol. `cd server && yarn test` green; the client is untouched. Out of scope:
+  `server/src/routes/bridge.js`, which runs its own issuer and its own token and is not edited here — oauth.js's
+  existing resource branch keeps its behaviour; per-connector tokens and the shared `MCP_BEARER_TOKEN` (KOL-014's
+  subject); the ten-year `expires_in`; and a `redirect_uri` allowlist or client registration, which needs a
+  deployment-config decision nobody has made.
 - [x] **(KOL-103) Nothing enforces a role on a content write: a viewer may edit, delete and spend** (routine 2026-10-21, 623ae5b)
   `Workspace.members[].role` is `owner | editor | viewer` (`server/src/models/Workspace.js:15`), `resolveWorkspace`
   reads it onto every request and `GET /workspace` hands it to the client "so it can hide what an editor or a viewer may
