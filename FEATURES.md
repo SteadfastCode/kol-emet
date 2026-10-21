@@ -64,7 +64,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client**
+- [x] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client**
   `POST /drafts/:id/apply` broadcasts one `draft:applied` frame to every stream in the workspace except the one that
   asked (`server/src/routes/drafts.js:682`), deliberately in place of a burst of per-entity events — the applier passes
   `broadcast: false` and `server/src/lib/changeLogger.js:56` says why. Nothing listens for it: `useEvents`
