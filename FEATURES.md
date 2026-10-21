@@ -63,7 +63,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM**
+- [x] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM**
   `server/src/index.js` connects, listens, and installs no signal handler, so the SIGTERM a host sends at every deploy
   takes the process down mid-request: a write caught between its Mongo call and its `ChangeLog` append is cut in half,
   and every open `GET /events` stream dies at the socket with no close frame, which
