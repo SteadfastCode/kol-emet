@@ -8,7 +8,7 @@ registration, or removes a feature.
 
 ## Workqueue Items
 
-- [ ] **(KOL-047) Bridge error handling, logging and reconnect** [needs-human]
+- [ ] **(KOL-047) Bridge error handling, logging and reconnect** [proposed]
   Filed after the chat side broke: `bridge_poll` returned repeated bare HTTP 400 "missing or invalid
   session ID" while `bridge_send` still worked, then send started failing the same way — the reply
   channel lost valid session context with no retry, no fallback and no visible logging. Three parts.
@@ -444,12 +444,12 @@ registration, or removes a feature.
   own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
   per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
   keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
-- [ ] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) [needs-human]
+- [ ] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) [proposed]
   The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
   (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
   raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
   `server/scripts/try-generate.js` against Daniel's allowance.
-- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [needs-human]
+- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [proposed]
   "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
   alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
   Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
