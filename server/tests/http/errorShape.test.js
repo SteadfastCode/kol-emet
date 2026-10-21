@@ -25,6 +25,13 @@
  *     error** carrying the very same pair (the OpenAI client sets `status` from
  *     the response and `code` from its body) is a 500 with a `ref`, not that
  *     dependency's string published as a code of this API's (KOL-101);
+ *   - and that the mark is **not copied** onto an error this code did not
+ *     raise. `Object.assign` and object spread both copy own *enumerable*
+ *     symbol-keyed properties, so the plain assignment KOL-101 shipped did
+ *     carry the mark across a copy, against the guarantee written over it;
+ *     `httpError()` now sets it non-enumerably, and the cases that prove it
+ *     copy a *marked* error rather than build an unmarked lookalike, which is
+ *     why the old group could not fail on this (KOL-108);
  *   - a `CastError` is 400 `INVALID_VALUE` and not a 500, because those routes
  *     answered 400 for an uncastable value before this middleware existed and
  *     KOL-075 moves no status a route chose deliberately;
@@ -57,7 +64,9 @@
  *
  * Falsification check: drop the `RAISED_HERE` test from rule 5 and the provider
  * group fails: `classify()` maps an error nobody here raised, and
- * `/probe/provider` answers 401 `invalid_api_key`. Drop `app.use(errorHandler)`
+ * `/probe/provider` answers 401 `invalid_api_key`. Put the mark back as a plain
+ * `err[RAISED_HERE] = true` and the two copy cases in that same group fail,
+ * because the mark rides the copy. Drop `app.use(errorHandler)`
  * from `src/app.js` and the
  * first three groups fail (Express's own handler answers HTML and, outside
  * production, the stack). Put `err.message` back into any router's catch and
@@ -780,6 +789,38 @@ describe('an error from the AI client that carries the same status and code', ()
     const lookalike = Object.assign(new Error('a dependency\'s own sentence'), { status: 503, code: 'EXPORT_NOT_CONFIGURED' });
     assert.equal(classify(lookalike), null,
       'an error nobody here raised cannot acquire rule 5 by carrying the right two properties');
+  });
+
+  test('and neither is a copy of a marked error, because the mark does not copy', () => {
+    // The sentence over `RAISED_HERE` promises the mark cannot arrive by
+    // accident — "not a property copied across by `Object.assign`". That
+    // quarter of it was false until KOL-108: `Object.assign` and object spread
+    // both copy own *enumerable* symbol-keyed properties, so a plain
+    // `err[RAISED_HERE] = true` rode along onto whatever a future
+    // `Object.assign(new Error('wrapped'), err)` built, and the wrapper would
+    // then publish its own `status` and `code` as though this codebase had
+    // chosen them — the one leak rule 5 exists to stop. The case above cannot
+    // fail on that, because it builds a fresh *unmarked* literal; these two
+    // copy a marked error, each of the two ways.
+    const raised = httpError(503, 'EXPORT_NOT_CONFIGURED');
+    log('light', 'the copy fixtures are copied from a real httpError(503, EXPORT_NOT_CONFIGURED), not hand-built');
+
+    const wrapped = Object.assign(new Error('a dependency\'s own sentence'), raised);
+    assert.equal(wrapped.status, 503, 'the premise: a copy does carry the shape, status and code both');
+    assert.equal(wrapped.code, 'EXPORT_NOT_CONFIGURED');
+    assert.equal(classify(wrapped), null,
+      'Object.assign from a marked error must not carry the mark: the wrapper is not what this code raised');
+
+    const spread = { ...raised };
+    assert.equal(spread.status, 503, 'likewise a spread, which copies own enumerable symbol keys too');
+    assert.equal(classify(spread), null,
+      'object spread from a marked error must not carry the mark either');
+
+    // And rule 5 still reads the mark where it is meant to, `fields` included,
+    // so the fix cannot have passed by breaking the rule it protects.
+    const mapped = classify(httpError(503, 'EXPORT_NOT_CONFIGURED', { fields: ['secret'] }));
+    assert.equal(mapped?.status, 503, 'an error this code did raise is still rule 5');
+    assert.deepEqual(mapped.body, { error: 'EXPORT_NOT_CONFIGURED', fields: ['secret'] });
   });
 
   test('is 500 INTERNAL with a ref through the handler, publishing neither the code nor the key', async () => {
