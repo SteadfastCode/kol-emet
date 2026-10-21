@@ -65,7 +65,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft**
+- [x] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft**
   `docs/roadmap.md` Phase 7 names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built compose, KOL-051
   built OpenAPI and put k8s out of scope, and `server/src/models/Draft.js:114` marks the seam — "drift / repo / k8s
   become new enum values here rather than new collections". Like both existing producers this is deterministic: no model
