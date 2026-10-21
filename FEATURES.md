@@ -61,6 +61,39 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-103) Nothing enforces a role on a content write: a viewer may edit, delete and spend**
+  `Workspace.members[].role` is `owner | editor | viewer` (`server/src/models/Workspace.js:15`), `resolveWorkspace`
+  reads it onto every request and `GET /workspace` hands it to the client "so it can hide what an editor or a viewer may
+  not do" (`server/src/middleware/workspace.js:87`), and `requireWorkspaceRole` has existed since KOL-071 — gating
+  exactly two routes, `PATCH /workspace` and `POST /import`. Every other write is ungated: 32 of them, across
+  `/entities` (3), `/relationship-groups` (9), `/open-questions` (3), `/entity-types` (3), `/relationship-types` (3),
+  `/tags` (2), the rollback in `server/src/routes/changelog.js` (1) and `/drafts` (8, one of which spends the
+  workspace's AI allowance). The Decision Log records why it was left — role enforcement on the content routes has
+  "nothing to enforce against while every workspace has exactly one member" — and collaborator invites are the
+  roadmap's next commercial step, so this is the gate that has to exist before the first invite rather than after it.
+  Build: `requireWriteRole` beside `requireWorkspaceRole` in `server/src/middleware/workspace.js` — a pass-through for
+  `GET`, `HEAD` and `OPTIONS` and `requireWorkspaceRole('editor')` for every other method, the same
+  unsafe-methods-only shape `originGuard` uses (`server/src/middleware/originGuard.js:148`) — mounted once per content
+  router in `server/src/app.js`, so a route added to one of those routers later inherits the gate instead of having to
+  remember it. The refusal stays `403 { error: 'NOT_WORKSPACE_EDITOR' }`, a code the client already branches on. `/mcp`
+  is the hole that would otherwise remain: its tools scope themselves through `mcpWorkspaceId()`
+  (`server/src/lib/mcpWorkspace.js:16`) and never pass through this middleware, so a viewer who authorized the
+  connector would keep full write access — have `mcpWorkspace.js` return the membership role it already loads and
+  refuse the write tools with a tool error naming it. `POST /import` keeps its owner gate; `GET /export` stays open to a
+  viewer, because reading is what a viewer is for. Files: `server/src/middleware/workspace.js`, `server/src/app.js`,
+  `server/src/lib/mcpWorkspace.js`, `server/src/routes/mcp.js`, a role column in `docs/api.md`, and a Decision Log line
+  recording editor as the write floor. Verify: a new `server/tests/http/writeRole.test.js` — one workspace seeded with
+  an owner, an editor and a viewer; for every write route named above the viewer is 403 `NOT_WORKSPACE_EDITOR` and the
+  collection is unchanged afterwards, while the editor and the owner succeed; every `GET` answers 200 for all three; the
+  route list is derived from the mounted routers rather than retyped, so a router added later without the gate fails the
+  test; `POST /drafts` refuses a viewer before any allowance is read (`aiBudget.spentMicros` unmoved); the MCP write
+  tools refuse a viewer while its reads answer; and `server/tests/http/tenancy.test.js` and `workspace.test.js` pass
+  unchanged, because isolation is what this must not weaken. `cd server && yarn test` green; the client is untouched,
+  since `GET /workspace` already carries the role. Out of scope: inviting or removing members and the routes that needs;
+  any matrix finer than read-versus-write — an owner-only floor for AI spend, for instance, which is a pricing decision
+  nobody has made; the `/bridge` endpoints, which carry their own token and no workspace role; and hiding buttons in the
+  client, which already has the role and is its own UX item.
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -297,39 +330,6 @@ registration, or removes a feature.
   ChangeLog and so need an event vocabulary of their own; replacing the apply's single frame with per-entity events;
   replaying what a disconnected client missed, and `Last-Event-ID` resumption; and the `/chat` SSE stream, which is a
   different channel with its own client.
-
-- [ ] **(KOL-103) Nothing enforces a role on a content write: a viewer may edit, delete and spend** [proposed]
-  `Workspace.members[].role` is `owner | editor | viewer` (`server/src/models/Workspace.js:15`), `resolveWorkspace`
-  reads it onto every request and `GET /workspace` hands it to the client "so it can hide what an editor or a viewer may
-  not do" (`server/src/middleware/workspace.js:87`), and `requireWorkspaceRole` has existed since KOL-071 — gating
-  exactly two routes, `PATCH /workspace` and `POST /import`. Every other write is ungated: 32 of them, across
-  `/entities` (3), `/relationship-groups` (9), `/open-questions` (3), `/entity-types` (3), `/relationship-types` (3),
-  `/tags` (2), the rollback in `server/src/routes/changelog.js` (1) and `/drafts` (8, one of which spends the
-  workspace's AI allowance). The Decision Log records why it was left — role enforcement on the content routes has
-  "nothing to enforce against while every workspace has exactly one member" — and collaborator invites are the
-  roadmap's next commercial step, so this is the gate that has to exist before the first invite rather than after it.
-  Build: `requireWriteRole` beside `requireWorkspaceRole` in `server/src/middleware/workspace.js` — a pass-through for
-  `GET`, `HEAD` and `OPTIONS` and `requireWorkspaceRole('editor')` for every other method, the same
-  unsafe-methods-only shape `originGuard` uses (`server/src/middleware/originGuard.js:148`) — mounted once per content
-  router in `server/src/app.js`, so a route added to one of those routers later inherits the gate instead of having to
-  remember it. The refusal stays `403 { error: 'NOT_WORKSPACE_EDITOR' }`, a code the client already branches on. `/mcp`
-  is the hole that would otherwise remain: its tools scope themselves through `mcpWorkspaceId()`
-  (`server/src/lib/mcpWorkspace.js:16`) and never pass through this middleware, so a viewer who authorized the
-  connector would keep full write access — have `mcpWorkspace.js` return the membership role it already loads and
-  refuse the write tools with a tool error naming it. `POST /import` keeps its owner gate; `GET /export` stays open to a
-  viewer, because reading is what a viewer is for. Files: `server/src/middleware/workspace.js`, `server/src/app.js`,
-  `server/src/lib/mcpWorkspace.js`, `server/src/routes/mcp.js`, a role column in `docs/api.md`, and a Decision Log line
-  recording editor as the write floor. Verify: a new `server/tests/http/writeRole.test.js` — one workspace seeded with
-  an owner, an editor and a viewer; for every write route named above the viewer is 403 `NOT_WORKSPACE_EDITOR` and the
-  collection is unchanged afterwards, while the editor and the owner succeed; every `GET` answers 200 for all three; the
-  route list is derived from the mounted routers rather than retyped, so a router added later without the gate fails the
-  test; `POST /drafts` refuses a viewer before any allowance is read (`aiBudget.spentMicros` unmoved); the MCP write
-  tools refuse a viewer while its reads answer; and `server/tests/http/tenancy.test.js` and `workspace.test.js` pass
-  unchanged, because isolation is what this must not weaken. `cd server && yarn test` green; the client is untouched,
-  since `GET /workspace` already carries the role. Out of scope: inviting or removing members and the routes that needs;
-  any matrix finer than read-versus-write — an owner-only floor for AI spend, for instance, which is a pricing decision
-  nobody has made; the `/bridge` endpoints, which carry their own token and no workspace role; and hiding buttons in the
-  client, which already has the role and is its own UX item.
 
 - [ ] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one** [proposed]
   The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
