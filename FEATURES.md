@@ -60,6 +60,22 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-109) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-27]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -259,6 +275,207 @@ registration, or removes a feature.
   overlap between an old and a new instance, which is the platform's concern and not the app's; the host's healthcheck
   setting; draining a generation run already in flight, whose budget lock already goes stale on its own after ten
   minutes; and `process.on('uncaughtException')`.
+
+- [ ] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client** [proposed]
+  `POST /drafts/:id/apply` broadcasts one `draft:applied` frame to every stream in the workspace except the one that
+  asked (`server/src/routes/drafts.js:682`), deliberately in place of a burst of per-entity events — the applier passes
+  `broadcast: false` and `server/src/lib/changeLogger.js:56` says why. Nothing listens for it: `useEvents`
+  (`client/src/composables/useEvents.js`) registers `client:id`, `entity:created`, `entity:updated` and
+  `entity:deleted` and nothing else, so the frame reaches only clients that drop it, while the tab that applied
+  refreshes itself through `onDraftApplied` (`client/src/components/WikiLayout.vue:428`). A 30-item apply is therefore
+  invisible in every other tab until a reload. `POST /import` is the same hole without the frame: it writes a whole
+  graph and broadcasts nothing at all, and its own tab reloads at `WikiLayout.vue:541`. Second defect, same file: when
+  the server ends a stream on purpose it writes `event: error` with `{ error: 'session-ended' }` or
+  `{ error: 'too-many-streams' }` first (`server/src/lib/broadcaster.js:166,201`, `server/src/routes/events.js:39`),
+  and `useEvents` cannot tell that from a dropped socket — `es.onerror` closes and re-dials every 3000 ms forever, so a
+  tab whose session was revoked, or one that tripped the per-session stream cap, retries a refusal for as long as it
+  stays open. Third: every frame is `console.log`ged with its whole payload, entity bodies included, in the one client
+  module with no tier (compare `ENTITY_LOAD_LOG_LEVEL`, `client/src/composables/useEntities.js:5`). Build: a
+  `draft:applied` and a `workspace:imported` listener that call `loadEntities(<reason>)` naming the source the way the
+  existing handlers do, plus a toast through `addToast` so a user sees who changed what; the
+  `broadcast('workspace:imported', …)` call in `server/src/routes/import.js` beside its per-collection counts. Then the
+  reconnect: read `e.data` on the error path — a frame the server wrote is a stop and not a retry, so `session-ended`
+  ends the loop and surfaces "signed out elsewhere", `too-many-streams` ends it naming the limit, and a transport
+  failure still retries but with a growing, jittered, capped delay. Tiered
+  `localStorage.SSE_LOG_LEVEL = off | light | normal | verbose` (default light): light names each connect, each ending
+  with the source that caused it — which frame, or which transport failure — and each reconnect with its attempt number
+  and delay, and carries no payload; normal adds the event name and the entity id; verbose adds the frame. Files:
+  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`, `server/src/routes/import.js`, a new
+  `client/src/composables/useEvents.test.js`, and the `/events` section of `docs/api.md`. Verify: the new Vitest suite
+  against a fake `EventSource` — a `draft:applied` frame reloads once and toasts once; a `workspace:imported` frame does
+  the same; a server `error` frame carrying `session-ended` schedules no reconnect and reports the reason;
+  `too-many-streams` likewise; a transport error does reconnect, and successive delays grow rather than repeating
+  3000 ms; and at the default tier no log line contains payload text. Plus a `WikiLayout.test.js` case that both new
+  events reload the sidebar, and a `server/tests/http/import.test.js` case that an import sends one frame to another
+  client in the same workspace and none to a client in another. `cd client && yarn test --run && yarn build` and
+  `cd server && yarn test` green. Out of scope: relationship-group writes, which broadcast nothing either but have no
+  ChangeLog and so need an event vocabulary of their own; replacing the apply's single frame with per-entity events;
+  replaying what a disconnected client missed, and `Last-Event-ID` resumption; and the `/chat` SSE stream, which is a
+  different channel with its own client.
+
+- [ ] **(KOL-103) Nothing enforces a role on a content write: a viewer may edit, delete and spend** [proposed]
+  `Workspace.members[].role` is `owner | editor | viewer` (`server/src/models/Workspace.js:15`), `resolveWorkspace`
+  reads it onto every request and `GET /workspace` hands it to the client "so it can hide what an editor or a viewer may
+  not do" (`server/src/middleware/workspace.js:87`), and `requireWorkspaceRole` has existed since KOL-071 — gating
+  exactly two routes, `PATCH /workspace` and `POST /import`. Every other write is ungated: 32 of them, across
+  `/entities` (3), `/relationship-groups` (9), `/open-questions` (3), `/entity-types` (3), `/relationship-types` (3),
+  `/tags` (2), the rollback in `server/src/routes/changelog.js` (1) and `/drafts` (8, one of which spends the
+  workspace's AI allowance). The Decision Log records why it was left — role enforcement on the content routes has
+  "nothing to enforce against while every workspace has exactly one member" — and collaborator invites are the
+  roadmap's next commercial step, so this is the gate that has to exist before the first invite rather than after it.
+  Build: `requireWriteRole` beside `requireWorkspaceRole` in `server/src/middleware/workspace.js` — a pass-through for
+  `GET`, `HEAD` and `OPTIONS` and `requireWorkspaceRole('editor')` for every other method, the same
+  unsafe-methods-only shape `originGuard` uses (`server/src/middleware/originGuard.js:148`) — mounted once per content
+  router in `server/src/app.js`, so a route added to one of those routers later inherits the gate instead of having to
+  remember it. The refusal stays `403 { error: 'NOT_WORKSPACE_EDITOR' }`, a code the client already branches on. `/mcp`
+  is the hole that would otherwise remain: its tools scope themselves through `mcpWorkspaceId()`
+  (`server/src/lib/mcpWorkspace.js:16`) and never pass through this middleware, so a viewer who authorized the
+  connector would keep full write access — have `mcpWorkspace.js` return the membership role it already loads and
+  refuse the write tools with a tool error naming it. `POST /import` keeps its owner gate; `GET /export` stays open to a
+  viewer, because reading is what a viewer is for. Files: `server/src/middleware/workspace.js`, `server/src/app.js`,
+  `server/src/lib/mcpWorkspace.js`, `server/src/routes/mcp.js`, a role column in `docs/api.md`, and a Decision Log line
+  recording editor as the write floor. Verify: a new `server/tests/http/writeRole.test.js` — one workspace seeded with
+  an owner, an editor and a viewer; for every write route named above the viewer is 403 `NOT_WORKSPACE_EDITOR` and the
+  collection is unchanged afterwards, while the editor and the owner succeed; every `GET` answers 200 for all three; the
+  route list is derived from the mounted routers rather than retyped, so a router added later without the gate fails the
+  test; `POST /drafts` refuses a viewer before any allowance is read (`aiBudget.spentMicros` unmoved); the MCP write
+  tools refuse a viewer while its reads answer; and `server/tests/http/tenancy.test.js` and `workspace.test.js` pass
+  unchanged, because isolation is what this must not weaken. `cd server && yarn test` green; the client is untouched,
+  since `GET /workspace` already carries the role. Out of scope: inviting or removing members and the routes that needs;
+  any matrix finer than read-versus-write — an owner-only floor for AI spend, for instance, which is a pricing decision
+  nobody has made; the `/bridge` endpoints, which carry their own token and no workspace role; and hiding buttons in the
+  client, which already has the role and is its own UX item.
+
+- [ ] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one** [proposed]
+  The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
+  `?status=` filter, back-links maintained on both sides, two MCP tools (`add_open_question`, `list_open_questions`),
+  and its own section in `docs/data-model.md`. The client reads them and nothing more:
+  `client/src/components/EntityHeader.vue:21` renders `entity.open_questions` as static text, there is no
+  `client/src/api/openQuestions.js` at all, and nothing under `client/src` fetches the route — the questions arrive
+  already populated on `GET /entities`. So on a public product the "what don't I know yet" half of the data model can
+  only be written by a user who has connected an AI client, and a question an agent raised can never be marked answered
+  from the UI. The routes have no HTTP test either — there is no `server/tests/http/openQuestions.test.js` — so the
+  contract the client would be built against is unpinned. Build: `client/src/api/openQuestions.js` wrapping the four
+  routes with the `X-SSE-Client-Id` header the other API modules send (`client/src/api/entities.js:1`); in the entity
+  detail panel, beside the list that is already there, an "Add a question" field, inline editing of the text, a
+  resolve/reopen toggle that writes `status` and nothing else, and a delete — each rendering what came back rather than
+  what was typed; and the badge counting open questions only, so a resolved one stops counting. Tiered
+  `localStorage.OPEN_QUESTION_LOG_LEVEL = off | light | normal | verbose` (default light): light names every write with
+  the question id, the field that changed and what asked for it, because a status write and a text write are otherwise
+  indistinguishable after the fact. Files: `client/src/api/openQuestions.js` (new),
+  `client/src/components/EntityHeader.vue`, `client/src/components/EntityDetail.vue`, cases in
+  `client/src/components/EntityDetail.test.js` (which already carries open-question fixtures), a new
+  `server/tests/http/openQuestions.test.js`, and the `/open-questions` rows in `docs/api.md` where they are thinner than
+  the routes. Verify: Vitest with `fetch` stubbed — adding a question posts once with the open entity's id in
+  `entry_ids` and renders the response; resolving sends `status: 'resolved'` and no other field; a failed write leaves
+  the list as it was and says so rather than showing a question the server refused; the badge counts open only; a delete
+  that answers 204 removes exactly one row. Server-side, the new suite covers the four routes end to end: a question
+  created against an entity appears on `GET /entities/:id`, `?status=open` excludes a resolved one, another workspace's
+  entity id is dropped from `entry_ids` rather than stored, a foreign question id is 404, and a delete removes the
+  back-link from the entity. `cd client && yarn test --run && yarn build` and `cd server && yarn test` green. Out of
+  scope: a workspace-wide open-question view and its paging, which KOL-092 leaves unclaimed and this item does not
+  need; the generator emitting `open_question` items, which is KOL-016; Claude flagging a question as possibly answered
+  (`docs/wishlist.md`); attaching one question to several entities from the UI, which the route supports and the panel
+  has no shape for; and `requireActor` plus a ChangeLog trail on these writes, which this collection has never had.
+
+- [ ] **(KOL-105) The assistant tells every workspace it is a world-building wiki** [proposed]
+  `buildSystemPrompt` opens with "You are an AI assistant integrated into Kol Emet, a world-building wiki"
+  (`server/src/routes/chat.js:54`) and the rest of that prompt talks about lore and invented content. Phase 6 shipped
+  user-defined entity types and two templates, so a workspace seeded from Software Architecture
+  (`server/src/config/templates.js:209`) holds Services, Data Stores, APIs and Teams — and its assistant is still told
+  the subject is a wiki of worlds and warned not to invent lore. KOL-028 fixed the half of this that is data: the tool
+  schema's category enum is built per request from `getCategories(req.workspaceId)` (`chat.js:388`). The prose was left,
+  and the workspace's own name is not in the prompt either, though `PATCH /workspace` exists to set it. Build: derive
+  the domain sentence from the request — the workspace's name and its entity-type names, from the same
+  `getCategories(req.workspaceId)` call hoisted above the prompt build at `chat.js:351` and reused by the tool schema,
+  so it stays one query. Where a workspace records which template seeded it, the prompt may use that template's own
+  `description` (`templates.js:58,209`), which means persisting the key: `POST /auth/register` already receives it
+  (`server/src/routes/auth.js:137`) and hands it to `seedWorkspace` (`:233`), and it is thrown away afterwards — store
+  it as a nullable `Workspace.template` with no backfill, so a workspace from before this carries null and falls back to
+  its type names. The instructions that are true of every domain stay exactly as they are — search before answering,
+  never invent, cite names — and only the ones about fiction go. Files: `server/src/routes/chat.js`,
+  `server/src/models/Workspace.js`, `server/src/lib/workspaceSeeder.js`, `server/src/routes/auth.js` (the one line that
+  passes the key through), and a Decision Log line on the prompt being per-workspace. Verify:
+  `server/tests/http/chat.test.js` already points the `steadfast` provider at a fake OpenAI-compatible server that
+  records every request body, which is the only place the prompt is observable — add cases there: a workspace seeded as
+  Software Architecture gets a system prompt naming its own types and no longer containing "world-building"; a
+  worldbuilding workspace still reads as one; a renamed workspace appears under its new name; a workspace with no types
+  at all falls back without leaving an empty list in the sentence; and one tenant's prompt never carries another's type
+  names. `cd server && yarn test` green; the client is untouched. Out of scope:
+  `server/src/lib/generatorPrompts.js`, whose wording is equally worldbuilding-shaped ("an author's rough notes") but
+  whose only honest verification is a paid generation run; re-seeding or inferring a template for existing workspaces;
+  the `save_memory` and MCP tool descriptions; and a per-workspace prompt a user can edit, which is a product decision
+  nobody has made.
+
+- [ ] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message** [proposed]
+  `server/tests/http/errorShape.test.js` is the guard that no router, middleware or lib hands a caught error's text to a
+  caller, and both of its file walks are non-recursive: `writingFiles()` (`:610`) and `sourceFiles()` (`:625`) read
+  `src/routes`, `src/middleware` and `src/lib` with a plain `readdirSync` and skip anything that is not a top-level
+  `.js`. `src/lib/producers/` is therefore unswept — and it is exactly the code the sweep carves an exception out for,
+  since the ParseError gate in the second test exists because a producer's own parse message is the one message a route
+  may publish. So `producers/dockerCompose.js` or `producers/openApi.js` could return or store a caught
+  `YAMLParseError` or a driver message and both sweeps would stay green; the `names.length >= 30` floor at `:695` cannot
+  notice a missing subdirectory either. `parserSourceFiles()` in the same file (`:459`) already walks recursively, so
+  this is one loop out of step with its neighbour, and KOL-089 would add a third file to the unswept directory. Found by
+  the grader of KOL-100 and never filed. Build: both helpers walk recursively the way `parserSourceFiles()` does, with
+  `OUT_OF_SCOPE` and `STORED_EXEMPT` matched on the path relative to `src/` rather than on a bare filename, so an
+  exemption cannot silently cover a same-named file in a subdirectory. Then name the producers in the assertion beside
+  the existing `draftApplier.js` and `failureNote.js` ones: a floor on a count is what let this through, so the new
+  assertion names files instead of counting them. Files: `server/tests/http/errorShape.test.js`, plus whatever the
+  newly-swept directory turns out to violate — if a producer does publish or store a caught message, fixing that is part
+  of this item rather than a follow-up. Verify: `cd server && yarn test` green with the sweep's own file list including
+  `src/lib/producers/dockerCompose.js` and `src/lib/producers/openApi.js`; falsification, as the suite's own header
+  style asks — a `res.json({ error: err.message })` added to a producer fails the sweep, and is then reverted; and
+  `composeDraft.test.js` and `openApiDraft.test.js` still pass, so the ParseError wording those suites pin is still
+  allowed. Out of scope: widening the sweep to `src/config` or `src/models`; the statement-splitting heuristic the sweep
+  matches with; the `STORED_EXEMPT` entries, which stay listed and exempt; and the `/chat` carve-out.
+
+- [ ] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run** [proposed]
+  `importGraph` builds `entityTypeDocs` at `server/src/lib/graphImporter.js:472-493` and calls `planIds` at `:507`, so
+  the row-shape checks `planIds` performs for `entityTypes` (`:357-365` — `isPlainObject`, then a non-empty `name`) run
+  after the loop that has already read `row.name`. A hand-edited document whose `entityTypes` holds `null`, a number, or
+  a bare name instead of a row throws a raw `TypeError` at `:475`; `server/src/routes/import.js` hands it to
+  `next(err)`, and the caller gets `500 INTERNAL` with a ref instead of the `400 MALFORMED_DOCUMENT` naming the field
+  that every other malformed row answers with. Nothing is written, so this is about the response and not the data — but
+  the module's promise is both that a refused document wrote nothing *and* that the caller is told which field, and
+  KOL-097 added those very checks for this class of input. `relationshipTypeDocs` is built at `:518`, after `planIds`,
+  so it is not affected. Found by the grader of KOL-097 and never filed. Build: validate before anything reads a row —
+  either call `planIds` ahead of the `entityTypeDocs` loop, or, if the canonical-name map `planIds` takes has to be
+  built first, run the `entityTypes` shape checks at the top of that build. The ordering is the whole fix: no new
+  refusal code, no new message shape, no change to what a well-formed document imports. Files:
+  `server/src/lib/graphImporter.js`, `server/tests/unit/graphImporter.test.js`, `server/tests/http/import.test.js`.
+  Verify: a unit case per shape — `entityTypes: [null]`, `[42]`, `["Worlds"]` and `[{}]` each refuse with
+  `MALFORMED_DOCUMENT` and a `fields` path naming `entityTypes[0]` or `entityTypes[0].name`, with
+  `EntityType.countDocuments` unchanged after each; the same through `POST /import`, which answers 400 and carries no
+  `ref`; and the existing round-trip, nested-subgroup and per-collection-cap cases pass unchanged. `cd server && yarn
+  test` green; the client is untouched. Out of scope: the other collections, whose rows are already checked before they
+  are read; a JSON Schema for the whole export document, which is a different way to do all of this; and merging into a
+  non-empty workspace, which KOL-077 deliberately left out.
+
+- [ ] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be** [proposed]
+  `RAISED_HERE` is a module-private Symbol set by plain assignment in `httpError()`
+  (`server/src/middleware/errorHandler.js:163`), and the comment above it (`:132`) states the guarantee the mark exists
+  for: nothing can carry it by accident — "not a property copied across by `Object.assign`". `Object.assign` and object
+  spread both copy own *enumerable* symbol-keyed properties, so `Object.assign(new Error(msg), marked)` and
+  `{ ...marked }` do carry it, and whatever it lands on then publishes its own `status` and `code` as though this
+  codebase had chosen them, which is the exact leak rule 5 exists to prevent. Nothing spreads a caught error today, so
+  nothing leaks now: the live protection is `JSON.stringify` dropping symbol keys, and that half of the comment is
+  true. What is wrong is the invariant a future `Object.assign(new Error('wrapped'), err)` would be written against,
+  and the test that claims to prove it (`server/tests/http/errorShape.test.js:730`) builds a fresh unmarked literal
+  rather than copying a marked error, so it cannot fail on this. Found by the grader of KOL-101 and never filed. Build:
+  make the claim true rather than softening it — set the mark with
+  `Object.defineProperty(err, RAISED_HERE, { value: true })`, which is non-enumerable and so copied by neither
+  `Object.assign` nor spread, while `classify` reads it exactly as it does now. Then make the test prove the sentence it
+  states, by copying a *marked* error both ways. Files: `server/src/middleware/errorHandler.js`,
+  `server/tests/http/errorShape.test.js`, and the KOL-101 Decision Log line if it repeats the overstated wording.
+  Verify: new cases in `errorShape.test.js` — `classify(Object.assign(new Error("a dependency's own sentence"),
+  httpError(503, 'X')))` is unmapped, and so is `classify({ ...httpError(503, 'X') })`;
+  `classify(httpError(503, 'X', { fields: ['a'] }))` is still 503 `X` with its `fields`, so the fix cannot have broken
+  the rule it protects; the provider-failure table is still unmapped; and the handler's 500-with-ref path is unchanged.
+  Falsification: restore the plain assignment and the two new cases fail. `cd server && yarn test` green; nothing else
+  changes. Out of scope: `publicMessage` in `server/src/lib/failureNote.js`, which makes the same kind of authorship
+  claim with a plain property and deserves the same treatment on its own evidence; any change to rule 5's status and
+  code conditions; and the error codes themselves.
 
 ## Blocked Items
 
