@@ -44,21 +44,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-094) Backlog audit: file new candidates under Proposed**
-  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
-  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
-  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
-  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
-  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
-  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
-  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
-  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
-  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
-  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
-  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
-  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
-  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
-  for `diff-policy`).
 
 - [ ] **(KOL-109) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-27]
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
@@ -481,6 +466,21 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-094) Backlog audit: file new candidates under Proposed** (routine 2026-10-20, d595575)
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
 - [x] **(KOL-101) Rule 2 reuses classify(), whose rule 5 ('explicit status and code') matches raw provider SDK erro…** (routine 2026-10-17, 1234105)
   Found by the grader of KOL-100 (medium, server/src/lib/failureNote.js:116). Rule 2 reuses
   `classify()`, whose rule 5 ('explicit status and code') matches raw provider SDK errors: the
