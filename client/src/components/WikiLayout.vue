@@ -147,6 +147,28 @@
           <p v-else-if="workspace" class="settings-note">
             Only an owner can rename this workspace. Your role here is {{ workspace.role }}.
           </p>
+          <!-- The switcher (KOL-090): which of this user's workspaces the session acts in. Only
+               when there is more than one — with a single membership there is nothing to choose
+               between, which is every account until invites land. -->
+          <div v-if="workspaces.length > 1" class="workspace-switcher">
+            <label class="workspace-switcher-label" for="workspace-switcher">Acting in</label>
+            <select
+              id="workspace-switcher"
+              class="workspace-input"
+              name="workspace-switcher"
+              :value="workspace?._id"
+              :disabled="workspaceSwitching"
+              @change="switchWorkspace($event.target.value)"
+            >
+              <option v-for="choice in workspaces" :key="choice._id" :value="choice._id">
+                {{ choice.name }} — {{ choice.role }}
+              </option>
+            </select>
+            <p class="settings-note">
+              Everything in this tab — the sidebar, search, chat and the graph — comes from the
+              workspace selected here. Switching reloads the page.
+            </p>
+          </div>
           <p v-if="workspaceError" class="settings-error" role="alert">{{ workspaceError }}</p>
         </div>
         <div class="settings-group">
@@ -392,7 +414,7 @@ import {
 } from '../api/auth.js';
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport, importWorkspaceFile } from '../api/export.js';
-import { getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
+import { getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -558,8 +580,10 @@ async function importWorkspace(event) {
  * (403 NOT_WORKSPACE_OWNER), which is what the error branch below says.
  */
 const workspace = ref(null);        // { _id, name, role, createdAt } from GET /workspace
+const workspaces = ref([]);         // every membership, from GET /workspaces (KOL-090)
 const workspaceDraft = ref('');     // the owner's edit in progress
 const workspaceSaving = ref(false);
+const workspaceSwitching = ref(false);
 const workspaceError = ref('');
 
 const workspaceRenameReady = computed(() => {
@@ -574,6 +598,14 @@ async function loadWorkspace() {
     workspaceDraft.value = workspace.value.name;
   } catch (err) {
     workspaceError.value = 'Could not load this workspace’s name.';
+  }
+  // Its own request, and its own failure: a list that did not answer leaves the
+  // switcher hidden (one choice is the ordinary case anyway) rather than hiding
+  // the name above it.
+  try {
+    workspaces.value = await listWorkspaces({ source: 'Settings → Workspace' });
+  } catch (err) {
+    workspaces.value = [];
   }
 }
 
@@ -603,6 +635,52 @@ async function saveWorkspaceName() {
       : 'Could not rename this workspace.';
   } finally {
     workspaceSaving.value = false;
+  }
+}
+
+/**
+ * Switching workspace (KOL-090). The choice is *server-side session state* —
+ * `POST /workspaces/:id/select` — because the client cannot scope its own
+ * reads: a workspace picked in a ref here while the server resolved another is
+ * precisely the read-A-write-B split this item removes.
+ *
+ * Then the page reloads. Everything on screen belongs to the workspace just
+ * left — the entity list, the type registry, the filters, and the `/events`
+ * stream, which is tagged with a workspace when it connects and not after — so
+ * refetching them one by one would leave a tab reading one workspace and
+ * streaming another, with the next forgotten fetch the next silent mismatch.
+ * A reload is the one thing that cannot be half-done.
+ */
+async function switchWorkspace(id) {
+  if (workspaceSwitching.value || !id || id === workspace.value?._id) return;
+  const from = workspace.value?.name;
+  workspaceSwitching.value = true;
+  workspaceError.value = '';
+  try {
+    const next = await selectWorkspace(id, { source: 'Settings → Workspace switcher', from });
+    workspace.value = next;
+    workspaceDraft.value = next.name;
+    reloadAfterSwitch();
+    // Deliberately still switching: the page is on its way out, and a select
+    // re-enabled for the half-second before it goes is a second switch nobody
+    // asked for.
+  } catch (err) {
+    // 404 is the server refusing an id this user is not a member of — which,
+    // since the list came from the server a moment ago, means the membership
+    // was revoked in between.
+    workspaceError.value = err.status === 404
+      ? 'You are no longer a member of that workspace.'
+      : 'Could not switch workspace.';
+    workspaceSwitching.value = false;
+  }
+}
+
+/** Wrapped so a test environment without navigation cannot fail the switch. */
+function reloadAfterSwitch() {
+  try {
+    window.location.reload();
+  } catch (err) {
+    /* jsdom has no navigation; the switch itself is already committed server-side. */
   }
 }
 
@@ -1242,6 +1320,23 @@ provide('openSnapshot', openSnapshot);
 
 .workspace-input:focus { outline: none; border-color: #555; }
 .workspace-input:disabled { opacity: 0.5; }
+
+.workspace-switcher {
+  margin-top: 10px;
+}
+
+.workspace-switcher-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #777;
+}
+
+.workspace-switcher .workspace-input {
+  width: 100%;
+}
 
 .settings-error {
   margin: 8px 0 0;

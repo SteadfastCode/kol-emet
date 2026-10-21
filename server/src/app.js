@@ -33,7 +33,7 @@ import chatRouter from './routes/chat.js';
 import conversationsRouter from './routes/conversations.js';
 import exportRouter from './routes/export.js';
 import importRouter, { importJsonBody } from './routes/import.js';
-import workspaceRouter from './routes/workspace.js';
+import workspaceRouter, { workspacesRouter } from './routes/workspace.js';
 import healthRouter from './routes/health.js';
 import './models/User.js';
 import './models/Conversation.js';
@@ -142,6 +142,16 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // resolveWorkspace here too: the SSE stream pushes full entity documents, so
   // each connection must be tagged with a workspace to filter broadcasts by.
   app.use('/events', requireAuth, resolveWorkspace, eventsRouter);
+  // Which workspace the caller acts in: their memberships, and the choice
+  // (KOL-090). Mounted ahead of the `/` changelog catch-all below on purpose —
+  // that mount runs resolveWorkspace for every path, which 403s a caller with
+  // no membership at all, and "you are a member of nothing" is exactly what
+  // `GET /workspaces` has to be able to answer. requireAuth only, and no
+  // resolveWorkspace of its own: a membership list is not content in one
+  // workspace, and the choice must not be gated on the role the caller happens
+  // to hold in the workspace they are leaving. Distinct from the `/workspace`
+  // mount below, which is the resolved one as a resource.
+  app.use('/workspaces', requireAuth, workspacesRouter);
   // resolveWorkspace sits behind requireAuth on every route that touches tenant
   // content: it sets req.workspaceId, which those routes filter every query on.
   // requireWriteRole follows it on every router that writes the graph (KOL-103):

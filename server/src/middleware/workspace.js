@@ -11,12 +11,18 @@ import { getMcpUser } from '../lib/mcpUserStore.js';
  * A role refusal and a rename are both invisible afterwards — the refusal
  * leaves no row at all, and a rename leaves only its result — so the light
  * tier names the *source* of each: who asked, through which route, and the
- * role this middleware read for them.
+ * role this middleware read for them. Since KOL-090 the same rule covers which
+ * workspace a request acted in: a request answers from one of possibly several,
+ * and afterwards nothing in the response says which — or why that one.
  *   off     — nothing
- *   light   — every rename (old name, new name, who asked) and every refusal
- *             (the role read, the role required, the request)
- *   normal  — light, plus each workspace resolved and each read
- *   verbose — normal, plus the membership the role came from
+ *   light   — every rename (old name, new name, who asked), every refusal
+ *             (the role read, the role required, the request), every selection
+ *             and every fall-back from a selection that is no longer a
+ *             membership
+ *   normal  — light, plus each workspace resolved — naming *where the choice
+ *             came from*, not just the id — and each read
+ *   verbose — normal, plus the membership the role came from and every
+ *             membership considered
  */
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
@@ -71,6 +77,67 @@ export async function resolveUserId(req) {
   return null;
 }
 
+/** The caller's own entry in a workspace's `members` array, or null. */
+export function membershipOf(workspace, userId) {
+  return (workspace?.members ?? []).find(m => String(m.userId) === String(userId)) ?? null;
+}
+
+/**
+ * Every workspace `userId` is a member of, oldest first.
+ *
+ * Sorted on `createdAt` **then `_id`**, so the order is *total*: two
+ * workspaces stamped in the same millisecond — a seed script, a test fixture,
+ * an import — would otherwise come back in whatever order the storage engine
+ * chose, and "oldest" would not be a fact. `_id` is unique by definition and
+ * its leading bytes are a timestamp, so it breaks the tie the same way time
+ * would.
+ *
+ * The projection is what both callers need between them: `_id` and `members`
+ * for the acting workspace and the role in it, `name` and `createdAt` for
+ * `GET /workspaces`. One query shape, so the list route and the middleware
+ * cannot disagree about the order they see.
+ *
+ * @param {string|import('mongoose').Types.ObjectId} userId
+ */
+export async function workspacesForUser(userId) {
+  return await Workspace.find({ 'members.userId': userId })
+    .select('_id name members createdAt')
+    .sort({ createdAt: 1, _id: 1 })
+    .lean();
+}
+
+/**
+ * The workspace a caller acts in when they have not chosen one: **the oldest
+ * they own, else the oldest they are a member of** (KOL-090).
+ *
+ * Ownership first because the workspace a user created for themselves is the
+ * one they mean by "my wiki", and an invitation to someone else's — which, once
+ * invites land, can arrive without being asked for — must not be able to become
+ * the place their own writes land. Age second because it is the only ordering
+ * that is stable for a user whose memberships change: a "most recently used"
+ * default would make the resolved workspace a function of history nothing
+ * records, which is the same unpredictability this item removes.
+ *
+ * "Owns" is read from the caller's own membership role, not from
+ * `Workspace.ownerId`: the role is what every gate in this file judges, so a
+ * default derived from it cannot disagree with `requireWorkspaceRole('owner')`
+ * about who an owner is.
+ *
+ * @param {Array<object>} workspaces as returned by workspacesForUser (oldest first)
+ * @param {string|import('mongoose').Types.ObjectId} userId
+ * @returns {{ workspace: object|null, reason: string }} the choice, and why — the
+ *   light log tier names the source of a resolution, not just its id
+ */
+export function defaultWorkspace(workspaces, userId) {
+  const owned = workspaces.find(w => membershipOf(w, userId)?.role === 'owner');
+  if (owned) return { workspace: owned, reason: 'the oldest workspace this user owns' };
+  const member = workspaces[0] ?? null;
+  return {
+    workspace: member,
+    reason: member ? 'the oldest workspace this user is a member of (they own none)' : 'nothing — this user has no membership',
+  };
+}
+
 /**
  * Sets req.workspaceId to the workspace the caller is acting in, plus
  * req.workspaceRole (their role in it) and req.actingUserId (who they are).
@@ -81,34 +148,74 @@ export async function resolveUserId(req) {
  *
  * Mounted after requireAuth on every route that touches tenant content — see
  * app.js (chat mounts it per-route). /mcp never passes through here: its tools
- * scope themselves via mcpWorkspaceId() in routes/mcp.js.
+ * scope themselves via mcpWorkspaceId() in routes/mcp.js, which takes the same
+ * default this does.
  *
  * The role is read from the caller's own `members` entry, never from a request:
  * it is what `requireWorkspaceRole` below gates on, and what `GET /workspace`
  * hands the client so it can hide what an editor or a viewer may not do.
+ *
+ * ─── Which workspace, and why (KOL-090) ──────────────────────────────────────
+ * This used to be `findOne({ 'members.userId': userId })` with no sort, under a
+ * comment that said a user belongs to exactly one. The moment one belongs to
+ * two — which collaborator invites make routine — every request resolved to
+ * whichever document the server happened to return first, so one session could
+ * read workspace A and then write workspace B and `GET /workspace` could report
+ * a name the content did not come from.
+ *
+ * So the choice is explicit, and it is **session state**: `POST
+ * /workspaces/:id/select` writes `req.session.workspaceId`, and this prefers it
+ * over the default. Two properties matter more than the preference itself:
+ *
+ *   - **The membership is re-checked on every request**, against the caller's
+ *     live membership list, so a selection is never a standing capability. A
+ *     session holding an id is not authority to act in it.
+ *   - **A stale selection falls back, it does not refuse.** When the membership
+ *     behind the id is gone — revoked, or the workspace deleted — answering 403
+ *     would lock a user out of *their own* workspace over access they lost to
+ *     someone else's. The id is left in the session rather than cleared: this
+ *     middleware runs on `/events` too, whose response ends only when the
+ *     stream does, and a session written there would be saved minutes later on
+ *     top of whatever was chosen since. `POST /workspaces/:id/select` is the
+ *     one writer.
  */
 export async function resolveWorkspace(req, res, next) {
   try {
     const userId = await resolveUserId(req);
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    // A user may later belong to several; today registration creates exactly one.
-    // `members` comes back because the caller's role is read out of it below.
-    const workspace = await Workspace.findOne({ 'members.userId': userId })
-      .select('_id members')
-      .lean();
+    // Every membership, oldest first: the acting workspace is chosen from this
+    // list rather than by a findOne whose answer was the storage engine's to pick.
+    const workspaces = await workspacesForUser(userId);
+    workspaceLog('verbose', `user ${userId} is a member of ${workspaces.length} workspace(s): ${workspaces.map(w => `${w._id} "${w.name}" as ${membershipOf(w, userId)?.role ?? 'no role'}`).join(', ') || '(none)'}`);
+
+    const chosenId = req.session?.workspaceId ?? null;
+    const chosen = chosenId ? workspaces.find(w => String(w._id) === String(chosenId)) ?? null : null;
+
+    let workspace = chosen;
+    let source = 'the session selection (POST /workspaces/:id/select)';
+    if (!chosen) {
+      const fallback = defaultWorkspace(workspaces, userId);
+      workspace = fallback.workspace;
+      source = `the default — ${fallback.reason}`;
+      if (chosenId) {
+        // Light tier: the request acts somewhere other than where this session
+        // asked to, and nothing in the response says so.
+        workspaceLog('light', `session selection of workspace ${chosenId} is no longer a membership of user ${userId}; falling back to ${workspace?._id ?? 'no workspace'} rather than refusing, so losing access to one workspace cannot lock a user out of their own (source: ${req.method} ${req.originalUrl})`);
+      }
+    }
 
     if (!workspace) {
       return res.status(403).json({ error: 'No workspace for this user' });
     }
 
-    const membership = (workspace.members ?? []).find(m => String(m.userId) === String(userId));
+    const membership = membershipOf(workspace, userId);
 
     req.workspaceId = workspace._id;
     req.actingUserId = String(userId);
     req.workspaceRole = membership?.role ?? null;
 
-    workspaceLog('normal', `resolved workspace ${workspace._id} for user ${req.actingUserId} as ${req.workspaceRole ?? 'no role'} (source: ${req.method} ${req.originalUrl})`);
+    workspaceLog('normal', `resolved workspace ${workspace._id} "${workspace.name}" for user ${req.actingUserId} as ${req.workspaceRole ?? 'no role'} (source: ${source}, for ${req.method} ${req.originalUrl})`);
     workspaceLog('verbose', `membership read: ${JSON.stringify(membership ?? null)}`);
     next();
   } catch (err) {

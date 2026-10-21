@@ -105,12 +105,15 @@ vi.mock('../api/auth.js', () => ({
 // The Workspace group reads GET /workspace on each Settings open and PATCHes a rename;
 // nothing in a test should fetch. What the module itself does is its own concern
 // (api/workspace.js).
-const { getWorkspace, renameWorkspace } = vi.hoisted(() => ({
+// The switcher (KOL-090) reads GET /workspaces on the same open and POSTs the choice.
+const { getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace } = vi.hoisted(() => ({
   getWorkspace: vi.fn(async () => ({ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
+  listWorkspaces: vi.fn(async () => [{ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' }]),
   renameWorkspace: vi.fn(async (name) => ({ _id: 'w1', name, role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
+  selectWorkspace: vi.fn(async (id) => ({ _id: id, name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' })),
 }));
 vi.mock('../api/workspace.js', () => ({
-  getWorkspace, renameWorkspace, WORKSPACE_NAME_MAX: 80, default: getWorkspace,
+  getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace, WORKSPACE_NAME_MAX: 80, default: getWorkspace,
 }));
 // One Escape case below mounts the generator overlay for real (KOL-084), and the overlay asks for
 // the AI allowance as it opens; nothing in a test should fetch. The rest of the module is mocked
@@ -366,11 +369,18 @@ describe('WikiLayout settings', () => {
 describe('WikiLayout workspace group', () => {
   const OWNED = { _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' };
 
+  const SHARED = { _id: 'w2', name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' };
+
   beforeEach(() => {
     getWorkspace.mockReset();
+    listWorkspaces.mockReset();
     renameWorkspace.mockReset();
+    selectWorkspace.mockReset();
     getWorkspace.mockResolvedValue({ ...OWNED });
+    // One membership: the ordinary case, and the one the switcher stays out of.
+    listWorkspaces.mockResolvedValue([{ ...OWNED }]);
     renameWorkspace.mockImplementation(async (name) => ({ ...OWNED, name }));
+    selectWorkspace.mockImplementation(async (id) => (id === SHARED._id ? { ...SHARED } : { ...OWNED }));
   });
 
   const group = (wrapper) =>
@@ -433,6 +443,79 @@ describe('WikiLayout workspace group', () => {
     expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
     expect(group(wrapper).find('.workspace-rename').exists()).toBe(false);
     expect(group(wrapper).get('.settings-note').text()).toContain('Only an owner can rename');
+  });
+
+  /**
+   * The switcher (KOL-090). Absent for a one-workspace user, which is every account until
+   * invites land: there is nothing to choose between, and a select with one option is a control
+   * that only looks like a choice. Present the moment there are two, and choosing one goes
+   * through the API — the choice is server-side session state, so a switch the server did not
+   * accept is not a switch.
+   */
+  describe('the switcher', () => {
+    it('is absent for a user with one workspace', async () => {
+      const wrapper = await openSettings();
+
+      expect(listWorkspaces).toHaveBeenCalledTimes(1);
+      expect(listWorkspaces.mock.calls[0][0]).toMatchObject({ source: expect.stringContaining('Settings') });
+      expect(group(wrapper).find('.workspace-switcher').exists()).toBe(false);
+      expect(group(wrapper).find('select').exists()).toBe(false);
+      // The name itself is still there: hiding the switcher hides nothing else.
+      expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    });
+
+    it('lists both for a user with two, with the current one selected', async () => {
+      listWorkspaces.mockResolvedValue([{ ...SHARED }, { ...OWNED }]);
+      const wrapper = await openSettings();
+
+      const select = group(wrapper).get('.workspace-switcher select');
+      expect(select.findAll('option').map((o) => o.attributes('value'))).toEqual([SHARED._id, OWNED._id]);
+      // The order is the server's (oldest first), and the value is the resolved workspace —
+      // never the first option, which is a different workspace here.
+      expect(select.element.value).toBe(OWNED._id);
+      expect(select.findAll('option').map((o) => o.text())).toEqual([
+        `${SHARED.name} — ${SHARED.role}`,
+        `${OWNED.name} — ${OWNED.role}`,
+      ]);
+    });
+
+    it('choosing another one sends the selection, naming the workspace it leaves', async () => {
+      listWorkspaces.mockResolvedValue([{ ...SHARED }, { ...OWNED }]);
+      const wrapper = await openSettings();
+
+      await group(wrapper).get('.workspace-switcher select').setValue(SHARED._id);
+      await flushPromises();
+
+      expect(selectWorkspace).toHaveBeenCalledTimes(1);
+      expect(selectWorkspace.mock.calls[0][0]).toBe(SHARED._id);
+      // Every light-tier line names the source and what is being replaced, not just the new value.
+      expect(selectWorkspace.mock.calls[0][1]).toMatchObject({
+        source: expect.stringContaining('Settings'),
+        from: OWNED.name,
+      });
+    });
+
+    it('does not re-select the workspace already resolved', async () => {
+      listWorkspaces.mockResolvedValue([{ ...SHARED }, { ...OWNED }]);
+      const wrapper = await openSettings();
+
+      await group(wrapper).get('.workspace-switcher select').setValue(OWNED._id);
+      await flushPromises();
+
+      expect(selectWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('a refused switch says so, and the group still shows where the session is', async () => {
+      listWorkspaces.mockResolvedValue([{ ...SHARED }, { ...OWNED }]);
+      selectWorkspace.mockRejectedValue(Object.assign(new Error('Not found'), { status: 404 }));
+      const wrapper = await openSettings();
+
+      await group(wrapper).get('.workspace-switcher select').setValue(SHARED._id);
+      await flushPromises();
+
+      expect(group(wrapper).get('.settings-error').text()).toBe('You are no longer a member of that workspace.');
+      expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    });
   });
 
   it('a refused rename says so in Settings', async () => {
