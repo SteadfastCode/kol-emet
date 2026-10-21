@@ -73,30 +73,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be**
-  `RAISED_HERE` is a module-private Symbol set by plain assignment in `httpError()`
-  (`server/src/middleware/errorHandler.js:163`), and the comment above it (`:132`) states the guarantee the mark exists
-  for: nothing can carry it by accident — "not a property copied across by `Object.assign`". `Object.assign` and object
-  spread both copy own *enumerable* symbol-keyed properties, so `Object.assign(new Error(msg), marked)` and
-  `{ ...marked }` do carry it, and whatever it lands on then publishes its own `status` and `code` as though this
-  codebase had chosen them, which is the exact leak rule 5 exists to prevent. Nothing spreads a caught error today, so
-  nothing leaks now: the live protection is `JSON.stringify` dropping symbol keys, and that half of the comment is
-  true. What is wrong is the invariant a future `Object.assign(new Error('wrapped'), err)` would be written against,
-  and the test that claims to prove it (`server/tests/http/errorShape.test.js:730`) builds a fresh unmarked literal
-  rather than copying a marked error, so it cannot fail on this. Found by the grader of KOL-101 and never filed. Build:
-  make the claim true rather than softening it — set the mark with
-  `Object.defineProperty(err, RAISED_HERE, { value: true })`, which is non-enumerable and so copied by neither
-  `Object.assign` nor spread, while `classify` reads it exactly as it does now. Then make the test prove the sentence it
-  states, by copying a *marked* error both ways. Files: `server/src/middleware/errorHandler.js`,
-  `server/tests/http/errorShape.test.js`, and the KOL-101 Decision Log line if it repeats the overstated wording.
-  Verify: new cases in `errorShape.test.js` — `classify(Object.assign(new Error("a dependency's own sentence"),
-  httpError(503, 'X')))` is unmapped, and so is `classify({ ...httpError(503, 'X') })`;
-  `classify(httpError(503, 'X', { fields: ['a'] }))` is still 503 `X` with its `fields`, so the fix cannot have broken
-  the rule it protects; the provider-failure table is still unmapped; and the handler's 500-with-ref path is unchanged.
-  Falsification: restore the plain assignment and the two new cases fail. `cd server && yarn test` green; nothing else
-  changes. Out of scope: `publicMessage` in `server/src/lib/failureNote.js`, which makes the same kind of authorship
-  claim with a plain property and deserves the same treatment on its own evidence; any change to rule 5's status and
-  code conditions; and the error codes themselves.
 
 ## Proposed
 
@@ -128,6 +104,30 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be** (routine 2026-10-21, c29c37b)
+  `RAISED_HERE` is a module-private Symbol set by plain assignment in `httpError()`
+  (`server/src/middleware/errorHandler.js:163`), and the comment above it (`:132`) states the guarantee the mark exists
+  for: nothing can carry it by accident — "not a property copied across by `Object.assign`". `Object.assign` and object
+  spread both copy own *enumerable* symbol-keyed properties, so `Object.assign(new Error(msg), marked)` and
+  `{ ...marked }` do carry it, and whatever it lands on then publishes its own `status` and `code` as though this
+  codebase had chosen them, which is the exact leak rule 5 exists to prevent. Nothing spreads a caught error today, so
+  nothing leaks now: the live protection is `JSON.stringify` dropping symbol keys, and that half of the comment is
+  true. What is wrong is the invariant a future `Object.assign(new Error('wrapped'), err)` would be written against,
+  and the test that claims to prove it (`server/tests/http/errorShape.test.js:730`) builds a fresh unmarked literal
+  rather than copying a marked error, so it cannot fail on this. Found by the grader of KOL-101 and never filed. Build:
+  make the claim true rather than softening it — set the mark with
+  `Object.defineProperty(err, RAISED_HERE, { value: true })`, which is non-enumerable and so copied by neither
+  `Object.assign` nor spread, while `classify` reads it exactly as it does now. Then make the test prove the sentence it
+  states, by copying a *marked* error both ways. Files: `server/src/middleware/errorHandler.js`,
+  `server/tests/http/errorShape.test.js`, and the KOL-101 Decision Log line if it repeats the overstated wording.
+  Verify: new cases in `errorShape.test.js` — `classify(Object.assign(new Error("a dependency's own sentence"),
+  httpError(503, 'X')))` is unmapped, and so is `classify({ ...httpError(503, 'X') })`;
+  `classify(httpError(503, 'X', { fields: ['a'] }))` is still 503 `X` with its `fields`, so the fix cannot have broken
+  the rule it protects; the provider-failure table is still unmapped; and the handler's 500-with-ref path is unchanged.
+  Falsification: restore the plain assignment and the two new cases fail. `cd server && yarn test` green; nothing else
+  changes. Out of scope: `publicMessage` in `server/src/lib/failureNote.js`, which makes the same kind of authorship
+  claim with a plain property and deserves the same treatment on its own evidence; any change to rule 5's status and
+  code conditions; and the error codes themselves.
 - [x] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run** (routine 2026-10-21, ec33339)
   `importGraph` builds `entityTypeDocs` at `server/src/lib/graphImporter.js:472-493` and calls `planIds` at `:507`, so
   the row-shape checks `planIds` performs for `entityTypes` (`:357-365` — `isPlainObject`, then a non-empty `name`) run

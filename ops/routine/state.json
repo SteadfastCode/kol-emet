@@ -79,7 +79,7 @@
     "KOL-108": {
       "order": 5,
       "title": "Rule 5's mark is copied by Object.assign, which the comment says it cannot be",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-108",
