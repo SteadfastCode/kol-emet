@@ -68,38 +68,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-092) Two list routes still answer with the whole workspace**
-  KOL-061 stopped `GET /entities` shipping every block and KOL-067 gave it keyset pages, but `GET /relationship-groups`
-  still returns every group in the workspace with its full `members` array
-  (`server/src/routes/relationshipGroups.js:78`) and `GET /open-questions` returns every question with `entry_ids`
-  populated (`server/src/routes/openQuestions.js:18`) — one query, no limit, and for the second a populate per row. At
-  the size this product is built for those are the two slowest responses in the API, and the graph view asks for the
-  whole group list the moment it opens. The caps elsewhere are the pattern to follow: `changelog.js:99` takes 50,
-  `drafts.js:90` takes 50, and `/entities` pages. Build: the same keyset contract `/entities` answers with
-  (`server/src/routes/entities.js:98-132`) on both routes — `?limit=` clamped to the route's own minimum and maximum,
-  `?after=` carrying the previous page's last `_id`, and `{ items, nextAfter }` — ordered by `_id`, so no new database
-  index is needed, and keeping the bare-array answer for a request that sends no `limit` exactly as `/entities` kept it,
-  so no existing caller breaks. Then the one client caller there is pages until `nextAfter` is null and concatenates:
-  `getAllGroups` (`client/src/api/relationshipGroups.js:20`), whose only call site is the graph's loader
-  (`client/src/components/GraphView.vue:341`), carrying the partial-failure surface KOL-083 added for the sidebar
-  (`loadEntities`, `client/src/composables/useEntities.js:79-130`, is the pattern to copy) — a page that fails leaves a
-  visible "stopped partway" state rather than a silently short list. `GET /open-questions` has **no client caller to
-  change**: nothing under `client/src` fetches it — open questions reach the client already populated on entities by
-  `GET /entities` — and the MCP `list_open_questions` tool queries `OpenQuestion` directly rather than through the route
-  (`server/src/routes/mcp.js:260`), so that route is capped for the public API's sake and its only in-repo callers are
-  its own tests. Files: `server/src/routes/relationshipGroups.js`, `server/src/routes/openQuestions.js`,
-  `client/src/api/relationshipGroups.js`, the graph caller (`client/src/components/GraphView.vue`), `docs/api.md`, and
-  the tests below; `client/src/composables/useEntities.js` is read for the paging pattern, not changed.
-  Verify: new `server/tests/http/relationshipGroupList.test.js` and `server/tests/http/openQuestionList.test.js`
-  mirroring `entityList.test.js` — a page is never longer than its limit; pages concatenate to the whole set with no row
-  served twice and none skipped when a write lands mid-walk; an `after` naming another workspace's id yields nothing; a
-  limit under the minimum or over the maximum is clamped rather than refused; and a request with no `limit` still gets
-  the bare array. Client-side, a Vitest case that the graph's loader pages to the end and one that a failed second page
-  surfaces the partial state. `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of
-  scope: `GET /conversations`, which is per-user and short and whose filter KOL-091 is already changing; a MongoDB text
-  index on block data, which is a change to the deployed database; the `/tags` aggregate; re-opening `/entities`' own
-  contract; and building the client an open-question list view, which no item owns and which this item's cap does not
-  need.
 
 - [ ] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one**
   The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
@@ -262,6 +230,38 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-092) Two list routes still answer with the whole workspace** (routine 2026-10-21, 5169b77)
+  KOL-061 stopped `GET /entities` shipping every block and KOL-067 gave it keyset pages, but `GET /relationship-groups`
+  still returns every group in the workspace with its full `members` array
+  (`server/src/routes/relationshipGroups.js:78`) and `GET /open-questions` returns every question with `entry_ids`
+  populated (`server/src/routes/openQuestions.js:18`) — one query, no limit, and for the second a populate per row. At
+  the size this product is built for those are the two slowest responses in the API, and the graph view asks for the
+  whole group list the moment it opens. The caps elsewhere are the pattern to follow: `changelog.js:99` takes 50,
+  `drafts.js:90` takes 50, and `/entities` pages. Build: the same keyset contract `/entities` answers with
+  (`server/src/routes/entities.js:98-132`) on both routes — `?limit=` clamped to the route's own minimum and maximum,
+  `?after=` carrying the previous page's last `_id`, and `{ items, nextAfter }` — ordered by `_id`, so no new database
+  index is needed, and keeping the bare-array answer for a request that sends no `limit` exactly as `/entities` kept it,
+  so no existing caller breaks. Then the one client caller there is pages until `nextAfter` is null and concatenates:
+  `getAllGroups` (`client/src/api/relationshipGroups.js:20`), whose only call site is the graph's loader
+  (`client/src/components/GraphView.vue:341`), carrying the partial-failure surface KOL-083 added for the sidebar
+  (`loadEntities`, `client/src/composables/useEntities.js:79-130`, is the pattern to copy) — a page that fails leaves a
+  visible "stopped partway" state rather than a silently short list. `GET /open-questions` has **no client caller to
+  change**: nothing under `client/src` fetches it — open questions reach the client already populated on entities by
+  `GET /entities` — and the MCP `list_open_questions` tool queries `OpenQuestion` directly rather than through the route
+  (`server/src/routes/mcp.js:260`), so that route is capped for the public API's sake and its only in-repo callers are
+  its own tests. Files: `server/src/routes/relationshipGroups.js`, `server/src/routes/openQuestions.js`,
+  `client/src/api/relationshipGroups.js`, the graph caller (`client/src/components/GraphView.vue`), `docs/api.md`, and
+  the tests below; `client/src/composables/useEntities.js` is read for the paging pattern, not changed.
+  Verify: new `server/tests/http/relationshipGroupList.test.js` and `server/tests/http/openQuestionList.test.js`
+  mirroring `entityList.test.js` — a page is never longer than its limit; pages concatenate to the whole set with no row
+  served twice and none skipped when a write lands mid-walk; an `after` naming another workspace's id yields nothing; a
+  limit under the minimum or over the maximum is clamped rather than refused; and a request with no `limit` still gets
+  the bare array. Client-side, a Vitest case that the graph's loader pages to the end and one that a failed second page
+  surfaces the partial state. `cd server && yarn test` and `cd client && yarn test --run && yarn build` green. Out of
+  scope: `GET /conversations`, which is per-user and short and whose filter KOL-091 is already changing; a MongoDB text
+  index on block data, which is a change to the deployed database; the `/tags` aggregate; re-opening `/entities`' own
+  contract; and building the client an open-question list view, which no item owns and which this item's cap does not
+  need.
 - [x] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together** (routine 2026-10-21, e95e078)
   `GET /conversations` lists by `userId` alone (`server/src/routes/conversations.js:26`) even though the router is
   mounted behind `resolveWorkspace`, and `POST /chat` loads a conversation by `{ _id, userId }`

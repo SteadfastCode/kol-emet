@@ -79,7 +79,7 @@
     "KOL-092": {
       "order": 5,
       "title": "Two list routes still answer with the whole workspace",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-092",
