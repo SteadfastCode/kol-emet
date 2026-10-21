@@ -1,9 +1,10 @@
 import User from '../models/User.js';
-import Workspace from '../models/Workspace.js';
 import { getMcpUser } from './mcpUserStore.js';
-// The ranks and the write floor, from the middleware that owns them: /mcp
-// never passes through requireWriteRole, but it must refuse on the same rule.
-import { ROLE_RANK, WRITE_ROLE } from '../middleware/workspace.js';
+// From the middleware that owns them: the ranks and the write floor (/mcp never
+// passes through requireWriteRole, but it must refuse on the same rule), and the
+// membership lookup and default-workspace rule (/mcp never passes through
+// resolveWorkspace, but it must land in the same workspace — KOL-090).
+import { ROLE_RANK, WRITE_ROLE, defaultWorkspace, membershipOf, workspacesForUser } from '../middleware/workspace.js';
 
 /**
  * The workspace the MCP connector acts in — that of its associated user.
@@ -37,9 +38,16 @@ export async function mcpWorkspaceId() {
 export async function mcpWorkspace() {
   const userId = await getMcpUser();
   if (!userId) throw new Error('MCP connector not authorized — re-authorize in wiki settings');
-  const workspace = await Workspace.findOne({ 'members.userId': userId }).select('_id members').lean();
+  // The same default a session caller gets before it chooses — the oldest
+  // workspace this user owns, else the oldest they are a member of (KOL-090).
+  // A connector carries no session, so there is nowhere for it to hold a
+  // choice; what it must not do is act in "whichever document came back first",
+  // which is what this was before the shared helpers existed. If the connector
+  // ever needs to name a workspace, it belongs in the tool arguments, not here.
+  const workspaces = await workspacesForUser(userId);
+  const { workspace } = defaultWorkspace(workspaces, userId);
   if (!workspace) throw new Error('No workspace for the MCP-associated user');
-  const membership = (workspace.members ?? []).find(m => String(m.userId) === String(userId));
+  const membership = membershipOf(workspace, userId);
   return { workspaceId: workspace._id, role: membership?.role ?? null, userId: String(userId) };
 }
 

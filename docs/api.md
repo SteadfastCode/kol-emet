@@ -49,6 +49,16 @@ than falling through to unscoped data, and must stay behind `requireAuth` so an 
 a 401 before any workspace lookup. Populated id arrays (`open_questions`, `entry_ids`) are scoped
 the same way; see [Workspace](data-model.md#workspace).
 
+**Which** workspace is an explicit choice, not whatever a `findOne` returned (KOL-090). The acting
+workspace is `req.session.workspaceId` when the caller is still a member of it, else the default:
+**the oldest workspace they own, else the oldest they are a member of**, over the membership list
+sorted `createdAt` then `_id` so the order is total. A selection is re-checked against the live
+membership list on every request — a session holding an id is not authority to act in it — and a
+*stale* one (the membership was revoked, or the workspace deleted) **falls back to the default
+rather than answering 403**, so losing access to one workspace cannot lock a user out of their own.
+`/mcp` keeps its bearer identity and takes the same default: a connector carries no session to hold
+a choice in. See [Workspaces](#workspaces).
+
 ### Roles
 
 `Workspace.members[].role` is one of `owner`, `editor`, `viewer`, and `resolveWorkspace` reads the
@@ -90,6 +100,7 @@ Mount points and their guards:
 | `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
 | `/` (oauth) | mixed | none | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | none | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
+| `/workspaces` | `requireAuth` | any member | The caller's memberships, and which one this session acts in. Deliberately **no** `resolveWorkspace`: a membership list is not content in one workspace, and the choice must not be gated on the role held in the workspace being left. Mounted ahead of the `/` changelog catch-all, whose `resolveWorkspace` would otherwise 403 a caller with no membership at all |
 | `/events` | `requireAuth` + `resolveWorkspace` | any member | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
 | `/entities` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes use `requireActor` |
@@ -793,9 +804,34 @@ signup form offers the name as an optional field.
   tier names every rename with the old name, the new one and who asked, and every role refusal with
   the role it read — the **source** of a change, not just its result.
 
-**Not here yet:** inviting or removing members, enforcing `editor`/`viewer` on the content routes
-(every workspace has exactly one member today, so there is nothing to enforce against), and more
-than one workspace per user — `resolveWorkspace` still takes the first membership it finds.
+## Workspaces
+
+Which workspace a request acts in, for a user who belongs to more than one (KOL-090).
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/workspaces` | Every workspace the caller is a member of, each `{ _id, name, role, createdAt }` — the same shape as `GET /workspace` — sorted `createdAt` then `_id`, so oldest first and the order is total. `role` is the caller's own in each. Both auth paths; a session caller with no membership gets `[]`, not 403 |
+| POST | `/workspaces/:id/select` | Make `:id` the workspace this session acts in: checks membership, writes `req.session.workspaceId`, saves the session before answering, and returns the selected workspace in the same shape. **Session only** — a bearer connector has no session to hold a choice in and is 401. 404 `{ error: 'Not found' }` for an id the caller is not a member of, writing nothing (never 403, which would confirm the row exists); 400 `INVALID_ID` for a malformed one |
+
+- **The choice is session state**, server-side, not a client preference: the client cannot scope its
+  own reads, so a workspace chosen in a client store while the server resolved another is exactly
+  the read-A-write-B split this removes.
+- **Membership is re-checked every request** (see [Authentication](#authentication)), and a stale
+  selection falls back to the default instead of refusing. The id is left in the session rather than
+  cleared — `resolveWorkspace` also runs on `/events`, whose response ends only when the stream
+  does, so a session written there would be saved minutes later on top of whatever was chosen since.
+  `POST /workspaces/:id/select` is the only writer.
+- **The default is ownership-then-age**: the oldest workspace the caller owns, else the oldest they
+  are a member of. Ownership first because an invitation to someone else's workspace — which, once
+  invites land, can arrive unasked — must not become where a user's own writes go. "Owns" is read
+  from their own membership role, the same fact every role gate judges, not from `Workspace.ownerId`.
+- The switcher is in the Workspace group in Settings (`client/src/components/WikiLayout.vue`), shown
+  only when there is more than one membership, and the page reloads after a switch: the entity list,
+  the type registry and the `/events` stream are all bound to the workspace being left.
+
+**Not here yet:** inviting or removing members (and the email delivery that needs), creating a
+second workspace from the UI, per-workspace billing, and enforcing `editor`/`viewer` differently
+than [Roles](#roles) already does.
 
 ## Export
 
