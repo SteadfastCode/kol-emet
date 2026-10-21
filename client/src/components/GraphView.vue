@@ -10,8 +10,17 @@
 
     <div v-if="loading" class="graph-overlay">Building graph…</div>
     <div v-else-if="fetchError" class="graph-overlay error">{{ fetchError }}</div>
-    <div v-else-if="!linkData.length" class="graph-overlay muted">
+    <!-- Not shown when the group walk stopped partway: "no relationships yet"
+         would be an answer the server never gave (KOL-092). -->
+    <div v-else-if="!linkData.length && !loadWarning" class="graph-overlay muted">
       No relationships yet — add relationship groups to see them here.
+    </div>
+
+    <!-- A walk that stopped partway draws a graph with every node present and
+         some edges simply missing, which is indistinguishable from a complete
+         one. So it says so. -->
+    <div v-if="!loading && !fetchError && loadWarning" class="graph-warning" role="status">
+      {{ loadWarning }}
     </div>
 
     <svg ref="svgRef" class="graph-svg" />
@@ -49,9 +58,32 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import * as d3 from 'd3';
 import { useEntityTypes } from '../composables/useEntityTypes.js';
 import { getEntities } from '../api/entities.js';
-import { getAllGroups } from '../api/relationshipGroups.js';
+import { getAllGroups, GROUP_PAGE_SIZE } from '../api/relationshipGroups.js';
 
 const emit = defineEmits(['close', 'open-entry']);
+
+/**
+ * Tiered debug logging: set localStorage.GRAPH_LOAD_LOG_LEVEL to
+ * off | light | normal | verbose (default light). The group walk is several
+ * requests deep (KOL-092) and none of it is visible in the drawing: an edge
+ * that should be there and is not looks the same whether a page failed, a group
+ * holds a member from another workspace, or the two entities are simply not
+ * related.
+ *   light   — a walk that stopped partway: which page failed, how many groups
+ *             had arrived, and the status it failed with
+ *   normal  — light, plus the load that landed, with its group and entity counts
+ *   verbose — normal, plus the page size asked for and the edge count built
+ */
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  let setting = null;
+  try { setting = localStorage.getItem('GRAPH_LOAD_LOG_LEVEL'); } catch { /* storage blocked */ }
+  if ((LEVELS[setting] ?? LEVELS.light) >= LEVELS[level]) console.log(`[graphLoad:${level}] ${msg}`);
+}
+
+const SESSION_EXPIRED = 'Your session has expired. Sign in again to see the whole graph.';
+const PARTIAL_GRAPH = 'Some relationships could not be loaded — this graph is incomplete.';
 
 // The graph's own fallbacks for a category the registry lacks, darker than the pills'.
 const { styleFor } = useEntityTypes();
@@ -61,6 +93,13 @@ const containerRef = ref(null);
 const svgRef = ref(null);
 const loading = ref(true);
 const fetchError = ref(null);
+/**
+ * Set when the group walk ended on a failed page (KOL-092): the sentence the
+ * strip under the toolbar shows. The graph is still drawn from the groups that
+ * arrived — dropping them would be a worse answer than an incomplete one — so
+ * this is the only thing that tells an incomplete graph from a whole one.
+ */
+const loadWarning = ref(null);
 const nodeData = ref([]);
 const linkData = ref([]);
 
@@ -336,9 +375,32 @@ function initGraph() {
   resizeObserver.observe(container);
 }
 
+/**
+ * Every relationship group, walked a page at a time, and what to say if the
+ * walk did not finish.
+ *
+ * A failed page is not a failed graph: the nodes come from `getEntities()` and
+ * the pages that did arrive still carry real edges, so the drawing keeps them
+ * and the strip above it says the set is short. A *first* page that failed is
+ * the same answer with nothing in it — "no relationships yet" is what must not
+ * be shown, because the server never said that.
+ */
+async function loadGroups() {
+  try {
+    const groups = await getAllGroups();
+    log('verbose', `group walk asked for pages of ${GROUP_PAGE_SIZE} and brought ${groups.length} group(s)`);
+    return groups;
+  } catch (err) {
+    const partial = err.partial ?? [];
+    loadWarning.value = err.status === 401 ? SESSION_EXPIRED : PARTIAL_GRAPH;
+    log('light', `group walk stopped on page ${err.page ?? '?'} with ${partial.length} group(s) loaded (source: getAllGroups, status ${err.status ?? 'none'}): ${err.message}`);
+    return partial;
+  }
+}
+
 onMounted(async () => {
   try {
-    const [entities, groups] = await Promise.all([getEntities(), getAllGroups()]);
+    const [entities, groups] = await Promise.all([getEntities(), loadGroups()]);
 
     nodeData.value = entities.map(e => ({
       id: String(e._id),
@@ -399,6 +461,8 @@ onMounted(async () => {
 
     linkData.value = Array.from(edgeMap.values());
     loading.value = false;
+    log('normal', `graph built from ${nodeData.value.length} entity node(s) and ${groups.length} group(s)${loadWarning.value ? ' — the group walk stopped partway' : ''}`);
+    log('verbose', `edges: ${linkData.value.length}`);
 
     await nextTick();
     initGraph();
@@ -473,6 +537,19 @@ onBeforeUnmount(() => {
 }
 .graph-overlay.error { color: #e07070; }
 .graph-overlay.muted { color: #444; }
+
+.graph-warning {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  z-index: 11;
+  padding: 7px 16px;
+  font-size: 12px;
+  color: #e0c070;
+  background: #1a1508;
+  border-bottom: 1px solid #332a10;
+}
 
 .graph-svg {
   display: block;

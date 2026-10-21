@@ -245,7 +245,7 @@ re-densified server-side.
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/relationship-groups` | List all groups |
+| GET | `/relationship-groups` | List the workspace's groups, ordered by `_id` (insertion order). `members` is **not** populated — ids only; `GET /relationship-groups/:id` is where a populated group comes from. **Pagination (opt-in):** with `?limit=` (an integer 1–200; clamped to 200 above it, and *no limit* for anything else — `0`, `-1`, `abc`, a repeated parameter or `?limit[$gt]=1`) the response is an envelope `{ items, nextAfter: <id> | null }` instead of a bare array. Without `limit` the response is the unbounded bare array it has always been, so existing callers are unaffected. Pages are keyset, not offset: send the previous page's `nextAfter` back as `?after=<id>`. `nextAfter` is `null` on the last page, and a present but unusable `after` is **400** rather than a silent first page. There is no `total`: nothing pages this route for a "page 2 of 7", and a count per page is a second query. |
 | GET | `/relationship-groups/:id` | Single group |
 | POST | `/relationship-groups` | Create a group |
 | PATCH | `/relationship-groups/:id` | Update group label |
@@ -308,7 +308,7 @@ different tag and is never touched. `:tag` is a URL path segment — percent-enc
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/open-questions` | List. Supports `?status=open|resolved`. |
+| GET | `/open-questions` | List, newest first (ordered by `_id` descending, which is creation order and, unlike `createdAt`, unique). Supports `?status=open|resolved`. Populates `entry_ids`. **Pagination (opt-in):** with `?limit=` (an integer 1–200; clamped to 200 above it, and *no limit* for anything else — `0`, `-1`, `abc`, a repeated parameter or `?limit[$gt]=1`) the response is an envelope `{ items, nextAfter: <id> | null }` instead of a bare array. Without `limit` the response is the unbounded bare array it has always been, so existing callers are unaffected. Pages are keyset, not offset: send the previous page's `nextAfter` back as `?after=<id>`. `nextAfter` is `null` on the last page, and a present but unusable `after` is **400** rather than a silent first page. There is no `total`: nothing pages this route for a "page 2 of 7", and a count per page is a second query. |
 | GET | `/open-questions/:id` | Single question |
 | POST | `/open-questions` | Create. `entry_ids` naming entities outside the caller's workspace are dropped. |
 | PUT | `/open-questions/:id` | Update (question text, status, linked entities; same `entry_ids` rule) |

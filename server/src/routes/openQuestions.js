@@ -3,6 +3,7 @@ import OpenQuestion from '../models/OpenQuestion.js';
 import Entity from '../models/Entity.js';
 import { entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
 import { objectIdParam } from '../middleware/objectId.js';
+import { boundedInteger, idCursor } from '../lib/searchFilter.js';
 
 const router = Router();
 
@@ -10,15 +11,106 @@ const router = Router();
 // Registered here rather than per handler so a later route inherits it.
 router.param('id', objectIdParam('id'));
 
-// GET /open-questions — all questions, optional ?status=open|resolved
+/**
+ * ─── Tiered debug logging ───────────────────────────────────────────────────
+ * OPEN_QUESTION_LIST_LOG_LEVEL = off | light | normal | verbose (default light)
+ *   off     — nothing
+ *   light   — every page of `GET /open-questions`: the limit, status filter and
+ *             cursor it ran with, how many rows came back, the cursor it hands
+ *             out next, and the query string all of that was read from. A page
+ *             boundary that drops or repeats a question leaves no other trace —
+ *             a caller concatenates pages and shows a list, so a missing
+ *             question looks like a missing question. Also every refused cursor.
+ *   normal  — light, plus the unpaged (bare array) reads, with their row count
+ *   verbose — normal, plus the first and last id on each page, which is what a
+ *             boundary bug is visible in
+ */
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  // Resolved per call, not at module load, so it can't depend on import order.
+  const active = LEVELS[process.env.OPEN_QUESTION_LIST_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[openQuestions:${level}] ${msg}`);
+}
+
+/**
+ * The page sizes `GET /open-questions` will serve. Below the minimum is no page
+ * size at all (see `boundedInteger`); above the maximum is clamped to it.
+ *
+ * The same 200 `GET /entities` and `GET /relationship-groups` serve. This route
+ * answered with every question in the workspace *and* resolved `entry_ids` for
+ * each one, so its cost grew twice over with the workspace — on the single
+ * event loop every tenant of this API shares. A caller who wants the whole set
+ * still gets it, by asking for pages.
+ */
+export const QUESTION_LIMIT_MIN = 1;
+export const QUESTION_LIMIT_MAX = 200;
+
+/**
+ * GET /open-questions — the workspace's questions, newest first, optional
+ * `?status=open|resolved`, a page at a time when a page is asked for.
+ *
+ * The contract is the one `GET /entities` answers (KOL-067) with a bare-id
+ * cursor, exactly as `GET /relationship-groups` answers it (KOL-092): `?limit=`
+ * opts into `{ items, nextAfter }`, no `?limit=` is the unbounded bare array
+ * this route has always answered, `?after=` is the previous page's `nextAfter`
+ * verbatim, and a present-but-unusable cursor is 400 rather than a silent first
+ * page (a client that pages until `nextAfter` is null would otherwise never
+ * stop).
+ *
+ * The sort moved from `createdAt: -1` to `_id: -1`, which keeps the newest-first
+ * order the route has always answered in while giving the cursor a position it
+ * can name: an ObjectId leads with its creation timestamp, so descending `_id`
+ * is descending creation order, and unlike `createdAt` it is unique — two
+ * questions created in the same millisecond cannot straddle a page boundary and
+ * lose one of themselves. It is indexed on every collection, so this needs no
+ * new index on a live Atlas collection.
+ *
+ * `.lean()` for the same reason the entity list reads lean: nothing here needs a
+ * hydrated document, and the page is serialized straight out.
+ */
 router.get('/', async (req, res, next) => {
   try {
     const filter = { workspaceId: req.workspaceId };
     if (req.query.status) filter.status = req.query.status;
-    const questions = await OpenQuestion.find(filter)
-      .sort({ createdAt: -1 })
-      .populate(entriesIn(req.workspaceId));
-    res.json(questions);
+    // `?limit=` through the same typing rule as every other query-string value
+    // that becomes a query: `?limit[$gt]=1` arrives as an object and
+    // `?limit=1&limit=2` as an array, and either reaching `.limit()` is a 500
+    // rather than a page. Absent, unusable, or below the minimum all mean *no
+    // limit* — today's unpaged bare array, unchanged.
+    const limit = boundedInteger(req.query.limit, { min: QUESTION_LIMIT_MIN, max: QUESTION_LIMIT_MAX });
+
+    const source = req.originalUrl.includes('?') ? `?${req.originalUrl.split('?').slice(1).join('?')}` : '(no query string)';
+    const cursor = idCursor(req.query.after);
+    if (cursor.error) {
+      log('light', `refused 400 — ${cursor.error} (source: ${source}, after=${JSON.stringify(req.query.after)})`);
+      return res.status(400).json({ error: cursor.error });
+    }
+    const after = cursor.after;
+
+    // `$lt`, not `$gt`: the sort is descending, so the next page is the rows
+    // *below* the cursor.
+    const query = OpenQuestion.find(after ? { ...filter, _id: { $lt: after } } : filter)
+      .sort({ _id: -1 });
+    // One row past the page, so whether a next page exists is a fact about what
+    // came back rather than something inferred from a second count query.
+    if (limit) query.limit(limit + 1);
+
+    const rows = await query.populate(entriesIn(req.workspaceId)).lean();
+
+    if (!limit) {
+      log('normal', `unpaged list → ${rows.length} question(s), bare array (source: ${source})`);
+      return res.json(rows);
+    }
+
+    const items = rows.slice(0, limit);
+    const last = items[items.length - 1];
+    const nextAfter = rows.length > limit && last ? String(last._id) : null;
+
+    log('light', `page → limit ${limit}, after ${after ?? '(none)'}, status ${filter.status ?? '(any)'}, ${items.length} question(s), next ${nextAfter ?? '(none)'} (source: ${source})`);
+    log('verbose', `page ids: ${items.length ? `${items[0]._id} … ${last._id}` : '(empty)'}`);
+
+    res.json({ items, nextAfter });
   } catch (err) {
     next(err);
   }

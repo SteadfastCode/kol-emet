@@ -37,10 +37,14 @@
  * the rule it applies, rather than in the paginated route that reads it: a
  * `?limit=` is the same caller-supplied query-string value arriving through the
  * same parser, and the answer to a value nobody wrote is the same answer.
+ * `idCursor` (KOL-092) joined them on the same terms: an `?after=` is read at
+ * the edge too, and two routes page over the same `_id` cursor.
  *
  * Pure and synchronous — no logging tier here; what reaches these functions is
  * visible in the request the caller made.
  */
+
+import mongoose from 'mongoose';
 
 /**
  * Every character that means something to the regex engine. The same class
@@ -138,4 +142,41 @@ export function boundedInteger(raw, { min, max }) {
   const value = Number(trimmed);
   if (value < min) return null;
   return Math.min(value, max);
+}
+
+/**
+ * The `?after=` cursor for the routes whose sort is `_id` alone — a bare id.
+ *
+ * `GET /entities` pages over `{ title, _id }` because its sort is by title, so
+ * its cursor is two fields and lives in that route (`listCursor`). The two
+ * routes KOL-092 capped — `GET /relationship-groups` and `GET /open-questions`
+ * — sort by `_id`, which is already unique, so the previous page's last `_id`
+ * *is* the whole position: no tie-break, and no index beyond the one every
+ * collection has. One reader for both of them lives here, beside
+ * `boundedInteger`, for the reason that one does: it is the same caller-supplied
+ * query-string value arriving through the same parser.
+ *
+ * A present-but-unusable cursor is refused rather than ignored, exactly as the
+ * compound one is: dropping it would answer page 1 to a request for page 2, and
+ * a client that pages until `nextAfter` is null would then never stop. An empty
+ * `?after=` is the exception — that is a client that built a query string
+ * around a value it does not have, which is no cursor.
+ *
+ * `mongoose.isValidObjectId` is the whole check, as in `middleware/objectId.js`:
+ * under Mongoose 8 / bson 6 a string passes only if it is 24 hex characters,
+ * which is exactly the set `new ObjectId(value)` will not throw on — and
+ * exactly the form `String(row._id)` handed out.
+ *
+ * @param {unknown} raw whatever the caller sent — a string, an operator object
+ *   from the extended query parser, a repeated parameter's array, or nothing
+ * @returns {{ after: string|null } | { error: string }} `after` is null when
+ *   there is no cursor; `error` is the sentence the route answers 400 with.
+ */
+export function idCursor(raw) {
+  if (raw === undefined || raw === '') return { after: null };
+
+  const error = { error: "after must be the previous page's nextAfter, as after=<id>" };
+  if (typeof raw !== 'string' || !mongoose.isValidObjectId(raw)) return error;
+
+  return { after: raw };
 }
