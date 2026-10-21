@@ -79,7 +79,7 @@
     "KOL-093": {
       "order": 5,
       "title": "A deploy kills in-flight requests and every live stream: handle SIGTERM",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-093",
