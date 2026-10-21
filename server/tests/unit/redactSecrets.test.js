@@ -34,6 +34,14 @@
  *   - the inline scan resuming past a value  -> the nested-assignment test
  *     whose key was not a credential              fails (JAVA_OPTS' datasource
  *                                                 password leaks in list form)
+ *   - parseAllDocuments put back to parseDocument -> every Kubernetes case
+ *                                            falls to the line pass, and the
+ *                                            `{ name, value }` env credential
+ *                                            and POSTGRES_USER both leak
+ *   - the k8s-env sibling lookup removed  -> the env-shape test fails
+ *   - SECRET_DATA_KEYS applied to a ConfigMap -> the ConfigMap test fails
+ *                                            (the endpoints the graph is made
+ *                                            of are redacted away)
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_REDACT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -45,7 +53,7 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDocument } from 'yaml';
+import { parseDocument, parseAllDocuments } from 'yaml';
 
 process.env.REDACT_LOG_LEVEL ??= 'off';
 
@@ -441,5 +449,100 @@ describe('redactSecrets — the same file always redacts the same way', () => {
     assert.deepEqual(redactSecrets('').text, '');
     assert.deepEqual(redactSecrets(null).text, '');
     assert.deepEqual(redactSecrets(undefined).count, 0);
+  });
+});
+
+describe('redactSecrets — Kubernetes manifests', () => {
+  // A manifest is a `---` stream, which `parseDocument` reports as an error —
+  // so before KOL-089 every manifest fell straight through to the line
+  // scanner, which cannot see that `value:` has a `name:` beside it.
+  const parsesAll = text =>
+    parseAllDocuments(text, { merge: true, prettyErrors: false }).every(doc => doc.errors.length === 0);
+
+  const MANIFEST = [
+    'apiVersion: apps/v1',
+    'kind: Deployment',
+    'metadata:',
+    '  name: web',
+    'spec:',
+    '  template:',
+    '    spec:',
+    '      containers:',
+    '        - name: web',
+    '          image: ghcr.io/acme/web:1.4.2',
+    '          env:',
+    '            - name: SESSION_SECRET',
+    '              value: s3cret-session-value',
+    '            - name: DATABASE_URL',
+    '              value: postgres://app:dbpassword@postgres:5432/app',
+    '            - name: FEATURE_FLAGS',
+    '              value: beta,graph',
+    '---',
+    'apiVersion: v1',
+    'kind: Secret',
+    'metadata:',
+    '  name: db-credentials',
+    'stringData:',
+    '  POSTGRES_USER: appuser',
+    '  POSTGRES_PASSWORD: hunter2',
+    'data:',
+    '  legacy.conf: aGVsbG8tdGhlcmU=',
+    '---',
+    'apiVersion: v1',
+    'kind: ConfigMap',
+    'metadata:',
+    '  name: web-config',
+    'data:',
+    '  SEARCH_ENDPOINT: https://search.internal.example/v1',
+    '  LOG_LEVEL: info',
+  ].join('\n');
+
+  test('a `---` stream gets the AST pass, not the line scanner', () => {
+    const out = redact(MANIFEST, 'a three-document manifest');
+    assert.equal(out.via, 'yaml', 'every document parsed, so the precise pass ran');
+    assert.ok(parsesAll(out.text), 'and the splice left every document valid');
+  });
+
+  test("an env value whose credential is named by the `name:` beside it goes", () => {
+    const out = redact(MANIFEST, 'the env shapes');
+    assertGone(out, ['s3cret-session-value', 'dbpassword'], 'env values');
+    assert.match(out.text, /name: SESSION_SECRET\n\s+value: REDACTED/);
+    // An address key keeps its host, exactly as it does in the other syntaxes:
+    // the host is what the producer's edge is made of, and is not the secret.
+    assert.match(out.text, /value: postgres:\/\/REDACTED@postgres:5432\/app/);
+    // And a value whose name is innocent is left alone.
+    assert.match(out.text, /name: FEATURE_FLAGS\n\s+value: beta,graph/);
+    assert.ok(out.redactions.some(r => r.rule === 'k8s-env' && r.key === 'SESSION_SECRET'),
+      'the log names the credential, not the word `value`');
+  });
+
+  test("a Secret's values go by position, whatever they are called", () => {
+    const out = redact(MANIFEST, 'a Secret');
+    assertGone(out, ['appuser', 'hunter2', 'aGVsbG8tdGhlcmU='], 'Secret values');
+    assert.match(out.text, /POSTGRES_USER: REDACTED/, 'a username is not a secret word, and in a Secret it still goes');
+    assert.match(out.text, /legacy\.conf: REDACTED/, '`data` is base64, not plaintext, and still a credential');
+    assert.ok(out.redactions.some(r => r.rule === 'k8s-secret' && r.key === 'POSTGRES_USER'));
+  });
+
+  test("a ConfigMap's values are NOT redacted — they are the graph's edges", () => {
+    const out = redact(MANIFEST, 'a ConfigMap');
+    assert.match(out.text, /SEARCH_ENDPOINT: https:\/\/search\.internal\.example\/v1/);
+    assert.match(out.text, /LOG_LEVEL: info/);
+  });
+
+  test('a manifest is deterministic and idempotent too', () => {
+    const once = redact(MANIFEST, 'manifest idempotence 1');
+    const twice = redactSecrets(once.text, { label: 'manifest idempotence 2' });
+    assert.equal(twice.text, once.text);
+    assert.equal(twice.count, 0, 'there is nothing left to redact');
+  });
+
+  test('an invalid document in the stream still falls back to the line scanner', () => {
+    // One unparseable document must not cost the whole stream its redaction:
+    // the AST pass returns null for the file, and the line pass still runs.
+    const broken = `${MANIFEST}\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: x\n   bad: indent\n  API_TOKEN: leaked-token-value\n`;
+    const out = redact(broken, 'a stream with one broken document');
+    assert.equal(out.via, 'lines');
+    assertGone(out, ['leaked-token-value', 'hunter2'], 'the line pass still catches a named credential');
   });
 });

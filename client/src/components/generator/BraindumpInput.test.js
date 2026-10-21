@@ -1,25 +1,27 @@
 /**
  * The braindump input's import routing. Notes (.txt/.md/.docx) are appended to
- * the textarea for editing before a generation; a docker-compose file and an
- * OpenAPI document are not notes, so each skips the textarea and goes to its
- * own producer (POST /drafts/compose, POST /drafts/openapi), and the finished
- * draft is handed up (`drafted`) for the overlay's review stage.
+ * the textarea for editing before a generation; a docker-compose file, an
+ * OpenAPI document and a Kubernetes manifest are not notes, so each skips the
+ * textarea and goes to its own producer (POST /drafts/compose, /drafts/openapi,
+ * /drafts/kubernetes), and the finished draft is handed up (`drafted`) for the
+ * overlay's review stage.
  *
  * These pin that split, and the thing that decides it: the producer is chosen
- * by the file's CONTENT, not its extension — both kinds arrive as `.yaml` — the
- * file is sent verbatim with its filename, a refusal is shown rather than
+ * by the file's CONTENT, not its extension — all three kinds arrive as `.yaml`
+ * — the file is sent verbatim with its filename, a refusal is shown rather than
  * swallowed, and a producer file mixed into a multi-file import is refused
  * before anything is sent.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import BraindumpInput from './BraindumpInput.vue';
-import { createComposeDraft, createOpenApiDraft } from '../../api/drafts.js';
+import { createComposeDraft, createOpenApiDraft, createKubernetesDraft } from '../../api/drafts.js';
 import { isProducerFile, producerFor, ACCEPT_ATTR } from '../../lib/importFile.js';
 
 vi.mock('../../api/drafts.js', () => ({
   createComposeDraft: vi.fn(),
   createOpenApiDraft: vi.fn(),
+  createKubernetesDraft: vi.fn(),
 }));
 
 beforeEach(() => { vi.clearAllMocks(); });
@@ -33,6 +35,19 @@ const OPENAPI_JSON = JSON.stringify({
   info: { title: 'Legacy Orders', version: '1.2.0' },
   paths: { '/orders': { get: {} } },
 }, null, 2);
+// A manifest is a `---` stream, which is the shape that makes `apiVersion` +
+// `kind` a per-document pair rather than a single top-level one.
+const MANIFEST = [
+  'apiVersion: apps/v1',
+  'kind: Deployment',
+  'metadata:',
+  '  name: web',
+  '---',
+  'apiVersion: v1',
+  'kind: Service',
+  'metadata:',
+  '  name: web',
+].join('\n');
 
 async function drop(wrapper, files) {
   await wrapper.get('.drop').trigger('drop', { dataTransfer: { files } });
@@ -52,11 +67,16 @@ describe('BraindumpInput import routing', () => {
     expect(producerFor(OPENAPI)).toBe('openapi');
     expect(producerFor(OPENAPI_JSON)).toBe('openapi');
     expect(producerFor(COMPOSE)).toBe('compose');
+    expect(producerFor(MANIFEST)).toBe('kubernetes');
     // A spec that happens to declare a `services` tag is still a spec.
     expect(producerFor('openapi: 3.0.0\nservices:\n  - name: x\n')).toBe('openapi');
     // `services:` nested under another key is not a top-level key.
     expect(producerFor('paths:\n  /x:\n    services: {}\n')).toBe(null);
     expect(producerFor('name: CI\non: push\n')).toBe(null);
+    // `kind:` on its own is a word other formats use; the pair is what identifies
+    // a Kubernetes object.
+    expect(producerFor('kind: Deployment\nmetadata: {}\n')).toBe(null);
+    expect(producerFor('$schema: http://json-schema.org/schema\nkind: object\n')).toBe(null);
   });
 
   it('sends a dropped compose file verbatim to the compose producer and hands the draft up', async () => {
@@ -97,14 +117,29 @@ describe('BraindumpInput import routing', () => {
     expect(wrapper.emitted('drafted')).toEqual([[draft]]);
   });
 
-  it('refuses a structured file that is neither, without sending anything', async () => {
+  it('sends a .yaml holding a `---` stream of objects to the Kubernetes producer', async () => {
+    const draft = { _id: 'd4', status: 'ready', counts: { proposed: 3 } };
+    createKubernetesDraft.mockResolvedValue(draft);
+    const wrapper = mount(BraindumpInput);
+
+    await drop(wrapper, [fakeFile('manifests.yaml', MANIFEST)]);
+
+    expect(createKubernetesDraft).toHaveBeenCalledWith({ text: MANIFEST, filename: 'manifests.yaml' });
+    expect(createComposeDraft).not.toHaveBeenCalled();
+    expect(createOpenApiDraft).not.toHaveBeenCalled();
+    expect(wrapper.emitted('drafted')).toEqual([[draft]]);
+    expect(wrapper.get('textarea').element.value).toBe('');
+  });
+
+  it('refuses a structured file that is none of them, without sending anything', async () => {
     const wrapper = mount(BraindumpInput);
 
     await drop(wrapper, [fakeFile('ci.yml', 'name: CI\non: push\njobs: {}\n')]);
 
     expect(createComposeDraft).not.toHaveBeenCalled();
     expect(createOpenApiDraft).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('doesn\'t look like an OpenAPI document or a docker-compose file');
+    expect(createKubernetesDraft).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('doesn\'t look like an OpenAPI document, a Kubernetes manifest or a docker-compose file');
     expect(wrapper.emitted('drafted')).toBeUndefined();
   });
 
@@ -125,7 +160,7 @@ describe('BraindumpInput import routing', () => {
 
     expect(createComposeDraft).not.toHaveBeenCalled();
     expect(createOpenApiDraft).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Import a docker-compose or OpenAPI file on its own');
+    expect(wrapper.text()).toContain('Import a docker-compose, OpenAPI or Kubernetes file on its own');
     expect(wrapper.get('textarea').element.value).toBe('');
   });
 

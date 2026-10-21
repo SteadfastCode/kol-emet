@@ -22,6 +22,10 @@ import {
   parseOpenApi, OpenApiParseError, PRODUCER as OPENAPI_PRODUCER,
   PRODUCER_VERSION as OPENAPI_PRODUCER_VERSION, MAX_OPENAPI_CHARS,
 } from '../lib/producers/openApi.js';
+import {
+  parseKubernetes, KubernetesParseError, PRODUCER as K8S_PRODUCER,
+  PRODUCER_VERSION as K8S_PRODUCER_VERSION, MAX_KUBERNETES_CHARS,
+} from '../lib/producers/kubernetes.js';
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { errorLog } from '../middleware/errorHandler.js';
@@ -47,13 +51,13 @@ const MIN_RUN_MICROS = Number(process.env.GENERATOR_MIN_RUN_MICROS ?? 15_000); /
 // those out, which costs no cron.
 const STALE_GENERATING_MS = 10 * 60 * 1000;
 
-// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL = off | light | normal | verbose (default light)
+// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL / KUBERNETES_LOG_LEVEL = off | light | normal | verbose (default light)
 //   light   — one line per draft created, naming the request, file and workspace
 //   normal  — light, plus every refused request and every drop reason
 //   verbose — normal, plus each proposed item
 //
-// One tier set per producer rather than one for both: a person debugging an
-// OpenAPI import should not have to read every compose line to find it.
+// One tier set per producer rather than one for all of them: a person debugging
+// an OpenAPI import should not have to read every compose line to find it.
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 function producerLogger(envVar, prefix) {
   return (level, msg) => {
@@ -295,9 +299,11 @@ router.post('/', async (req, res, next) => {
  * point — source.text, every evidence quote, every log line — is the redacted
  * file, because Draft has no TTL and the exporter carries source.text and the
  * quotes out verbatim. A compose file carries POSTGRES_PASSWORD; an OpenAPI
- * document carries an example API key, which is the same problem.
+ * document carries an example API key; a manifest carries a Secret's
+ * `stringData`, and an env `value` whose credential is named by the `name:`
+ * beside it. All the same problem, all redacted here.
  *
- * Written once for both producers rather than copied per producer: everything
+ * Written once for every producer rather than copied per producer: everything
  * here except the parse call itself — the redaction seam, the hash, the
  * block-pruning re-import pass, the category check, the draft row and its log
  * tiers — is the contract a producer plugs into, and a second copy of it is a
@@ -463,6 +469,25 @@ router.post('/openapi', fileProducerRoute({
   defaultTitle: 'openapi',
   needs: 'an OpenAPI import',
   log: producerLogger('OPENAPI_LOG_LEVEL', 'drafts:openapi'),
+}));
+
+/**
+ * POST /drafts/kubernetes — a `---` stream of Kubernetes manifests becomes a
+ * reviewable draft: a Service (or Data Store, by image) per Deployment,
+ * StatefulSet or DaemonSet, an API per Service port exposed by the workload its
+ * selector matches, a Data Store per PersistentVolumeClaim, and Calls / Depends
+ * on per env URL. A `kind` with no reading is a drop reason, not a refusal.
+ */
+router.post('/kubernetes', fileProducerRoute({
+  route: '/drafts/kubernetes',
+  producer: K8S_PRODUCER,
+  producerVersion: K8S_PRODUCER_VERSION,
+  parse: parseKubernetes,
+  ParseError: KubernetesParseError,
+  maxChars: MAX_KUBERNETES_CHARS,
+  defaultTitle: 'kubernetes',
+  needs: 'a Kubernetes import',
+  log: producerLogger('KUBERNETES_LOG_LEVEL', 'drafts:kubernetes'),
 }));
 
 // ─── Decision routes ─────────────────────────────────────────────────────────

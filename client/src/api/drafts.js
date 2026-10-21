@@ -58,6 +58,17 @@ export const createOpenApiDraft = ({ text, filename }) =>
   req('/drafts/openapi', { method: 'POST', body: JSON.stringify({ text, filename }) });
 
 /**
+ * The same, for a `---` stream of Kubernetes manifests: each Deployment,
+ * StatefulSet or DaemonSet becomes a Service (or a Data Store, by its image),
+ * each Service port an API exposed by the workload it selects, each
+ * PersistentVolumeClaim a Data Store, and each env URL a Calls or an External
+ * Dependency. A kind the producer has no reading for is a drop reason on an
+ * otherwise ready draft, not a refusal.
+ */
+export const createKubernetesDraft = ({ text, filename }) =>
+  req('/drafts/kubernetes', { method: 'POST', body: JSON.stringify({ text, filename }) });
+
+/**
  * Start a generation, yielding progress events:
  *   { type: 'created', draftId }
  *   { type: 'stage',   stage, chunk?, of? }
