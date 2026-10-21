@@ -65,37 +65,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft**
-  `docs/roadmap.md` Phase 7 names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built compose, KOL-051
-  built OpenAPI and put k8s out of scope, and `server/src/models/Draft.js:114` marks the seam — "drift / repo / k8s
-  become new enum values here rather than new collections". Like both existing producers this is deterministic: no model
-  call, so no allowance check and no generation lock, which is the property that makes a producer safe to re-run. Build
-  `server/src/lib/producers/kubernetes.js` exporting the contract `fileProducerRoute` already takes
-  (`server/src/routes/drafts.js:291`) — `PRODUCER`, `PRODUCER_VERSION`, `parse`, a `ParseError` and a character cap —
-  mapping into the Software Architecture vocabulary (`server/src/config/templates.js`): a `Deployment`, `StatefulSet` or
-  `DaemonSet` becomes a Service, or a Data Store when its image matches the known-image list the compose producer
-  already has (imported from it, not copied); a `Service` object becomes an "Exposes" group between the workload its
-  selector matches and an API titled for the port; a `PersistentVolumeClaim` becomes a Data Store; an env var or
-  `envFrom` whose URL host names another workload becomes "Calls", and one that names nothing in the file becomes an
-  External Dependency plus "Depends on". Multi-document YAML (`---`) is the normal shape of a manifest and is the unit
-  of iteration. Evidence quote and source offsets per item as both other producers do, and `redactSecrets` before the
-  source text is stored — a `Secret`'s `stringData` is exactly what must not reach a corpus that has no TTL. Register
-  it: `'kubernetes'` in the `source.producer` enum (`server/src/models/Draft.js:117`), one `fileProducerRoute` call for
-  `POST /drafts/kubernetes`, `createKubernetesDraft` in `client/src/api/drafts.js`, and a third branch in `producerFor`
-  (`client/src/lib/importFile.js:73`) keyed on `apiVersion` plus `kind`, because a manifest and a compose file are both
-  `.yaml` and the extension cannot choose. Files: the new producer, `server/src/routes/drafts.js`,
-  `server/src/models/Draft.js`, `client/src/api/drafts.js`, `client/src/lib/importFile.js`,
-  `client/src/components/generator/BraindumpInput.vue` (the accept list and its copy), a new
-  `server/tests/fixtures/kubernetes.yaml`, `docs/api.md`, and a Decision Log line for the mapping. Verify: a new
-  `server/tests/unit/kubernetes.test.js` — the fixture's workloads, services and claims map as documented; a file with
-  several `---` documents yields items from every one of them; a `Secret`'s values never appear in the draft's stored
-  text; a document whose `kind` is unrecognised is a recorded drop reason and not a 500; and the same file parsed twice
-  yields the same items, with the second run dedupping against the graph. A new
-  `server/tests/http/kubernetesDraft.test.js` mirroring `openApiDraft.test.js` — 201 with a `ready` draft, no allowance
-  spent, an over-size body refused, and no workspace nameable but the caller's own. `cd server && yarn test` and `cd
-  client && yarn test --run && yarn build` green. Out of scope: Helm charts and kustomize overlays, which are templated
-  input and their own problem; reading a live cluster or any kubeconfig; the repo and DB-schema producers; drift
-  detection; and any change to either existing producer's mapping.
 
 - [ ] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly**
   `resolveWorkspace` picks the acting workspace with `Workspace.findOne({ 'members.userId': userId })` and no sort
@@ -346,6 +315,37 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft** (routine 2026-10-21, 32b9199)
+  `docs/roadmap.md` Phase 7 names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built compose, KOL-051
+  built OpenAPI and put k8s out of scope, and `server/src/models/Draft.js:114` marks the seam — "drift / repo / k8s
+  become new enum values here rather than new collections". Like both existing producers this is deterministic: no model
+  call, so no allowance check and no generation lock, which is the property that makes a producer safe to re-run. Build
+  `server/src/lib/producers/kubernetes.js` exporting the contract `fileProducerRoute` already takes
+  (`server/src/routes/drafts.js:291`) — `PRODUCER`, `PRODUCER_VERSION`, `parse`, a `ParseError` and a character cap —
+  mapping into the Software Architecture vocabulary (`server/src/config/templates.js`): a `Deployment`, `StatefulSet` or
+  `DaemonSet` becomes a Service, or a Data Store when its image matches the known-image list the compose producer
+  already has (imported from it, not copied); a `Service` object becomes an "Exposes" group between the workload its
+  selector matches and an API titled for the port; a `PersistentVolumeClaim` becomes a Data Store; an env var or
+  `envFrom` whose URL host names another workload becomes "Calls", and one that names nothing in the file becomes an
+  External Dependency plus "Depends on". Multi-document YAML (`---`) is the normal shape of a manifest and is the unit
+  of iteration. Evidence quote and source offsets per item as both other producers do, and `redactSecrets` before the
+  source text is stored — a `Secret`'s `stringData` is exactly what must not reach a corpus that has no TTL. Register
+  it: `'kubernetes'` in the `source.producer` enum (`server/src/models/Draft.js:117`), one `fileProducerRoute` call for
+  `POST /drafts/kubernetes`, `createKubernetesDraft` in `client/src/api/drafts.js`, and a third branch in `producerFor`
+  (`client/src/lib/importFile.js:73`) keyed on `apiVersion` plus `kind`, because a manifest and a compose file are both
+  `.yaml` and the extension cannot choose. Files: the new producer, `server/src/routes/drafts.js`,
+  `server/src/models/Draft.js`, `client/src/api/drafts.js`, `client/src/lib/importFile.js`,
+  `client/src/components/generator/BraindumpInput.vue` (the accept list and its copy), a new
+  `server/tests/fixtures/kubernetes.yaml`, `docs/api.md`, and a Decision Log line for the mapping. Verify: a new
+  `server/tests/unit/kubernetes.test.js` — the fixture's workloads, services and claims map as documented; a file with
+  several `---` documents yields items from every one of them; a `Secret`'s values never appear in the draft's stored
+  text; a document whose `kind` is unrecognised is a recorded drop reason and not a 500; and the same file parsed twice
+  yields the same items, with the second run dedupping against the graph. A new
+  `server/tests/http/kubernetesDraft.test.js` mirroring `openApiDraft.test.js` — 201 with a `ready` draft, no allowance
+  spent, an over-size body refused, and no workspace nameable but the caller's own. `cd server && yarn test` and `cd
+  client && yarn test --run && yarn build` green. Out of scope: Helm charts and kustomize overlays, which are templated
+  input and their own problem; reading a live cluster or any kubeconfig; the repo and DB-schema producers; drift
+  detection; and any change to either existing producer's mapping.
 - [x] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client** (routine 2026-10-21, c1946a2)
   `POST /drafts/:id/apply` broadcasts one `draft:applied` frame to every stream in the workspace except the one that
   asked (`server/src/routes/drafts.js:682`), deliberately in place of a burst of per-entity events — the applier passes

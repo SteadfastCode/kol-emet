@@ -79,7 +79,7 @@
     "KOL-089": {
       "order": 5,
       "title": "Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-089",
