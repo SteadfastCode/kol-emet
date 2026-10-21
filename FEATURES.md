@@ -67,7 +67,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together**
+- [x] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together**
   `GET /conversations` lists by `userId` alone (`server/src/routes/conversations.js:26`) even though the router is
   mounted behind `resolveWorkspace`, and `POST /chat` loads a conversation by `{ _id, userId }`
   (`server/src/routes/chat.js:343`) and then answers it out of the caller's *current* `req.workspaceId`: the graph tools
