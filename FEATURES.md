@@ -72,7 +72,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run**
+- [x] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run**
   `importGraph` builds `entityTypeDocs` at `server/src/lib/graphImporter.js:472-493` and calls `planIds` at `:507`, so
   the row-shape checks `planIds` performs for `entityTypes` (`:357-365` — `isPlainObject`, then a non-empty `name`) run
   after the loop that has already read `row.name`. A hand-edited document whose `entityTypes` holds `null`, a number, or
