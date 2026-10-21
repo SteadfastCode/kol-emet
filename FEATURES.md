@@ -69,7 +69,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one**
+- [x] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one**
   The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
   `?status=` filter, back-links maintained on both sides, two MCP tools (`add_open_question`, `list_open_questions`),
   and its own section in `docs/data-model.md`. The client reads them and nothing more:
