@@ -72,27 +72,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run**
-  `importGraph` builds `entityTypeDocs` at `server/src/lib/graphImporter.js:472-493` and calls `planIds` at `:507`, so
-  the row-shape checks `planIds` performs for `entityTypes` (`:357-365` — `isPlainObject`, then a non-empty `name`) run
-  after the loop that has already read `row.name`. A hand-edited document whose `entityTypes` holds `null`, a number, or
-  a bare name instead of a row throws a raw `TypeError` at `:475`; `server/src/routes/import.js` hands it to
-  `next(err)`, and the caller gets `500 INTERNAL` with a ref instead of the `400 MALFORMED_DOCUMENT` naming the field
-  that every other malformed row answers with. Nothing is written, so this is about the response and not the data — but
-  the module's promise is both that a refused document wrote nothing *and* that the caller is told which field, and
-  KOL-097 added those very checks for this class of input. `relationshipTypeDocs` is built at `:518`, after `planIds`,
-  so it is not affected. Found by the grader of KOL-097 and never filed. Build: validate before anything reads a row —
-  either call `planIds` ahead of the `entityTypeDocs` loop, or, if the canonical-name map `planIds` takes has to be
-  built first, run the `entityTypes` shape checks at the top of that build. The ordering is the whole fix: no new
-  refusal code, no new message shape, no change to what a well-formed document imports. Files:
-  `server/src/lib/graphImporter.js`, `server/tests/unit/graphImporter.test.js`, `server/tests/http/import.test.js`.
-  Verify: a unit case per shape — `entityTypes: [null]`, `[42]`, `["Worlds"]` and `[{}]` each refuse with
-  `MALFORMED_DOCUMENT` and a `fields` path naming `entityTypes[0]` or `entityTypes[0].name`, with
-  `EntityType.countDocuments` unchanged after each; the same through `POST /import`, which answers 400 and carries no
-  `ref`; and the existing round-trip, nested-subgroup and per-collection-cap cases pass unchanged. `cd server && yarn
-  test` green; the client is untouched. Out of scope: the other collections, whose rows are already checked before they
-  are read; a JSON Schema for the whole export document, which is a different way to do all of this; and merging into a
-  non-empty workspace, which KOL-077 deliberately left out.
 
 - [ ] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be**
   `RAISED_HERE` is a module-private Symbol set by plain assignment in `httpError()`
@@ -149,6 +128,27 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run** (routine 2026-10-21, ec33339)
+  `importGraph` builds `entityTypeDocs` at `server/src/lib/graphImporter.js:472-493` and calls `planIds` at `:507`, so
+  the row-shape checks `planIds` performs for `entityTypes` (`:357-365` — `isPlainObject`, then a non-empty `name`) run
+  after the loop that has already read `row.name`. A hand-edited document whose `entityTypes` holds `null`, a number, or
+  a bare name instead of a row throws a raw `TypeError` at `:475`; `server/src/routes/import.js` hands it to
+  `next(err)`, and the caller gets `500 INTERNAL` with a ref instead of the `400 MALFORMED_DOCUMENT` naming the field
+  that every other malformed row answers with. Nothing is written, so this is about the response and not the data — but
+  the module's promise is both that a refused document wrote nothing *and* that the caller is told which field, and
+  KOL-097 added those very checks for this class of input. `relationshipTypeDocs` is built at `:518`, after `planIds`,
+  so it is not affected. Found by the grader of KOL-097 and never filed. Build: validate before anything reads a row —
+  either call `planIds` ahead of the `entityTypeDocs` loop, or, if the canonical-name map `planIds` takes has to be
+  built first, run the `entityTypes` shape checks at the top of that build. The ordering is the whole fix: no new
+  refusal code, no new message shape, no change to what a well-formed document imports. Files:
+  `server/src/lib/graphImporter.js`, `server/tests/unit/graphImporter.test.js`, `server/tests/http/import.test.js`.
+  Verify: a unit case per shape — `entityTypes: [null]`, `[42]`, `["Worlds"]` and `[{}]` each refuse with
+  `MALFORMED_DOCUMENT` and a `fields` path naming `entityTypes[0]` or `entityTypes[0].name`, with
+  `EntityType.countDocuments` unchanged after each; the same through `POST /import`, which answers 400 and carries no
+  `ref`; and the existing round-trip, nested-subgroup and per-collection-cap cases pass unchanged. `cd server && yarn
+  test` green; the client is untouched. Out of scope: the other collections, whose rows are already checked before they
+  are read; a JSON Schema for the whole export document, which is a different way to do all of this; and merging into a
+  non-empty workspace, which KOL-077 deliberately left out.
 - [x] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message** (routine 2026-10-21, ce09da7)
   `server/tests/http/errorShape.test.js` is the guard that no router, middleware or lib hands a caught error's text to a
   caller, and both of its file walks are non-recursive: `writingFiles()` (`:610`) and `sourceFiles()` (`:625`) read

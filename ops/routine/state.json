@@ -79,7 +79,7 @@
     "KOL-107": {
       "order": 5,
       "title": "An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-107",
