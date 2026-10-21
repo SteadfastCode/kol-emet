@@ -23,8 +23,10 @@
  *   { path: 'userId', owner: User }           — UserMemory, Conversation
  *   { path: 'workspaceId', owner: Workspace } — every model in the deleter's
  *                                               WORKSPACE_SCOPED_MODELS
- * Conversation carries both. An editor's chat in a deleted workspace has a
- * user who still exists, so only its workspace can catch it.
+ * UserMemory and Conversation carry both. An editor's chat — or a fact
+ * remembered from it — in a deleted workspace has a user who still exists, so
+ * only its workspace can catch it; and a row written before either model
+ * carried a workspace has no workspace to catch it, so only its user can.
  *
  * It only works if the check runs on every insert, whichever code path does
  * it, so it is a schema plugin and not a helper each writer has to remember to

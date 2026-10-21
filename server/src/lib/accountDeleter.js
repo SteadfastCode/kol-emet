@@ -13,9 +13,11 @@
  *   - every document in those workspaces, in every model that carries
  *     workspaceId (WORKSPACE_SCOPED_MODELS; the test fails if a model with a
  *     workspaceId path is missing from the list);
- *   - the user's data that is keyed by user rather than workspace: UserMemory,
- *     and Conversation by userId, which also catches pre-tenancy chats still
- *     carrying workspaceId: null;
+ *   - the user's own rows by userId as well — UserMemory and Conversation —
+ *     which catches two things the workspace pass cannot: an editor's chat or
+ *     memory in a workspace someone else owns, and rows written before each
+ *     model carried a workspace (chats before tenancy, memories before
+ *     KOL-091) that still hold workspaceId: null;
  *   - Settings.mcpUserId, if the MCP connector was authorized as this user;
  *   - the User, last.
  *
@@ -32,8 +34,8 @@
  * finishes the job.
  *
  * Writes that race the deletion: each owner is deleted before its data gets a
- * final sweep. Content is swept once the workspaces are gone, and UserMemory and
- * Conversation once the User is gone. That closes the window because every one
+ * final sweep. Content is swept once the workspaces are gone, and the
+ * user-keyed rows of UserMemory and Conversation once the User is gone. That closes the window because every one
  * of those models looks up its owner after each insert (lib/ownerGuard.js):
  * content its workspace, UserMemory and Conversation their user. An insert
  * before the final sweep gets swept. One after it finds no owner and deletes
@@ -83,6 +85,10 @@ export const WORKSPACE_SCOPED_MODELS = [
   OpenQuestion,
   Draft,
   Conversation,
+  // Workspace-scoped since KOL-091: a remembered fact is about one workspace's
+  // chats, so it goes with that workspace. It is still swept by userId below as
+  // well, for rows written before the field existed.
+  UserMemory,
   ChangeLog,
   BridgeMessage,
   BridgePresence,
@@ -163,7 +169,10 @@ export async function deleteAccount(userId, { source = 'unspecified caller' } = 
   const swept = await deleteScopedContent(workspaceIds, deleted, 'sweep');
   if (swept) log('light', `deleteAccount(${id}): sweep removed ${swept} document(s) written during deletion (source: ${source})`);
 
-  deleted.UserMemory = (await UserMemory.deleteMany({ userId: id })).deletedCount;
+  // `+=`, not `=`: both of these are in WORKSPACE_SCOPED_MODELS, so the two
+  // passes above already counted the rows that carried a workspace, and this
+  // adds the ones reachable only by user.
+  deleted.UserMemory += (await UserMemory.deleteMany({ userId: id })).deletedCount;
   deleted.Conversation += (await Conversation.deleteMany({ userId: id })).deletedCount;
   const mcpUserCleared = (
     await Settings.updateOne({ _id: 'global', mcpUserId: id }, { $set: { mcpUserId: null } })

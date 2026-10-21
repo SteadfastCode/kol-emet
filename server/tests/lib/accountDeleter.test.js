@@ -49,8 +49,9 @@ process.env.ACCOUNT_DELETE_LOG_LEVEL ??= 'off';
 
 /**
  * A tenant with a document in every collection it can own: its User and
- * Workspace, one row in each workspace-scoped model, a UserMemory, and a
- * pre-tenancy Conversation (workspaceId: null) reachable only through userId.
+ * Workspace, one row in each workspace-scoped model, and — reachable only
+ * through userId — a pre-tenancy Conversation and a pre-KOL-091 UserMemory,
+ * both carrying workspaceId: null.
  */
 async function seedTenant(label) {
   const user = await User.create({ email: `${label}@example.test`, passwordHash: 'not-a-real-hash' });
@@ -83,7 +84,12 @@ async function seedTenant(label) {
   await RoutineRepo.create({ workspaceId, repo: `${label}-repo`, syncedAt: new Date() });
   await RoutineItem.create({ workspaceId, repo: `${label}-repo`, itemId: 'X-001', title: `${label} item`, state: 'pending', syncedAt: new Date() });
 
-  await UserMemory.create({ userId: user._id, fact: `${label} rides the night train` });
+  await UserMemory.create({ workspaceId, userId: user._id, fact: `${label} rides the night train` });
+
+  // The rows that predate the column on their model: a chat from before
+  // tenancy, and a memory from before KOL-091 gave UserMemory a workspace.
+  // Only the userId pass can reach either.
+  await UserMemory.create({ workspaceId: null, userId: user._id, fact: `${label} remembers the old line` });
   await Conversation.create({ workspaceId: null, userId: user._id, provider: 'test', model: 'test' });
 
   return { user, workspace };
@@ -161,6 +167,7 @@ describe('deleting a sole owner', () => {
     assert.equal(result.deleted.User, 1);
     assert.equal(result.deleted.Workspace, 1);
     assert.equal(result.deleted.Conversation, 2);
+    assert.equal(result.deleted.UserMemory, 2, 'the workspace-scoped memory and the pre-KOL-091 one');
     assert.equal(result.mcpUserCleared, false);
   });
 
@@ -275,7 +282,7 @@ describe('user-keyed writes that race the deletion', () => {
 
     // A live owner's inserts stand.
     for (const write of lateWrites(b.user._id)) await write();
-    assert.equal(await UserMemory.countDocuments({ userId: b.user._id }), 3);
+    assert.equal(await UserMemory.countDocuments({ userId: b.user._id }), 4);
     assert.equal(await Conversation.countDocuments({ userId: b.user._id }), 3);
   });
 
@@ -295,7 +302,7 @@ describe('user-keyed writes that race the deletion', () => {
 
     const result = await deleteAccount(a.user._id);
 
-    assert.equal(result.deleted.UserMemory, 3, 'the seeded memory and both late ones');
+    assert.equal(result.deleted.UserMemory, 4, 'both seeded memories and both late ones');
     assert.equal(result.deleted.Conversation, 3, 'both seeded chats and the late one');
     assert.deepEqual(await snapshot(), without(before, a));
   });
@@ -315,6 +322,7 @@ describe('workspace-scoped writes that race the deletion', () => {
     OpenQuestion: (workspaceId) => ({ question: 'Who wrote this late?', workspaceId }),
     Draft: (workspaceId, writerId) => ({ workspaceId, createdBy: writerId, title: 'late draft' }),
     Conversation: (workspaceId, writerId) => ({ workspaceId, userId: writerId, provider: 'test', model: 'test' }),
+    UserMemory: (workspaceId, writerId) => ({ workspaceId, userId: writerId, fact: 'late fact about the night train' }),
     ChangeLog: (workspaceId, writerId) => ({
       workspaceId,
       entityId: new mongoose.Types.ObjectId(),
