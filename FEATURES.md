@@ -64,42 +64,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client**
-  `POST /drafts/:id/apply` broadcasts one `draft:applied` frame to every stream in the workspace except the one that
-  asked (`server/src/routes/drafts.js:682`), deliberately in place of a burst of per-entity events — the applier passes
-  `broadcast: false` and `server/src/lib/changeLogger.js:56` says why. Nothing listens for it: `useEvents`
-  (`client/src/composables/useEvents.js`) registers `client:id`, `entity:created`, `entity:updated` and
-  `entity:deleted` and nothing else, so the frame reaches only clients that drop it, while the tab that applied
-  refreshes itself through `onDraftApplied` (`client/src/components/WikiLayout.vue:428`). A 30-item apply is therefore
-  invisible in every other tab until a reload. `POST /import` is the same hole without the frame: it writes a whole
-  graph and broadcasts nothing at all, and its own tab reloads at `WikiLayout.vue:541`. Second defect, same file: when
-  the server ends a stream on purpose it writes `event: error` with `{ error: 'session-ended' }` or
-  `{ error: 'too-many-streams' }` first (`server/src/lib/broadcaster.js:166,201`, `server/src/routes/events.js:39`),
-  and `useEvents` cannot tell that from a dropped socket — `es.onerror` closes and re-dials every 3000 ms forever, so a
-  tab whose session was revoked, or one that tripped the per-session stream cap, retries a refusal for as long as it
-  stays open. Third: every frame is `console.log`ged with its whole payload, entity bodies included, in the one client
-  module with no tier (compare `ENTITY_LOAD_LOG_LEVEL`, `client/src/composables/useEntities.js:5`). Build: a
-  `draft:applied` and a `workspace:imported` listener that call `loadEntities(<reason>)` naming the source the way the
-  existing handlers do, plus a toast through `addToast` so a user sees who changed what; the
-  `broadcast('workspace:imported', …)` call in `server/src/routes/import.js` beside its per-collection counts. Then the
-  reconnect: read `e.data` on the error path — a frame the server wrote is a stop and not a retry, so `session-ended`
-  ends the loop and surfaces "signed out elsewhere", `too-many-streams` ends it naming the limit, and a transport
-  failure still retries but with a growing, jittered, capped delay. Tiered
-  `localStorage.SSE_LOG_LEVEL = off | light | normal | verbose` (default light): light names each connect, each ending
-  with the source that caused it — which frame, or which transport failure — and each reconnect with its attempt number
-  and delay, and carries no payload; normal adds the event name and the entity id; verbose adds the frame. Files:
-  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`, `server/src/routes/import.js`, a new
-  `client/src/composables/useEvents.test.js`, and the `/events` section of `docs/api.md`. Verify: the new Vitest suite
-  against a fake `EventSource` — a `draft:applied` frame reloads once and toasts once; a `workspace:imported` frame does
-  the same; a server `error` frame carrying `session-ended` schedules no reconnect and reports the reason;
-  `too-many-streams` likewise; a transport error does reconnect, and successive delays grow rather than repeating
-  3000 ms; and at the default tier no log line contains payload text. Plus a `WikiLayout.test.js` case that both new
-  events reload the sidebar, and a `server/tests/http/import.test.js` case that an import sends one frame to another
-  client in the same workspace and none to a client in another. `cd client && yarn test --run && yarn build` and
-  `cd server && yarn test` green. Out of scope: relationship-group writes, which broadcast nothing either but have no
-  ChangeLog and so need an event vocabulary of their own; replacing the apply's single frame with per-entity events;
-  replaying what a disconnected client missed, and `Last-Event-ID` resumption; and the `/chat` SSE stream, which is a
-  different channel with its own client.
 
 - [ ] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft**
   `docs/roadmap.md` Phase 7 names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built compose, KOL-051
@@ -382,6 +346,42 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client** (routine 2026-10-21, c1946a2)
+  `POST /drafts/:id/apply` broadcasts one `draft:applied` frame to every stream in the workspace except the one that
+  asked (`server/src/routes/drafts.js:682`), deliberately in place of a burst of per-entity events — the applier passes
+  `broadcast: false` and `server/src/lib/changeLogger.js:56` says why. Nothing listens for it: `useEvents`
+  (`client/src/composables/useEvents.js`) registers `client:id`, `entity:created`, `entity:updated` and
+  `entity:deleted` and nothing else, so the frame reaches only clients that drop it, while the tab that applied
+  refreshes itself through `onDraftApplied` (`client/src/components/WikiLayout.vue:428`). A 30-item apply is therefore
+  invisible in every other tab until a reload. `POST /import` is the same hole without the frame: it writes a whole
+  graph and broadcasts nothing at all, and its own tab reloads at `WikiLayout.vue:541`. Second defect, same file: when
+  the server ends a stream on purpose it writes `event: error` with `{ error: 'session-ended' }` or
+  `{ error: 'too-many-streams' }` first (`server/src/lib/broadcaster.js:166,201`, `server/src/routes/events.js:39`),
+  and `useEvents` cannot tell that from a dropped socket — `es.onerror` closes and re-dials every 3000 ms forever, so a
+  tab whose session was revoked, or one that tripped the per-session stream cap, retries a refusal for as long as it
+  stays open. Third: every frame is `console.log`ged with its whole payload, entity bodies included, in the one client
+  module with no tier (compare `ENTITY_LOAD_LOG_LEVEL`, `client/src/composables/useEntities.js:5`). Build: a
+  `draft:applied` and a `workspace:imported` listener that call `loadEntities(<reason>)` naming the source the way the
+  existing handlers do, plus a toast through `addToast` so a user sees who changed what; the
+  `broadcast('workspace:imported', …)` call in `server/src/routes/import.js` beside its per-collection counts. Then the
+  reconnect: read `e.data` on the error path — a frame the server wrote is a stop and not a retry, so `session-ended`
+  ends the loop and surfaces "signed out elsewhere", `too-many-streams` ends it naming the limit, and a transport
+  failure still retries but with a growing, jittered, capped delay. Tiered
+  `localStorage.SSE_LOG_LEVEL = off | light | normal | verbose` (default light): light names each connect, each ending
+  with the source that caused it — which frame, or which transport failure — and each reconnect with its attempt number
+  and delay, and carries no payload; normal adds the event name and the entity id; verbose adds the frame. Files:
+  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`, `server/src/routes/import.js`, a new
+  `client/src/composables/useEvents.test.js`, and the `/events` section of `docs/api.md`. Verify: the new Vitest suite
+  against a fake `EventSource` — a `draft:applied` frame reloads once and toasts once; a `workspace:imported` frame does
+  the same; a server `error` frame carrying `session-ended` schedules no reconnect and reports the reason;
+  `too-many-streams` likewise; a transport error does reconnect, and successive delays grow rather than repeating
+  3000 ms; and at the default tier no log line contains payload text. Plus a `WikiLayout.test.js` case that both new
+  events reload the sidebar, and a `server/tests/http/import.test.js` case that an import sends one frame to another
+  client in the same workspace and none to a client in another. `cd client && yarn test --run && yarn build` and
+  `cd server && yarn test` green. Out of scope: relationship-group writes, which broadcast nothing either but have no
+  ChangeLog and so need an event vocabulary of their own; replacing the apply's single frame with per-entity events;
+  replaying what a disconnected client missed, and `Last-Event-ID` resumption; and the `/chat` SSE stream, which is a
+  different channel with its own client.
 - [x] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM** (routine 2026-10-21, 15b78b2)
   `server/src/index.js` connects, listens, and installs no signal handler, so the SIGTERM a host sends at every deploy
   takes the process down mid-request: a write caught between its Mongo call and its `ChangeLog` append is cut in half,

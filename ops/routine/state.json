@@ -79,7 +79,7 @@
     "KOL-102": {
       "order": 5,
       "title": "Live sync misses every bulk write: an apply and an import reach no other client",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-102",
