@@ -67,31 +67,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together**
-  `GET /conversations` lists by `userId` alone (`server/src/routes/conversations.js:26`) even though the router is
-  mounted behind `resolveWorkspace`, and `POST /chat` loads a conversation by `{ _id, userId }`
-  (`server/src/routes/chat.js:343`) and then answers it out of the caller's *current* `req.workspaceId`: the graph tools
-  read that workspace (`chat.js:189,206`) and the spend is billed to it (`:422`). `Conversation.workspaceId` is stamped
-  at creation and read by nothing — `conversations.js:47` says as much. `UserMemory` has no workspace at all
-  (`server/src/models/UserMemory.js:7`), so a fact extracted from one workspace's chat is loaded into another's system
-  prompt (`memoryExtractor.js:130,148`). None of this is visible today, because every user has exactly one workspace; it
-  becomes visible the moment KOL-090's switcher exists, which is why it is filed alongside it rather than after the bug
-  report. Build: filter the conversation list and every by-id lookup on `workspaceId` as well as `userId`, so a chat is
-  reachable only from the workspace it was created in; add `workspaceId` to `UserMemory` with the `ownerGuard` the other
-  scoped models carry (`{ path: 'workspaceId', owner: Workspace }`), write it in `extractAndSaveMemories`, and filter
-  `loadMemories` by it. Rows written before this carry `workspaceId: null`: read a null as belonging to the caller's
-  current workspace so nobody loses their history, and record that rule in the Decision Log rather than shipping a
-  migration that has to guess which workspace a row meant. Files: `server/src/routes/conversations.js`,
-  `server/src/routes/chat.js`, `server/src/models/UserMemory.js`, `server/src/lib/memoryExtractor.js`,
-  `server/src/lib/accountDeleter.js` (`UserMemory` joins the workspace-scoped list, whose completeness its own test
-  already asserts), `docs/data-model.md`, `docs/api.md`, and the Decision Log line. Verify: a new
-  `server/tests/http/conversationScope.test.js` — for one user in two workspaces, a conversation created in the first is
-  absent from the list in the second and answers 404 to `GET`, `PATCH`, `DELETE` and `POST /chat` there; a memory
-  extracted in the first does not reach the second's prompt; a legacy row with `workspaceId: null` is still readable and
-  still listed; and the account-deletion sweep still removes both models. `cd server && yarn test` green; the client
-  changes only if a 404 it did not expect needs handling. Out of scope: moving a conversation between workspaces,
-  sharing one with another member, per-workspace memory limits, and pagination of the conversation list, which no item
-  owns yet.
 
 - [ ] **(KOL-092) Two list routes still answer with the whole workspace**
   KOL-061 stopped `GET /entities` shipping every block and KOL-067 gave it keyset pages, but `GET /relationship-groups`
@@ -287,6 +262,31 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together** (routine 2026-10-21, e95e078)
+  `GET /conversations` lists by `userId` alone (`server/src/routes/conversations.js:26`) even though the router is
+  mounted behind `resolveWorkspace`, and `POST /chat` loads a conversation by `{ _id, userId }`
+  (`server/src/routes/chat.js:343`) and then answers it out of the caller's *current* `req.workspaceId`: the graph tools
+  read that workspace (`chat.js:189,206`) and the spend is billed to it (`:422`). `Conversation.workspaceId` is stamped
+  at creation and read by nothing — `conversations.js:47` says as much. `UserMemory` has no workspace at all
+  (`server/src/models/UserMemory.js:7`), so a fact extracted from one workspace's chat is loaded into another's system
+  prompt (`memoryExtractor.js:130,148`). None of this is visible today, because every user has exactly one workspace; it
+  becomes visible the moment KOL-090's switcher exists, which is why it is filed alongside it rather than after the bug
+  report. Build: filter the conversation list and every by-id lookup on `workspaceId` as well as `userId`, so a chat is
+  reachable only from the workspace it was created in; add `workspaceId` to `UserMemory` with the `ownerGuard` the other
+  scoped models carry (`{ path: 'workspaceId', owner: Workspace }`), write it in `extractAndSaveMemories`, and filter
+  `loadMemories` by it. Rows written before this carry `workspaceId: null`: read a null as belonging to the caller's
+  current workspace so nobody loses their history, and record that rule in the Decision Log rather than shipping a
+  migration that has to guess which workspace a row meant. Files: `server/src/routes/conversations.js`,
+  `server/src/routes/chat.js`, `server/src/models/UserMemory.js`, `server/src/lib/memoryExtractor.js`,
+  `server/src/lib/accountDeleter.js` (`UserMemory` joins the workspace-scoped list, whose completeness its own test
+  already asserts), `docs/data-model.md`, `docs/api.md`, and the Decision Log line. Verify: a new
+  `server/tests/http/conversationScope.test.js` — for one user in two workspaces, a conversation created in the first is
+  absent from the list in the second and answers 404 to `GET`, `PATCH`, `DELETE` and `POST /chat` there; a memory
+  extracted in the first does not reach the second's prompt; a legacy row with `workspaceId: null` is still readable and
+  still listed; and the account-deletion sweep still removes both models. `cd server && yarn test` green; the client
+  changes only if a 404 it did not expect needs handling. Out of scope: moving a conversation between workspaces,
+  sharing one with another member, per-workspace memory limits, and pagination of the conversation list, which no item
+  owns yet.
 - [x] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly** (routine 2026-10-21, 6ed92bd)
   `resolveWorkspace` picks the acting workspace with `Workspace.findOne({ 'members.userId': userId })` and no sort
   (`server/src/middleware/workspace.js:97`), under a comment that says it plainly: "A user may later belong to several;

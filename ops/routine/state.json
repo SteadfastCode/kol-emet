@@ -79,7 +79,7 @@
     "KOL-091": {
       "order": 5,
       "title": "A chat belongs to a user but is answered from a workspace, and nothing ties the two together",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-091",
