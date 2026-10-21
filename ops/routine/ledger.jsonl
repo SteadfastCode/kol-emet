@@ -452,3 +452,4 @@
 {"event":"note","text":"bridge queue.promote moved KOL-105 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-105","atUtc":"2026-10-21T03:23:22.062Z"}
 {"event":"note","text":"bridge queue.promote moved KOL-106 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-106","atUtc":"2026-10-21T03:23:23.935Z"}
 {"event":"note","text":"bridge queue.promote moved KOL-107 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-107","atUtc":"2026-10-21T03:23:25.848Z"}
+{"event":"note","text":"bridge queue.promote moved KOL-108 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-108","atUtc":"2026-10-21T03:23:27.727Z"}
