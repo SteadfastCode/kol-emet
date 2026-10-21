@@ -113,6 +113,7 @@ import {
   sweepClients,
   closeStreamsForSession,
   closeStreamsForUser,
+  closeAllStreams,
   maxStreamsPerUser,
   DEFAULT_MAX_STREAMS_PER_USER,
 } from '../../src/lib/broadcaster.js';
@@ -719,5 +720,52 @@ describe('closing streams for a session or a user', () => {
 
     assert.equal(closeStreamsForUser(hex), 1);
     assert.equal(res.ended, true);
+  });
+});
+
+describe('closing every stream for a shutdown', () => {
+  // The second stage of lib/shutdown.js. Unlike the two closers above this one
+  // has no filter: a SIGTERM ends every tenant's streams, and it has to end
+  // them *cleanly*, because a stream that merely dies with the socket reaches
+  // the browser as a network error with no reason attached.
+  test('closes every open stream, whatever it was authenticated by, and empties the registry', async () => {
+    const mine = uniqueWs();
+    const theirs = uniqueWs();
+    const one = connect('tab-1', mine, { userId: 'u1', sessionId: 'sid-1' });
+    const two = connect('tab-2', mine, { userId: 'u1', sessionId: 'sid-2' });
+    const otherTenant = connect('tab-3', theirs, { userId: 'u2', sessionId: 'sid-3' });
+    // The BEARER_TOKEN path: no user, no session, so neither closer above
+    // reaches it. A deploy still has to end it.
+    const connector = connect('tab-4', theirs, { userId: null, sessionId: null });
+
+    const closed = closeAllStreams('SIGTERM: the server is shutting down');
+
+    assert.equal(closed, 4);
+    for (const [name, res] of [['one', one], ['two', two], ['otherTenant', otherTenant], ['connector', connector]]) {
+      assert.equal(res.ended, true, `${name} was left open`);
+      // A reason the client can reconnect on, not the session-ended the logout
+      // and account-deletion closers send.
+      assert.deepEqual(errors(res), [{ error: 'server-restarting' }], `${name} was not told why`);
+    }
+
+    // Empty registry: nothing is left to close, and a broadcast reaches nobody.
+    assert.equal(closeAllStreams(), 0, 'the registry still held closed streams');
+    broadcast('entity:created', { _id: 'e1' }, { workspaceId: mine });
+    broadcast('entity:created', { _id: 'e2' }, { workspaceId: theirs });
+    for (const res of [one, two, otherTenant, connector]) {
+      assert.equal(frames(res).filter((f) => f.event === 'entity:created').length, 0, 'a closed stream received a broadcast');
+    }
+  });
+
+  test('writes the reason it was given to the log, per stream', () => {
+    connect('tab-1', uniqueWs(), { userId: 'u1', sessionId: 'sid-1' });
+    connect('tab-2', uniqueWs(), { userId: 'u2', sessionId: 'sid-2' });
+
+    closeAllStreams('SIGTERM: the server is shutting down');
+
+    // The light tier's whole job: every connection that ends says why.
+    const lines = captured.filter((l) => /SIGTERM: the server is shutting down/.test(l));
+    assert.equal(lines.length, 2, `expected one line per stream, got ${lines.length}`);
+    assert.ok(lines.every((l) => /disconnected/.test(l)), lines.join('\n'));
   });
 });
