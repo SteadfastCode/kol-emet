@@ -10,6 +10,7 @@
     <template v-else-if="entity">
       <EntityHeader
         :entity="entity"
+        :can-write="canWrite"
         @save="saveHeader"
         @set-tag="$emit('set-tag', $event)"
       />
@@ -127,6 +128,9 @@ import { useEntityTypes } from '../composables/useEntityTypes.js';
  * choice. A 409 arriving anyway — a type renamed while the list was on screen —
  * turns that row into the same picker, from the types the refusal named.
  *
+ * The open-question section in the header writes to its own routes and logs on
+ * its own OPEN_QUESTION_LOG_LEVEL (KOL-104); `canWrite` below gates it.
+ *
  * Tiered debug logging: set localStorage.HISTORY_LOG_LEVEL to
  * off | light | normal | verbose (default light). The server logs its side on
  * its own CHANGELOG_LOG_LEVEL.
@@ -140,6 +144,13 @@ const props = defineProps({
   entity: Object,
   loading: Boolean,
   breadcrumbs: Array,
+  /**
+   * Whether this entity's open questions can be written (KOL-104). False for a
+   * deleted entity's snapshot, which this panel also renders: the open-question
+   * section writes straight to `/open-questions`, and a question written
+   * against an entity that no longer exists would be stored linked to nothing.
+   */
+  canWrite: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['crumb-click', 'follow-link', 'set-tag', 'saved', 'deleted', 'refresh']);

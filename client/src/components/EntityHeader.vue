@@ -18,12 +18,84 @@
             @click="$emit('set-tag', tag)"
           >#{{ tag }}</span>
         </div>
-        <div v-if="entity.open_questions?.length" class="oq-list">
-          <div class="oq-label">Open questions</div>
-          <div v-for="oq in entity.open_questions" :key="oq._id" class="oq-item">
-            <span class="oq-badge">{{ oq.status }}</span>
-            {{ oq.question }}
+        <div v-if="questions.length || canWrite" class="oq-list">
+          <div class="oq-head">
+            <span class="oq-label">Open questions</span>
+            <!-- Open ones only: a resolved question is answered, and a badge
+                 that kept counting it would never reach zero. -->
+            <span
+              v-if="openCount"
+              class="oq-count"
+              :title="`${openCount} unanswered`"
+            >{{ openCount }}</span>
           </div>
+
+          <!-- Above the list, not instead of it: a refused write has to leave
+               the questions on screen, because the row is where the retry is. -->
+          <p v-if="questionError" class="oq-error" role="alert">{{ questionError }}</p>
+
+          <div
+            v-for="oq in questions" :key="oq._id"
+            class="oq-item"
+            :class="{ 'oq-resolved': oq.status === 'resolved' }"
+          >
+            <button
+              v-if="canWrite"
+              type="button"
+              class="oq-badge oq-badge-btn"
+              :title="oq.status === 'resolved' ? 'Reopen this question' : 'Mark this question answered'"
+              :disabled="pendingId === oq._id"
+              @click.stop="toggleStatus(oq)"
+            >{{ oq.status }}</button>
+            <span v-else class="oq-badge">{{ oq.status }}</span>
+
+            <template v-if="editingId === oq._id">
+              <input
+                v-model="editText"
+                class="input oq-edit"
+                aria-label="Question text"
+                @click.stop
+                @keyup.enter="commitEdit(oq)"
+              />
+              <button type="button" class="btn-sm" @click.stop="cancelQuestionEdit">Cancel</button>
+              <button
+                type="button" class="btn-sm primary"
+                :disabled="!editText.trim() || pendingId === oq._id"
+                @click.stop="commitEdit(oq)"
+              >Save</button>
+            </template>
+            <template v-else>
+              <span class="oq-text">{{ oq.question }}</span>
+              <button
+                v-if="canWrite"
+                type="button" class="icon-btn oq-action"
+                title="Edit question"
+                :disabled="pendingId === oq._id"
+                @click.stop="startQuestionEdit(oq)"
+              ><PencilIcon /></button>
+              <button
+                v-if="canWrite"
+                type="button" class="icon-btn oq-action"
+                title="Delete question"
+                :disabled="pendingId === oq._id"
+                @click.stop="removeQuestion(oq)"
+              >✕</button>
+            </template>
+          </div>
+
+          <form v-if="canWrite" class="oq-add" @submit.prevent="addQuestion">
+            <input
+              v-model="newQuestion"
+              class="input oq-new"
+              placeholder="Add a question"
+              aria-label="Add a question"
+              @click.stop
+            />
+            <button
+              type="submit" class="btn-sm"
+              :disabled="!newQuestion.trim() || addPending"
+            >{{ addPending ? 'Adding…' : 'Add' }}</button>
+          </form>
         </div>
       </div>
     </template>
@@ -61,16 +133,198 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, watch } from 'vue';
 import { useEntityTypes } from '../composables/useEntityTypes.js';
+import {
+  createOpenQuestion,
+  renameOpenQuestion,
+  setOpenQuestionStatus,
+  deleteOpenQuestion,
+} from '../api/openQuestions.js';
 import PencilIcon from './icons/PencilIcon.vue';
 
-const props = defineProps({ entity: Object });
+/**
+ * The entity's header, and its open questions (KOL-104).
+ *
+ * The open-question list used to be static text: the questions arrive already
+ * populated on `GET /entities/:id`, and nothing under `client/src` so much as
+ * fetched `/open-questions`. So a reader could see what the workspace did not
+ * know yet and could not add to it, and a question an agent raised through
+ * `add_open_question` could never be marked answered from the UI. The four
+ * routes now have a caller: api/openQuestions.js.
+ *
+ * The rows are held locally rather than written back through the entity: an
+ * open question is its own document, and `PUT /entities/:id` has no say over
+ * it. Each write renders **what came back** — the created question, the renamed
+ * text, the new status — because the server is the one that decides (it drops
+ * `entry_ids` outside the workspace, and could normalize or refuse the text).
+ * A refused write leaves the list exactly as it was and says so above it.
+ *
+ * The local rows are re-seeded whenever a fresh `entity.open_questions` array
+ * arrives — a reopened panel, or the populated answer to an entity save — so
+ * the server's account wins over ours as soon as there is one.
+ *
+ * `canWrite` false renders the list as it always was, with no controls: the
+ * panel also shows deleted entities' snapshots, and a question written against
+ * one would be stored with no link to anything (the entity is gone, so the
+ * server drops its id from `entry_ids`).
+ *
+ * Tiered debug logging: set localStorage.OPEN_QUESTION_LOG_LEVEL to
+ * off | light | normal | verbose (default light).
+ *   light   — every write: the question id, the field that changed, and what
+ *             asked for it. A status write and a text write are both a
+ *             `PUT /open-questions/:id` and otherwise indistinguishable after
+ *             the fact. Failed writes too, with their status.
+ *   normal  — light, plus every re-seed from the entity prop and its row count
+ *   verbose — normal, plus each row as the server returned it
+ */
+
+const props = defineProps({
+  entity: Object,
+  /** Whether this entity's open questions can be written. See above. */
+  canWrite: { type: Boolean, default: true },
+});
 const emit = defineEmits(['save', 'set-tag']);
 
 const isEditing = ref(false);
 const isSaving = ref(false);
 const form = reactive({ title: '', category: '', summary: '', tagsRaw: '' });
+
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  let configured = null;
+  try { configured = localStorage.getItem('OPEN_QUESTION_LOG_LEVEL'); } catch { /* storage blocked */ }
+  if ((LEVELS[configured] ?? LEVELS.light) >= LEVELS[level]) console.log(`[openQuestions:${level}] ${msg}`);
+}
+
+/** This entity's questions, as the server last described them. */
+const questions = ref([]);
+/** The id of the question being written, or null — one write at a time per row. */
+const pendingId = ref(null);
+/** Whether the add field's own write is in flight. */
+const addPending = ref(false);
+const questionError = ref('');
+/** The id of the question whose text is open in the inline editor, or null. */
+const editingId = ref(null);
+const editText = ref('');
+const newQuestion = ref('');
+
+/** Only what the entity populate carries, so a row's shape never varies. */
+const asRow = (q) => ({ _id: String(q._id), question: q.question, status: q.status });
+
+// A fresh array from the server replaces ours; a re-render with the same array
+// identity leaves our writes alone.
+watch(() => props.entity?.open_questions, (rows) => {
+  questions.value = (rows ?? []).map(asRow);
+  questionError.value = '';
+  editingId.value = null;
+  pendingId.value = null;
+  addPending.value = false;
+  newQuestion.value = '';
+  log('normal', `seeded ${questions.value.length} question(s) for ${props.entity?._id} (source: entity.open_questions)`);
+  for (const row of questions.value) log('verbose', `${row._id} [${row.status}] ${JSON.stringify(row.question)}`);
+}, { immediate: true });
+
+/** Unanswered only — the badge's whole point. */
+const openCount = computed(() => questions.value.filter(q => q.status !== 'resolved').length);
+
+function failed(what, id, err) {
+  questionError.value = err.message;
+  log('light', `${what} ${id ?? '(new)'} failed: ${err.status ?? ''} ${err.message} (source: the open-questions section of ${props.entity?._id})`);
+}
+
+async function addQuestion() {
+  const text = newQuestion.value.trim();
+  if (!text || addPending.value) return;
+  addPending.value = true;
+  questionError.value = '';
+  try {
+    // Linked to the entity whose panel this is, which is the only entity this
+    // section knows about. The server drops the id if it is not in the
+    // workspace, so the question that comes back is what was actually linked.
+    const created = await createOpenQuestion({ question: text, entry_ids: [props.entity._id] });
+    questions.value = [...questions.value, asRow(created)];
+    newQuestion.value = '';
+    log('light', `created ${created._id}: question + entry_ids [${props.entity._id}] (source: the "Add a question" field)`);
+    log('verbose', `server returned ${JSON.stringify(created)}`);
+  } catch (err) {
+    // The typed text stays in the field: the question the server refused is not
+    // put on the list, and retrying should not mean typing it again.
+    failed('creating a question against', props.entity?._id, err);
+  } finally {
+    addPending.value = false;
+  }
+}
+
+function startQuestionEdit(oq) {
+  editingId.value = oq._id;
+  editText.value = oq.question;
+  questionError.value = '';
+}
+
+function cancelQuestionEdit() {
+  editingId.value = null;
+  editText.value = '';
+}
+
+async function commitEdit(oq) {
+  const text = editText.value.trim();
+  if (!text || pendingId.value) return;
+  if (text === oq.question) return cancelQuestionEdit();
+  pendingId.value = oq._id;
+  questionError.value = '';
+  try {
+    const saved = await renameOpenQuestion(oq._id, text);
+    replaceRow(saved);
+    cancelQuestionEdit();
+    log('light', `updated ${oq._id}: question ${JSON.stringify(oq.question)} → ${JSON.stringify(saved.question)} (source: the pencil on that row)`);
+  } catch (err) {
+    // The editor stays open holding the typed text; the row keeps the old one.
+    failed('rewriting question', oq._id, err);
+  } finally {
+    pendingId.value = null;
+  }
+}
+
+async function toggleStatus(oq) {
+  if (pendingId.value) return;
+  const next = oq.status === 'resolved' ? 'open' : 'resolved';
+  pendingId.value = oq._id;
+  questionError.value = '';
+  try {
+    const saved = await setOpenQuestionStatus(oq._id, next);
+    replaceRow(saved);
+    log('light', `updated ${oq._id}: status ${oq.status} → ${saved.status} (source: the status badge on that row)`);
+  } catch (err) {
+    failed('changing the status of question', oq._id, err);
+  } finally {
+    pendingId.value = null;
+  }
+}
+
+async function removeQuestion(oq) {
+  if (pendingId.value) return;
+  pendingId.value = oq._id;
+  questionError.value = '';
+  try {
+    await deleteOpenQuestion(oq._id);
+    questions.value = questions.value.filter(q => q._id !== oq._id);
+    if (editingId.value === oq._id) cancelQuestionEdit();
+    log('light', `deleted ${oq._id}: the whole question ${JSON.stringify(oq.question)} (source: the ✕ on that row)`);
+  } catch (err) {
+    failed('deleting question', oq._id, err);
+  } finally {
+    pendingId.value = null;
+  }
+}
+
+/** Swaps one row for the server's version of it, leaving the order alone. */
+function replaceRow(saved) {
+  const row = asRow(saved);
+  questions.value = questions.value.map(q => (q._id === row._id ? row : q));
+  log('verbose', `server returned ${JSON.stringify(saved)}`);
+}
 
 const { names: categoryNames, styleFor } = useEntityTypes();
 
@@ -124,11 +378,33 @@ async function save() {
 .entity-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 
 .oq-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.oq-head { display: flex; align-items: center; gap: 8px; }
 .oq-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #c07020; }
+.oq-count {
+  min-width: 18px; padding: 0 5px; border-radius: 9px;
+  background: #c07020; color: #140c00;
+  font-size: 11px; font-weight: 600; line-height: 18px; text-align: center;
+}
+.oq-error { font-size: 12px; color: #c66; }
 .oq-item {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 10px; background: #2a1800; border-radius: 7px; font-size: 12px; color: #f0a040;
 }
+.oq-item.oq-resolved { background: #171717; color: #777; }
+.oq-text { flex: 1; min-width: 0; }
+.oq-badge-btn {
+  border: none; border-radius: 5px; padding: 2px 6px; cursor: pointer;
+  background: #3a2200; color: inherit; font-size: 11px; font-family: inherit;
+}
+.oq-badge-btn:hover:not(:disabled) { background: #4a2c00; }
+.oq-badge-btn:disabled { cursor: default; opacity: 0.6; }
+.oq-item.oq-resolved .oq-badge-btn { background: #222; }
+.oq-action { color: #8a6030; flex-shrink: 0; }
+.oq-action:hover:not(:disabled) { color: #f0a040; }
+.oq-action:disabled { cursor: default; opacity: 0.5; }
+.oq-edit { flex: 1; min-width: 0; font-size: 12px; }
+.oq-add { display: flex; gap: 6px; align-items: center; }
+.oq-new { flex: 1; font-size: 12px; }
 
 /* Edit mode */
 .header-edit { display: flex; flex-direction: column; gap: 8px; }
