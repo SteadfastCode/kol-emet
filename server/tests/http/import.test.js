@@ -20,7 +20,16 @@
  *   - **unauthenticated** is **401**;
  *   - **malformed JSON** is **400 `MALFORMED_JSON`**, which is the path-scoped
  *     parser in app.js rather than the app-wide one (whose parse failure would
- *     be a 500).
+ *     be a 500);
+ *   - a successful import sends **one `workspace:imported` frame** down the
+ *     live-sync channel (KOL-102) — to the workspace's *other* open streams,
+ *     never to another tenant's, and never back to the client that asked. An
+ *     import writes a whole graph and broadcasts none of the per-entity events
+ *     the normal write path does, so without that frame every other tab in the
+ *     workspace showed the pre-import workspace until someone reloaded. That
+ *     case needs a real socket held open, so this file also listens on an
+ *     ephemeral port (supertest buffers a response to completion, and an SSE
+ *     response is never completed).
  *
  * The fixtures register through the real `POST /auth/register`, so each
  * workspace is seeded exactly as a signup's is — which is what makes "carol's
@@ -46,6 +55,7 @@
 
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 
 import bcrypt from 'bcrypt';
 import session from 'express-session';
@@ -68,6 +78,9 @@ delete process.env.BEARER_TOKEN;
 process.env.SEED_LOG_LEVEL ??= 'off';
 process.env.EXPORT_LOG_LEVEL ??= 'off';
 process.env.IMPORT_LOG_LEVEL ??= 'off';
+// The broadcaster narrates every connect, drop and broadcast; readable when the
+// live-sync case is being chased, noise otherwise.
+process.env.SSE_LOG_LEVEL ??= 'off';
 process.env.ENTITY_TYPE_LOG_LEVEL ??= 'off';
 process.env.WORKSPACE_LOG_LEVEL ??= 'off';
 process.env.ERROR_LOG_LEVEL ??= 'off';
@@ -86,8 +99,12 @@ const PASSWORD = 'correct-horse-battery-staple';
 const ALICE_TITLE = 'Alice Only';
 
 let app;
+let server;   // the live-sync group's own listener (see before())
+let port;
+let opened = [];   // every SSE stream this file holds open, destroyed in after()
 let alice;    // the graph being exported, and the non-empty workspace
 let carol;    // empties her workspace, then imports alice's graph into it
+let erin;     // same, with two live streams open while she imports
 let editor;   // a member of alice's workspace, role editor
 let document; // alice's export, the document under test
 
@@ -99,7 +116,10 @@ async function registerUser(email) {
   const user = await User.findOne({ email }).select('_id').lean();
   const workspace = await Workspace.findOne({ 'members.userId': user._id }).select('_id name').lean();
   log('light', `registered ${email} (source: POST /auth/register) → workspace ${workspace._id}`);
-  return { agent, email, workspaceId: String(workspace._id) };
+  // The cookie as a request header: the live-sync group opens its streams with
+  // raw http requests, which carry no agent jar.
+  const cookie = (res.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).join('; ');
+  return { agent, email, cookie, workspaceId: String(workspace._id) };
 }
 
 /** A signed-in user whose only membership is `role` in `workspaceId`. */
@@ -185,11 +205,21 @@ async function importAs(who, body, label) {
 before(async () => {
   await db.connect();
   app = createApp({ sessionStore: new session.MemoryStore(), authLimits: SUITE_AUTH_LIMITS });
+  // A listening server of this file's own, for the live-sync group only: an SSE
+  // response is deliberately never completed, and supertest buffers to
+  // completion. Everything else here still goes through its agent.
+  server = await new Promise((resolve) => {
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
+  });
+  port = server.address().port;
+  log('light', `app listening on 127.0.0.1:${port} (source: app.listen(0))`);
 
   alice = await registerUser('alice@example.test');
   carol = await registerUser('carol@example.test');
+  erin = await registerUser('erin@example.test');
   editor = await addMember('editor@example.test', alice.workspaceId, 'editor');
   assert.notEqual(alice.workspaceId, carol.workspaceId);
+  assert.notEqual(alice.workspaceId, erin.workspaceId);
 
   await createEntity(alice, ALICE_TITLE);
 
@@ -200,7 +230,13 @@ before(async () => {
   log('light', `took alice's export: ${document.entities.length} entities, ${document.relationshipGroups.length} groups (source: GET /export)`);
 });
 
-after(async () => { await db.disconnect(); });
+after(async () => {
+  for (const stream of opened) stream.req.destroy();
+  opened = [];
+  server?.closeAllConnections?.();
+  if (server) await new Promise((resolve) => server.close(resolve));
+  await db.disconnect();
+});
 
 describe('POST /import as the owner of an empty workspace', () => {
   test('is 201, and the imported entities appear under GET /entities', async () => {
@@ -328,5 +364,132 @@ describe('a document the server cannot read', () => {
 
     assert.equal(res.status, 400);
     assert.equal(res.body.error, 'UNSUPPORTED_VERSION', 'no version is an unsupported version, not a shape complaint');
+  });
+});
+
+// ─── the live-sync frame (KOL-102) ───────────────────────────────────────────
+//
+// The helpers below are the same shape as the ones in tests/http/events.test.js
+// — the suite about the channel itself — kept local rather than shared: that
+// file drives the stream lifecycle and instruments it on its own tier, while
+// all this group needs is "hold a stream open and read the frames it got".
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Opens a `GET /events` connection and keeps it open, collecting frames.
+ * Resolves on the response head: the body never ends, so waiting for it hangs.
+ */
+function openStream(label, cookie) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      host: '127.0.0.1',
+      port,
+      path: '/events',
+      method: 'GET',
+      headers: { Cookie: cookie, Accept: 'text/event-stream' },
+    });
+    req.on('error', reject);
+    req.on('response', (res) => {
+      const stream = { label, req, res, status: res.statusCode, chunks: [] };
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        stream.chunks.push(chunk);
+        log('verbose', `${label} received: ${JSON.stringify(chunk)}`);
+      });
+      opened.push(stream);
+      log('light', `${label} opened (status ${res.statusCode}, source: GET /events)`);
+      resolve(stream);
+    });
+    req.end();
+  });
+}
+
+/** Every complete SSE frame a stream has received, as `{ event, data }`. */
+function frames(stream) {
+  return stream.chunks
+    .join('')
+    .split('\n\n')
+    .filter((block) => block.trim() !== '')
+    .map((block) => {
+      const event = /^event: (.*)$/m.exec(block)?.[1] ?? null;
+      const raw = /^data: (.*)$/m.exec(block)?.[1] ?? null;
+      if (event === null && raw === 'ping') return { event: 'ping', data: null };
+      let data = null;
+      try { data = raw === null ? null : JSON.parse(raw); } catch { data = raw; }
+      return { event, data };
+    });
+}
+
+const framesNamed = (stream, event) => frames(stream).filter((f) => f.event === event);
+
+/** Polls `check` until it is true, failing with `label` rather than hanging. */
+async function waitFor(check, label, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (check()) return;
+    if (Date.now() > deadline) assert.fail(`timed out after ${timeoutMs}ms waiting for ${label}`);
+    await delay(10);
+  }
+}
+
+/** A stream the server has already assigned a client id, with that id. */
+async function openReadyStream(label, who) {
+  const stream = await openStream(label, who.cookie);
+  assert.equal(stream.status, 200, `${label} was not accepted`);
+  await waitFor(() => framesNamed(stream, 'client:id').length === 1, `${label} to be assigned a client id`);
+  stream.clientId = framesNamed(stream, 'client:id')[0].data.clientId;
+  return stream;
+}
+
+describe('a successful import tells the workspace\'s other live clients', () => {
+  test('one workspace:imported frame: not to the importer, not to another tenant', async () => {
+    // Emptied first, then the streams: clearing the seeded content is itself a
+    // run of ordinary deletes, and each of those broadcasts its own
+    // entity:deleted — which is the write path this import deliberately does
+    // not use, and would be noise in the assertions below.
+    await emptyWorkspace(erin);
+
+    // Three open streams: two tabs of erin's own (the importer's, and the one
+    // that has to find out), and alice's, in another workspace entirely.
+    const importerTab = await openReadyStream('erin/tab-importing', erin);
+    const otherTab = await openReadyStream('erin/tab-watching', erin);
+    const otherTenant = await openReadyStream('alice/tab-1', alice);
+
+    const res = await erin.agent.post('/import')
+      .set('X-SSE-Client-Id', importerTab.clientId)
+      .send(document);
+    log('normal', `POST /import as erin → ${res.status} ${JSON.stringify(res.body)}`);
+    assert.equal(res.status, 201);
+
+    // The tab that did not ask learns the whole graph changed — one frame for
+    // the lot, carrying the counts the 201 carried and who imported.
+    await waitFor(() => framesNamed(otherTab, 'workspace:imported').length === 1,
+      'the other tab in the workspace to be told about the import');
+    const frame = framesNamed(otherTab, 'workspace:imported')[0].data;
+    assert.equal(frame.version, EXPORT_VERSION);
+    assert.deepEqual(frame.imported, res.body.imported);
+    assert.deepEqual(frame.actor, { label: erin.email, type: 'user' });
+
+    // Exactly one — a bulk write is one frame, not a per-entity burst.
+    await delay(50);
+    assert.equal(framesNamed(otherTab, 'workspace:imported').length, 1);
+    // And nothing else: the per-entity events the normal write path broadcasts
+    // are not sent for an import.
+    assert.deepEqual(
+      frames(otherTab).map((f) => f.event).filter((e) => e !== 'ping'),
+      ['client:id', 'workspace:imported'],
+      `the watching tab received more than the one frame: ${JSON.stringify(frames(otherTab))}`,
+    );
+
+    // The client that asked is excluded by its own X-SSE-Client-Id header, the
+    // way every other write excludes it: that tab reloads on its 201.
+    assert.deepEqual(framesNamed(importerTab, 'workspace:imported'), [],
+      'the importing client was sent its own frame');
+
+    // And the tenancy boundary holds: another workspace's stream is open,
+    // authenticated, and told nothing.
+    assert.deepEqual(frames(otherTenant).map((f) => f.event).filter((e) => e !== 'ping'), ['client:id'],
+      `another workspace's stream received this import: ${JSON.stringify(frames(otherTenant))}`);
   });
 });

@@ -838,9 +838,14 @@ multipart upload — and the answer is **201** with what it wrote:
   `IMPORT_MAX_RELATIONSHIP_GROUPS`, `IMPORT_MAX_OPEN_QUESTIONS`. The body limit is
   `IMPORT_BODY_LIMIT` (default `8mb`) — `/import` has a parser of its own, mounted ahead of the
   app-wide 100 kB one, which is also what turns a parse failure into a 400 instead of a 500.
+- **One `workspace:imported` frame** on [`/events`](#events-sse) (KOL-102), carrying the same
+  counts as the 201 and the actor, to every other stream in the workspace — never to another
+  tenant's, and never back to the client that asked (`x-sse-client-id`). An import writes a whole
+  graph and emits none of the per-entity events the normal write path does, so without it every
+  other tab showed the pre-import workspace until a reload.
 - Logging is `IMPORT_LOG_LEVEL` (`off | light | normal | verbose`, default `light`): the light tier
-  names the document's version, the per-collection counts, the **source** and the reason behind
-  every refusal.
+  names the document's version, the per-collection counts, the **source**, the frame it broadcast
+  and the reason behind every refusal.
 
 Not imported: `ChangeLog` and `Draft` (history waits on KOL-019 settling whether it is permanent),
 and nothing about the account or the workspace itself — an import never renames a workspace. There
@@ -854,6 +859,32 @@ non-empty workspace are each their own item.
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/events` | Server-Sent Events stream for live multi-client sync. On connect the server emits `client:id`; clients echo it back as the `x-sse-client-id` header on writes so the broadcaster can skip the originating tab. |
+
+### The frames
+
+| Frame | Sent by | Carries | What the client does with it |
+|-------|---------|---------|------------------------------|
+| `client:id` | the route, on connect | `{ clientId }` | stores it and echoes it as `x-sse-client-id` on every write |
+| `entity:created` | every entity create | `{ entity, actor, changes }` | inserts the row |
+| `entity:updated` | every entity update | `{ entity, actor, changes }` | replaces the row |
+| `entity:deleted` | every entity delete | `{ entityId, entityTitle, actor, snapshot, deletedAt }` | drops the row |
+| `draft:applied` | `POST /drafts/:id/apply` | `{ draftId, applied, failed, blocked, skipped, actor }` | refetches the list |
+| `workspace:imported` | `POST /import` | `{ version, imported, actor }` | refetches the list |
+| `error` | the server, before it closes a stream | `{ error, limit? }` | see *Ending a stream* below |
+
+The last two are the **bulk writes**: one frame for a request that wrote many rows, rather than a
+burst of per-entity events a 30-item apply would flood every open tab with (the applier passes
+`broadcast: false` through `lib/changeLogger.js`; the importer never used the per-entity path at
+all). The trade is that one frame cannot say *which* rows moved, so the client refetches rather
+than patching — and that a frame nothing listens for is a bulk write no other tab ever sees, which
+is what KOL-102 fixed. Both exclude the client that asked, by its `x-sse-client-id`, since that one
+has the response.
+
+Not broadcast yet, and deliberately: relationship-group writes (they have no `ChangeLog` and so
+need an event vocabulary of their own) and anything on `/chat`, which is a separate SSE channel with
+its own client.
+
+### Ending a stream
 
 A stream is bounded in both lifetime and number (KOL-062), because it is authenticated once and then
 held open while whole entity documents are pushed down it:
@@ -873,8 +904,27 @@ held open while whole entity documents are pushed down it:
   per user; connections on the bearer token share one allowance. Both the cap and the sweep are
   per API instance (in-process state, as with the auth counters).
 
-Logging is `SSE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`); the light tier names
-the reason every connection ended.
+An `EventSource` dispatches **both** of those server frames and a plain dropped socket as `error`,
+and only the frames carry `data` — which is how the client tells them apart
+(`client/src/composables/useEvents.js`, KOL-102):
+
+- `session-ended` and `too-many-streams` **end the loop**. Reconnecting would fetch the same
+  refusal forever, so nothing is scheduled and the user is told instead ("signed out in another
+  window", or the limit by number). Reload is the way back.
+- a `server-restarting` frame (what the SIGTERM sequence sends, KOL-093), or any code this build
+  does not know, is **retried** — a stop that is wrong leaves a tab permanently blind, so an
+  unrecognised code errs towards coming back.
+- a dropped socket is retried with an **exponentially growing, jittered, capped** delay (1 s
+  doubling to 30 s, ±25 %) rather than the fixed 3 s it used to re-dial: every tab in the
+  deployment loses its stream in the same instant, so a fixed delay has them all return in the same
+  instant too. A connection that opens resets the backoff.
+
+Logging is `SSE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) on both ends — the
+environment variable on the server, `localStorage.SSE_LOG_LEVEL` in the browser. Server-side the
+light tier names the reason every connection ended; client-side it names every connect, every
+ending with the source that caused it (which frame, or which transport failure) and every reconnect
+with its attempt number and delay, and carries no payload — `normal` adds each frame's name and the
+id it is about, `verbose` the frame itself.
 
 ## OAuth (MCP connector)
 
