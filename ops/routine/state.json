@@ -79,7 +79,7 @@
     "KOL-103": {
       "order": 5,
       "title": "Nothing enforces a role on a content write: a viewer may edit, delete and spend",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-103",
