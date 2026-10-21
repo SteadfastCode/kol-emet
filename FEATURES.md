@@ -62,7 +62,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-088) OAuth logs the authorization code, the PKCE verifier, and every code still outstanding**
+- [x] **(KOL-088) OAuth logs the authorization code, the PKCE verifier, and every code still outstanding**
   `server/src/routes/oauth.js` is the one router with no tiered logging, and it prints credentials unconditionally.
   `POST /oauth/token` logs its whole form body at `:133` — the one-time `code` and the `code_verifier`, which is the
   PKCE secret — and a miss at `:148` logs the submitted code plus `[...authCodes.keys()]`, every code still outstanding
