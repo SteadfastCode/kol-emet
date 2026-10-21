@@ -121,6 +121,33 @@ registration, or removes a feature.
   subject); the ten-year `expires_in`; and a `redirect_uri` allowlist or client registration, which needs a
   deployment-config decision nobody has made.
 
+- [ ] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM**
+  `server/src/index.js` connects, listens, and installs no signal handler, so the SIGTERM a host sends at every deploy
+  takes the process down mid-request: a write caught between its Mongo call and its `ChangeLog` append is cut in half,
+  and every open `GET /events` stream dies at the socket with no close frame, which
+  `client/src/composables/useEvents.js` can only read as a network error rather than a planned end. The broadcaster
+  already has the pieces for a clean ending — `endStream` writes a reason and `closeStreamsForSession` and
+  `closeStreamsForUser` use it (`server/src/lib/broadcaster.js:166,196,218`) — there is simply nothing that ends them
+  all. Build `server/src/lib/shutdown.js`: one function taking the HTTP server, a stream-closer and a disconnect,
+  running them in order — stop accepting connections (`server.close`), end every open stream with a reason a client can
+  reconnect on, wait for in-flight requests up to `SHUTDOWN_GRACE_MS` (default 10000), disconnect Mongoose, resolve —
+  and force-exit when the grace period expires, because one hung request must not hold a deploy open. Add
+  `closeAllStreams(reason)` to the broadcaster beside the two closers it already has. `index.js` wires SIGTERM and
+  SIGINT to it idempotently, so a second signal cannot start a second shutdown. Tiered `SHUTDOWN_LOG_LEVEL = off | light
+  | normal | verbose` (default light): light names what started it — which signal — and the result of each stage,
+  because a shutdown leaves nothing behind to inspect afterwards. Files: `server/src/lib/shutdown.js` (new),
+  `server/src/lib/broadcaster.js`, `server/src/index.js`, a paragraph in `docs/architecture.md`, and a Decision Log line
+  for the force-exit. Verify: a new `server/tests/unit/shutdown.test.js` — the stages run in order and each is awaited;
+  an in-flight request that finishes inside the grace period is waited for and one that does not is abandoned at the
+  deadline with the force-exit path taken; a second signal is ignored while the first shutdown is running; and a stage
+  that throws does not stop the stages after it, since a failed disconnect must not be what keeps the process alive.
+  Plus a broadcaster case that `closeAllStreams` writes its reason to every open stream and leaves the registry empty.
+  All of it driven through injected fakes — no real listener, no real signal, nothing that could end the test runner's
+  own process. `cd server && yarn test` green; the client is untouched. Out of scope: zero-downtime handover or any
+  overlap between an old and a new instance, which is the platform's concern and not the app's; the host's healthcheck
+  setting; draining a generation run already in flight, whose budget lock already goes stale on its own after ten
+  minutes; and `process.on('uncaughtException')`.
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -266,33 +293,6 @@ registration, or removes a feature.
   index on block data, which is a change to the deployed database; the `/tags` aggregate; re-opening `/entities`' own
   contract; and building the client an open-question list view, which no item owns and which this item's cap does not
   need.
-
-- [ ] **(KOL-093) A deploy kills in-flight requests and every live stream: handle SIGTERM** [proposed]
-  `server/src/index.js` connects, listens, and installs no signal handler, so the SIGTERM a host sends at every deploy
-  takes the process down mid-request: a write caught between its Mongo call and its `ChangeLog` append is cut in half,
-  and every open `GET /events` stream dies at the socket with no close frame, which
-  `client/src/composables/useEvents.js` can only read as a network error rather than a planned end. The broadcaster
-  already has the pieces for a clean ending — `endStream` writes a reason and `closeStreamsForSession` and
-  `closeStreamsForUser` use it (`server/src/lib/broadcaster.js:166,196,218`) — there is simply nothing that ends them
-  all. Build `server/src/lib/shutdown.js`: one function taking the HTTP server, a stream-closer and a disconnect,
-  running them in order — stop accepting connections (`server.close`), end every open stream with a reason a client can
-  reconnect on, wait for in-flight requests up to `SHUTDOWN_GRACE_MS` (default 10000), disconnect Mongoose, resolve —
-  and force-exit when the grace period expires, because one hung request must not hold a deploy open. Add
-  `closeAllStreams(reason)` to the broadcaster beside the two closers it already has. `index.js` wires SIGTERM and
-  SIGINT to it idempotently, so a second signal cannot start a second shutdown. Tiered `SHUTDOWN_LOG_LEVEL = off | light
-  | normal | verbose` (default light): light names what started it — which signal — and the result of each stage,
-  because a shutdown leaves nothing behind to inspect afterwards. Files: `server/src/lib/shutdown.js` (new),
-  `server/src/lib/broadcaster.js`, `server/src/index.js`, a paragraph in `docs/architecture.md`, and a Decision Log line
-  for the force-exit. Verify: a new `server/tests/unit/shutdown.test.js` — the stages run in order and each is awaited;
-  an in-flight request that finishes inside the grace period is waited for and one that does not is abandoned at the
-  deadline with the force-exit path taken; a second signal is ignored while the first shutdown is running; and a stage
-  that throws does not stop the stages after it, since a failed disconnect must not be what keeps the process alive.
-  Plus a broadcaster case that `closeAllStreams` writes its reason to every open stream and leaves the registry empty.
-  All of it driven through injected fakes — no real listener, no real signal, nothing that could end the test runner's
-  own process. `cd server && yarn test` green; the client is untouched. Out of scope: zero-downtime handover or any
-  overlap between an old and a new instance, which is the platform's concern and not the app's; the host's healthcheck
-  setting; draining a generation run already in flight, whose budget lock already goes stale on its own after ten
-  minutes; and `process.on('uncaughtException')`.
 
 - [ ] **(KOL-102) Live sync misses every bulk write: an apply and an import reach no other client** [proposed]
   `POST /drafts/:id/apply` broadcasts one `draft:applied` frame to every stream in the workspace except the one that
