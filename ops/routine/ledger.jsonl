@@ -441,3 +441,4 @@
 {"event":"claim","runId":"2026-10-21T00:08:06.139Z","item":"KOL-094","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-10-21T00:08:33.582Z"}
 {"event":"complete","runId":"2026-10-21T00:08:06.139Z","item":"KOL-094","mergeSha":"d595575034aeec02a80c8451e3181ee89e5e89d9","durationMin":16,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-10-21T00:24:08.476Z"}
 {"event":"note","text":"bridge queue.promote moved KOL-103 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-103","atUtc":"2026-10-21T03:23:04.438Z"}
+{"event":"note","text":"bridge queue.promote moved KOL-088 from Proposed to Workqueue Items","source":"bridge","command":"queue.promote","item":"KOL-088","atUtc":"2026-10-21T03:23:06.530Z"}
