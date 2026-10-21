@@ -79,7 +79,7 @@
     "KOL-090": {
       "order": 5,
       "title": "Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-090",

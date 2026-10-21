@@ -66,34 +66,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly**
-  `resolveWorkspace` picks the acting workspace with `Workspace.findOne({ 'members.userId': userId })` and no sort
-  (`server/src/middleware/workspace.js:97`), under a comment that says it plainly: "A user may later belong to several;
-  today registration creates exactly one." For a product whose roadmap has collaborator invites next, that line is the
-  gate in front of them — the moment a user is in two workspaces every request resolves to whichever document the server
-  happened to return first, so one session can read workspace A and then write workspace B, and `GET /workspace` can
-  report a name the content did not come from. Nothing lists a user's workspaces either, so a client cannot show the
-  choice, let alone change it. Build: `GET /workspaces`, every workspace the caller is a member of in the existing
-  `workspaceBody` shape (`_id`, `name`, `role`, `createdAt`), sorted by `createdAt` then `_id` so the order is total.
-  Make the choice explicit session state: `POST /workspaces/:id/select` checks membership and writes
-  `req.session.workspaceId`; `resolveWorkspace` prefers that id and re-checks the membership on every request, and when
-  the id is stale — the membership was revoked — it falls back to the default rather than answering 403, so losing
-  access to one workspace cannot lock a user out of their own. The default is deterministic: the oldest workspace the
-  caller owns, else the oldest they are a member of. The MCP path keeps `resolveUserId`'s bearer identity and takes that
-  same default, since a connector carries no session to hold a choice in. Files: `server/src/middleware/workspace.js`,
-  `server/src/routes/workspace.js`, `server/src/app.js` (the `/workspaces` mount), `client/src/api/workspace.js`, the
-  Settings area of `client/src/components/WikiLayout.vue` (a switcher, shown only when there is more than one),
-  `docs/api.md`, and a Decision Log line recording that the choice is session state and the fallback is
-  ownership-then-age. Verify: a new `server/tests/http/workspaceSelect.test.js` — a user seeded into two workspaces
-  resolves the same one on twenty consecutive requests; selecting the second moves `GET /entities`, `GET /workspace` and
-  a write together; selecting one the caller is not a member of is 404 and changes nothing; a selection whose membership
-  is then removed falls back instead of refusing every request; one user's selection does not affect another's; and
-  `server/tests/http/tenancy.test.js` passes unchanged, because isolation is the thing this must not weaken. Plus a
-  `WikiLayout.test.js` case that the switcher is absent for a one-workspace user. `cd server && yarn test` and `cd
-  client && yarn test --run && yarn build` green. Out of scope: inviting or removing members and the email delivery that
-  needs — the roadmap's own next step; creating a second workspace from the UI (the tests seed the second directly, and
-  this item is the prerequisite rather than the feature); per-workspace billing; and any change to what a role may do,
-  so `requireWorkspaceRole` is untouched.
 
 - [ ] **(KOL-091) A chat belongs to a user but is answered from a workspace, and nothing ties the two together**
   `GET /conversations` lists by `userId` alone (`server/src/routes/conversations.js:26`) even though the router is
@@ -315,6 +287,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly** (routine 2026-10-21, 6ed92bd)
+  `resolveWorkspace` picks the acting workspace with `Workspace.findOne({ 'members.userId': userId })` and no sort
+  (`server/src/middleware/workspace.js:97`), under a comment that says it plainly: "A user may later belong to several;
+  today registration creates exactly one." For a product whose roadmap has collaborator invites next, that line is the
+  gate in front of them — the moment a user is in two workspaces every request resolves to whichever document the server
+  happened to return first, so one session can read workspace A and then write workspace B, and `GET /workspace` can
+  report a name the content did not come from. Nothing lists a user's workspaces either, so a client cannot show the
+  choice, let alone change it. Build: `GET /workspaces`, every workspace the caller is a member of in the existing
+  `workspaceBody` shape (`_id`, `name`, `role`, `createdAt`), sorted by `createdAt` then `_id` so the order is total.
+  Make the choice explicit session state: `POST /workspaces/:id/select` checks membership and writes
+  `req.session.workspaceId`; `resolveWorkspace` prefers that id and re-checks the membership on every request, and when
+  the id is stale — the membership was revoked — it falls back to the default rather than answering 403, so losing
+  access to one workspace cannot lock a user out of their own. The default is deterministic: the oldest workspace the
+  caller owns, else the oldest they are a member of. The MCP path keeps `resolveUserId`'s bearer identity and takes that
+  same default, since a connector carries no session to hold a choice in. Files: `server/src/middleware/workspace.js`,
+  `server/src/routes/workspace.js`, `server/src/app.js` (the `/workspaces` mount), `client/src/api/workspace.js`, the
+  Settings area of `client/src/components/WikiLayout.vue` (a switcher, shown only when there is more than one),
+  `docs/api.md`, and a Decision Log line recording that the choice is session state and the fallback is
+  ownership-then-age. Verify: a new `server/tests/http/workspaceSelect.test.js` — a user seeded into two workspaces
+  resolves the same one on twenty consecutive requests; selecting the second moves `GET /entities`, `GET /workspace` and
+  a write together; selecting one the caller is not a member of is 404 and changes nothing; a selection whose membership
+  is then removed falls back instead of refusing every request; one user's selection does not affect another's; and
+  `server/tests/http/tenancy.test.js` passes unchanged, because isolation is the thing this must not weaken. Plus a
+  `WikiLayout.test.js` case that the switcher is absent for a one-workspace user. `cd server && yarn test` and `cd
+  client && yarn test --run && yarn build` green. Out of scope: inviting or removing members and the email delivery that
+  needs — the roadmap's own next step; creating a second workspace from the UI (the tests seed the second directly, and
+  this item is the prerequisite rather than the feature); per-workspace billing; and any change to what a role may do,
+  so `requireWorkspaceRole` is untouched.
 - [x] **(KOL-089) Third vertical-ingestion producer: Kubernetes manifests become a reviewable Draft** (routine 2026-10-21, 32b9199)
   `docs/roadmap.md` Phase 7 names "repo / OpenAPI / docker-compose / k8s / DB-schema"; KOL-033 built compose, KOL-051
   built OpenAPI and put k8s out of scope, and `server/src/models/Draft.js:114` marks the seam — "drift / repo / k8s
