@@ -15,7 +15,7 @@ import {
   workspaceLog,
   workspaceName,
 } from '../middleware/workspace.js';
-import { seedWorkspace } from '../lib/workspaceSeeder.js';
+import { resolveTemplateKey, seedWorkspace } from '../lib/workspaceSeeder.js';
 import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
 import { createAuthLimiter } from '../lib/attemptLimiter.js';
@@ -219,6 +219,12 @@ router.post('/register', async (req, res) => {
       name:    newWorkspaceName,
       ownerId: user._id,
       members: [{ userId: user._id, role: 'owner' }],
+      // Which template seeded it (KOL-105), kept rather than discarded once
+      // seedWorkspace below has used it: the template's one-line description
+      // is what tells the assistant what this workspace is about. Written
+      // here rather than by the seeder because seeding is best-effort — a
+      // workspace that seeded only partly was still asked for this template.
+      template: resolveTemplateKey(template),
     });
     workspaceLog('light', `created workspace ${workspace._id} named "${workspace.name}" for user ${user._id} (source: POST /auth/register, ${requestedName === undefined ? `no workspaceName in the request → the default` : `workspaceName from the request`})`);
   } catch (err) {

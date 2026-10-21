@@ -24,6 +24,30 @@ const workspaceSchema = new mongoose.Schema(
     members: { type: [memberSchema], default: [] },
 
     /**
+     * The template key this workspace was seeded from (`config/templates.js`),
+     * or null for one created before it was recorded.
+     *
+     * Kept because the key is otherwise thrown away the moment seeding ends:
+     * `POST /auth/register` receives it, hands it to `seedWorkspace` and
+     * forgets it. The template's own one-line `description` is the only
+     * sentence anywhere that says what a workspace is *about*, and the
+     * assistant's system prompt needs exactly that — without it every
+     * workspace was told it was a world-building wiki, including one whose
+     * entities are Services and Data Stores (KOL-105, routes/chat.js).
+     *
+     * **No backfill.** Nothing in an existing workspace records which template
+     * its types came from, and inferring one from the type names would be
+     * wrong for anyone who has since renamed or deleted one. A null is read as
+     * "unknown" and the prompt falls back to the workspace's own entity type
+     * names, which are a fact rather than a guess.
+     *
+     * Not an enum: templates are code and a key can be retired, and a stored
+     * key that no longer names one must read as unknown rather than make the
+     * document unsaveable.
+     */
+    template: { type: String, default: null },
+
+    /**
      * AI spending allowance, in micro-dollars (1_000_000 = one dollar).
      *
      * Integers because this is compared and decremented on every AI call and

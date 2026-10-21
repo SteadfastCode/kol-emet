@@ -29,12 +29,42 @@ import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import { getCategories } from '../config/categories.js';
+import { TEMPLATES, hasTemplate } from '../config/templates.js';
+import Workspace from '../models/Workspace.js';
 import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js';
 import { personalScope } from '../lib/personalScope.js';
 import { checkBudget, recordSpend } from '../lib/usageMeter.js';
 import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
 const router = Router();
+
+/**
+ * ─── Tiered debug logging ────────────────────────────────────────────────────
+ * CHAT_LOG_LEVEL = off | light | normal | verbose (default light).
+ *
+ * The system prompt is the one part of a turn that leaves no trace: it is sent
+ * to the provider and never stored, so an assistant answering as though it
+ * were in the wrong workspace — the failure KOL-105 is about — looks identical
+ * afterwards to one that simply got the question wrong. The light tier
+ * therefore names the **source** of each domain sentence, not merely the text
+ * it produced: whether the subject came from a stored template key or was
+ * skipped for want of one, how many type names `getCategories()` supplied, and
+ * how many remembered facts were appended.
+ *   off     — nothing
+ *   light   — one line per prompt build: the workspace, where each sentence
+ *             came from, and the number of memories
+ *   normal  — light, plus the domain sentences themselves
+ *   verbose — normal, plus the whole prompt. Not a default at any tier: the
+ *             remembered-context block is the user's own facts, and these logs
+ *             outlive the chat.
+ */
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+/** Resolved per call, not at import, so a test can change the level. */
+function chatLog(level, msg) {
+  const active = LEVELS[process.env.CHAT_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[chat:${level}] ${msg}`);
+}
 
 /**
  * Accumulates token usage across the several model calls one chat turn can make
@@ -50,24 +80,104 @@ function tally(ctx, usage) {
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(memories = []) {
-  const base =
-    'You are an AI assistant integrated into Kol Emet, a world-building wiki. ' +
-    'You have access to wiki search tools — use them. ' +
-    'ALWAYS call search_entities before answering questions about wiki content. ' +
-    'Use get_entity when you need full details on a specific entity. ' +
-    'NEVER invent entity names, relationships, places, or lore. ' +
-    'If search returns nothing, say so — do not fill the gap with invented content. ' +
-    'Be concise. Cite entity names when referencing wiki content. ' +
-    'You also have a save_memory tool — use it when the user shares something important ' +
-    'or explicitly asks you to remember something.';
+/**
+ * The instructions that are true whatever the workspace holds. Every one of
+ * them — search before answering, never invent, cite names — reads the same
+ * for a wiki of invented worlds, a service catalogue or a case file, which is
+ * why they are a constant while the sentences above them are built per
+ * request. The two clauses that were specific to fiction are gone: the opening
+ * "a world-building wiki", and "places, or lore" in the never-invent rule
+ * (KOL-105).
+ */
+const DOMAIN_NEUTRAL_RULES =
+  'You have access to wiki search tools — use them. ' +
+  'ALWAYS call search_entities before answering questions about wiki content. ' +
+  'Use get_entity when you need full details on a specific entity. ' +
+  'NEVER invent entity names, relationships, or details the tools did not return. ' +
+  'If search returns nothing, say so — do not fill the gap with invented content. ' +
+  'Be concise. Cite entity names when referencing wiki content. ' +
+  'You also have a save_memory tool — use it when the user shares something important ' +
+  'or explicitly asks you to remember something.';
 
-  if (memories.length === 0) return base;
+/**
+ * What this workspace *is*, in sentences built from the request.
+ *
+ * Three facts, each only included when it is known, so the prompt never
+ * contains an empty list or a guess:
+ *
+ *   - **its name**, which `PATCH /workspace` lets an owner set and which the
+ *     prompt never carried, so the assistant could not say where it was;
+ *   - **the template it was seeded from**, when the workspace recorded one
+ *     (`Workspace.template`). The template's own `description` is the single
+ *     sentence that says what the subject is. A workspace from before that was
+ *     stored carries null and simply skips this line — `getTemplate()`'s
+ *     fallback is deliberately *not* used here, because falling back to the
+ *     default template's description would state the worldbuilding subject as
+ *     fact for a workspace nobody seeded that way, which is the bug;
+ *   - **its entity type names**, from the same `getCategories()` the tool
+ *     schema's category enum is built from, so the prose and the enum cannot
+ *     name different vocabularies.
+ *
+ * @param {{name?: string, template?: string|null, categories?: string[]}} workspace
+ * @returns {{ text: string, source: string }} the sentences, and where each
+ *   came from — the light log tier names the source, not just the result
+ */
+function describeWorkspace({ name, template, categories = [] } = {}) {
+  const sentences = [];
+  const sources = [];
+
+  const title = typeof name === 'string' && name.trim() ? name.trim() : null;
+  if (title) {
+    sentences.push(`You are answering inside the workspace "${title}".`);
+    sources.push('name from Workspace.name');
+  } else {
+    sources.push('no workspace name available');
+  }
+
+  const subject = hasTemplate(template) ? TEMPLATES[template].description : null;
+  if (subject) {
+    sentences.push(`Its subject: ${subject}`);
+    sources.push(`subject from template "${template}"`);
+  } else {
+    sources.push(`no subject sentence (Workspace.template is ${template === undefined ? 'absent' : JSON.stringify(template)}, which names no template)`);
+  }
+
+  const types = categories.filter(c => typeof c === 'string' && c.trim());
+  if (types.length) {
+    sentences.push(`Its entities are of these types: ${types.join(', ')}.`);
+    sources.push(`${types.length} type name(s) from getCategories()`);
+  } else {
+    sources.push('no type names (getCategories returned nothing)');
+  }
+
+  return { text: sentences.join(' '), source: sources.join('; ') };
+}
+
+/**
+ * @param {string[]} memories facts recalled for this user and workspace
+ * @param {{name?: string, template?: string|null, categories?: string[]}} workspace
+ */
+function buildSystemPrompt(memories = [], workspace = {}) {
+  const domain = describeWorkspace(workspace);
+  chatLog('light', `system prompt built for workspace ${workspace.id ?? 'unknown'} (source: ${domain.source}; ${memories.length} remembered fact(s))`);
+  chatLog('normal', `domain sentences: ${domain.text || '(none)'}`);
+
+  const base = [
+    'You are an AI assistant integrated into Kol Emet, a wiki and knowledge graph.',
+    domain.text,
+    DOMAIN_NEUTRAL_RULES,
+  ].filter(Boolean).join(' ');
+
+  if (memories.length === 0) {
+    chatLog('verbose', `system prompt: ${base}`);
+    return base;
+  }
 
   const memBlock =
     '\n\nREMEMBERED CONTEXT (from past conversations):\n' +
     memories.map(f => `- ${f}`).join('\n');
 
+  chatLog('verbose', `system prompt: ${base + memBlock}`);
   return base + memBlock;
 }
 
@@ -361,11 +471,29 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
     if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
   }
 
+  // The requesting workspace's entity type names, read once and used twice:
+  // the system prompt's domain sentences below, and the `search_entities`
+  // category enum further down (wikiTools). One query — hoisted here from the
+  // tool-schema call site rather than repeated, since the prompt and the enum
+  // must describe the same vocabulary or the model is offered a filter value
+  // the prose never mentioned.
+  const categories = await getCategories(req.workspaceId);
+
   // Load memories and build system prompt (skip if caller supplied a custom one)
   let effectiveSystem = systemPrompt;
   if (!effectiveSystem) {
     const memories = userId ? await loadMemories(userId, req.workspaceId) : [];
-    effectiveSystem = buildSystemPrompt(memories);
+    // Name and template only: everything else on the document — members, the
+    // allowance — has no business in a prompt. A workspace deleted between
+    // resolveWorkspace and here leaves null, and describeWorkspace drops the
+    // sentences it cannot support rather than inventing them.
+    const workspace = await Workspace.findById(req.workspaceId).select('name template').lean();
+    effectiveSystem = buildSystemPrompt(memories, {
+      id:         req.workspaceId,
+      name:       workspace?.name,
+      template:   workspace?.template ?? null,
+      categories,
+    });
   }
 
   const ctx = {
@@ -402,7 +530,7 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
     const assistantText = useResponsesApi
       ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send, ctx)
       : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send, ctx,
-          wikiTools(await getCategories(req.workspaceId)));
+          wikiTools(categories));
 
     // Persist the new exchange to the conversation
     if (conversation && assistantText) {
