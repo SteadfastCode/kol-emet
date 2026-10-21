@@ -1,0 +1,174 @@
+{
+  "item": "KOL-094",
+  "repo": "kol-emet",
+  "mergeSha": "d595575034aeec02a80c8451e3181ee89e5e89d9",
+  "completedAtUtc": "2026-10-21T00:24:08.476Z",
+  "completeRunId": "2026-10-21T00:08:06.139Z",
+  "reviewRunId": "2026-10-21T07:02:09.320Z",
+  "reviewedAtUtc": "2026-10-21T07:12:41.355Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 24271,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 2007,
+      "contextBytes": 11972,
+      "promptTokens": 4391,
+      "completionTokens": 109,
+      "latencyMs": 18388,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 14007,
+      "contextBytes": 0,
+      "promptTokens": 4279,
+      "completionTokens": 450,
+      "latencyMs": 35234,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 8522,
+      "contextBytes": 0,
+      "promptTokens": 3010,
+      "completionTokens": 400,
+      "latencyMs": 27904,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 2,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "FEATURES.md",
+      "line": 62,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Duplicate entry for 'Backlog audit' item.",
+      "scenario": "The diff adds a new 'Backlog audit' item with the same description and ID as an existing one, which could lead to confusion or duplication in tracking.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The diff adds a duplicate entry for the 'Backlog audit' item with the same description and ID."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 276,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The proposed feature (KOL-102) does not address the issue of live sync misses every bulk write.",
+      "scenario": "When a bulk write operation is performed, it should broadcast to all clients in the workspace. However, the proposed solution only addresses the 'draft:applied' and 'workspace:imported' events, but does not mention how other types of bulk writes will be handled.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The proposed feature (KOL-102) specifically mentions handling 'draft:applied' and 'workspace:imported' events, but does not address other types of bulk writes."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 276,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The proposed feature (KOL-102) does not address the issue of live sync misses every bulk write.",
+      "scenario": "When a bulk write operation is performed, it should broadcast to all clients in the workspace. However, the proposed solution only addresses the 'draft:applied' and 'workspace:imported' events, but does not mention how other types of bulk writes will be handled.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The proposed feature (KOL-102) specifically mentions handling 'draft:applied' and 'workspace:imported' events, but does not address other types of bulk writes."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 276,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The proposed feature (KOL-102) does not address the issue of live sync misses every bulk write.",
+      "scenario": "When a bulk write operation is performed, it should broadcast to all clients in the workspace. However, the proposed solution only addresses the 'draft:applied' and 'workspace:imported' events, but does not mention how other types of bulk writes will be handled.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The proposed feature (KOL-102) specifically mentions handling 'draft:applied' and 'workspace:imported' events, but does not address other types of bulk writes."
+      }
+    },
+    {
+      "file": "FEATURES.md",
+      "line": 304,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The proposed item (KOL-106) does not address the issue with src/lib/producers directory.",
+      "scenario": "The description states that the error-shape sweeps skip src/lib/producers, but the build instructions do not include modifying this directory. This could lead to a security vulnerability where caught messages are not properly handled in this directory.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The proposed item (KOL-106) explicitly states that the error-shape sweeps skip src/lib/producers, but the build instructions do not include modifying this directory."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "Found 1 defect. · The proposed feature (KOL-102) does not address the issue of live sync misses every bulk write. The solution only addresses the 'draft:applied' and 'workspace:imported' events, but does not mention how other types of bulk writes will be handled. · There are three high-severity issues with the proposed items in FEATURES.md. Each item does not address the issue it claims to fix, which could lead to security vulnerabilities.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 49391,
+    "completionTokens": 1707
+  },
+  "latencyMs": 187479
+}
