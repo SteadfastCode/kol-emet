@@ -71,28 +71,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message**
-  `server/tests/http/errorShape.test.js` is the guard that no router, middleware or lib hands a caught error's text to a
-  caller, and both of its file walks are non-recursive: `writingFiles()` (`:610`) and `sourceFiles()` (`:625`) read
-  `src/routes`, `src/middleware` and `src/lib` with a plain `readdirSync` and skip anything that is not a top-level
-  `.js`. `src/lib/producers/` is therefore unswept — and it is exactly the code the sweep carves an exception out for,
-  since the ParseError gate in the second test exists because a producer's own parse message is the one message a route
-  may publish. So `producers/dockerCompose.js` or `producers/openApi.js` could return or store a caught
-  `YAMLParseError` or a driver message and both sweeps would stay green; the `names.length >= 30` floor at `:695` cannot
-  notice a missing subdirectory either. `parserSourceFiles()` in the same file (`:459`) already walks recursively, so
-  this is one loop out of step with its neighbour, and KOL-089 would add a third file to the unswept directory. Found by
-  the grader of KOL-100 and never filed. Build: both helpers walk recursively the way `parserSourceFiles()` does, with
-  `OUT_OF_SCOPE` and `STORED_EXEMPT` matched on the path relative to `src/` rather than on a bare filename, so an
-  exemption cannot silently cover a same-named file in a subdirectory. Then name the producers in the assertion beside
-  the existing `draftApplier.js` and `failureNote.js` ones: a floor on a count is what let this through, so the new
-  assertion names files instead of counting them. Files: `server/tests/http/errorShape.test.js`, plus whatever the
-  newly-swept directory turns out to violate — if a producer does publish or store a caught message, fixing that is part
-  of this item rather than a follow-up. Verify: `cd server && yarn test` green with the sweep's own file list including
-  `src/lib/producers/dockerCompose.js` and `src/lib/producers/openApi.js`; falsification, as the suite's own header
-  style asks — a `res.json({ error: err.message })` added to a producer fails the sweep, and is then reverted; and
-  `composeDraft.test.js` and `openApiDraft.test.js` still pass, so the ParseError wording those suites pin is still
-  allowed. Out of scope: widening the sweep to `src/config` or `src/models`; the statement-splitting heuristic the sweep
-  matches with; the `STORED_EXEMPT` entries, which stay listed and exempt; and the `/chat` carve-out.
 
 - [ ] **(KOL-107) An import whose entityTypes holds a non-object is a 500: the docs are built before the checks run**
   `importGraph` builds `entityTypeDocs` at `server/src/lib/graphImporter.js:472-493` and calls `planIds` at `:507`, so
@@ -171,6 +149,28 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-106) The error-shape sweeps skip src/lib/producers, the one directory that publishes a caught message** (routine 2026-10-21, ce09da7)
+  `server/tests/http/errorShape.test.js` is the guard that no router, middleware or lib hands a caught error's text to a
+  caller, and both of its file walks are non-recursive: `writingFiles()` (`:610`) and `sourceFiles()` (`:625`) read
+  `src/routes`, `src/middleware` and `src/lib` with a plain `readdirSync` and skip anything that is not a top-level
+  `.js`. `src/lib/producers/` is therefore unswept — and it is exactly the code the sweep carves an exception out for,
+  since the ParseError gate in the second test exists because a producer's own parse message is the one message a route
+  may publish. So `producers/dockerCompose.js` or `producers/openApi.js` could return or store a caught
+  `YAMLParseError` or a driver message and both sweeps would stay green; the `names.length >= 30` floor at `:695` cannot
+  notice a missing subdirectory either. `parserSourceFiles()` in the same file (`:459`) already walks recursively, so
+  this is one loop out of step with its neighbour, and KOL-089 would add a third file to the unswept directory. Found by
+  the grader of KOL-100 and never filed. Build: both helpers walk recursively the way `parserSourceFiles()` does, with
+  `OUT_OF_SCOPE` and `STORED_EXEMPT` matched on the path relative to `src/` rather than on a bare filename, so an
+  exemption cannot silently cover a same-named file in a subdirectory. Then name the producers in the assertion beside
+  the existing `draftApplier.js` and `failureNote.js` ones: a floor on a count is what let this through, so the new
+  assertion names files instead of counting them. Files: `server/tests/http/errorShape.test.js`, plus whatever the
+  newly-swept directory turns out to violate — if a producer does publish or store a caught message, fixing that is part
+  of this item rather than a follow-up. Verify: `cd server && yarn test` green with the sweep's own file list including
+  `src/lib/producers/dockerCompose.js` and `src/lib/producers/openApi.js`; falsification, as the suite's own header
+  style asks — a `res.json({ error: err.message })` added to a producer fails the sweep, and is then reverted; and
+  `composeDraft.test.js` and `openApiDraft.test.js` still pass, so the ParseError wording those suites pin is still
+  allowed. Out of scope: widening the sweep to `src/config` or `src/models`; the statement-splitting heuristic the sweep
+  matches with; the `STORED_EXEMPT` entries, which stay listed and exempt; and the `/chat` carve-out.
 - [x] **(KOL-105) The assistant tells every workspace it is a world-building wiki** (routine 2026-10-21, bff791a)
   `buildSystemPrompt` opens with "You are an AI assistant integrated into Kol Emet, a world-building wiki"
   (`server/src/routes/chat.js:54`) and the rest of that prompt talks about lore and invented content. Phase 6 shipped
