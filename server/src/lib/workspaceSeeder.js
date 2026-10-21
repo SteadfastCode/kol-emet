@@ -24,15 +24,31 @@ function log(level, msg) {
 }
 
 /**
- * The template key `requested` resolves to — itself, or the default when it
- * names no template (getTemplate's fallback) — worded for a log line so a
- * fallback is visible rather than silent. `requested` comes straight from a
- * request body, so it is clipped rather than logged whole.
+ * The template key `requested` actually seeds: itself when it names one, else
+ * the default — getTemplate's fallback, named rather than left implicit.
+ *
+ * Exported because registration now *stores* the key on the workspace
+ * (`Workspace.template`, read by the assistant's system prompt — KOL-105), and
+ * what is stored has to be the key that was seeded. Deriving it there with a
+ * second `hasTemplate(...) ? ... : DEFAULT_TEMPLATE` is how the two would
+ * eventually disagree about what an unknown key means.
+ *
+ * @param {unknown} requested straight from a request body
+ * @returns {string} a key of TEMPLATES
+ */
+export function resolveTemplateKey(requested) {
+  return hasTemplate(requested) ? requested : DEFAULT_TEMPLATE;
+}
+
+/**
+ * The same resolution, worded for a log line so a fallback is visible rather
+ * than silent. `requested` comes straight from a request body, so it is
+ * clipped rather than logged whole.
  */
 function describeTemplate(requested) {
   return hasTemplate(requested)
     ? `template "${requested}"`
-    : `template "${DEFAULT_TEMPLATE}" (requested ${String(JSON.stringify(requested)).slice(0, 80)}, which is not a template)`;
+    : `template "${resolveTemplateKey(requested)}" (requested ${String(JSON.stringify(requested)).slice(0, 80)}, which is not a template)`;
 }
 
 /**
