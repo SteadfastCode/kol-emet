@@ -69,37 +69,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one**
-  The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
-  `?status=` filter, back-links maintained on both sides, two MCP tools (`add_open_question`, `list_open_questions`),
-  and its own section in `docs/data-model.md`. The client reads them and nothing more:
-  `client/src/components/EntityHeader.vue:21` renders `entity.open_questions` as static text, there is no
-  `client/src/api/openQuestions.js` at all, and nothing under `client/src` fetches the route — the questions arrive
-  already populated on `GET /entities`. So on a public product the "what don't I know yet" half of the data model can
-  only be written by a user who has connected an AI client, and a question an agent raised can never be marked answered
-  from the UI. The routes have no HTTP test either — there is no `server/tests/http/openQuestions.test.js` — so the
-  contract the client would be built against is unpinned. Build: `client/src/api/openQuestions.js` wrapping the four
-  routes with the `X-SSE-Client-Id` header the other API modules send (`client/src/api/entities.js:1`); in the entity
-  detail panel, beside the list that is already there, an "Add a question" field, inline editing of the text, a
-  resolve/reopen toggle that writes `status` and nothing else, and a delete — each rendering what came back rather than
-  what was typed; and the badge counting open questions only, so a resolved one stops counting. Tiered
-  `localStorage.OPEN_QUESTION_LOG_LEVEL = off | light | normal | verbose` (default light): light names every write with
-  the question id, the field that changed and what asked for it, because a status write and a text write are otherwise
-  indistinguishable after the fact. Files: `client/src/api/openQuestions.js` (new),
-  `client/src/components/EntityHeader.vue`, `client/src/components/EntityDetail.vue`, cases in
-  `client/src/components/EntityDetail.test.js` (which already carries open-question fixtures), a new
-  `server/tests/http/openQuestions.test.js`, and the `/open-questions` rows in `docs/api.md` where they are thinner than
-  the routes. Verify: Vitest with `fetch` stubbed — adding a question posts once with the open entity's id in
-  `entry_ids` and renders the response; resolving sends `status: 'resolved'` and no other field; a failed write leaves
-  the list as it was and says so rather than showing a question the server refused; the badge counts open only; a delete
-  that answers 204 removes exactly one row. Server-side, the new suite covers the four routes end to end: a question
-  created against an entity appears on `GET /entities/:id`, `?status=open` excludes a resolved one, another workspace's
-  entity id is dropped from `entry_ids` rather than stored, a foreign question id is 404, and a delete removes the
-  back-link from the entity. `cd client && yarn test --run && yarn build` and `cd server && yarn test` green. Out of
-  scope: a workspace-wide open-question view and its paging, which KOL-092 leaves unclaimed and this item does not
-  need; the generator emitting `open_question` items, which is KOL-016; Claude flagging a question as possibly answered
-  (`docs/wishlist.md`); attaching one question to several entities from the UI, which the route supports and the panel
-  has no shape for; and `requireActor` plus a ChangeLog trail on these writes, which this collection has never had.
 
 - [ ] **(KOL-105) The assistant tells every workspace it is a world-building wiki**
   `buildSystemPrompt` opens with "You are an AI assistant integrated into Kol Emet, a world-building wiki"
@@ -230,6 +199,37 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-104) Open questions are readable and nothing else: no client can add, answer or resolve one** (routine 2026-10-21, d70e7cc)
+  The `OpenQuestion` collection has full CRUD behind `/open-questions` (`server/src/routes/openQuestions.js`), a
+  `?status=` filter, back-links maintained on both sides, two MCP tools (`add_open_question`, `list_open_questions`),
+  and its own section in `docs/data-model.md`. The client reads them and nothing more:
+  `client/src/components/EntityHeader.vue:21` renders `entity.open_questions` as static text, there is no
+  `client/src/api/openQuestions.js` at all, and nothing under `client/src` fetches the route — the questions arrive
+  already populated on `GET /entities`. So on a public product the "what don't I know yet" half of the data model can
+  only be written by a user who has connected an AI client, and a question an agent raised can never be marked answered
+  from the UI. The routes have no HTTP test either — there is no `server/tests/http/openQuestions.test.js` — so the
+  contract the client would be built against is unpinned. Build: `client/src/api/openQuestions.js` wrapping the four
+  routes with the `X-SSE-Client-Id` header the other API modules send (`client/src/api/entities.js:1`); in the entity
+  detail panel, beside the list that is already there, an "Add a question" field, inline editing of the text, a
+  resolve/reopen toggle that writes `status` and nothing else, and a delete — each rendering what came back rather than
+  what was typed; and the badge counting open questions only, so a resolved one stops counting. Tiered
+  `localStorage.OPEN_QUESTION_LOG_LEVEL = off | light | normal | verbose` (default light): light names every write with
+  the question id, the field that changed and what asked for it, because a status write and a text write are otherwise
+  indistinguishable after the fact. Files: `client/src/api/openQuestions.js` (new),
+  `client/src/components/EntityHeader.vue`, `client/src/components/EntityDetail.vue`, cases in
+  `client/src/components/EntityDetail.test.js` (which already carries open-question fixtures), a new
+  `server/tests/http/openQuestions.test.js`, and the `/open-questions` rows in `docs/api.md` where they are thinner than
+  the routes. Verify: Vitest with `fetch` stubbed — adding a question posts once with the open entity's id in
+  `entry_ids` and renders the response; resolving sends `status: 'resolved'` and no other field; a failed write leaves
+  the list as it was and says so rather than showing a question the server refused; the badge counts open only; a delete
+  that answers 204 removes exactly one row. Server-side, the new suite covers the four routes end to end: a question
+  created against an entity appears on `GET /entities/:id`, `?status=open` excludes a resolved one, another workspace's
+  entity id is dropped from `entry_ids` rather than stored, a foreign question id is 404, and a delete removes the
+  back-link from the entity. `cd client && yarn test --run && yarn build` and `cd server && yarn test` green. Out of
+  scope: a workspace-wide open-question view and its paging, which KOL-092 leaves unclaimed and this item does not
+  need; the generator emitting `open_question` items, which is KOL-016; Claude flagging a question as possibly answered
+  (`docs/wishlist.md`); attaching one question to several entities from the UI, which the route supports and the panel
+  has no shape for; and `requireActor` plus a ChangeLog trail on these writes, which this collection has never had.
 - [x] **(KOL-092) Two list routes still answer with the whole workspace** (routine 2026-10-21, 5169b77)
   KOL-061 stopped `GET /entities` shipping every block and KOL-067 gave it keyset pages, but `GET /relationship-groups`
   still returns every group in the workspace with its full `members` array

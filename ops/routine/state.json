@@ -79,7 +79,7 @@
     "KOL-104": {
       "order": 5,
       "title": "Open questions are readable and nothing else: no client can add, answer or resolve one",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-104",
