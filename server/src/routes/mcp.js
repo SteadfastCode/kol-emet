@@ -8,7 +8,7 @@ import Entity, { BLOCK_TYPES } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import OpenQuestion from '../models/OpenQuestion.js';
-import { mcpWorkspaceId, resolveMcpActor } from '../lib/mcpWorkspace.js';
+import { mcpWorkspaceId, mcpWriteWorkspaceId, resolveMcpActor } from '../lib/mcpWorkspace.js';
 import EntityType from '../models/EntityType.js';
 import { getCategories } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
@@ -97,6 +97,14 @@ const BlockInput = z.object({
 // refuses a name the workspace has no type for, and the tool returns its message.
 const CATEGORY_HINT = 'call list_entity_types for the valid names';
 
+// Reads call mcpWorkspaceId(); the ten write tools call mcpWriteWorkspaceId(),
+// which is the same lookup plus the role the membership carries and a thrown
+// refusal below `editor` (KOL-103). /mcp never passes through
+// resolveWorkspace/requireWriteRole — it has its own bearer gate and every
+// tool scopes itself — so this is where the write floor is enforced for the
+// connector. A new write tool that reaches for mcpWorkspaceId() is the mistake
+// to look for; tests/http/writeRole.test.js drives every tool a viewer could
+// call and fails on one that answers instead of refusing.
 function createMcpServer() {
   const server = new McpServer({ name: 'kol-emet', version: '0.1.0' });
 
@@ -193,7 +201,7 @@ function createMcpServer() {
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
       }
-      const entity = await Entity.create({ ...data, workspaceId: await mcpWorkspaceId() });
+      const entity = await Entity.create({ ...data, workspaceId: await mcpWriteWorkspaceId() });
       const actor = await resolveMcpActor();
       if (actor) {
         logCreate(entity.toObject(), actor).catch(err => console.error('[changelog] logCreate failed:', err));
@@ -220,7 +228,7 @@ function createMcpServer() {
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
       }
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       const before = await Entity.findOne({ _id: id, workspaceId }).lean();
       if (!before) throw new Error(`Entity not found: ${id}`);
       const after = await Entity.findOneAndUpdate({ _id: id, workspaceId }, data, { new: true, runValidators: true })
@@ -242,7 +250,7 @@ function createMcpServer() {
       entry_ids: z.array(z.string()).describe('MongoDB ObjectIds of entities to link this question to'),
     },
     async ({ question, entry_ids: requested }) => {
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       // Same rule as POST /open-questions: only this workspace's entities.
       const entry_ids = await ownEntryIds(requested, workspaceId);
       const oq = await OpenQuestion.create({ question, entry_ids, workspaceId });
@@ -354,7 +362,7 @@ function createMcpServer() {
       })).min(2).describe('All members of the group. Minimum 2.'),
     },
     async ({ groupLabel, members }) => {
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       const group = await RelationshipGroup.create({
         label: groupLabel ?? null,
         workspaceId,
@@ -383,7 +391,7 @@ function createMcpServer() {
       })).min(1).describe('One or more members to add. All must be new to this group.'),
     },
     async ({ groupId, members }) => {
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       const group = await RelationshipGroup.findOne({ _id: groupId, workspaceId });
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
       const existingIds = new Set(
@@ -414,7 +422,7 @@ function createMcpServer() {
     },
     async ({ groupId, label }) => {
       const group = await RelationshipGroup.findOneAndUpdate(
-        { _id: groupId, workspaceId: await mcpWorkspaceId() },
+        { _id: groupId, workspaceId: await mcpWriteWorkspaceId() },
         { label: label ?? null },
         { new: true, runValidators: true }
       );
@@ -432,7 +440,7 @@ function createMcpServer() {
       entityId: z.string().describe('MongoDB ObjectId of the entity to remove'),
     },
     async ({ groupId, entityId }) => {
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       const group = await RelationshipGroup.findOne({ _id: groupId, workspaceId });
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
       group.members = group.members.filter(
@@ -465,7 +473,7 @@ function createMcpServer() {
       notes:    z.string().nullable().optional().describe('New notes, or null to clear them'),
     },
     async ({ groupId, entityId, label, notes }) => {
-      const group = await RelationshipGroup.findOne({ _id: groupId, workspaceId: await mcpWorkspaceId() });
+      const group = await RelationshipGroup.findOne({ _id: groupId, workspaceId: await mcpWriteWorkspaceId() });
       if (!group) throw new Error(`Relationship group not found: ${groupId}`);
       const member = group.members.find(
         m => m.refModel === 'Entity' && String(m.refId) === String(entityId)
@@ -507,7 +515,7 @@ function createMcpServer() {
       ),
     },
     async ({ parentGroupId, subGroupId, linkLabel }) => {
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       const parent = await RelationshipGroup.findOne({ _id: parentGroupId, workspaceId });
       if (!parent) throw new Error(`Parent group not found: ${parentGroupId}`);
       const child = await RelationshipGroup.findOne({ _id: subGroupId, workspaceId });
@@ -532,7 +540,7 @@ function createMcpServer() {
       subGroupId:    z.string().describe('MongoDB ObjectId of the sub-group to unlink'),
     },
     async ({ parentGroupId, subGroupId }) => {
-      const workspaceId = await mcpWorkspaceId();
+      const workspaceId = await mcpWriteWorkspaceId();
       const parent = await RelationshipGroup.findOne({ _id: parentGroupId, workspaceId });
       if (!parent) throw new Error(`Parent group not found: ${parentGroupId}`);
       const linked = parent.members.some(

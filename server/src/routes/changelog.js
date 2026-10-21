@@ -65,6 +65,7 @@ import { Router } from 'express';
 import ChangeLog from '../models/ChangeLog.js';
 import Entity from '../models/Entity.js';
 import { requireActor } from '../middleware/auth.js';
+import { requireWriteRole } from '../middleware/workspace.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
 import { openQuestionsIn } from '../lib/scopedPopulate.js';
 import { registeredCategories } from '../lib/entityTypeRegistry.js';
@@ -180,7 +181,14 @@ router.get('/deleted', async (req, res, next) => {
 });
 
 // POST /entities/:id/rollback/:logId — restore entity from a snapshot
-router.post('/entities/:id/rollback/:logId', requireActor, async (req, res, next) => {
+//
+// requireWriteRole here on the route, and not beside resolveWorkspace in
+// app.js the way every other content router carries it (KOL-103): this router
+// is mounted at '/', which matches every path, so a gate at that mount would
+// also judge requests destined for the mounts declared after it. A write added
+// to this router later has to repeat it — the derived sweep in
+// tests/http/writeRole.test.js is what catches one that does not.
+router.post('/entities/:id/rollback/:logId', requireWriteRole, requireActor, async (req, res, next) => {
   try {
     const entry = await ChangeLog.findOne({
       _id: req.params.logId,

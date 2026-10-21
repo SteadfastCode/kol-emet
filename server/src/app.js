@@ -43,7 +43,7 @@ import './models/EntityType.js';
 import './models/RelationshipGroup.js';
 import { requireAuth } from './middleware/auth.js';
 import { originGuard, logOriginGuardStartup } from './middleware/originGuard.js';
-import { resolveWorkspace } from './middleware/workspace.js';
+import { resolveWorkspace, requireWriteRole } from './middleware/workspace.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createAuthLimiter } from './lib/attemptLimiter.js';
 import { sessionCookieOptions } from './lib/sessionCookie.js';
@@ -144,18 +144,35 @@ export function createApp({ sessionStore, authLimits } = {}) {
   app.use('/events', requireAuth, resolveWorkspace, eventsRouter);
   // resolveWorkspace sits behind requireAuth on every route that touches tenant
   // content: it sets req.workspaceId, which those routes filter every query on.
-  app.use('/entities', requireAuth, resolveWorkspace, entitiesRouter);
+  // requireWriteRole follows it on every router that writes the graph (KOL-103):
+  // a GET passes, anything else needs `editor`. It is mounted here, once per
+  // router, rather than on each route, so a route added to one of them later
+  // inherits the gate instead of having to remember it.
+  app.use('/entities', requireAuth, resolveWorkspace, requireWriteRole, entitiesRouter);
+  // No requireWriteRole at this mount, unlike every other content router: the
+  // changelog router is mounted at '/', which matches every path, so a gate
+  // here would also judge a request on its way to `/chat` or `/conversations`
+  // below. Its one write — the rollback — carries the gate itself. See
+  // routes/changelog.js.
   app.use('/', requireAuth, resolveWorkspace, changelogRouter);
-  app.use('/relationship-groups', requireAuth, resolveWorkspace, relationshipGroupsRouter);
-  app.use('/tags', requireAuth, resolveWorkspace, tagsRouter);
-  app.use('/open-questions', requireAuth, resolveWorkspace, openQuestionsRouter);
-  app.use('/relationship-types', requireAuth, resolveWorkspace, relationshipTypesRouter);
-  app.use('/entity-types', requireAuth, resolveWorkspace, entityTypesRouter);
+  app.use('/relationship-groups', requireAuth, resolveWorkspace, requireWriteRole, relationshipGroupsRouter);
+  app.use('/tags', requireAuth, resolveWorkspace, requireWriteRole, tagsRouter);
+  app.use('/open-questions', requireAuth, resolveWorkspace, requireWriteRole, openQuestionsRouter);
+  app.use('/relationship-types', requireAuth, resolveWorkspace, requireWriteRole, relationshipTypesRouter);
+  app.use('/entity-types', requireAuth, resolveWorkspace, requireWriteRole, entityTypesRouter);
   // Chat authenticates per-route rather than at mount, so it resolves the
   // workspace per-route too — see routes/chat.js.
+  //
+  // Neither /chat nor /conversations takes requireWriteRole: asking the
+  // assistant a question reads the graph and writes nothing to it, and a saved
+  // conversation is the asker's own row (Conversation.userId), not shared
+  // content. A floor on who may spend the workspace's AI allowance is a
+  // pricing decision nobody has made — see the Decision Log for KOL-103.
   app.use('/chat', chatRouter);
   app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
-  app.use('/drafts', requireAuth, resolveWorkspace, draftsRouter);
+  // Drafts are gated: a draft stages changes to the graph and `POST /:id/apply`
+  // writes them, so the whole router is a write surface.
+  app.use('/drafts', requireAuth, resolveWorkspace, requireWriteRole, draftsRouter);
   // The way out: the whole workspace graph as one canonical JSON file. Behind
   // the same two middlewares as every other tenant-content route, so the
   // workspace exported is the caller's own and cannot be named in a parameter.

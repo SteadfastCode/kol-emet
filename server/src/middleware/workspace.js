@@ -148,3 +148,42 @@ export function requireWorkspaceRole(required) {
     res.status(403).json({ error });
   };
 }
+
+/**
+ * The write gate every content router carries: a read passes, anything else
+ * needs `editor`.
+ *
+ * `editor` is the write floor (KOL-103). Roles existed from KOL-071 and were
+ * enforced on exactly two routes — `PATCH /workspace` and `POST /import`, both
+ * owner-only — while the 32 writes that make up the graph were ungated, so a
+ * viewer could create, edit, delete and spend the workspace's AI allowance.
+ * There was nothing to enforce against while every workspace had one member;
+ * collaborator invites are the next commercial step, so the gate has to exist
+ * before the first invite rather than after it.
+ *
+ * Unsafe-methods-only, the same shape `originGuard` uses: `GET`, `HEAD` and
+ * `OPTIONS` pass through untouched (reading is what a viewer is *for*), and
+ * every other method goes through `requireWorkspaceRole('editor')` — so the
+ * refusal is the same `403 { error: 'NOT_WORKSPACE_EDITOR' }` the client
+ * already branches on, and an owner passes because a role is a floor.
+ *
+ * Mounted once per content router in app.js rather than per route, so a route
+ * added to one of those routers later inherits the gate instead of having to
+ * remember it. The one exception is the changelog router, which is mounted at
+ * `/` — a mount-level gate there would also see every request on its way to a
+ * later mount — so its single write carries the gate on the route itself.
+ */
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/** The role a write needs. A gate asking for it passes an owner too. */
+export const WRITE_ROLE = 'editor';
+
+const writeGate = requireWorkspaceRole(WRITE_ROLE);
+
+export function requireWriteRole(req, res, next) {
+  if (READ_METHODS.has(req.method)) {
+    workspaceLog('verbose', `allowed ${req.method} ${req.originalUrl} unchecked (source: read-only method)`);
+    return next();
+  }
+  return writeGate(req, res, next);
+}

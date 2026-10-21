@@ -49,26 +49,58 @@ than falling through to unscoped data, and must stay behind `requireAuth` so an 
 a 401 before any workspace lookup. Populated id arrays (`open_questions`, `entry_ids`) are scoped
 the same way; see [Workspace](data-model.md#workspace).
 
+### Roles
+
+`Workspace.members[].role` is one of `owner`, `editor`, `viewer`, and `resolveWorkspace` reads the
+caller's own membership onto every request (`req.workspaceRole`); `GET /workspace` hands it to the
+client so the UI can hide what a role may not do. The server never trusts that copy.
+
+**`editor` is the write floor.** `requireWriteRole`
+([`middleware/workspace.js`](../server/src/middleware/workspace.js)) is mounted beside
+`resolveWorkspace` on every router that writes the graph: `GET`, `HEAD` and `OPTIONS` pass through
+untouched — reading is what a viewer is for — and every other method goes through
+`requireWorkspaceRole('editor')`, so a viewer's write is **403 `{ "error":
+"NOT_WORKSPACE_EDITOR" }`** before the route runs and before any AI allowance is read. Roles are a
+floor, not an exact match, so an owner passes an `editor` gate. It is mounted once per router rather
+than per route, so a route added to one of them later inherits the gate; the one exception is the
+changelog router, which is mounted at `/` (a gate there would judge every request on its way to a
+later mount), so its single write carries the gate on the route itself.
+
+Two routes ask for `owner` instead and answer **403 `NOT_WORKSPACE_OWNER`**: `PATCH /workspace` and
+`POST /import`. Three content routes deliberately have no write gate — `GET /export` (a read),
+`/chat` and `/conversations` (asking the assistant a question reads the graph and writes nothing to
+it, and a saved conversation is the asker's own row). A floor on who may *spend* the workspace's AI
+allowance is a pricing decision, not a permission one, and has not been made.
+
+`/mcp` never passes through this middleware — it has its own bearer gate and each tool scopes
+itself — so the same floor is enforced there by
+[`lib/mcpWorkspace.js`](../server/src/lib/mcpWorkspace.js): read tools call `mcpWorkspaceId()`, the
+ten write tools call `mcpWriteWorkspaceId()`, which refuses below `editor` with a tool error naming
+the role it read. `/bridge/*` carries its own token and no workspace role.
+
+`WORKSPACE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) names every refusal with
+the role read, the role required and the request it came from.
+
 Mount points and their guards:
 
-| Prefix | Guard | Notes |
-|--------|-------|-------|
-| `/auth` | mixed | Login/registration; individual routes guard themselves |
-| `/templates` | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
-| `/mcp` | self | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
-| `/` (oauth) | mixed | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
-| `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
-| `/events` | `requireAuth` + `resolveWorkspace` | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
-| `/entities` | `requireAuth` + `resolveWorkspace` | Writes additionally use `requireActor` |
-| `/relationship-groups` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
-| `/relationship-types` | `requireAuth` + `resolveWorkspace` | |
-| `/entity-types` | `requireAuth` + `resolveWorkspace` | Gates the category names entities and relationship types can hold |
-| `/tags` | `requireAuth` + `resolveWorkspace` | Writes use `requireActor` |
-| `/open-questions` | `requireAuth` + `resolveWorkspace` | |
-| `/` (changelog) | `requireAuth` + `resolveWorkspace` | History + rollback under `/entities/:id/...`, and `/deleted` |
-| `/chat` | per-route | AI chat (SSE streaming). `GET /providers`: `requireAuth`; `POST /`: `requireAuth` + `resolveWorkspace` |
-| `/conversations` | `requireAuth` + `resolveWorkspace` | Saved AI conversations |
-| `/drafts` | `requireAuth` + `resolveWorkspace` | Generated drafts; `POST /:id/apply` uses `requireActor` |
+| Prefix | Guard | Role | Notes |
+|--------|-------|------|-------|
+| `/auth` | mixed | none | Login/registration; individual routes guard themselves |
+| `/templates` | none | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
+| `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
+| `/` (oauth) | mixed | none | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
+| `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | none | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
+| `/events` | `requireAuth` + `resolveWorkspace` | any member | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
+| `/entities` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes additionally use `requireActor` |
+| `/relationship-groups` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes use `requireActor` |
+| `/relationship-types` | `requireAuth` + `resolveWorkspace` | `editor` to write | |
+| `/entity-types` | `requireAuth` + `resolveWorkspace` | `editor` to write | Gates the category names entities and relationship types can hold |
+| `/tags` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes use `requireActor` |
+| `/open-questions` | `requireAuth` + `resolveWorkspace` | `editor` to write | |
+| `/` (changelog) | `requireAuth` + `resolveWorkspace` | `editor` to roll back | History + rollback under `/entities/:id/...`, and `/deleted` |
+| `/chat` | per-route | any member | AI chat (SSE streaming). `GET /providers`: `requireAuth`; `POST /`: `requireAuth` + `resolveWorkspace` |
+| `/conversations` | `requireAuth` + `resolveWorkspace` | any member | Saved AI conversations |
+| `/drafts` | `requireAuth` + `resolveWorkspace` | `editor` to write | Generated drafts; `POST /:id/apply` uses `requireActor` |
 
 ## Route parameters
 
