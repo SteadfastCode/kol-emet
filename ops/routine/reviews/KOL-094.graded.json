@@ -1,0 +1,98 @@
+{
+  "item": "KOL-094",
+  "repo": "kol-emet",
+  "mergeSha": "d595575034aeec02a80c8451e3181ee89e5e89d9",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-21T07:07:50.089Z",
+  "gradedAtUtc": "2026-10-21T07:16:24.093Z",
+  "independent": [
+    {
+      "file": "FEATURES.md",
+      "line": 392,
+      "severity": "low",
+      "summary": "KOL-107's premise overstates the bug: in `graphImporter.js:475` only `entityTypes: [null]`/`[undefined]` throws a TypeError (`row.name` on a non-null primitive is just `undefined`), so the `[42]` and `[\"Worlds\"]` cases the item cites as 500s already answer 400 MALFORMED_DOCUMENT via `planIds`; the ordering fix and its verify cases still hold, but the stated failure scenario is wrong for two of the four shapes."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The renewal copy is exactly what KOL-094 mandates (\"append a copy of this block at the bottom of ## Workqueue Items with the next free id\"), and KOL-109 is a new, unused id while KOL-094 moved to Completed — not a duplicate."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "KOL-102 addresses the two bulk writes that exist (`POST /drafts/:id/apply` and `POST /import`, verified in `drafts.js:682` and an import that broadcasts nothing) and explicitly scopes relationship-group writes out with a stated reason, so nothing is unhandled."
+    },
+    {
+      "index": 3,
+      "verdict": "duplicate",
+      "reason": "Byte-identical restatement of finding 2."
+    },
+    {
+      "index": 4,
+      "verdict": "duplicate",
+      "reason": "Byte-identical restatement of finding 2."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "KOL-106's entire build is to make `writingFiles()`/`sourceFiles()` recurse so `src/lib/producers/` is swept and to fix any violation found there — the item is about that directory, and the non-recursive `readdirSync` walks it describes are real in `errorShape.test.js:610,625`."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change touches only FEATURES.md backlog prose; no auth code, session, role or registration behaviour changes."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env vars or config values are added or referenced as values."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Proposed items mention the AI allowance but no billing, pricing or spend code is modified."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Pure addition of markdown text; no deletions, migrations or data-touching code."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No provider calls, endpoints or HTTP clients are changed — the file is a backlog document."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, build, deploy or packaging artifact is touched."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All five local findings are wrong — three of them the same text repeated — and it flagged the item's own mandated renewal as a duplicate while missing the one real inaccuracy, in KOL-107's failure scenario.",
+  "counts": {
+    "findings": 5,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 2,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.2205674999999998,
+  "numTurns": 18,
+  "durationMs": 156602,
+  "sessionId": "b795aaec-9855-4183-81f7-9800e6fb0229"
+}
