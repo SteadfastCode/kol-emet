@@ -227,6 +227,31 @@ export function closeStreamsForUser(userId, reason = 'its account was deleted') 
 }
 
 /**
+ * Closes every open stream, in this process.
+ *
+ * The shutdown sequence's second stage (`lib/shutdown.js`): a SIGTERM that
+ * killed the process outright left each of these sockets dying with no close
+ * frame, which the client can only read as a network error. The reason reaches
+ * the browser as `{ error: 'server-restarting' }` — a planned end it should
+ * reconnect after, rather than the `session-ended` the two closers above send,
+ * which means "do not come back on this credential".
+ *
+ * It is also what lets `server.close` finish: a stream is held open for hours,
+ * so a listener still holding one drains only when the grace period runs out.
+ *
+ * @returns {number} how many were closed
+ */
+export function closeAllStreams(reason = 'the server is shutting down') {
+  let closed = 0;
+  // Keys snapshotted because endStream deletes as we go.
+  for (const clientId of [...clients.keys()]) {
+    closed += endStream(clientId, reason, { error: 'server-restarting' }) ? 1 : 0;
+  }
+  log('normal', `closed all ${closed} open stream(s) — ${reason}`);
+  return closed;
+}
+
+/**
  * One pass over every open connection: drop the ones whose session has gone,
  * ping the rest.
  *

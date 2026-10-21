@@ -147,6 +147,22 @@ inside the bridge router.
 writes with `x-sse-client-id` so the broadcaster can echo changes to every *other* tab/device without
 bouncing them back to the originator.
 
+## Shutdown
+A host sends SIGTERM at every deploy, so `index.js` wires SIGTERM and SIGINT to the sequence in
+[`lib/shutdown.js`](../server/src/lib/shutdown.js) rather than letting the signal's default action
+kill the process where it stands — which cut a write in half between its Mongo call and its
+`ChangeLog` append, and killed every `/events` stream at the socket with no close frame, something
+`useEvents.js` can only read as a network error. Four stages run in order, each awaited: stop
+accepting connections (`server.close`); end every live stream with `broadcaster.closeAllStreams`,
+which writes `{ error: 'server-restarting' }` to each one first (and is also what lets the listener
+drain at all, since an SSE socket is held open for hours); wait for in-flight requests, up to
+`SHUTDOWN_GRACE_MS` (default 10s); disconnect Mongoose. The server, the stream closer, the
+disconnect and the exit are injected, so `tests/unit/shutdown.test.js` drives the real sequencing
+with no listener, no signal and no exit. The handler is idempotent — a second signal joins the
+running shutdown instead of starting another — and the sequence always ends in an explicit exit (0
+clean, 1 forced); see the Decision Log for why both. `SHUTDOWN_LOG_LEVEL` (off | light | normal |
+verbose, default light) is the only account of a shutdown that exists afterwards.
+
 ## AI chat
 `/chat` streams completions over SSE from whichever provider's key is configured, all through one
 OpenAI-compatible client ([`aiProviders.js`](../server/src/lib/aiProviders.js)):
