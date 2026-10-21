@@ -70,7 +70,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-105) The assistant tells every workspace it is a world-building wiki**
+- [x] **(KOL-105) The assistant tells every workspace it is a world-building wiki**
   `buildSystemPrompt` opens with "You are an AI assistant integrated into Kol Emet, a world-building wiki"
   (`server/src/routes/chat.js:54`) and the rest of that prompt talks about lore and invented content. Phase 6 shipped
   user-defined entity types and two templates, so a workspace seeded from Software Architecture
