@@ -62,18 +62,18 @@
     "KOL-094": {
       "order": 4,
       "title": "Backlog audit: file new candidates under Proposed",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-094",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-21T00:08:33.582Z",
+      "runId": "2026-10-21T00:08:06.139Z",
       "lastFail": null
     },
     "KOL-014": {
