@@ -25,8 +25,105 @@ const MCP_TOKEN = process.env.MCP_BEARER_TOKEN;
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
 const isBridgeResource = (resource) => typeof resource === 'string' && /\/bridge\/mcp\/?$/.test(resource);
 
-// Short-lived auth codes: code -> { codeChallenge, redirectUri, state, expiresAt }
+/**
+ * ─── Tiered debug logging (KOL-088) ─────────────────────────────────────────
+ * OAUTH_LOG_LEVEL = off | light | normal | verbose (default light), the same
+ * shape `middleware/workspace.js` and `routes/changelog.js` use.
+ *
+ * This router used to print `req.query` and `req.body` whole, which put the
+ * one-time `code`, the PKCE `code_verifier` and both challenges into the log,
+ * and a miss printed `[...authCodes.keys()]` — every code outstanding, for
+ * every user. Each of those codes redeems for `MCP_BEARER_TOKEN`, the
+ * workspace-wide write token, so anyone who could read the log could take the
+ * workspace; on a hosted deployment the log is the deploy console. **No tier
+ * prints a code, a verifier or a challenge.**
+ *
+ * What ties two lines to one exchange instead is a fingerprint: the first 8 hex
+ * of SHA-256 of the code. Enough to follow an issue to its redemption, not
+ * enough to redeem, and not reversible to a code — a code is a v4 UUID, so
+ * there is nothing to guess back from 32 bits of its digest.
+ *   off     — nothing
+ *   light   — the source of every decision: the route, the grant type, the rule
+ *             that refused it, and the fingerprint of the code it was about;
+ *             plus the identity each approval binds (KOL-098)
+ *   normal  — light, plus each code issued and redeemed (fingerprint and how
+ *             many are outstanding), each expired-code sweep, and discovery
+ *   verbose — normal, plus `redirect_uri` and `resource`. Never `state`: it is
+ *             the client's own correlation value and ours to pass, not to keep.
+ */
+const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function log(level, msg) {
+  // Resolved per call, not at module load, so a test can change it.
+  const active = LEVELS[process.env.OAUTH_LOG_LEVEL] ?? LEVELS.light;
+  if (active >= LEVELS[level]) console.log(`[oauth:${level}] ${msg}`);
+}
+
+/**
+ * A code's first 8 hex of SHA-256 — what the log says in place of the code.
+ *
+ * Takes whatever a query string or form body can produce (a missing field, an
+ * array from a repeated parameter, an object from `a[b]=c`), because a
+ * malformed request is exactly the case that has to reach its refusal line
+ * rather than throw inside the logger.
+ */
+function fingerprint(code) {
+  if (typeof code !== 'string' || !code) return 'none';
+  return createHash('sha256').update(code).digest('hex').slice(0, 8);
+}
+
+/**
+ * A caller-supplied, non-secret value as the log may print it: short, and
+ * bounded, so a client cannot write a megabyte into the deploy console by
+ * sending a megabyte `grant_type`.
+ */
+function brief(value) {
+  if (value === undefined || value === null) return 'unset';
+  const text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value);
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+}
+
+// Short-lived auth codes: code -> { codeChallenge, redirectUri, forBridge, expiresAt }
+//
+// In memory on purpose — a code lives five minutes, and a restart invalidating
+// one costs the connector a retry — but in memory means this process owns
+// whatever is in here for as long as it runs. `expiresAt` used to be read only
+// at redemption, so a code nobody redeemed was never removed and `POST
+// /authorize` grew the map without bound (KOL-088). Now every issue sweeps what
+// has expired, and the map has a ceiling: past it an approval is refused with
+// 503 rather than let in, because a server holding this many unredeemed codes
+// is misconfigured or being abused and neither is the caller's fault — the same
+// 503-not-401 reasoning the /mcp gate uses.
 const authCodes = new Map();
+const CODE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * The ceiling on outstanding codes. Read per request rather than at module
+ * load, both so a deployment can raise it without a code change and so a test
+ * can lower it to two instead of issuing five hundred codes.
+ */
+function maxPendingCodes() {
+  const configured = Number(process.env.OAUTH_MAX_PENDING_CODES);
+  return Number.isInteger(configured) && configured > 0 ? configured : 500;
+}
+
+/**
+ * Drops every code whose five minutes are up. Called on issue, so the map is
+ * bounded by what one five-minute window can hold rather than by uptime.
+ *
+ * @returns {number} how many were dropped
+ */
+function sweepExpiredCodes(now = Date.now()) {
+  let dropped = 0;
+  // Deleting through a Map's own iterator is defined to be safe.
+  for (const [code, entry] of authCodes) {
+    if (now > entry.expiresAt) {
+      authCodes.delete(code);
+      dropped++;
+    }
+  }
+  return dropped;
+}
 
 // RFC 8414 discovery — Claude.ai fetches this first
 router.get('/.well-known/oauth-authorization-server', (req, res) => {
@@ -39,25 +136,26 @@ router.get('/.well-known/oauth-authorization-server', (req, res) => {
     response_types_supported: ['code'],
     code_challenge_methods_supported: ['S256'],
   };
-  console.log('[oauth] discovery fetched', doc);
+  log('normal', `discovery fetched (issuer: ${base})`);
   res.json(doc);
 });
 
 // GET /authorize — show approval page
 router.get('/authorize', async (req, res) => {
-  console.log('[oauth] GET /authorize query:', req.query);
   const { response_type, client_id, redirect_uri, code_challenge, code_challenge_method, state, resource } = req.query;
+  log('verbose', `GET /authorize redirect_uri=${brief(redirect_uri)} resource=${brief(resource)}`);
 
   if (response_type !== 'code') {
-    console.log('[oauth] bad response_type:', response_type);
+    log('light', `GET /authorize refused: response_type must be "code" (source: the request, which sent ${brief(response_type)})`);
     return res.status(400).send('unsupported_response_type');
   }
   if (code_challenge_method !== 'S256') {
-    console.log('[oauth] bad code_challenge_method:', code_challenge_method);
+    log('light', `GET /authorize refused: code_challenge_method must be S256 (source: the request, which sent ${brief(code_challenge_method)})`);
     return res.status(400).send('code_challenge_method must be S256');
   }
   if (!code_challenge || !redirect_uri) {
-    console.log('[oauth] missing params — code_challenge:', code_challenge, 'redirect_uri:', redirect_uri);
+    // Presence, never the value: `code_challenge` is half of the PKCE pair.
+    log('light', `GET /authorize refused: missing required parameters (source: the request — code_challenge ${code_challenge ? 'present' : 'absent'}, redirect_uri ${redirect_uri ? 'present' : 'absent'})`);
     return res.status(400).send('missing required parameters');
   }
 
@@ -68,7 +166,7 @@ router.get('/authorize', async (req, res) => {
   // only what the page says.
   const signedIn = await resolveLoginSession(req);
   const mayApprove = signedIn.reason === 'live' || signedIn.reason === 'lookup-failed';
-  console.log(`[oauth] serving ${mayApprove ? 'Allow' : 'sign-in'} page for client_id: ${client_id} (session: ${signedIn.reason})`);
+  log('light', `GET /authorize serving the ${mayApprove ? 'Allow' : 'sign-in'} page for client_id ${brief(client_id)} (source: login session ${signedIn.reason})`);
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -115,74 +213,96 @@ router.get('/authorize', async (req, res) => {
 // get a code and, if `mcpUserId` was already set, a token that acted as that
 // account. See the KOL-098 note in middleware/auth.js.
 router.post('/authorize', form, requireLoginSession, async (req, res) => {
-  console.log('[oauth] POST /authorize body:', req.body);
   const { redirect_uri, code_challenge, state, resource } = req.body;
+  log('verbose', `POST /authorize redirect_uri=${brief(redirect_uri)} resource=${brief(resource)}`);
 
   // Before the identity write, not after: a malformed approval must not
   // re-point `Settings.mcpUserId` on its way to a 400.
   if (!redirect_uri || !code_challenge) {
-    console.log('[oauth] POST /authorize missing params — body was:', req.body);
+    log('light', `POST /authorize refused: missing required parameters (source: the form body — code_challenge ${code_challenge ? 'present' : 'absent'}, redirect_uri ${redirect_uri ? 'present' : 'absent'})`);
     return res.status(400).send('missing required parameters');
+  }
+
+  // The sweep comes before the ceiling, so a box that has been up for a month
+  // is not refusing approvals over codes nobody will ever redeem.
+  const dropped = sweepExpiredCodes();
+  if (dropped) log('normal', `POST /authorize dropped ${dropped} expired code(s), ${authCodes.size} outstanding (source: the issue-time sweep)`);
+
+  // Ahead of the identity write for the same reason the check above is: an
+  // approval that cannot be completed must bind nothing.
+  const ceiling = maxPendingCodes();
+  if (authCodes.size >= ceiling) {
+    log('light', `POST /authorize refused: ${authCodes.size} outstanding code(s) is at the ceiling of ${ceiling} (source: the pending-code cap, OAUTH_MAX_PENDING_CODES)`);
+    return res.status(503).send('too many pending authorizations');
   }
 
   // Associate the MCP connector with the user this request is signed in as.
   await setMcpUser(req.loginUserId);
-  console.log('[oauth] MCP user set to', req.loginUserId, '(source: POST /authorize with a live login session)');
+  log('light', `MCP user set to ${req.loginUserId} (source: POST /authorize with a live login session)`);
 
+  const forBridge = isBridgeResource(resource);
   const code = randomUUID();
   authCodes.set(code, {
     codeChallenge: code_challenge,
     redirectUri: redirect_uri,
-    forBridge: isBridgeResource(resource),
-    expiresAt: Date.now() + 5 * 60 * 1000,
+    forBridge,
+    expiresAt: Date.now() + CODE_TTL_MS,
   });
 
   const url = new URL(redirect_uri);
   url.searchParams.set('code', code);
   if (state) url.searchParams.set('state', state);
 
-  console.log('[oauth] issuing code, redirecting to:', url.toString());
+  // Never `url.toString()`: it carries the code, and the client's state.
+  log('normal', `POST /authorize issued code ${fingerprint(code)}, ${authCodes.size} outstanding (audience: ${forBridge ? 'bridge' : 'mcp'})`);
   res.redirect(url.toString());
 });
 
 // POST /oauth/token — exchange code for access token
 router.post('/oauth/token', form, (req, res) => {
-  console.log('[oauth] POST /oauth/token body:', req.body);
-  const { grant_type, code, code_verifier } = req.body;
+  const { grant_type, code, code_verifier, resource } = req.body;
+  // The fingerprint, once, so every line below names the same exchange.
+  const print = fingerprint(code);
+  log('verbose', `POST /oauth/token code ${print} resource=${brief(resource)}`);
 
   if (grant_type !== 'authorization_code') {
-    console.log('[oauth] unsupported grant_type:', grant_type);
+    log('light', `POST /oauth/token refused code ${print}: grant_type must be authorization_code (source: the form body, which sent ${brief(grant_type)})`);
     return res.status(400).json({ error: 'unsupported_grant_type' });
   }
 
   if (!MCP_TOKEN) {
-    console.log('[oauth] MCP_BEARER_TOKEN not set');
+    log('light', `POST /oauth/token refused code ${print}: MCP_BEARER_TOKEN is unset (source: the environment, read at module load)`);
     return res.status(500).json({ error: 'server_misconfigured' });
   }
 
-  const stored = authCodes.get(code);
+  const stored = typeof code === 'string' ? authCodes.get(code) : undefined;
   if (!stored) {
-    console.log('[oauth] code not found:', code, '— stored codes:', [...authCodes.keys()]);
+    // The count, never the keys. The keys are every code still outstanding,
+    // for every user, and each one redeems for the write token (KOL-088).
+    log('light', `POST /oauth/token refused code ${print}: no such code (source: the pending map, ${authCodes.size} outstanding)`);
     return res.status(400).json({ error: 'invalid_grant', detail: 'code not found' });
   }
   if (Date.now() > stored.expiresAt) {
-    console.log('[oauth] code expired');
+    log('light', `POST /oauth/token refused code ${print}: expired (source: its ${CODE_TTL_MS}ms lifetime)`);
     return res.status(400).json({ error: 'invalid_grant', detail: 'code expired' });
   }
 
   const challenge = createHash('sha256').update(code_verifier).digest('base64url');
-  console.log('[oauth] PKCE check — computed:', challenge, 'stored:', stored.codeChallenge, 'match:', challenge === stored.codeChallenge);
 
   if (challenge !== stored.codeChallenge) {
+    // Neither challenge at any tier, and no "computed vs stored" pair: the
+    // stored challenge is what a verifier has to hash to, so printing it is
+    // publishing the shape of the lock.
+    log('light', `POST /oauth/token refused code ${print}: the verifier does not hash to the stored challenge (source: the S256 PKCE check)`);
     return res.status(400).json({ error: 'invalid_grant', detail: 'pkce mismatch' });
   }
 
   authCodes.delete(code);
   if (stored.forBridge && !BRIDGE_TOKEN) {
-    console.log('[oauth] code was for the bridge but BRIDGE_TOKEN is not set');
+    log('light', `POST /oauth/token refused code ${print}: the code was issued for the bridge but BRIDGE_TOKEN is unset (source: the environment, read at module load)`);
     return res.status(500).json({ error: 'server_misconfigured' });
   }
-  console.log(`[oauth] token issued successfully (${stored.forBridge ? 'bridge' : 'mcp'})`);
+  log('normal', `POST /oauth/token redeemed code ${print} → token issued, ${authCodes.size} outstanding (audience: ${stored.forBridge ? 'bridge' : 'mcp'})`);
 
   res.json({
     access_token: stored.forBridge ? BRIDGE_TOKEN : MCP_TOKEN,

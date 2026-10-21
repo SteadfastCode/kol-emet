@@ -35,12 +35,16 @@
  *     approve as, so the one user who may do this is not sent into a bare 401.
  *   - `POST /oauth/token` enforces PKCE and single use of a code.
  *   - `requireAuth` refuses `/entities` with no session and no bearer token.
+ *   - The router's log holds no credential, and the pending-code map is bounded
+ *     (KOL-088 — see the group at the bottom of this file).
  *
  * Falsification checks: drop `requireLoginSession` from `POST /authorize` and
  * the anonymous, bearer and revoked cases all fail; read `req.session.userId`
  * instead of `req.loginUserId` and the revoked case fails; set the MCP user
  * before the missing-parameter check and the malformed-approval case fails;
- * render the Allow form unconditionally and the page case fails.
+ * render the Allow form unconditionally and the page case fails; print
+ * `req.body` or `[...authCodes.keys()]` anywhere in the router and the
+ * redaction group fails; drop the issue-time sweep and the expiry case fails.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_OAUTH_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -52,7 +56,7 @@
 
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import session from 'express-session';
 import request from 'supertest';
@@ -86,6 +90,8 @@ process.env.SESSION_REVOKE_LOG_LEVEL ??= 'off';
 process.env.SESSION_COOKIE_LOG_LEVEL ??= 'off';
 process.env.AUTH_LIMIT_LOG_LEVEL ??= 'off';
 process.env.EVENTS_LOG_LEVEL ??= 'off';
+// Quiet by default; the KOL-088 group raises it per capture and puts it back.
+process.env.OAUTH_LOG_LEVEL ??= 'off';
 
 const { createApp } = await import('../../src/app.js');
 
@@ -159,6 +165,57 @@ async function signIn(t, label) {
   log('light', `signed ${t.email} in a second time (source: POST /auth/login) → session ${sid}`);
   return { agent, sid, email: t.email, userId: t.userId };
 }
+
+/**
+ * Runs `fn` with `OAUTH_LOG_LEVEL` at `level` and both console streams
+ * collected rather than printed.
+ *
+ * Both streams, not just `console.log`: a value the router never meant to print
+ * could also reach the log through the error handler, which writes the error
+ * itself to `console.error` — so a suite that captured one stream could watch
+ * the secret leave by the other.
+ */
+async function capturingLog(level, fn) {
+  const lines = [];
+  const realLog = console.log;
+  const realError = console.error;
+  const realLevel = process.env.OAUTH_LOG_LEVEL;
+  console.log = (...args) => { lines.push(args.map(String).join(' ')); };
+  console.error = (...args) => { lines.push(args.map(String).join(' ')); };
+  process.env.OAUTH_LOG_LEVEL = level;
+  try {
+    const result = await fn();
+    return { result, lines, text: lines.join('\n') };
+  } finally {
+    console.log = realLog;
+    console.error = realError;
+    if (realLevel === undefined) delete process.env.OAUTH_LOG_LEVEL;
+    else process.env.OAUTH_LOG_LEVEL = realLevel;
+  }
+}
+
+/** The fingerprint the router logs in place of a code: first 8 hex of SHA-256. */
+const sha8 = (value) => createHash('sha256').update(value).digest('hex').slice(0, 8);
+
+/**
+ * Runs `fn` with `Date.now` moved `ms` into the future.
+ *
+ * The code lifetime is five minutes and nothing exports it, so a test about
+ * expiry has to move the clock; `node --test` runs a file's tests one at a
+ * time, so nothing else is reading the clock while this is in force.
+ */
+async function atClockOffset(ms, fn) {
+  const realNow = Date.now;
+  Date.now = () => realNow() + ms;
+  try {
+    return await fn();
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+/** Comfortably past the router's five-minute code lifetime. */
+const PAST_CODE_TTL_MS = 6 * 60 * 1000;
 
 /** PKCE pair: a verifier and its S256 challenge. */
 function pkcePair() {
@@ -378,6 +435,214 @@ describe('POST /oauth/token', () => {
     assert.equal(replay.status, 400, 'a consumed code must not be redeemable twice');
     assert.equal(replay.body.error, 'invalid_grant');
     assert.equal(replay.body.access_token, undefined);
+  });
+});
+
+/**
+ * ─── KOL-088: the log is not a credential store, and the map is bounded ─────
+ *
+ * Every line this router used to print came from dumping a whole request:
+ * `POST /oauth/token` logged its form body (the one-time `code` and the
+ * `code_verifier`, which is the PKCE secret), a miss logged the submitted code
+ * plus `[...authCodes.keys()]` — every code outstanding, for every user — and
+ * the PKCE check logged the computed and the stored challenge. Each of those
+ * codes redeems for `MCP_BEARER_TOKEN`, the workspace-wide write token, so the
+ * log was a list of credentials and on a hosted box the log is the deploy
+ * console.
+ *
+ * So these tests read what was *printed*, at the loudest tier, and assert what
+ * is absent. The fingerprint is what has to be present instead: two lines that
+ * can be tied to one exchange without either being redeemable.
+ *
+ * Second defect, same file: `expiresAt` was read only at redemption, so a code
+ * nobody redeemed stayed for the life of the process. The expiry case asserts
+ * the sweep through the *refusal it changes* — a swept code is "code not
+ * found", a merely-expired one is "code expired" — rather than through an
+ * exported internal, which would pass just as well with no sweep at all.
+ */
+describe('OAuth logging and the pending-code map (KOL-088)', () => {
+  test('a full exchange at the loudest tier prints no code, no verifier and no challenge', async () => {
+    // Registered outside the capture, so only the exchange's own lines are read.
+    const t = await tenant('redaction');
+    const { verifier, challenge } = pkcePair();
+
+    const { result, text } = await capturingLog('verbose', async () => {
+      const code = await issueCode(challenge, t.agent);
+      const res = await request(app)
+        .post('/oauth/token')
+        .type('form')
+        .send({ grant_type: 'authorization_code', code, code_verifier: verifier });
+      return { code, res };
+    });
+
+    // The protocol first: a redaction that broke the exchange would "pass".
+    assert.equal(result.res.status, 200, `the happy path must still issue a token: ${result.res.text}`);
+    assert.equal(result.res.body.access_token, 'test-mcp-bearer-token');
+    assert.equal(result.res.body.token_type, 'Bearer');
+
+    assert.ok(!text.includes(result.code), `the one-time code must not be logged: ${text}`);
+    assert.ok(!text.includes(verifier), `the PKCE verifier must not be logged: ${text}`);
+    assert.ok(!text.includes(challenge), `the challenge it hashes to must not be logged: ${text}`);
+    assert.ok(!text.includes('opaque-state'), `nor the client's state: ${text}`);
+
+    // What ties the two lines together instead.
+    const print = sha8(result.code);
+    const tied = text.split('\n').filter(line => line.includes(print));
+    assert.ok(tied.length >= 2, `the issue and the redemption must share one fingerprint: ${text}`);
+    assert.match(text, /issued code [0-9a-f]{8}, \d+ outstanding/);
+    assert.match(text, /redeemed code [0-9a-f]{8} → token issued/);
+    assert.match(text, /audience: mcp/, 'and the line must name the rule that chose the token');
+    log('verbose', `exchange logged under fingerprint ${print} across ${tied.length} lines`);
+  });
+
+  test('OAUTH_LOG_LEVEL=off prints nothing at all', async () => {
+    const t = await tenant('silent');
+    const { verifier, challenge } = pkcePair();
+
+    const { result, text } = await capturingLog('off', async () => {
+      const code = await issueCode(challenge, t.agent);
+      return await request(app)
+        .post('/oauth/token')
+        .type('form')
+        .send({ grant_type: 'authorization_code', code, code_verifier: verifier });
+    });
+
+    assert.equal(result.status, 200);
+    assert.ok(!text.includes('[oauth:'), `off must print no router line: ${text}`);
+  });
+
+  test('a miss does not print the codes that are still outstanding', async () => {
+    const t = await tenant('pending-bystander');
+    // Issued and deliberately left unredeemed: what the old key dump published.
+    const pending = await issueCode(pkcePair().challenge, t.agent);
+
+    const { result, text } = await capturingLog('verbose', () => request(app)
+      .post('/oauth/token')
+      .type('form')
+      .send({ grant_type: 'authorization_code', code: randomUUID(), code_verifier: pkcePair().verifier }));
+
+    assert.equal(result.status, 400);
+    assert.equal(result.body.detail, 'code not found');
+    assert.ok(!text.includes(pending), `a miss must not print a live code: ${text}`);
+    assert.ok(!text.includes(sha8(pending)), `nor the fingerprint of one: ${text}`);
+    assert.match(
+      text,
+      /refused code [0-9a-f]{8}: no such code \(source: the pending map, \d+ outstanding\)/,
+      `the count is what replaces the key dump, and the rule has to be named: ${text}`,
+    );
+  });
+
+  test('a wrong verifier names the rule it broke and prints neither challenge', async () => {
+    const t = await tenant('mismatch-log');
+    const { challenge } = pkcePair();
+    const wrong = pkcePair();
+    const code = await issueCode(challenge, t.agent);
+
+    const { result, text } = await capturingLog('verbose', () => request(app)
+      .post('/oauth/token')
+      .type('form')
+      .send({ grant_type: 'authorization_code', code, code_verifier: wrong.verifier }));
+
+    assert.equal(result.status, 400);
+    assert.equal(result.body.detail, 'pkce mismatch');
+    assert.ok(!text.includes(code), `the code must not be logged: ${text}`);
+    assert.ok(!text.includes(wrong.verifier), `nor the verifier that was sent: ${text}`);
+    assert.ok(!text.includes(challenge), `nor the stored challenge: ${text}`);
+    assert.ok(!text.includes(wrong.challenge), `nor the one just computed from the verifier: ${text}`);
+    assert.match(
+      text,
+      /does not hash to the stored challenge \(source: the S256 PKCE check\)/,
+      `the refusal has to name its rule: ${text}`,
+    );
+  });
+
+  test('an unsupported grant type is refused by name, with the code only as a fingerprint', async () => {
+    const { result, text } = await capturingLog('verbose', () => request(app)
+      .post('/oauth/token')
+      .type('form')
+      .send({ grant_type: 'client_credentials', code: 'not-a-real-code' }));
+
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, 'unsupported_grant_type');
+    assert.ok(!text.includes('not-a-real-code'), `even a bogus code is logged as a fingerprint: ${text}`);
+    assert.match(text, /grant_type must be authorization_code \(source: the form body, which sent client_credentials\)/);
+  });
+
+  test('an expired code nothing has swept is refused as expired', async () => {
+    const t = await tenant('expired');
+    const { verifier, challenge } = pkcePair();
+    const code = await issueCode(challenge, t.agent);
+
+    // POST /oauth/token touches no database, so this is the clock moving and
+    // nothing else. The control for the sweep case below.
+    const res = await atClockOffset(PAST_CODE_TTL_MS, () => request(app)
+      .post('/oauth/token')
+      .type('form')
+      .send({ grant_type: 'authorization_code', code, code_verifier: verifier }));
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.detail, 'code expired', 'still in the map, just too old');
+  });
+
+  test('issuing a code sweeps the ones whose five minutes are up', async () => {
+    const t = await tenant('sweep');
+    const { verifier, challenge } = pkcePair();
+    const stale = await issueCode(challenge, t.agent);
+
+    // The next approval, five minutes later, is what runs the sweep.
+    const { text } = await capturingLog('normal', () => atClockOffset(
+      PAST_CODE_TTL_MS,
+      () => issueCode(pkcePair().challenge, t.agent),
+    ));
+    assert.match(text, /dropped \d+ expired code\(s\).*source: the issue-time sweep/, `the sweep has to say it ran: ${text}`);
+
+    const res = await request(app)
+      .post('/oauth/token')
+      .type('form')
+      .send({ grant_type: 'authorization_code', code: stale, code_verifier: verifier });
+
+    assert.equal(res.status, 400);
+    assert.equal(
+      res.body.detail,
+      'code not found',
+      'the sweep must have removed it — "code expired" would mean it was still in the map',
+    );
+  });
+
+  test('an approval past the pending-code ceiling is a 503 that binds nothing', async () => {
+    const t = await tenant('ceiling');
+    const bystander = await tenant('ceiling-bystander');
+
+    // How many are outstanding right now, read off the issue line rather than
+    // an exported internal: the tests above left codes in the map on purpose.
+    const { text } = await capturingLog('normal', () => issueCode(pkcePair().challenge, t.agent));
+    const outstanding = text.match(/issued code [0-9a-f]{8}, (\d+) outstanding/);
+    assert.ok(outstanding, `the issue line has to report the count: ${text}`);
+
+    // After that approval, not before — it binds the identity itself.
+    await setMcpUser(bystander.userId);
+
+    // The ceiling set to exactly what is already there: the next one is over it.
+    process.env.OAUTH_MAX_PENDING_CODES = outstanding[1];
+    try {
+      const res = called('POST /authorize (at the ceiling)', await t.agent
+        .post('/authorize')
+        .type('form')
+        .send({ redirect_uri: REDIRECT_URI, code_challenge: pkcePair().challenge, state: 'opaque-state' }));
+
+      assert.equal(res.status, 503, 'a full map is a server condition, not a bad request');
+      assert.equal(res.headers.location, undefined, 'and no code may be issued');
+      assert.equal(
+        await getMcpUser(),
+        bystander.userId,
+        'the refusal is ahead of the identity write, so an approval that cannot complete binds nothing',
+      );
+    } finally {
+      delete process.env.OAUTH_MAX_PENDING_CODES;
+    }
+
+    // And the ceiling lifted, approvals work again.
+    assert.ok(await issueCode(pkcePair().challenge, t.agent));
   });
 });
 

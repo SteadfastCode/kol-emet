@@ -885,7 +885,7 @@ authorization-code with PKCE):
 |--------|-------|-------------|
 | GET | `/.well-known/oauth-authorization-server` | Discovery document |
 | GET | `/authorize` | Approval page. Offers the Allow button only to a signed-in visitor; otherwise it says to sign in first, because the POST below would refuse |
-| POST | `/authorize` | Approve → set `Settings.mcpUserId` to the signed-in user, issue auth code. `application/x-www-form-urlencoded` (the approval page's form). **Requires a live login session** — 401 for a revoked session (which it also ends), for an anonymous caller and for a bearer token |
+| POST | `/authorize` | Approve → set `Settings.mcpUserId` to the signed-in user, issue auth code. `application/x-www-form-urlencoded` (the approval page's form). **Requires a live login session** — 401 for a revoked session (which it also ends), for an anonymous caller and for a bearer token. Sweeps expired codes before issuing, and answers **503** `too many pending authorizations` when the pending-code map is at its ceiling — ahead of the identity write, so a refused approval binds nothing |
 | POST | `/oauth/token` | Exchange code for token. `application/x-www-form-urlencoded` |
 
 These two and the bridge's own `POST /bridge/authorize` and `POST /bridge/oauth/token` are the only
@@ -898,6 +898,22 @@ caller is deliberately not enough — a connector that could re-point the identi
 connector whose revocation does not hold. This is not in tension with the connector carve-out in
 [Sessions](#sessions): that carve-out is about a bearer token
 surviving a revocation until it is rotated, never about a revoked *session* minting a new grant.
+
+An authorization code is held in memory for five minutes, and the map holding them is bounded two
+ways (KOL-088): every issue first drops the codes whose five minutes are up, and an approval that
+would push the map past `OAUTH_MAX_PENDING_CODES` (default `500`) is refused with a 503 instead.
+Before this, `expiresAt` was read only at redemption, so a code nobody redeemed was never removed.
+
+Logging is `OAUTH_LOG_LEVEL` (`off | light | normal | verbose`, default `light`). **No tier prints a
+code, a `code_verifier` or a `code_challenge`** — each code redeems for `MCP_BEARER_TOKEN`, the
+workspace-wide write token, and the router used to print `req.query` and `req.body` whole plus
+`[...authCodes.keys()]` on a miss, which made the log (the deploy console, on a hosted box) a list of
+live credentials. A code appears only as a **fingerprint**: the first 8 hex of its SHA-256, enough to
+tie an issue to its redemption and not enough to redeem. `light` names the source of every decision
+— the route, the grant type, the rule that refused, that fingerprint, and the identity each approval
+binds; `normal` adds each code issued and redeemed with the outstanding **count** (never the keys),
+each sweep, and discovery; `verbose` adds `redirect_uri` and `resource`. `state` is never logged at
+any tier.
 
 ## MCP transport
 
