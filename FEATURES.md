@@ -66,7 +66,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly**
+- [x] **(KOL-090) Which workspace a request acts in is whatever findOne returned: list them, and choose one explicitly**
   `resolveWorkspace` picks the acting workspace with `Workspace.findOne({ 'members.userId': userId })` and no sort
   (`server/src/middleware/workspace.js:97`), under a comment that says it plainly: "A user may later belong to several;
   today registration creates exactly one." For a product whose roadmap has collaborator invites next, that line is the
