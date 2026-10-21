@@ -133,11 +133,17 @@ export function errorLog(level, msg) {
  *
  * A module-private Symbol, so nothing can carry it by accident — not a
  * dependency's error object, not a JSON body parsed into one, not a property
- * copied across by `Object.assign`, and not anything that crossed a serialising
- * boundary, since `JSON.stringify` drops symbol keys. `httpError()` is the only
- * thing that sets it, the way `publicFailure()` in `lib/failureNote.js` is the
- * only thing that sets `publicMessage`: in both places the claim being made is
- * about who wrote the string, which only the author can assert.
+ * copied across by `Object.assign` or object spread, and not anything that
+ * crossed a serialising boundary, since `JSON.stringify` drops symbol keys.
+ * Two of those four take the symbol alone; the copying pair does not, because
+ * `Object.assign` and spread both copy own *enumerable* symbol-keyed
+ * properties. So `httpError()` sets it with `Object.defineProperty`, which
+ * defaults to non-enumerable — the one construction that makes the whole
+ * sentence true rather than three quarters of it (KOL-108). `httpError()` is
+ * the only thing that sets it, the way `publicFailure()` in
+ * `lib/failureNote.js` is the only thing that sets `publicMessage`: in both
+ * places the claim being made is about who wrote the string, which only the
+ * author can assert.
  */
 const RAISED_HERE = Symbol('errorHandler.raisedHere');
 
@@ -160,7 +166,9 @@ const RAISED_HERE = Symbol('errorHandler.raisedHere');
  */
 export function httpError(status, code, extra = {}) {
   const err = new Error(`${status} ${code}`);
-  err[RAISED_HERE] = true;
+  // Non-enumerable, so neither `Object.assign` nor a spread can carry the mark
+  // onto something this code did not raise. `classify` reads it the same way.
+  Object.defineProperty(err, RAISED_HERE, { value: true });
   err.status = status;
   err.code = code;
   if (extra.fields) err.fields = extra.fields;
