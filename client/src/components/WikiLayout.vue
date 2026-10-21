@@ -49,10 +49,13 @@
           />
           <template v-else-if="activePanel?.mode === 'snapshot'">
             <div class="deleted-badge">DELETED — {{ activePanel.deletedAt }}</div>
+            <!-- A snapshot of a deleted entity: readable, and no open-question
+                 writes (the entity it would link to is gone). -->
             <EntityDetail
               :entity="activePanel.snapshotEntry"
               :loading="false"
               :breadcrumbs="[]"
+              :can-write="false"
             />
           </template>
           <EntityDetail

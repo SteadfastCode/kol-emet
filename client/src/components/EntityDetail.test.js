@@ -185,3 +185,214 @@ describe('EntityDetail history', () => {
     expect(wrapper.emitted('refresh')).toBeUndefined();
   });
 });
+
+/**
+ * The open-question section on an entity's page (KOL-104).
+ *
+ * `EntityHeader` is deliberately *not* stubbed here, unlike in the history
+ * cases above: the section lives in the header, and what is worth pinning is
+ * that the panel's own entity id reaches `entry_ids` — a header mounted on its
+ * own could not show that. fetch is stubbed the same way, so these pin the
+ * routes the section calls (method, path and body) and what it renders from
+ * their answers.
+ *
+ * The server's own rules — which `entry_ids` it keeps, the back-links, the 404
+ * for a foreign id — are in server/tests/http/openQuestions.test.js.
+ */
+
+const QUESTIONS = [
+  { _id: 'q1', question: 'Who stokes it on the night run?', status: 'open' },
+  { _id: 'q2', question: 'How long is the northern line?', status: 'resolved' },
+];
+
+/** Mounts the page with the real header, so the open-question section renders. */
+async function openPanel(entity = { ...ENTITY, open_questions: QUESTIONS }) {
+  const { loadEntityTypes } = await import('../composables/useEntityTypes.js').then((m) => m.useEntityTypes());
+  await loadEntityTypes('EntityDetail.test.js');
+
+  const wrapper = mount(EntityDetail, {
+    props: { entity, loading: false, breadcrumbs: [] },
+    global: { stubs: { BreadcrumbBar: true, BlockList: true, RelationshipsSection: true } },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
+/** The rendered question rows, as `{ status, text }` in order. */
+const rows = (wrapper) => wrapper.findAll('.oq-item').map((li) => ({
+  status: li.get('.oq-badge').text(),
+  text: li.get('.oq-text').text(),
+}));
+
+/** The row whose text is `text`. Found by what is on screen, not by index. */
+const questionRow = (wrapper, text) => {
+  const found = wrapper.findAll('.oq-item')
+    .find((li) => li.find('.oq-text').exists() && li.get('.oq-text').text() === text);
+  if (!found) throw new Error(`no question row reading "${text}"`);
+  return found;
+};
+
+/** The one row with its text open in the inline editor. */
+const editingRow = (wrapper) => {
+  const found = wrapper.findAll('.oq-item').find((li) => li.find('.oq-edit').exists());
+  if (!found) throw new Error('no question row is being edited');
+  return found;
+};
+
+const addField = (wrapper) => wrapper.get('input[aria-label="Add a question"]');
+
+describe('EntityDetail open questions', () => {
+  beforeEach(() => {
+    localStorage.setItem('OPEN_QUESTION_LOG_LEVEL', 'off');
+  });
+
+  it('renders the questions it was given and counts only the open ones', async () => {
+    const wrapper = await openPanel();
+
+    expect(rows(wrapper)).toEqual([
+      { status: 'open', text: 'Who stokes it on the night run?' },
+      { status: 'resolved', text: 'How long is the northern line?' },
+    ]);
+    // Two questions, one answered: the badge is 1, not 2.
+    expect(wrapper.get('.oq-count').text()).toBe('1');
+    // Reading them asks for nothing — they arrive populated on the entity.
+    expect(calls.filter((c) => c.key.includes('/open-questions'))).toHaveLength(0);
+  });
+
+  it('posts a new question once, with the open entity id, and renders what came back', async () => {
+    const wrapper = await openPanel();
+    routes['POST /open-questions'] = () => [201, {
+      _id: 'q3',
+      // The server's version of it, which is what has to appear on the list.
+      question: 'Where does the coal come from?',
+      status: 'open',
+      entry_ids: ['e1'],
+    }];
+
+    await addField(wrapper).setValue('  Where does the coal come from?  ');
+    await wrapper.get('form.oq-add').trigger('submit');
+    await flushPromises();
+
+    const posts = calls.filter((c) => c.key === 'POST /open-questions');
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0].body)).toEqual({
+      question: 'Where does the coal come from?',
+      entry_ids: ['e1'],
+    });
+
+    expect(rows(wrapper).map((r) => r.text)).toContain('Where does the coal come from?');
+    expect(wrapper.get('.oq-count').text()).toBe('2');
+    expect(addField(wrapper).element.value).toBe('');
+  });
+
+  it('resolving sends status and no other field', async () => {
+    const wrapper = await openPanel();
+    routes['PUT /open-questions/q1'] = () => [200, { ...QUESTIONS[0], status: 'resolved' }];
+
+    await questionRow(wrapper, 'Who stokes it on the night run?').get('.oq-badge-btn').trigger('click');
+    await flushPromises();
+
+    const sent = calls.filter((c) => c.key === 'PUT /open-questions/q1');
+    expect(sent).toHaveLength(1);
+    // Not the text, not entry_ids: a resolve that carried the row it was
+    // clicked from could overwrite a rename somebody else made.
+    expect(JSON.parse(sent[0].body)).toEqual({ status: 'resolved' });
+
+    expect(questionRow(wrapper, 'Who stokes it on the night run?').text()).toContain('resolved');
+    expect(wrapper.find('.oq-count').exists()).toBe(false);
+  });
+
+  it('reopening a resolved question sends status open', async () => {
+    const wrapper = await openPanel();
+    routes['PUT /open-questions/q2'] = () => [200, { ...QUESTIONS[1], status: 'open' }];
+
+    await questionRow(wrapper, 'How long is the northern line?').get('.oq-badge-btn').trigger('click');
+    await flushPromises();
+
+    expect(JSON.parse(calls.find((c) => c.key === 'PUT /open-questions/q2').body)).toEqual({ status: 'open' });
+    expect(wrapper.get('.oq-count').text()).toBe('2');
+  });
+
+  it('an inline rename sends the text alone and renders the saved text', async () => {
+    const wrapper = await openPanel();
+    routes['PUT /open-questions/q1'] = (init) => [200, {
+      ...QUESTIONS[0],
+      question: JSON.parse(init.body).question,
+    }];
+
+    const row = questionRow(wrapper, 'Who stokes it on the night run?');
+    await row.get('button[title="Edit question"]').trigger('click');
+    await editingRow(wrapper).get('.oq-edit').setValue('Who stokes it?');
+    await button(editingRow(wrapper), 'Save').trigger('click');
+    await flushPromises();
+
+    expect(JSON.parse(calls.find((c) => c.key === 'PUT /open-questions/q1').body)).toEqual({
+      question: 'Who stokes it?',
+    });
+    expect(rows(wrapper).map((r) => r.text)).toEqual(['Who stokes it?', 'How long is the northern line?']);
+    expect(wrapper.find('input[aria-label="Question text"]').exists()).toBe(false);
+  });
+
+  it('a refused create leaves the list as it was and says so', async () => {
+    const wrapper = await openPanel();
+    const before = rows(wrapper);
+    routes['POST /open-questions'] = () => [400, { error: 'Question is required' }];
+
+    await addField(wrapper).setValue('Something the server will refuse');
+    await wrapper.get('form.oq-add').trigger('submit');
+    await flushPromises();
+
+    // Not on the list: what is rendered is what came back, and nothing did.
+    expect(rows(wrapper)).toEqual(before);
+    expect(wrapper.get('.oq-error').text()).toBe('Question is required');
+    // The typed text stays put, so the retry is a click and not a retype.
+    expect(addField(wrapper).element.value).toBe('Something the server will refuse');
+  });
+
+  it('a refused resolve leaves the status and the count alone and says so', async () => {
+    const wrapper = await openPanel();
+    routes['PUT /open-questions/q1'] = () => [403, { error: 'Read-only access' }];
+
+    await questionRow(wrapper, 'Who stokes it on the night run?').get('.oq-badge-btn').trigger('click');
+    await flushPromises();
+
+    expect(rows(wrapper)).toEqual([
+      { status: 'open', text: 'Who stokes it on the night run?' },
+      { status: 'resolved', text: 'How long is the northern line?' },
+    ]);
+    expect(wrapper.get('.oq-count').text()).toBe('1');
+    expect(wrapper.get('.oq-error').text()).toBe('Read-only access');
+  });
+
+  it('a delete answering 204 removes exactly one row', async () => {
+    const wrapper = await openPanel();
+    routes['DELETE /open-questions/q2'] = () => [204, null];
+
+    await questionRow(wrapper, 'How long is the northern line?').get('button[title="Delete question"]').trigger('click');
+    await flushPromises();
+
+    expect(rows(wrapper)).toEqual([{ status: 'open', text: 'Who stokes it on the night run?' }]);
+    expect(calls.filter((c) => c.key.startsWith('DELETE /open-questions'))).toHaveLength(1);
+  });
+
+  it('offers no controls on a snapshot, and still shows the questions', async () => {
+    const wrapper = await openPanel();
+    const live = wrapper.findAll('.oq-badge-btn').length;
+    expect(live).toBe(2);
+
+    const snapshot = mount(EntityDetail, {
+      props: {
+        entity: { ...ENTITY, open_questions: QUESTIONS },
+        loading: false,
+        breadcrumbs: [],
+        canWrite: false,
+      },
+      global: { stubs: { BreadcrumbBar: true, BlockList: true, RelationshipsSection: true } },
+    });
+    await flushPromises();
+
+    expect(rows(snapshot).map((r) => r.text)).toEqual(QUESTIONS.map((q) => q.question));
+    expect(snapshot.findAll('.oq-badge-btn')).toHaveLength(0);
+    expect(snapshot.find('form.oq-add').exists()).toBe(false);
+  });
+});

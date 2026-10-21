@@ -194,7 +194,15 @@ router.put('/:id', async (req, res, next) => {
       update.entry_ids = entry_ids;
     }
 
-    const oq = await OpenQuestion.findOneAndUpdate(scope, update, { new: true })
+    // `runValidators` because this is a `findOneAndUpdate`, which runs none by
+    // default: without it the schema's `status` enum is enforced on create and
+    // nowhere else, and `PUT { status: 'banana' }` answered 200 and stored it.
+    // A client reading these counts the open ones (the badge in
+    // client/src/components/EntityHeader.vue), so a third status is not a
+    // cosmetic problem — it is a question that is neither open nor answered.
+    // Validators run only on the paths the body named, so a `{ status }` write
+    // is not refused for a `question` it never mentioned.
+    const oq = await OpenQuestion.findOneAndUpdate(scope, update, { new: true, runValidators: true })
       .populate(entriesIn(req.workspaceId));
     if (!oq) return res.status(404).json({ error: 'Not found' });
     res.json(oq);
