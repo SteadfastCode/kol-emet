@@ -76,7 +76,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-110) secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…**
+- [x] **(KOL-110) secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…**
   Found by the grader of KOL-089 (high, server/src/lib/producers/redactSecrets.js:343).
   `secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in
   a `kind: List` document — exactly what `kubectl get secrets -o yaml` emits, a shape the

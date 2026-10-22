@@ -79,18 +79,18 @@
     "KOL-110": {
       "order": 5,
       "title": "secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-110",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-22T10:20:09.713Z",
+      "runId": "2026-10-22T09:10:06.188Z",
       "lastFail": null
     },
     "KOL-111": {
