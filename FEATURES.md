@@ -76,7 +76,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…**
+- [x] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…**
   Found by the grader of KOL-089 (medium, server/src/lib/producers/kubernetes.js:483). The
   host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS
   suffix was stripped, so any external FQDN whose first label happens to match an in-file workload
