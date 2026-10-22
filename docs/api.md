@@ -637,10 +637,13 @@ values were removed.
 
 Two shapes are Kubernetes' own. An env var is written as a two-key mapping, so the credential's name
 is a *sibling* key — `- name: SESSION_SECRET` / `value: …` — and the `value:` is judged by the `name:`
-beside it. And in a document whose `kind` is `Secret`, **every** value under `data` / `stringData` goes
+beside it. And in any object whose `kind` is `Secret`, **every** value under `data` / `stringData` goes
 by position whatever it is called, because `POSTGRES_USER` is not a secret word and in a Secret it is
-still a value nobody uploaded on purpose. A `ConfigMap`'s `data` is deliberately *not* redacted: that
-is where a manifest keeps the endpoints the producer's edges are made of.
+still a value nobody uploaded on purpose. *Any* object, at any depth, not only a document's own root:
+`kubectl get secrets -o yaml` emits one document whose root is a `kind: List` with the Secrets under
+`items`, and a wrapped Secret is a Secret. A `ConfigMap`'s `data` is deliberately *not* redacted —
+wrapped or not — because that is where a manifest keeps the endpoints the producer's edges are made of;
+only the mapping that itself says `kind: Secret` is read by position, never the one containing it.
 
 A key that names an **address** (`*_URL`, `*_URI`, `*_HOST`, `*_ENDPOINT`, `*_DSN`, …) keeps its value
 and loses only its userinfo: the host is what the producer turns into an edge, and it is not the secret.

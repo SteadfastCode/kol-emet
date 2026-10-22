@@ -160,12 +160,15 @@ const K8S_ENV_VALUE_KEYS = new Set(['value']);
 /**
  * A `kind: Secret`'s `data` and `stringData` are credentials whatever they are
  * called: `POSTGRES_USER` is not a secret word, and in a Secret it is still a
- * value nobody uploaded on purpose. So in that one document kind every value
- * under those two keys goes, by position rather than by name.
+ * value nobody uploaded on purpose. So in that one kind of object every value
+ * under those two keys goes, by position rather than by name — wherever in the
+ * stream that object sits, including inside a `kind: List` (secretDataPairs).
  *
  * Deliberately NOT applied to a ConfigMap's `data`: that is where a manifest
  * keeps the endpoints the producer's edges are made of, and redacting them
- * would cost the graph exactly what the import is for.
+ * would cost the graph exactly what the import is for. A ConfigMap wrapped in
+ * a List is a ConfigMap too — only the mapping that says `kind: Secret` is
+ * read this way, never the one that contains it.
  */
 const SECRET_DATA_KEYS = ['data', 'stringData'];
 
@@ -335,26 +338,46 @@ function siblingName(path) {
 }
 
 /**
- * Every scalar pair under `data` / `stringData` of a document whose `kind` is
- * `Secret`. A manifest keeps its passwords here, under keys the word lists have
- * no reason to recognise (`POSTGRES_USER`), so in this one kind of document
- * they go by position.
+ * Every scalar pair under `data` / `stringData` of every mapping in the
+ * document that calls itself a `Secret`. A manifest keeps its passwords here,
+ * under keys the word lists have no reason to recognise (`POSTGRES_USER`), so
+ * in this one kind of object they go by position.
+ *
+ * Every mapping, not the document's own root: `kubectl get secrets -o yaml`
+ * — the command a person actually runs to get the thing they then upload, and
+ * a shape this producer's docs advertise as supported input — emits ONE
+ * document whose root is a `kind: List` with the Secrets under `items`. A
+ * root-only test read that root's `kind` as `List`, found no by-position rule
+ * to apply, and left every value whose key is not a credential word
+ * (`POSTGRES_USER: appuser`, `legacy.conf: <base64>`) in the text that is then
+ * stored in `Draft.source.text` — which has no TTL — and carried out verbatim
+ * by the exporter. A `kind:` nested anywhere is the object's own declaration of
+ * what it is, so it is read wherever it sits: a List's items, a kustomize
+ * wrapper, a Helm hook's rendered output.
+ *
+ * Still deliberately NOT a ConfigMap at any depth — see SECRET_DATA_KEYS.
  */
 function secretDataPairs(doc) {
-  const root = doc.contents;
-  if (!isMap(root)) return [];
-  const kindPair = root.items.find(p => isScalar(p.key) && String(p.key.value) === 'kind');
-  if (!kindPair || !isScalar(kindPair.value) || String(kindPair.value.value).trim() !== 'Secret') return [];
-
   const out = [];
-  for (const name of SECRET_DATA_KEYS) {
-    const pair = root.items.find(p => isScalar(p.key) && String(p.key.value) === name);
-    if (!pair || !isMap(pair.value)) continue;
-    for (const entry of pair.value.items) {
-      if (isScalar(entry.key) && isScalar(entry.value)) out.push(entry);
-    }
-  }
+  visit(doc, {
+    Map(_, node) {
+      if (!declaresKind(node, 'Secret')) return;
+      for (const name of SECRET_DATA_KEYS) {
+        const pair = node.items.find(p => isScalar(p.key) && String(p.key.value) === name);
+        if (!pair || !isMap(pair.value)) continue;
+        for (const entry of pair.value.items) {
+          if (isScalar(entry.key) && isScalar(entry.value)) out.push(entry);
+        }
+      }
+    },
+  });
   return out;
+}
+
+/** Whether a mapping has a scalar `kind:` of its own equal to `kind`. */
+function declaresKind(node, kind) {
+  const pair = node.items.find(p => isScalar(p.key) && String(p.key.value) === 'kind');
+  return !!pair && isScalar(pair.value) && String(pair.value.value).trim() === kind;
 }
 
 /**
