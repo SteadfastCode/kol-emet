@@ -25,6 +25,11 @@
  *   - isDataStoreImage ignored                   -> postgres maps as a Service
  *   - the unknown-kind drop turned into a throw  -> the Ingress refuses the file
  *   - existingByKey lookup removed               -> the re-import test fails
+ *   - resolveHost back to one unconditional
+ *     `.split('.')[0]`                           -> the three external-FQDN
+ *                                                   collision tests fail
+ *   - resolveHost's namespace branch removed     -> `cache.acme` stops being a
+ *                                                   call
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_KUBERNETES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -450,6 +455,83 @@ describe('other manifest shapes', () => {
     assert.deepEqual(edges(items, 'Calls'), ['Caller:api → Callee:cache']);
     // `broker` is nothing in this file, so it is a dependency rather than a call.
     assert.deepEqual(edges(items, 'Depends on'), ['Dependent:api → Dependency:broker.acme.svc']);
+  });
+
+  test('an external FQDN whose first label names a workload is still an External Dependency', () => {
+    // KOL-111. The first label of a host is only a candidate once a cluster-DNS
+    // suffix has come off it; `api.stripe.com` carries none, so the `api`
+    // Deployment standing beside `web` must not capture it.
+    const text = manifest(
+      [deployment('web', 'ghcr.io/acme/web:1'),
+        '          env:',
+        '            - name: PAYMENTS_API',
+        '              value: https://api.stripe.com/v1',
+      ].join('\n'),
+      deployment('api', 'ghcr.io/acme/api:1'),
+    );
+    const { items } = parse(text, {}, 'an external FQDN colliding with a workload name');
+    assert.deepEqual(edges(items, 'Calls'), [], 'stripe is not something in this cluster');
+    assert.deepEqual(edges(items, 'Depends on'), ['Dependent:web → Dependency:api.stripe.com']);
+    assert.equal(entityNamed(items, 'api.stripe.com').proposed.category, 'External Dependency');
+  });
+
+  test('an external FQDN whose first label is the workload reading it is proposed, not swallowed', () => {
+    // The same collision on one workload: addEdge drops a self-edge, so the
+    // old fallback resolved the host to `api`, declined to link it to itself,
+    // and proposed nothing at all for the host.
+    const text = manifest([
+      deployment('api', 'ghcr.io/acme/api:1'),
+      '          env:',
+      '            - name: PAYMENTS_API',
+      '              value: https://api.stripe.com/v1',
+    ].join('\n'));
+    const { items } = parse(text, {}, 'an external FQDN colliding with its own reader');
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['api', 'api.stripe.com']);
+    assert.deepEqual(edges(items, 'Depends on'), ['Dependent:api → Dependency:api.stripe.com']);
+  });
+
+  test('a `service.namespace` host resolves when the namespace is one the file names', () => {
+    // Written without `.svc`, which resolves in-cluster off the pod's search
+    // path. Three sources for the namespace: a `kind: Namespace` object, the
+    // reader's own `metadata.namespace`, and `default`, where an object that
+    // declares no namespace lives.
+    const text = manifest(
+      ['apiVersion: v1', 'kind: Namespace', 'metadata:', '  name: acme'].join('\n'),
+      deployment('cache', 'redis:7', { app: 'cache' }),
+      ['apiVersion: v1', 'kind: Service', 'metadata:', '  name: cache', 'spec:', '  selector:',
+        '    app: cache', '  ports:', '    - port: 6379'].join('\n'),
+      deployment('db', 'postgres:16'),
+      deployment('queue', 'ghcr.io/acme/queue:1'),
+      ['apiVersion: apps/v1', 'kind: Deployment', 'metadata:', '  name: api', '  namespace: team-b',
+        'spec:', '  template:', '    metadata:', '      labels:', '        app: api',
+        '    spec:', '      containers:', '        - name: api', '          image: ghcr.io/acme/api:1',
+        '          env:',
+        '            - name: CACHE_URL', '              value: redis://cache.acme:6379/0',
+        '            - name: DB_URL', '              value: postgres://db.team-b:5432/x',
+        '            - name: QUEUE_URL', '              value: amqp://queue.default:5672',
+      ].join('\n'),
+    );
+    const { items } = parse(text, {}, 'env URLs written as service.namespace');
+    assert.deepEqual(edges(items, 'Calls'), [
+      'Caller:api → Callee:cache',
+      'Caller:api → Callee:db',
+      'Caller:api → Callee:queue',
+    ]);
+    assert.deepEqual(edges(items, 'Depends on'), []);
+  });
+
+  test('a two-label external host is not resolved by a namespace this file never names', () => {
+    const text = manifest(
+      [deployment('web', 'ghcr.io/acme/web:1'),
+        '          env:',
+        '            - name: ERRORS_URL',
+        '              value: https://sentry.io/api/1/store/',
+      ].join('\n'),
+      deployment('sentry', 'getsentry/sentry:24'),
+    );
+    const { items } = parse(text, {}, 'a two-label external host');
+    assert.deepEqual(edges(items, 'Calls'), [], '`io` is not a namespace of this file');
+    assert.deepEqual(edges(items, 'Depends on'), ['Dependent:web → Dependency:sentry.io']);
   });
 
   test('an env value whose host is Kubernetes\' own expansion names nothing, and is skipped', () => {
