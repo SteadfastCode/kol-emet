@@ -1,0 +1,218 @@
+{
+  "item": "KOL-088",
+  "repo": "kol-emet",
+  "mergeSha": "71cce48614f01ca2bd060dac237b27f21512902d",
+  "completedAtUtc": "2026-10-21T13:48:36.469Z",
+  "completeRunId": "2026-10-21T13:09:06.169Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T07:14:09.793Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 42446,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 3056,
+      "contextBytes": 7519,
+      "promptTokens": 3695,
+      "completionTokens": 393,
+      "latencyMs": 29799,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/.env.example"
+      ],
+      "part": null,
+      "bytes": 10795,
+      "contextBytes": 0,
+      "promptTokens": 3671,
+      "completionTokens": 313,
+      "latencyMs": 23701,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/oauth.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 7704,
+      "contextBytes": 0,
+      "promptTokens": 3131,
+      "completionTokens": 395,
+      "latencyMs": 25810,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 4,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/oauth.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 6595,
+      "contextBytes": 5842,
+      "promptTokens": 4326,
+      "completionTokens": 439,
+      "latencyMs": 32370,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 3,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/oauth.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4149,
+      "contextBytes": 8301,
+      "promptTokens": 4303,
+      "completionTokens": 379,
+      "latencyMs": 31754,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 2,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/oauth.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10495,
+      "contextBytes": 0,
+      "promptTokens": 3795,
+      "completionTokens": 277,
+      "latencyMs": 24639,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 2,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 133,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Logging of authorization code and PKCE verifier exposes sensitive information.",
+      "scenario": "An attacker with access to the log can see the authorization code and PKCE verifier, which can be used to impersonate a user or obtain unauthorized access.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code logs the whole form body at line 133, including the authorization code and PKCE verifier."
+      }
+    },
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 148,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Logs all outstanding authorization codes unconditionally.",
+      "scenario": "An attacker with access to the log can obtain valid authorization codes, leading to unauthorized token issuance.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code at line 148 logs `[...authCodes.keys()]`, which includes every outstanding authorization code."
+      }
+    },
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 25,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Memory leak due to unbounded growth of `authCodes` map.",
+      "scenario": "If authorization codes are not redeemed, they will remain in the `authCodes` map indefinitely, leading to a memory leak.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`expiresAt` is only read at redemption, so unredemed codes never expire and grow the map without bound."
+      }
+    },
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 156,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Logging of computed and stored PKCE challenges can expose sensitive information.",
+      "scenario": "If an attacker gains access to the log, they can see the shape of the lock for a code that is still live, which could be used to attempt to guess or brute-force the code.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The old 'computed vs stored, match: false' line was removed entirely rather than tier-gated, exposing the shape of the lock for a code that is still live."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/oauth.js:133"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/src/routes/oauth.js:133"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/oauth.js:25"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces several security vulnerabilities by logging sensitive information and potentially causing a memory leak. · The change introduces logging changes that expose sensitive information and potential memory issues. · The change introduces logging that exposes sensitive information and does not address the issue of unbounded growth in the `authCodes` map. · The change introduces several high-severity security issues related to logging sensitive information. It also includes a medium-severity issue regarding the logging of query and body parameters for GET /authorize and POST /authorize. · Found 4 high and medium severity issues in server/src/routes/oauth.js related to logging sensitive information and unbounded growth of the authCodes map. · Three high-severity issues found in the OAuth implementation: logging sensitive information, unbounded map growth, and potential unauthorized access through logs.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 128817,
+    "completionTokens": 3930
+  },
+  "latencyMs": 384620
+}

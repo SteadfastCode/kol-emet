@@ -1,0 +1,123 @@
+{
+  "item": "KOL-108",
+  "repo": "kol-emet",
+  "mergeSha": "c29c37bd5d240d35a1acf40a31badb8bf7ce57c9",
+  "completedAtUtc": "2026-10-21T23:40:28.976Z",
+  "completeRunId": "2026-10-21T23:33:56.508Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T08:11:54.610Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 24324,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 9270,
+      "contextBytes": 0,
+      "promptTokens": 3215,
+      "completionTokens": 170,
+      "latencyMs": 17472,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8549,
+      "contextBytes": 0,
+      "promptTokens": 2929,
+      "completionTokens": 180,
+      "latencyMs": 14678,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/middleware/errorHandler.js",
+        "server/tests/http/errorShape.test.js"
+      ],
+      "part": null,
+      "bytes": 6629,
+      "contextBytes": 6153,
+      "promptTokens": 4338,
+      "completionTokens": 162,
+      "latencyMs": 18427,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/middleware/errorHandler.js",
+      "line": 163,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "`RAISED_HERE` Symbol is enumerable and can be copied by `Object.assign`, violating the intended security guarantee.",
+      "scenario": "An attacker could create a new Error object, copy properties from a marked error using `Object.assign`, and then publish it, leading to unintended exposure of internal status and code information.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`RAISED_HERE` Symbol is enumerable and can be copied by `Object.assign`."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces a high-severity defect where the `RAISED_HERE` Symbol is enumerable and can be copied by `Object.assign`, violating the intended security guarantee. This could lead to unintended exposure of internal status and code information. · The change introduces a high-severity security issue where the `RAISED_HERE` symbol, used for marking errors, is enumerable and can be copied by `Object.assign` or object spread. This could lead to unauthorized access or manipulation of error handling logic. · The change introduces a high-severity issue where the `RAISED_HERE` symbol is set as non-enumerable but not configurable. This could allow an attacker to redefine the symbol and potentially bypass security checks.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 31286,
+    "completionTokens": 1001
+  },
+  "latencyMs": 125725
+}

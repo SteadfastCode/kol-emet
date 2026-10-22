@@ -1,0 +1,166 @@
+{
+  "item": "KOL-105",
+  "repo": "kol-emet",
+  "mergeSha": "bff791aaeed92a1fb24ea92a0ccae9c34bae2de2",
+  "completedAtUtc": "2026-10-21T22:46:18.876Z",
+  "completeRunId": "2026-10-21T22:04:53.295Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T08:07:08.876Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 36333,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/workspaceSeeder.js",
+        "server/src/models/Workspace.js",
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 11956,
+      "contextBytes": 0,
+      "promptTokens": 3884,
+      "completionTokens": 118,
+      "latencyMs": 17009,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/chat.js"
+      ],
+      "part": null,
+      "bytes": 10188,
+      "contextBytes": 0,
+      "promptTokens": 3542,
+      "completionTokens": 152,
+      "latencyMs": 15306,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/chat.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 9925,
+      "contextBytes": 0,
+      "promptTokens": 3530,
+      "completionTokens": 432,
+      "latencyMs": 28929,
+      "findings": 3,
+      "critiqued": 3,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/chat.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4444,
+      "contextBytes": 8059,
+      "promptTokens": 4081,
+      "completionTokens": 127,
+      "latencyMs": 15780,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/tests/http/chat.test.js",
+      "line": 164,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test setup does not verify that the system prompt is correctly built from the workspace's name and template description.",
+      "scenario": "When a workspace is seeded with a template, the system prompt should include the template's description. However, the current test setup only checks if the system prompt exists but does not validate its content against the expected values.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test setup does not verify that the system prompt is correctly built from the workspace's name and template description."
+      }
+    },
+    {
+      "file": "server/tests/http/chat.test.js",
+      "line": 164,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test setup does not verify that the system prompt correctly handles workspaces with no types.",
+      "scenario": "When a workspace has no entity types, the system prompt should fall back to using only the workspace's name and template description. The current test setup does not include a case where a workspace has no types to ensure this behavior is tested.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The legacy workspace is set up with no entity types, but the test does not verify that the system prompt correctly handles this case."
+      }
+    },
+    {
+      "file": "server/tests/http/chat.test.js",
+      "line": 164,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test setup does not verify that the system prompt correctly handles workspaces with no template.",
+      "scenario": "When a workspace was created before KOL-105 and has no associated template, the system prompt should fall back to using only the workspace's name and entity type names. The current test setup does not include a case where a workspace has no template to ensure this behavior is tested.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The legacy workspace created in the test setup (chat-legacy@example.test) has its template unset and entity types deleted, which should exercise the fallback behavior for workspaces with no associated template."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:233"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "server/tests/http/chat.test.js:120"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One high-severity finding identified. · One high-severity finding related to potential performance issues due to redundant function calls. · The provided diff includes changes to the chat test file to verify that the system prompt is correctly built from the workspace's name, template description, and entity type names. However, the current implementation does not fully cover all scenarios, such as workspaces with no types or no template. · One finding identified in the diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 51924,
+    "completionTokens": 1642
+  },
+  "latencyMs": 199285
+}

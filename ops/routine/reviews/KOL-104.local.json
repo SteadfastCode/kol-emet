@@ -1,0 +1,254 @@
+{
+  "item": "KOL-104",
+  "repo": "kol-emet",
+  "mergeSha": "d70e7ccffb9e15e8f6a40b3fbafd9165b3a34b00",
+  "completedAtUtc": "2026-10-21T22:19:33.234Z",
+  "completeRunId": "2026-10-21T22:04:53.295Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T08:03:49.470Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 66239,
+  "contextFiles": 8,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/openQuestions.js"
+      ],
+      "part": null,
+      "bytes": 5652,
+      "contextBytes": 0,
+      "promptTokens": 2667,
+      "completionTokens": 474,
+      "latencyMs": 30151,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 3,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityDetail.test.js",
+        "client/src/components/EntityDetail.vue"
+      ],
+      "part": null,
+      "bytes": 11109,
+      "contextBytes": 0,
+      "promptTokens": 4179,
+      "completionTokens": 159,
+      "latencyMs": 17367,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityHeader.vue"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3881,
+      "contextBytes": 6343,
+      "promptTokens": 3629,
+      "completionTokens": 138,
+      "latencyMs": 14823,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityHeader.vue"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10220,
+      "contextBytes": 0,
+      "promptTokens": 4090,
+      "completionTokens": 324,
+      "latencyMs": 25357,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 4908,
+      "contextBytes": 7124,
+      "promptTokens": 4220,
+      "completionTokens": 156,
+      "latencyMs": 17551,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/routes/openQuestions.js"
+      ],
+      "part": null,
+      "bytes": 10289,
+      "contextBytes": 1767,
+      "promptTokens": 4037,
+      "completionTokens": 182,
+      "latencyMs": 18219,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/openQuestions.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12050,
+      "contextBytes": 0,
+      "promptTokens": 4292,
+      "completionTokens": 121,
+      "latencyMs": 15965,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/openQuestions.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8560,
+      "contextBytes": 0,
+      "promptTokens": 3322,
+      "completionTokens": 156,
+      "latencyMs": 14621,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/api/openQuestions.js",
+      "line": 150,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `deleteOpenQuestion` function does not handle potential errors when deleting a question.",
+      "scenario": "If the server returns an error response while trying to delete a question, the client will not handle it properly and may leave the UI in an inconsistent state.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `deleteOpenQuestion` function does not include any error handling logic for non-204 responses."
+      }
+    },
+    {
+      "file": "client/src/components/EntityHeader.vue",
+      "line": 102,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Potential security issue: Missing validation of untrusted input for question text.",
+      "scenario": "An attacker could inject malicious content into the question text field, which would be rendered on the screen without proper sanitization. This could lead to Cross-Site Scripting (XSS) attacks if the content is not properly escaped.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not show any validation or escaping of the question text before rendering it, which could lead to XSS."
+      }
+    },
+    {
+      "file": "client/src/components/EntityHeader.vue",
+      "line": 452,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "Potential data inconsistency: The `replaceRow` function does not handle the case where the server returns a question with a different shape than expected.",
+      "scenario": "If the server returns a question object that does not include the `_id`, `question`, or `status` fields, the `asRow` function will throw an error when trying to access these properties. This could lead to data inconsistency in the application.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `replaceRow` function assumes that the server response includes `_id`, `question`, and `status` fields, which are accessed directly without any checks."
+      }
+    },
+    {
+      "file": "server/src/routes/openQuestions.js",
+      "line": 215,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Validators are not run on all fields during update, allowing invalid data to be stored.",
+      "scenario": "An attacker can send a PUT request with an invalid status value (e.g., 'banana') that is not part of the defined enum. The server will accept this value and store it in the database because validators are only run on the paths specified in the update object, not on all fields. This can lead to data integrity issues as the system expects valid statuses.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`runValidators: true` ensures that only the updated fields are validated, not all fields."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/openQuestions.js:1"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "client/src/api/openQuestions.js:107"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The new `openQuestions.js` file introduces several functions for interacting with open questions. However, none of these functions handle potential errors that could occur during server communication, which could lead to inconsistent UI states if not properly managed. · One finding identified: The `canWrite` prop is not used in the template, which means the open-question section will always be writable regardless of its value. · One high-severity security issue found in EntityHeader.vue. · The diff introduces new functionality for managing open questions within the EntityHeader component. However, there are potential issues with handling server responses that do not match the expected shape, which could lead to data loss or inconsistency. · One high-severity finding identified in WikiLayout.vue. · One high-severity issue found: Validators are not run on all fields during update, allowing invalid data to be stored. · One high-severity finding identified in the provided diff. · One high-severity defect found in the test file.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 102938,
+    "completionTokens": 3319
+  },
+  "latencyMs": 388364
+}

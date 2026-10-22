@@ -1,0 +1,302 @@
+{
+  "item": "KOL-102",
+  "repo": "kol-emet",
+  "mergeSha": "c1946a266f82a96ace02f1f3352339cf3abe5b14",
+  "completedAtUtc": "2026-10-21T14:40:55.550Z",
+  "completeRunId": "2026-10-21T13:09:06.169Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T07:25:07.334Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 60248,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/export.js",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 8083,
+      "contextBytes": 0,
+      "promptTokens": 3526,
+      "completionTokens": 136,
+      "latencyMs": 16776,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEvents.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11604,
+      "contextBytes": 0,
+      "promptTokens": 4451,
+      "completionTokens": 317,
+      "latencyMs": 26046,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEvents.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 1291,
+      "contextBytes": 3326,
+      "promptTokens": 2570,
+      "completionTokens": 168,
+      "latencyMs": 12353,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEvents.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11597,
+      "contextBytes": 0,
+      "promptTokens": 4513,
+      "completionTokens": 117,
+      "latencyMs": 16065,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEvents.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 2304,
+      "contextBytes": 3989,
+      "promptTokens": 3051,
+      "completionTokens": 334,
+      "latencyMs": 21959,
+      "findings": 2,
+      "critiqued": 2,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 5738,
+      "contextBytes": 5736,
+      "promptTokens": 4275,
+      "completionTokens": 113,
+      "latencyMs": 15051,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/routes/import.js"
+      ],
+      "part": null,
+      "bytes": 9106,
+      "contextBytes": 0,
+      "promptTokens": 3532,
+      "completionTokens": 176,
+      "latencyMs": 15808,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/import.test.js"
+      ],
+      "part": null,
+      "bytes": 11015,
+      "contextBytes": 0,
+      "promptTokens": 4256,
+      "completionTokens": 149,
+      "latencyMs": 16906,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 1023,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `onStreamEnded` handler does not handle the 'too-many-streams' reason correctly.",
+      "scenario": "When the server ends a stream with the 'too-many-streams' reason, the client should display a message indicating the limit, but the current implementation only shows a generic 'signed out elsewhere' message.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `onStreamEnded` handler does not check for the 'too-many-streams' reason and always displays a generic 'signed out elsewhere' message."
+      }
+    },
+    {
+      "file": "client/src/composables/useEvents.js",
+      "line": 185,
+      "severity": "medium",
+      "confidence": 0.9,
+      "summary": "The `onFrame` function does not handle the case where the payload is missing or null.",
+      "scenario": "If a frame arrives without any data, the `JSON.parse(e.data)` call will throw an error, and the current implementation will log a message but not handle it further. This could lead to unexpected behavior if other parts of the code rely on the payload being present.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `onFrame` function does not handle the case where the payload is missing or null."
+      }
+    },
+    {
+      "file": "client/src/composables/useEvents.js",
+      "line": 201,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `handleError` function does not handle the case where the `onStreamEnded` handler throws an error.",
+      "scenario": "If the `onStreamEnded` handler throws an error, it will be caught and logged to the console, but the current implementation does not handle this scenario. This could lead to unexpected behavior if other parts of the code rely on the `onStreamEnded` handler being executed successfully.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `handleError` function catches and logs errors thrown by the `onStreamEnded` handler, but it does not handle this scenario explicitly."
+      }
+    },
+    {
+      "file": "client/src/composables/useEvents.test.js",
+      "line": 298,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The default log tier does not carry no payload as expected.",
+      "scenario": "When a frame is logged at the default tier, it includes the entire body of a private entity, which should not be logged for security reasons.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test case logs the entire body of a private entity, which contradicts the expectation that the default log tier carries no payload."
+      }
+    },
+    {
+      "file": "client/src/composables/useEvents.test.js",
+      "line": 310,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the `loadEntities` function is called when a `draft:applied` or `workspace:imported` event is received.",
+      "scenario": "When a `draft:applied` or `workspace:imported` event is broadcast, the client should call `loadEntities` to refresh its state. However, the test does not check if this function is called.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the `loadEntities` function is called when a `draft:applied` or `workspace:imported` event is received."
+      }
+    },
+    {
+      "file": "client/src/composables/useEvents.test.js",
+      "line": 310,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that a toast notification is shown when a `draft:applied` or `workspace:imported` event is received.",
+      "scenario": "When a `draft:applied` or `workspace:imported` event is broadcast, the client should show a toast notification to inform the user of the change. However, the test does not check if this notification is displayed.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that a toast notification is shown when a `draft:applied` or `workspace:imported` event is received."
+      }
+    },
+    {
+      "file": "docs/api.md",
+      "line": 859,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `workspace:imported` frame is not mentioned in the table of frames.",
+      "scenario": "A developer might miss that the `workspace:imported` frame exists and its purpose, leading to confusion or incorrect implementation.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`workspace:imported` frame is described but not listed in the table of frames."
+      }
+    },
+    {
+      "file": "server/src/routes/import.js",
+      "line": 94,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `broadcast` function is called with an object that includes the actor's label and type, but it is not clear if this information is being used correctly or securely.",
+      "scenario": "If the actor's label or type contains sensitive information, broadcasting it to all clients in the workspace could lead to a security risk. Additionally, if the actor's label or type is not properly validated, it could lead to unexpected behavior or errors.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The code snippet provided does not show how the `broadcast` function handles the actor's label and type, nor does it indicate if there are any validation mechanisms in place for these fields."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/composables/useEvents.js:201"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "client/src/composables/useEvents.test.js:310"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One medium severity finding identified. · The diff introduces new functionality for handling server-sent events (SSE) in a client application, including logging and error handling. However, there are potential issues with how payloads are handled and how errors are managed. · The `handleError` function does not handle all possible error reasons from the server, which can lead to the client not retrying connections or notifying users of errors. · One real defect found in the change. · The new tests for `useEvents.js` do not verify that the `loadEntities` function is called and that a toast notification is shown when a `draft:applied` or `workspace:imported` event is received. These are critical functionalities that should be tested to ensure proper behavior. · One finding related to documentation consistency. · The change introduces new functionality for live sync and error handling, but there are potential security concerns related to broadcasting sensitive information about the actor. · The change introduces a new test suite for live sync events but misses adding the necessary broadcast call in the `POST /import` route.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 97619,
+    "completionTokens": 3008
+  },
+  "latencyMs": 348734
+}

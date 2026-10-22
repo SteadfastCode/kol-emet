@@ -1,0 +1,475 @@
+{
+  "item": "KOL-089",
+  "repo": "kol-emet",
+  "mergeSha": "32b91996210e41cd4480c9c0bf84f22febdac56d",
+  "completedAtUtc": "2026-10-21T20:28:49.915Z",
+  "completeRunId": "2026-10-21T20:09:06.321Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T07:36:27.038Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 137942,
+  "contextFiles": 15,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/drafts.js",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/generator/BraindumpInput.test.js"
+      ],
+      "part": null,
+      "bytes": 7862,
+      "contextBytes": 0,
+      "promptTokens": 3294,
+      "completionTokens": 149,
+      "latencyMs": 16537,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/generator/BraindumpInput.vue",
+        "client/src/lib/importFile.js"
+      ],
+      "part": null,
+      "bytes": 8162,
+      "contextBytes": 0,
+      "promptTokens": 3338,
+      "completionTokens": 119,
+      "latencyMs": 12520,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 7912,
+      "contextBytes": 0,
+      "promptTokens": 3322,
+      "completionTokens": 147,
+      "latencyMs": 13856,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 10929,
+      "contextBytes": 0,
+      "promptTokens": 3816,
+      "completionTokens": 132,
+      "latencyMs": 14769,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12126,
+      "contextBytes": 0,
+      "promptTokens": 4446,
+      "completionTokens": 111,
+      "latencyMs": 15935,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12094,
+      "contextBytes": 0,
+      "promptTokens": 4465,
+      "completionTokens": 119,
+      "latencyMs": 16429,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 7254,
+      "contextBytes": 0,
+      "promptTokens": 3188,
+      "completionTokens": 375,
+      "latencyMs": 24574,
+      "findings": 4,
+      "critiqued": 4,
+      "dropped": 4,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/redactSecrets.js",
+        "server/src/models/Draft.js"
+      ],
+      "part": null,
+      "bytes": 9894,
+      "contextBytes": 0,
+      "promptTokens": 3857,
+      "completionTokens": 130,
+      "latencyMs": 14709,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/drafts.js",
+        "server/tests/fixtures/kubernetes.yaml"
+      ],
+      "part": null,
+      "bytes": 6740,
+      "contextBytes": 5383,
+      "promptTokens": 4509,
+      "completionTokens": 120,
+      "latencyMs": 16413,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/kubernetesDraft.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12080,
+      "contextBytes": 0,
+      "promptTokens": 4341,
+      "completionTokens": 122,
+      "latencyMs": 16120,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/kubernetesDraft.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8673,
+      "contextBytes": 0,
+      "promptTokens": 3554,
+      "completionTokens": 121,
+      "latencyMs": 13482,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12042,
+      "contextBytes": 0,
+      "promptTokens": 4358,
+      "completionTokens": 109,
+      "latencyMs": 15369,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12117,
+      "contextBytes": 0,
+      "promptTokens": 4454,
+      "completionTokens": 116,
+      "latencyMs": 16305,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 5075,
+      "contextBytes": 7055,
+      "promptTokens": 4455,
+      "completionTokens": 155,
+      "latencyMs": 18166,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/redactSecrets.test.js"
+      ],
+      "part": null,
+      "bytes": 6054,
+      "contextBytes": 6011,
+      "promptTokens": 4413,
+      "completionTokens": 132,
+      "latencyMs": 16940,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "client/src/components/generator/BraindumpInput.test.js",
+      "line": 67,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The test for Kubernetes manifest import does not verify that the draft's stored text has redacted secrets.",
+      "scenario": "A Kubernetes manifest containing a Secret with `stringData` is imported, but the test does not check if the secret values are removed from the draft's stored text.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test for Kubernetes manifest import does not verify that the draft's stored text has redacted secrets."
+      }
+    },
+    {
+      "file": "client/src/lib/importFile.js",
+      "line": 67,
+      "severity": "medium",
+      "confidence": 0.8,
+      "summary": "The `topLevelKeys` function does not handle multi-document YAML correctly.",
+      "scenario": "When a Kubernetes manifest contains multiple documents separated by '---', the function only scans the first document and may miss keys in subsequent documents, leading to incorrect producer determination.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `topLevelKeys` function does not handle multi-document YAML correctly."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 123,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Redaction of Kubernetes secrets may fail if `stringData` contains base64-encoded values.",
+      "scenario": "If a Kubernetes Secret's `stringData` field contains base64-encoded sensitive information, the current redaction logic might not properly decode and redact these values before storing them in the draft. This could lead to sensitive data being exposed in the stored text.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The finding cites a potential issue with base64-encoded values in `stringData` fields of Kubernetes Secrets not being properly decoded and redacted."
+      }
+    },
+    {
+      "file": "kol_emet_spec.md",
+      "line": 501,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `redactSecrets` function does not handle Kubernetes' two shapes correctly.",
+      "scenario": "When parsing a Kubernetes manifest, the `redactSecrets` function may incorrectly redact or store verbatim environment variable values and Secret data. This could lead to sensitive information being exposed in the draft's stored text.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The finding cites that `redactSecrets` had to learn two Kubernetes shapes, and this is why the item named it. Specifically, it mentions that a manifest's env values were being stored verbatim, quoted as evidence and carried out by the exporter."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 247,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Potential infinite loop in alias resolution.",
+      "scenario": "If an alias chain is circular or exceeds the maximum depth (16), the `deref` function may not handle it correctly, leading to an infinite loop.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The `deref` function has a hardcoded limit of 16 iterations to prevent alias bombs from expanding, but if an alias chain is circular or exceeds this depth, it may not handle it correctly, leading to an infinite loop."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 248,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "Potential security vulnerability: Secrets are not redacted in the draft's stored text.",
+      "scenario": "If a Kubernetes manifest contains a Secret with `stringData`, its values may be exposed in the draft's stored text, leading to potential data leakage.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code does not handle redaction of Secrets' stringData."
+      }
+    },
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 238,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The `redactSecrets` function does not handle nested secrets in Kubernetes manifests.",
+      "scenario": "If a Kubernetes manifest contains a Secret with nested structures (e.g., a JSON object or array), the current implementation may fail to redact all sensitive information, potentially exposing sensitive data.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The code does not show how `redactSecrets` handles nested secrets in Kubernetes manifests."
+      }
+    },
+    {
+      "file": "server/tests/http/kubernetesDraft.test.js",
+      "line": 23,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the draft's stored text does not contain any secrets.",
+      "scenario": "If a Kubernetes manifest contains sensitive information in its `Secret` objects, the test does not check if this information is redacted before being stored in the draft.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not verify that the draft's stored text does not contain any secrets."
+      }
+    },
+    {
+      "file": "server/tests/unit/kubernetes.test.js",
+      "line": 180,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The test does not verify that the redaction of secrets is effective.",
+      "scenario": "If a Secret's values are not properly redacted before being stored in the draft, sensitive information could be exposed.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test does not include any assertions to check if the `redactSecrets` function effectively removes secret values from the parsed Kubernetes YAML."
+      }
+    },
+    {
+      "file": "server/tests/unit/kubernetes.test.js",
+      "line": 450,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The test case 'a workload with no name, and one with no containers, each say so' does not verify that the drop reasons are correctly associated with the respective workloads.",
+      "scenario": "When parsing a YAML file containing a Deployment with no metadata.name and a StatefulSet with no containers, the test asserts that the drop reasons are correct but does not check which drop reason corresponds to which workload.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The test case 'a workload with no name, and one with no containers, each say so' does not verify that the drop reasons are correctly associated with the respective workloads."
+      }
+    },
+    {
+      "file": "server/tests/unit/redactSecrets.test.js",
+      "line": 451,
+      "severity": "high",
+      "confidence": 0.9,
+      "summary": "Redaction of Kubernetes secrets is not fully implemented.",
+      "scenario": "The test cases for redacting Kubernetes manifests do not cover all possible scenarios, such as nested structures or different data types within Secrets and ConfigMaps. This could lead to sensitive information being leaked in the draft's stored text.",
+      "critique": {
+        "verdict": "unsure",
+        "reason": "The finding mentions potential scenarios not covered by the test cases, but without seeing the implementation details of `redactSecrets` or how it handles nested structures and different data types within Secrets and ConfigMaps, it's unclear if these scenarios are actually unsupported."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/drafts.js:291"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/src/lib/producers/kubernetes.js:123"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "One finding identified: The test for Kubernetes manifest import does not verify that the draft's stored text has redacted secrets. · One potential defect found. · One high-severity finding identified. · One high-severity finding identified. · One potential defect found. · One high-severity finding identified. · The Kubernetes producer has several potential issues related to data processing and updates. These include potential infinite loops, missing relationship and entity updates, and missing entity creations. · One high-severity finding identified. · One high-severity finding identified in the diff. · One high-severity finding identified. · One high-severity finding identified. · One high-severity finding identified. · One high-severity finding identified. · One finding identified in server/tests/unit/kubernetes.test.js · One high-severity finding identified.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 187912,
+    "completionTokens": 5042
+  },
+  "latencyMs": 679437
+}

@@ -1,0 +1,100 @@
+{
+  "item": "KOL-107",
+  "repo": "kol-emet",
+  "mergeSha": "ec33339c157d9c689ed2d6ab4383bae080c6f1e3",
+  "completedAtUtc": "2026-10-21T23:22:14.325Z",
+  "completeRunId": "2026-10-21T22:04:53.295Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T08:09:48.798Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 13281,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/src/lib/graphImporter.js",
+        "server/tests/http/import.test.js"
+      ],
+      "part": null,
+      "bytes": 8192,
+      "contextBytes": 0,
+      "promptTokens": 3212,
+      "completionTokens": 1024,
+      "latencyMs": 59670,
+      "findings": 0,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": false,
+      "retry": false,
+      "error": "output truncated at 1024 tokens"
+    },
+    {
+      "files": [
+        "server/tests/unit/graphImporter.test.js"
+      ],
+      "part": null,
+      "bytes": 5089,
+      "contextBytes": 8136,
+      "promptTokens": 4325,
+      "completionTokens": 242,
+      "latencyMs": 22532,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/graphImporter.js",
+      "line": 475,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "A raw TypeError is thrown when entityTypes holds a non-object, resulting in a 500 INTERNAL error instead of the expected 400 MALFORMED_DOCUMENT.",
+      "scenario": "When an import document contains invalid entityTypes (e.g., null, number, or bare name), the code throws a TypeError at line 475. This error is then passed to next(err) in server/src/routes/import.js, resulting in a 500 INTERNAL error response instead of a 400 MALFORMED_DOCUMENT with a specific field path.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code reads `row.name` off every row before the checks run, leading to a raw TypeError when entityTypes holds a non-object."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change aims to fix an issue where invalid entityTypes in import documents cause a raw TypeError, leading to a 500 INTERNAL error instead of the expected 400 MALFORMED_DOCUMENT. The solution involves validating entityTypes before anything reads them, ensuring that malformed rows are refused with the correct error code and field path.",
+  "errors": [
+    "output truncated at 1024 tokens"
+  ],
+  "usage": {
+    "promptTokens": 16184,
+    "completionTokens": 1436
+  },
+  "latencyMs": 115959
+}

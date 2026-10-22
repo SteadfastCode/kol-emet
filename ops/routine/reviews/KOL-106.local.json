@@ -1,0 +1,67 @@
+{
+  "item": "KOL-106",
+  "repo": "kol-emet",
+  "mergeSha": "ce09da7f705bc90080d28d1e6f19cdd147e0daf4",
+  "completedAtUtc": "2026-10-21T23:08:29.713Z",
+  "completeRunId": "2026-10-21T22:04:53.295Z",
+  "reviewRunId": "2026-10-22T07:01:09.442Z",
+  "reviewedAtUtc": "2026-10-22T08:07:52.773Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 8867,
+  "contextFiles": 1,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "server/tests/http/errorShape.test.js"
+      ],
+      "part": null,
+      "bytes": 8867,
+      "contextBytes": 0,
+      "promptTokens": 3384,
+      "completionTokens": 157,
+      "latencyMs": 17306,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change introduces a recursive file walk for the stored-failure sweep but fails to handle the 'src/lib/producers' directory correctly, potentially allowing caught messages to be published without detection.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 10094,
+    "completionTokens": 311
+  },
+  "latencyMs": 43844
+}
