@@ -79,7 +79,7 @@
     "KOL-113": {
       "order": 5,
       "title": "The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-113",

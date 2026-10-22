@@ -76,18 +76,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…**
-  Found by the grader of KOL-103 (high, server/src/routes/chat.js:208). The write floor is
-  bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated
-  premise that "asking the assistant a question reads the graph and writes nothing to it"
-  (app.js:176-180, docs/api.md, Decision Log). On the Responses-API path (any provider with
-  `responsesApi: true` plus `MCP_SERVER_URL` set, app.js-adjacent chat.js:528) the route hands the
-  model this deployment's own MCP server via `mcpToolDef()` with `require_approval: 'never'` and
-  no `allowed_tools` restriction, authenticated with `MCP_BEARER_TOKEN`. The ten write tools
-  therefore run with the role of `Settings.mcpUserId` (normally an owner/editor), not the
-  caller's, so a viewer can say "create/rename/delete this entity" in chat and the write lands —
-  the same hole the item identified for the direct connector, left open for chat's relay to it,
-  and untested by the new MCP group.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
@@ -116,6 +104,18 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…** (routine 2026-10-22, 0270e6d)
+  Found by the grader of KOL-103 (high, server/src/routes/chat.js:208). The write floor is
+  bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated
+  premise that "asking the assistant a question reads the graph and writes nothing to it"
+  (app.js:176-180, docs/api.md, Decision Log). On the Responses-API path (any provider with
+  `responsesApi: true` plus `MCP_SERVER_URL` set, app.js-adjacent chat.js:528) the route hands the
+  model this deployment's own MCP server via `mcpToolDef()` with `require_approval: 'never'` and
+  no `allowed_tools` restriction, authenticated with `MCP_BEARER_TOKEN`. The ten write tools
+  therefore run with the role of `Settings.mcpUserId` (normally an owner/editor), not the
+  caller's, so a viewer can say "create/rename/delete this entity" in chat and the write lands —
+  the same hole the item identified for the direct connector, left open for chat's relay to it,
+  and untested by the new MCP group.
 - [x] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…** (routine 2026-10-22, 2e77a7a)
   Found by the grader of KOL-102 (high, client/src/composables/useEvents.js:95). Treating
   `session-ended` as a permanent stop breaks "Sign out everywhere else": `POST
