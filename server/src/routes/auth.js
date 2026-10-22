@@ -1206,16 +1206,23 @@ router.post('/sessions/revoke-all', requireActor, async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Every live /events stream this account holds in this process, the
-    // caller's own included. A revoked session is not noticed until its browser
-    // next asks the API for something, and an SSE stream has already asked: it
-    // would go on receiving this workspace's entity documents until the
-    // broadcaster's sweep found the session gone from the store (KOL-062). The
-    // caller's client reconnects within seconds and is accepted, because its
-    // session was re-stamped above.
-    const closedStreams = closeStreamsForUser(userId, REVOKE_SOURCE);
+    // Every live /events stream this account holds in this process *except the
+    // caller's own*. A revoked session is not noticed until its browser next
+    // asks the API for something, and an SSE stream has already asked: it would
+    // go on receiving this workspace's entity documents until the broadcaster's
+    // sweep found the session gone from the store (KOL-062).
+    //
+    // The exception is not a nicety (KOL-112). The frame that closes a stream
+    // here is `session-ended`, which the browser treats as permanent — it stops
+    // reconnecting for the life of the tab and says the account was signed out
+    // elsewhere. This route promises the opposite to the browser it is called
+    // from ("This browser stays signed in"), and nothing about that session
+    // changed: it was re-stamped above and is as good as it was a line ago. So
+    // its streams are left alone rather than closed in the hope that the
+    // reconnect this file used to assume would happen ever did.
+    const closedStreams = closeStreamsForUser(userId, REVOKE_SOURCE, { exceptSessionId: req.sessionID });
 
-    logSessions('light', `user ${userId}: every session issued before ${new Date(revokedAt).toISOString()} is revoked, re-authenticated with ${byPassword ? 'the password' : 'a passkey'}; session ${req.sessionID} was re-stamped and stays signed in, and ${closedStreams} live /events stream(s) were closed (source: ${REVOKE_SOURCE})`);
+    logSessions('light', `user ${userId}: every session issued before ${new Date(revokedAt).toISOString()} is revoked, re-authenticated with ${byPassword ? 'the password' : 'a passkey'}; session ${req.sessionID} was re-stamped, stays signed in and keeps its live /events stream(s), and ${closedStreams} other live /events stream(s) were closed (source: ${REVOKE_SOURCE})`);
     res.json({ ok: true, revokedAt: new Date(revokedAt).toISOString() });
   } catch (err) {
     logSessions('light', `${REVOKE_SOURCE} failed for user ${userId}: ${err.message}`);

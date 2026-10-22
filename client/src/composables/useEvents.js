@@ -90,6 +90,15 @@ export function reconnectDelay(attempt, random = Math.random) {
  * fetch the same refusal forever. Anything else the server sends is a planned
  * end (a deploy's `server-restarting`) or a code this client does not know
  * yet — retried, because a stop that is wrong leaves a tab permanently blind.
+ *
+ * That last clause is a contract the *server* has to keep, and it was broken
+ * once (KOL-112): `POST /auth/sessions/revoke-all` closed every stream the
+ * account held, the caller's own included, assuming this file would reconnect.
+ * It does not, by design — so the tab that asked went blind for good and was
+ * told it had been signed out in another window while the same screen said it
+ * was still signed in. `session-ended` now reaches a stream only when that
+ * stream's session really is finished (`server/src/lib/broadcaster.js`); a
+ * server that wants a stream to come back sends any other code.
  */
 export const STOP_REASONS = Object.freeze({
   'session-ended': () =>

@@ -46,8 +46,13 @@
  *   `Set` of live ids and the module keeps no store or Mongo dependency.
  *
  *   `closeStreamsForSession` / `closeStreamsForUser`: the same drop, now, for
- *   the two routes that know a session has ended before the next sweep would
- *   — `POST /auth/logout` and `DELETE /auth/account`.
+ *   the three routes that know a session has ended before the next sweep would
+ *   — `POST /auth/logout`, `DELETE /auth/account` and
+ *   `POST /auth/sessions/revoke-all`. The last of those ends every session
+ *   *but its own*, so `closeStreamsForUser` takes an `exceptSessionId`: the
+ *   frame it sends is `session-ended`, which the browser reads as permanent,
+ *   and sending it to a session that stays signed in left that tab blind for
+ *   good (KOL-112).
  *
  * Fake `res` objects rather than real sockets: the function reads exactly one
  * thing off `res` (`write`), and "the socket is gone" is trivially expressible
@@ -85,6 +90,10 @@
  *   - Have the sweep treat a thrown resolver as "session gone" and the
  *     fail-open test fails; have it check connections with no session id and
  *     the bearer test fails.
+ *   - Ignore `exceptSessionId` and the revocation test fails; spare by
+ *     `client.sessionId !== spared` without the `spared !== null` guard and
+ *     the bearer-stream case fails, because `null === null` would keep a
+ *     connector's stream open on an account deletion.
  *
  * Deliberately not covered: the keep-alive interval's own *timer* (the sweep it
  * runs is called directly here; asserting the 30-second tick would cost the
@@ -700,6 +709,52 @@ describe('closing streams for a session or a user', () => {
     assert.equal(one.ended, true);
     assert.equal(two.ended, true);
     assert.equal(someoneElse.ended, false, 'another user\'s stream was closed');
+  });
+
+  test('exceptSessionId keeps the session that asked, and only that one', async () => {
+    // POST /auth/sessions/revoke-all: every other device is signed out, and the
+    // browser that asked is told so on screen that it stays signed in. Its
+    // stream carries `session-ended` if it is closed here, which that browser
+    // never reconnects after — so it must not be closed (KOL-112).
+    const workspaceId = uniqueWs();
+    const caller = connect('tab-1', workspaceId, { userId: 'u1', sessionId: 'sid-1' });
+    // A second tab of the same browser: same session, so it stays too.
+    const sameBrowser = connect('tab-2', workspaceId, { userId: 'u1', sessionId: 'sid-1' });
+    const revoked = connect('tab-3', workspaceId, { userId: 'u1', sessionId: 'sid-2' });
+    const someoneElse = connect('tab-4', workspaceId, { userId: 'u2', sessionId: 'sid-3' });
+
+    const closed = closeStreamsForUser('u1', 'POST /auth/sessions/revoke-all', { exceptSessionId: 'sid-1' });
+
+    assert.equal(closed, 1, 'only the revoked session\'s stream should have been closed');
+    assert.equal(revoked.ended, true);
+    assert.deepEqual(errors(revoked), [{ error: 'session-ended' }]);
+    assert.equal(caller.ended, false, 'the session that asked was signed out of its own live channel');
+    assert.equal(sameBrowser.ended, false, 'a second tab of the calling session was closed');
+    assert.equal(someoneElse.ended, false, 'another user\'s stream was closed');
+
+    // And the kept streams are still live, not merely unclosed: live sync going
+    // dead silently is the whole symptom this defends.
+    broadcast('entity:created', { _id: 'e1' }, { workspaceId });
+    assert.equal(frames(caller).filter((f) => f.event === 'entity:created').length, 1,
+      'the calling session stopped receiving updates');
+    assert.equal(frames(sameBrowser).filter((f) => f.event === 'entity:created').length, 1);
+    assert.equal(frames(revoked).filter((f) => f.event === 'entity:created').length, 0,
+      'a closed stream received a broadcast');
+  });
+
+  test('a stream with no session id is closed, spared session or not', async () => {
+    // `null === null` must not read as "this is the session that asked". A
+    // stream can carry a user and no session id, and an account deletion —
+    // which spares nothing — has to reach it like every other.
+    const unsessioned = connect('tab-1', uniqueWs(), { userId: 'u1', sessionId: null });
+    assert.equal(closeStreamsForUser('u1', 'DELETE /auth/account'), 1,
+      'a stream with no session id was spared by a call that spares nothing');
+    assert.equal(unsessioned.ended, true);
+
+    const alongside = connect('tab-2', uniqueWs(), { userId: 'u1', sessionId: null });
+    assert.equal(closeStreamsForUser('u1', 'POST /auth/sessions/revoke-all', { exceptSessionId: 'sid-1' }), 1,
+      'a stream with no session id was spared by a call sparing a different one');
+    assert.equal(alongside.ended, true);
   });
 
   test('an id matching nothing, or a missing one, is a no-op', () => {
