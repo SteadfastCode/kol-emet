@@ -82,11 +82,24 @@ Two routes ask for `owner` instead and answer **403 `NOT_WORKSPACE_OWNER`**: `PA
 it, and a saved conversation is the asker's own row). A floor on who may *spend* the workspace's AI
 allowance is a pricing decision, not a permission one, and has not been made.
 
+"Writes nothing to it" is enforced, not assumed (KOL-113). On the Responses-API path `POST /chat`
+executes no tools itself: it hands the provider this deployment's own `/mcp` endpoint with
+`MCP_BEARER_TOKEN` and `require_approval: 'never'`. That token is the *connector's* identity — the
+tools behind it act as `Settings.mcpUserId` — so an unrestricted relay was this gate, bypassed one
+mount over: a viewer could ask the assistant to create or delete an entity and the write landed.
+Chat's relay is therefore a **read-only MCP session**
+([`lib/mcpScope.js`](../server/src/lib/mcpScope.js)): `allowed_tools` is `MCP_READ_TOOLS`, and the
+request carries `x-kol-emet-mcp-scope: read`, which `/mcp` honours by registering **no write tools
+on that session at all** — the half that does not depend on a provider honouring `allowed_tools`.
+Restoring write access through chat needs the relay to carry the *caller's* identity rather than the
+connector's, not the removal of this.
+
 `/mcp` never passes through this middleware — it has its own bearer gate and each tool scopes
 itself — so the same floor is enforced there by
 [`lib/mcpWorkspace.js`](../server/src/lib/mcpWorkspace.js): read tools call `mcpWorkspaceId()`, the
 ten write tools call `mcpWriteWorkspaceId()`, which refuses below `editor` with a tool error naming
-the role it read. `/bridge/*` carries its own token and no workspace role.
+the role it read. A session opened with `x-kol-emet-mcp-scope: read` never registers those ten at
+all (see chat's relay, above). `/bridge/*` carries its own token and no workspace role.
 
 `WORKSPACE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`) names every refusal with
 the role read, the role required and the request it came from.
@@ -97,7 +110,7 @@ Mount points and their guards:
 |--------|-------|------|-------|
 | `/auth` | mixed | none | Login/registration; individual routes guard themselves |
 | `/templates` | none | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
-| `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace |
+| `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace. A session opened with `x-kol-emet-mcp-scope: read` (chat's relay) registers the four read tools only |
 | `/` (oauth) | mixed | none | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | none | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
 | `/workspaces` | `requireAuth` | any member | The caller's memberships, and which one this session acts in. Deliberately **no** `resolveWorkspace`: a membership list is not content in one workspace, and the choice must not be gated on the role held in the workspace being left. Mounted ahead of the `/` changelog catch-all, whose `resolveWorkspace` would otherwise 403 a caller with no membership at all |
@@ -534,7 +547,7 @@ and timestamps only — never an email or a credential. The client logs its own 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/chat/providers` | Providers whose API key is configured on the server (`id`, `name`, `models`, `defaultModel`) |
-| POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Persists to the conversation when `conversationId` is supplied — which must belong to the caller **and to the workspace the request acted in**, or it is `404 Conversation not found` before the stream opens and before anything is billed (KOL-091). The system prompt is built from the caller's memories *in that workspace* only. |
+| POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Tools are read-only on both paths — on the Responses-API path the relayed `/mcp` session carries no write tools (KOL-113; see [Roles](#roles)). Persists to the conversation when `conversationId` is supplied — which must belong to the caller **and to the workspace the request acted in**, or it is `404 Conversation not found` before the stream opens and before anything is billed (KOL-091). The system prompt is built from the caller's memories *in that workspace* only. |
 
 Providers are defined in [`lib/aiProviders.js`](../server/src/lib/aiProviders.js) and reached through
 an OpenAI-compatible client. Currently registered: **OpenRouter** (primary), the native **Claude

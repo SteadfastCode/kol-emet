@@ -35,6 +35,7 @@ import { extractAndSaveMemories, loadMemories } from '../lib/memoryExtractor.js'
 import { personalScope } from '../lib/personalScope.js';
 import { checkBudget, recordSpend } from '../lib/usageMeter.js';
 import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
+import { MCP_READ_SCOPE, MCP_READ_TOOLS, MCP_SCOPE_HEADER } from '../lib/mcpScope.js';
 
 const router = Router();
 
@@ -183,12 +184,36 @@ function buildSystemPrompt(memories = [], workspace = {}) {
 
 // ─── Responses API path (MCP tools) ──────────────────────────────────────────
 
+/**
+ * The deployment's own MCP endpoint, as a tool the provider calls for us —
+ * **restricted to the read tools** (KOL-113).
+ *
+ * This hands a third party a credential into tenant content with
+ * `require_approval: 'never'`, and `MCP_BEARER_TOKEN` is the *connector's*
+ * identity: every tool behind it resolves its workspace and its role from
+ * `Settings.mcpUserId`, not from whoever is chatting. Unrestricted, that made
+ * `POST /chat` a way around the write floor — a viewer refused every write by
+ * `requireWriteRole` could ask the assistant to create or delete an entity and
+ * the write landed with the MCP user's role. Both halves of the restriction are
+ * here: `allowed_tools`, which is the provider's to honour, and the scope
+ * header, which routes/mcp.js honours by registering no write tools on this
+ * session at all. See lib/mcpScope.js for why read-only is the floor until the
+ * relay can carry the caller's own identity.
+ */
 function mcpToolDef() {
+  // Light tier: the relay's restriction is otherwise invisible — a write that
+  // did not happen leaves nothing behind, and neither does a read tool chat
+  // silently stopped offering because it is missing from MCP_READ_TOOLS.
+  chatLog('light', `responses-api relay offering ${MCP_READ_TOOLS.length} read-only MCP tool(s) — ${MCP_READ_TOOLS.join(', ')} (source: MCP_READ_TOOLS in lib/mcpScope.js, sent as allowed_tools and ${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE})`);
   return {
     type: 'mcp',
     server_label: 'kol-emet',
     server_url: process.env.MCP_SERVER_URL,
-    headers: { Authorization: `Bearer ${process.env.MCP_BEARER_TOKEN}` },
+    headers: {
+      Authorization: `Bearer ${process.env.MCP_BEARER_TOKEN}`,
+      [MCP_SCOPE_HEADER]: MCP_READ_SCOPE,
+    },
+    allowed_tools: [...MCP_READ_TOOLS],
     require_approval: 'never',
   };
 }
