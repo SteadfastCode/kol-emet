@@ -76,15 +76,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…**
-  Found by the grader of KOL-102 (high, client/src/composables/useEvents.js:95). Treating
-  `session-ended` as a permanent stop breaks "Sign out everywhere else": `POST
-  /auth/revoke-other-sessions` calls `closeStreamsForUser(userId)`, which closes the caller's OWN
-  stream with `{ error: 'session-ended' }` (server/src/routes/auth.js:1216, whose comment
-  explicitly relies on "the caller's client reconnects within seconds and is accepted, because its
-  session was re-stamped above"). The still-signed-in tab now sets `stopped = true`, never
-  reconnects, and toasts "you were signed out in another window" — live sync is dead for the rest
-  of that tab's life and the message is false.
 - [ ] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…**
   Found by the grader of KOL-103 (high, server/src/routes/chat.js:208). The write floor is
   bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated
@@ -125,6 +116,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…** (routine 2026-10-22, 2e77a7a)
+  Found by the grader of KOL-102 (high, client/src/composables/useEvents.js:95). Treating
+  `session-ended` as a permanent stop breaks "Sign out everywhere else": `POST
+  /auth/revoke-other-sessions` calls `closeStreamsForUser(userId)`, which closes the caller's OWN
+  stream with `{ error: 'session-ended' }` (server/src/routes/auth.js:1216, whose comment
+  explicitly relies on "the caller's client reconnects within seconds and is accepted, because its
+  session was re-stamped above"). The still-signed-in tab now sets `stopped = true`, never
+  reconnects, and toasts "you were signed out in another window" — live sync is dead for the rest
+  of that tab's life and the message is false.
 - [x] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…** (routine 2026-10-22, fb59979)
   Found by the grader of KOL-089 (medium, server/src/lib/producers/kubernetes.js:483). The
   host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS

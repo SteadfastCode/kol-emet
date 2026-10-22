@@ -79,7 +79,7 @@
     "KOL-112": {
       "order": 5,
       "title": "Treating session-ended as a permanent stop breaks \"Sign out everywhere else\": POST /auth/revoke-o…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-112",
