@@ -76,7 +76,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…**
+- [x] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…**
   Found by the grader of KOL-103 (high, server/src/routes/chat.js:208). The write floor is
   bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated
   premise that "asking the assistant a question reads the graph and writes nothing to it"
