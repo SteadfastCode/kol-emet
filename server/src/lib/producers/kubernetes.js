@@ -241,6 +241,11 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   // have a `kind:` in it — would propose nonsense from a file the person
   // picked by mistake.
   const objects = [];
+  // Every namespace this file names, which is what tells a `service.namespace`
+  // host apart from an external two-label one (resolveHost). `default` is in it
+  // from the start because that is where an object declaring no namespace
+  // lives, so `postgres.default` names the same thing a bare `postgres` does.
+  const namespaces = new Set(['default']);
   for (let i = 0; i < docs.length; i++) {
     const doc = docs[i];
     const read = readerFor(doc);
@@ -251,6 +256,9 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
     const apiVersion = (read.scalarString(read.pairOf(root, 'apiVersion')?.value) ?? '').trim();
     if (!kind || !apiVersion) continue;
     const name = (read.scalarString(read.nodeAt(root, ['metadata', 'name'])) ?? '').trim();
+    const namespace = (read.scalarString(read.nodeAt(root, ['metadata', 'namespace'])) ?? '').trim();
+    if (namespace) namespaces.add(namespace.toLowerCase());
+    if (kind === 'Namespace' && name) namespaces.add(name.toLowerCase());
     objects.push({ index: i, read, root, kind, apiVersion, name, kindOffset: kindPair?.key?.range?.[0] });
   }
 
@@ -480,7 +488,7 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
     const { read } = w;
     for (const { key, value, offset } of envEntries(w, read, configMaps)) {
       for (const host of urlHosts(value)) {
-        const target = hostToEntity.get(host) ?? hostToEntity.get(host.replace(CLUSTER_SUFFIX_RE, '').split('.')[0]);
+        const target = resolveHost(host, hostToEntity, namespaces);
         if (target) {
           addEdge('Calls', CALLS, w.name, target, offset);
         } else if (!LOCAL_HOSTS.has(host) && !host.startsWith('127.')) {
@@ -672,6 +680,45 @@ function envEntries(workload, read, configMaps) {
     }
   }
   return out;
+}
+
+/**
+ * The entity an env URL's host names, or null when it names nothing in the file.
+ *
+ * Three host forms resolve, and no others:
+ *
+ *   `postgres`                            a workload's own name, or a Service's
+ *   `postgres.prod.svc[.cluster.local]`   a cluster-DNS name — `.svc` is proof
+ *                                         the host is inside the cluster, so
+ *                                         the namespace in it need not be one
+ *                                         this file declares
+ *   `postgres.prod`                       service.namespace, but only when
+ *                                         `prod` is a namespace this file names
+ *
+ * What makes this a function rather than one `??` chain is what it refuses: the
+ * first label of a host is NOT a candidate on its own. The fallback used to
+ * apply `.split('.')[0]` to every host, whether or not a cluster suffix had
+ * just come off it, so any external FQDN whose first label happened to collide
+ * with a workload or Service name in the same file became an internal `Calls`
+ * edge: a stream carrying a Deployment called `api` beside a `web` whose env
+ * holds `https://api.stripe.com/v1` proposed `Calls web → api` and never
+ * proposed `api.stripe.com` as a dependency at all — and had the env been on
+ * `api` itself, addEdge's self-edge guard would have dropped the host without
+ * proposing anything (KOL-111). A cluster suffix, or a second label that is a
+ * namespace of this file's, is the only place a short name can now hide.
+ */
+function resolveHost(host, hostToEntity, namespaces) {
+  const exact = hostToEntity.get(host);
+  if (exact) return exact;
+  if (CLUSTER_SUFFIX_RE.test(host)) {
+    // `postgres.prod.svc.cluster.local` -> `postgres`. The namespace is not
+    // checked: the suffix already says this is a cluster name, and a manifest
+    // is free to reach a Service in a namespace no document here declares.
+    return hostToEntity.get(host.replace(CLUSTER_SUFFIX_RE, '').split('.')[0]) ?? null;
+  }
+  const labels = host.split('.');
+  if (labels.length === 2 && namespaces.has(labels[1])) return hostToEntity.get(labels[0]) ?? null;
+  return null;
 }
 
 /** Lower-cased hosts of every URL in `value`; templated hosts are skipped. */
