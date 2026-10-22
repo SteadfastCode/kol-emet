@@ -76,42 +76,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-111": {
+    "KOL-112": {
       "order": 5,
-      "title": "The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…",
-      "status": "done",
+      "title": "Treating session-ended as a permanent stop breaks \"Sign out everywhere else\": POST /auth/revoke-o…",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-111",
+      "branch": "routine/item/KOL-112",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-22T10:34:54.779Z",
+      "claimedAtUtc": "2026-10-22T10:51:20.756Z",
       "runId": "2026-10-22T09:10:06.188Z",
       "lastFail": null
     },
-    "KOL-112": {
-      "order": 6,
-      "title": "Treating session-ended as a permanent stop breaks \"Sign out everywhere else\": POST /auth/revoke-o…",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-113": {
-      "order": 7,
+      "order": 6,
       "title": "The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 8,
+      "order": 7,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -145,7 +128,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 9,
+      "order": 8,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-017": {
-      "order": 10,
+      "order": 9,
       "title": "Source-coverage pane in the draft review UI",
       "status": "pending",
       "attempts": 0,
@@ -181,7 +164,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 11,
+      "order": 10,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -198,7 +181,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 12,
+      "order": 11,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -212,6 +195,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-111": {
+      "order": null,
+      "title": "The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-111",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-22T10:34:54.779Z",
+      "runId": "2026-10-22T09:10:06.188Z",
       "lastFail": null
     },
     "KOL-110": {

@@ -76,7 +76,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…**
+- [x] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…**
   Found by the grader of KOL-102 (high, client/src/composables/useEvents.js:95). Treating
   `session-ended` as a permanent stop breaks "Sign out everywhere else": `POST
   /auth/revoke-other-sessions` calls `closeStreamsForUser(userId)`, which closes the caller's OWN
