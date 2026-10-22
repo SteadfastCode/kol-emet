@@ -76,13 +76,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…**
-  Found by the grader of KOL-089 (medium, server/src/lib/producers/kubernetes.js:483). The
-  host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS
-  suffix was stripped, so any external FQDN whose first label happens to match an in-file workload
-  or Service name is turned into an internal `Calls` edge instead of an External Dependency — e.g.
-  a stream with a Deployment named `api` and `value: https://api.stripe.com/v1` proposes `Calls
-  web → api` and never proposes `api.stripe.com` at all.
 - [ ] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…**
   Found by the grader of KOL-102 (high, client/src/composables/useEvents.js:95). Treating
   `session-ended` as a permanent stop breaks "Sign out everywhere else": `POST
@@ -132,6 +125,13 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…** (routine 2026-10-22, fb59979)
+  Found by the grader of KOL-089 (medium, server/src/lib/producers/kubernetes.js:483). The
+  host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS
+  suffix was stripped, so any external FQDN whose first label happens to match an in-file workload
+  or Service name is turned into an internal `Calls` edge instead of an External Dependency — e.g.
+  a stream with a Deployment named `api` and `value: https://api.stripe.com/v1` proposes `Calls
+  web → api` and never proposes `api.stripe.com` at all.
 - [x] **(KOL-110) secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…** (routine 2026-10-22, 71dd84d)
   Found by the grader of KOL-089 (high, server/src/lib/producers/redactSecrets.js:343).
   `secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in

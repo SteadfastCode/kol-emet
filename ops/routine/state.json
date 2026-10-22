@@ -79,7 +79,7 @@
     "KOL-111": {
       "order": 5,
       "title": "The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-111",
