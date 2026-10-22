@@ -213,16 +213,43 @@ export function closeStreamsForSession(sessionId, reason = 'its session ended') 
  * own sessions expired. Those sessions do outlive the account — that is a known
  * limit recorded in the Decision Log — but their push channels do not have to.
  *
+ * `exceptSessionId` spares one session's streams, and exists because the frame
+ * this sends is `session-ended`, which the browser reads as *do not come back
+ * on this credential* (`client/src/composables/useEvents.js`): a tab told that
+ * stops retrying for the rest of its life. `POST /auth/sessions/revoke-all`
+ * ends every session but its own, so sending it the same frame as the devices
+ * it just signed out left the surviving tab permanently blind and toasting a
+ * sign-out that never happened (KOL-112). Nothing about the calling session
+ * changed, so the honest thing is to leave its streams alone — not to close
+ * them and hope the reconnect is allowed.
+ *
+ * A client with no session id — the `BEARER_TOKEN` path — is never the spared
+ * one: `null` matching `null` would silently keep a connector's stream open on
+ * an account deletion.
+ *
+ * @param {any} userId
+ * @param {string} [reason] what the light tier reports per closed stream
+ * @param {object} [opts]
+ * @param {string} [opts.exceptSessionId] a session whose streams stay open
  * @returns {number} how many were closed
  */
-export function closeStreamsForUser(userId, reason = 'its account was deleted') {
+export function closeStreamsForUser(userId, reason = 'its account was deleted', opts = {}) {
   if (userId == null) return 0;
+  const { exceptSessionId = null } = opts;
   const target = String(userId);
+  const spared = exceptSessionId == null ? null : String(exceptSessionId);
   let closed = 0;
+  let kept = 0;
   for (const [clientId, client] of clients) {
-    if (client.userId === target) closed += endStream(clientId, reason, { error: 'session-ended' }) ? 1 : 0;
+    if (client.userId !== target) continue;
+    if (spared !== null && client.sessionId === spared) {
+      kept += 1;
+      log('verbose', `stream ${clientId} kept open — its session (${spared}) is the one that asked`);
+      continue;
+    }
+    closed += endStream(clientId, reason, { error: 'session-ended' }) ? 1 : 0;
   }
-  log('normal', `closed ${closed} stream(s) for user ${target} — ${reason}`);
+  log('normal', `closed ${closed} stream(s) for user ${target}${spared === null ? '' : `, keeping ${kept} on session ${spared}`} — ${reason}`);
   return closed;
 }
 

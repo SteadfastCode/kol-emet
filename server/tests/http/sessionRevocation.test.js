@@ -34,6 +34,11 @@
  *     revocation, because it cannot be shown to postdate one.
  *   - Repeated wrong passwords are throttled on the account's own counter —
  *     the one the deletion and password-change confirmations share.
+ *   - The other devices' live `/events` streams are closed at once, with the
+ *     `session-ended` frame, and the calling browser's are **left open and
+ *     still receiving broadcasts** (KOL-112): that frame is final to the
+ *     client, so sending it to the one session this route keeps signed in left
+ *     that tab blind for the rest of its life.
  *
  * Not here, but part of the same mechanism: the two OAuth approval forms, which
  * read `req.session.userId` themselves until KOL-098 put them behind
@@ -49,7 +54,8 @@
  * fails; treat a missing `issuedAt` as valid and the legacy-session case fails;
  * bump before re-stamping and the caller is signed out when the store write
  * fails; use `requireAuth` instead of the bearer guard and the connector signs
- * every device out.
+ * every device out; drop the `exceptSessionId` the route passes
+ * `closeStreamsForUser` and the calling browser loses its live stream.
  *
  * Real stack throughout — createApp() over supertest, real registration
  * (bcrypt, Workspace, seedWorkspace), real mongod, a real `@simplewebauthn`
@@ -67,7 +73,7 @@
  * The routes log on SESSION_REVOKE_LOG_LEVEL, silenced here unless set.
  */
 
-import { describe, test, before, after } from 'node:test';
+import { describe, test, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import session from 'express-session';
@@ -84,6 +90,10 @@ import { SUITE_AUTH_LIMITS } from '../helpers/suiteLimits.js';
 import { createSoftAuthenticator } from '../helpers/softAuthenticator.js';
 import User from '../../src/models/User.js';
 import { setMcpUser } from '../../src/lib/mcpUserStore.js';
+// Live /events streams are registered straight on the broadcaster rather than
+// over a socket: an SSE response is never finished, so supertest would hang
+// waiting for one. See liveStream() below.
+import { addClient, removeClient, broadcast } from '../../src/lib/broadcaster.js';
 
 // createApp() reads NODE_ENV when called, and src/routes/auth.js reads the
 // relying party at module load, so all of it is set before src/app.js is
@@ -107,6 +117,7 @@ process.env.PASSKEY_LOG_LEVEL ??= 'off';
 process.env.AUTH_LIMIT_LOG_LEVEL ??= 'off';
 process.env.SESSION_COOKIE_LOG_LEVEL ??= 'off';
 process.env.EVENTS_LOG_LEVEL ??= 'off';
+process.env.SSE_LOG_LEVEL ??= 'off';
 
 const { createApp } = await import('../../src/app.js');
 
@@ -220,12 +231,48 @@ async function addPasskey(t, authenticator) {
   assert.equal(complete.status, 200, `passkey registration failed: ${complete.status} ${JSON.stringify(complete.body)}`);
 }
 
+/** Client ids registered straight on the broadcaster, cleared after each test. */
+const liveStreams = [];
+
+/**
+ * A live `GET /events` stream for `session`, registered the way the route
+ * registers one.
+ *
+ * Not opened over HTTP: an SSE response is deliberately never finished, so a
+ * supertest request for one does not resolve. What this suite needs to see is
+ * which streams a revocation closes, and that is decided by the `{userId,
+ * sessionId}` pair the route stored — which is exactly what is handed over
+ * here, with a fake `res` standing in for the held socket.
+ */
+function liveStream(clientId, session, workspaceId) {
+  const res = { chunks: [], ended: false };
+  res.write = (chunk) => { res.chunks.push(chunk); return true; };
+  res.end = () => { res.ended = true; };
+  const added = addClient(clientId, res, workspaceId, { userId: session.userId, sessionId: session.sid });
+  assert.equal(added.accepted, true, `the broadcaster refused the ${clientId} fixture`);
+  liveStreams.push(clientId);
+  log('normal', `opened a live /events stream (${clientId}) for session ${session.sid}`);
+  return res;
+}
+
+/** The `event: <name>` frames a fake stream received, parsed. */
+const streamFrames = (res) => res.chunks.map((chunk) => ({
+  event: chunk.match(/^event: (.*)$/m)?.[1] ?? 'ping',
+  data: chunk.startsWith('event:') ? JSON.parse(chunk.match(/^data: (.*)$/m)[1]) : null,
+}));
+
 before(async () => {
   await db.connect();
   // Held, not just passed: the tests below ask the store what it still has,
   // which is the difference between a session destroyed and one merely refused.
   sessionStore = new session.MemoryStore();
   app = createApp({ sessionStore, authLimits: { ...SUITE_AUTH_LIMITS, perUser: PER_USER } });
+});
+
+afterEach(() => {
+  // The broadcaster's client map is module-level state; a fixture left in it
+  // would count against the next test's per-user stream cap.
+  for (const clientId of liveStreams.splice(0)) removeClient(clientId, 'the test that opened it ended');
 });
 
 after(async () => { await db.disconnect(); });
@@ -463,6 +510,46 @@ describe('POST /auth/sessions/revoke-all', () => {
       delete process.env.BEARER_TOKEN;
       await setMcpUser(null);
     }
+  });
+
+  test('closes the other devices’ live /events streams and leaves the caller’s open', async () => {
+    // KOL-112. The close frame is `{ error: 'session-ended' }`, which the
+    // browser treats as final — it stops reconnecting for the life of the tab
+    // and says the account was signed out elsewhere. This route tells the
+    // browser it is called from the opposite, and that browser's session is
+    // still good, so its stream has to survive the revocation it asked for.
+    const t = await tenant('keeps-its-stream');
+    const other = await signIn(t, 'the device left behind');
+    const workspaceId = 'ws-revoke-streams';
+    const caller = liveStream('revoke-caller-tab', t, workspaceId);
+    const callerSecondTab = liveStream('revoke-caller-tab-2', t, workspaceId);
+    const theirs = liveStream('revoke-other-device-tab', other, workspaceId);
+
+    const res = called('POST /auth/sessions/revoke-all (with streams open)', await t.agent
+      .post('/auth/sessions/revoke-all')
+      .send({ password: PASSWORD }));
+    assert.equal(res.status, 200, `revocation failed: ${res.status} ${JSON.stringify(res.body)}`);
+
+    assert.equal(theirs.ended, true, 'the revoked device kept its live stream');
+    assert.deepEqual(streamFrames(theirs).filter(f => f.event === 'error').map(f => f.data),
+      [{ error: 'session-ended' }], 'the revoked device was not told why its stream ended');
+
+    assert.equal(caller.ended, false, 'the browser that asked was cut off from live updates');
+    assert.equal(callerSecondTab.ended, false, 'a second tab of the calling browser was cut off');
+    assert.equal(streamFrames(caller).filter(f => f.event === 'error').length, 0,
+      'the calling browser was told its session had ended');
+
+    // Open is not the same as live: the kept streams still receive this
+    // workspace's updates, which is what "this browser stays signed in" means
+    // for the sidebar.
+    broadcast('entity:created', { entity: { _id: 'e1', title: 'After the revocation' } }, { workspaceId });
+    for (const [label, stream] of [['the caller', caller], ['its second tab', callerSecondTab]]) {
+      assert.equal(streamFrames(stream).filter(f => f.event === 'entity:created').length, 1,
+        `${label} stopped receiving live updates`);
+    }
+    assert.equal(streamFrames(theirs).filter(f => f.event === 'entity:created').length, 0,
+      'a closed stream received a broadcast');
+    log('light', `user ${t.userId}: the revoked device's stream was closed and the caller's ${caller.chunks.length} frame(s) kept flowing (source: POST /auth/sessions/revoke-all)`);
   });
 });
 
