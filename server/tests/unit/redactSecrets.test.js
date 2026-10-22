@@ -546,3 +546,89 @@ describe('redactSecrets — Kubernetes manifests', () => {
     assertGone(out, ['leaked-token-value', 'hunter2'], 'the line pass still catches a named credential');
   });
 });
+
+// A Secret does not have to be the root of its own document. `kubectl get
+// secrets -o yaml` — the command a person runs to get the thing they upload —
+// wraps every match in ONE document whose root is a `kind: List`, and a
+// by-position rule that only read the document's own root found `List` there,
+// applied nothing, and stored every value whose key is not a credential word
+// verbatim in `Draft.source.text`, which has no TTL and is exported as-is.
+describe('redactSecrets — a Secret wrapped in a `kind: List`', () => {
+  const parsesAll = text =>
+    parseAllDocuments(text, { merge: true, prettyErrors: false }).every(doc => doc.errors.length === 0);
+
+  const LIST = [
+    'apiVersion: v1',
+    'kind: List',
+    'items:',
+    '  - apiVersion: v1',
+    '    kind: Secret',
+    '    metadata:',
+    '      name: db-credentials',
+    '    type: Opaque',
+    '    stringData:',
+    '      POSTGRES_USER: appuser',
+    '      POSTGRES_PASSWORD: hunter2',
+    '    data:',
+    '      legacy.conf: aGVsbG8tdGhlcmU=',
+    '  - apiVersion: v1',
+    '    kind: ConfigMap',
+    '    metadata:',
+    '      name: web-config',
+    '    data:',
+    '      SEARCH_ENDPOINT: https://search.internal.example/v1',
+    '      LOG_LEVEL: info',
+    'metadata:',
+    '  resourceVersion: ""',
+  ].join('\n');
+
+  test("a wrapped Secret's values go by position, exactly as an unwrapped one's do", () => {
+    const out = redact(LIST, 'a kubectl-style Secret list');
+    assert.equal(out.via, 'yaml', 'the precise pass ran');
+    assertGone(out, ['appuser', 'hunter2', 'aGVsbG8tdGhlcmU='], 'values of a Secret under `items`');
+    assert.match(out.text, /POSTGRES_USER: REDACTED/, 'a username is no secret word, and in a Secret it still goes');
+    assert.match(out.text, /legacy\.conf: REDACTED/, '`data` is base64, not plaintext, and still a credential');
+    assert.ok(out.redactions.some(r => r.rule === 'k8s-secret' && r.key === 'POSTGRES_USER'),
+      'and the log says which rule took it');
+    assert.ok(parsesAll(out.text), 'the splice left the document valid');
+  });
+
+  test("the List's own keys, and a ConfigMap beside the Secret, are left alone", () => {
+    const out = redact(LIST, 'what a list must keep');
+    // Only the mapping that says `kind: Secret` is read by position — never the
+    // one that contains it, or the graph loses the edges the import is for.
+    assert.match(out.text, /SEARCH_ENDPOINT: https:\/\/search\.internal\.example\/v1/);
+    assert.match(out.text, /LOG_LEVEL: info/);
+    assert.match(out.text, /kind: List/);
+    assert.match(out.text, /name: db-credentials/, 'a Secret keeps its name — it is not under `data`');
+  });
+
+  test('a Secret nested deeper than `items` is read too', () => {
+    // Nothing about `kind:` says it may only appear at a root or one level in:
+    // a kustomize wrapper or a rendered Helm hook puts an object anywhere.
+    const nested = [
+      'apiVersion: v1',
+      'kind: List',
+      'items:',
+      '  - apiVersion: v1',
+      '    kind: List',
+      '    items:',
+      '      - apiVersion: v1',
+      '        kind: Secret',
+      '        metadata:',
+      '          name: inner',
+      '        stringData:',
+      '          BOOTSTRAP_USER: deploybot',
+    ].join('\n');
+    const out = redact(nested, 'a Secret two lists down');
+    assertGone(out, ['deploybot'], 'a doubly-wrapped Secret');
+    assert.ok(out.redactions.some(r => r.rule === 'k8s-secret' && r.key === 'BOOTSTRAP_USER'));
+  });
+
+  test('a wrapped list is deterministic and idempotent too', () => {
+    const once = redact(LIST, 'list idempotence 1');
+    const twice = redactSecrets(once.text, { label: 'list idempotence 2' });
+    assert.equal(twice.text, once.text);
+    assert.equal(twice.count, 0, 'there is nothing left to redact');
+  });
+});
