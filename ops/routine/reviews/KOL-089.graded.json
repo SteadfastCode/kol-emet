@@ -1,0 +1,149 @@
+{
+  "item": "KOL-089",
+  "repo": "kol-emet",
+  "mergeSha": "32b91996210e41cd4480c9c0bf84f22febdac56d",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:40:19.756Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 343,
+      "severity": "high",
+      "summary": "`secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in a `kind: List` document — exactly what `kubectl get secrets -o yaml` emits, a shape the producer's own docs advertise as supported input — gets no by-position redaction; its `stringData`/`data` values whose keys are not credential words (`POSTGRES_USER: appuser`, `legacy.conf: <base64>`) are stored verbatim in `Draft.source.text`, which has no TTL and is carried out verbatim by the exporter."
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 483,
+      "severity": "medium",
+      "summary": "The host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS suffix was stripped, so any external FQDN whose first label happens to match an in-file workload or Service name is turned into an internal `Calls` edge instead of an External Dependency — e.g. a stream with a Deployment named `api` and `value: https://api.stripe.com/v1` proposes `Calls web → api` and never proposes `api.stripe.com` at all."
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 94,
+      "severity": "low",
+      "summary": "`List` is in `QUIET_KINDS` and its `items[]` are never unwrapped, so a `kubectl get … -o yaml` List dump (which passes the `apiVersion`+`kind` check on the List itself) yields a 201 `ready` draft with zero items and zero drop reasons — the reviewer gets an empty draft with no diagnostic saying why."
+    },
+    {
+      "file": "server/tests/http/kubernetesDraft.test.js",
+      "line": 368,
+      "severity": "low",
+      "summary": "The cross-workspace assertion's predicate is unsatisfiable — `d.title === 'kubernetes' && … && d.title === 'smuggled'` can never be true (and `d.workspaceId` is not even selected by `.select('title')`) — so that `assert.ok` passes vacuously and tests nothing; only the following `architectDrafts` loop actually covers the claim."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "That is a client-side routing test with `../../api/drafts.js` mocked; redaction happens server-side in `routes/drafts.js` and is covered by `kubernetesDraft.test.js` and `redactSecrets.test.js`."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`topLevelKeys` scans every line of the whole file with a column-zero regex, so keys in every `---` document are collected; the diff's own test (`producerFor(MANIFEST)`) proves a second-document `kind:` is seen."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "`stringData` is plaintext by definition and a Secret's `data` (base64) is redacted wholesale by position regardless of encoding — `secretDataPairs` takes every scalar entry, and the test asserts `legacy.conf: REDACTED`."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Points at a Decision Log line, gives no concrete failing input, and the two shapes are in fact implemented (`k8s-env` sibling lookup, `k8s-secret` by position) with passing assertions for each."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "`deref` is bounded by `i < 16` and `pairOf` by `depth > 16`, so neither can loop forever; an unresolvable alias is also caught up front and refused."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "A Secret's `stringData` is redacted before the producer ever sees the text (`fileProducerRoute` calls `redactSecrets` at drafts.js:346), and the HTTP test asserts `POSTGRES_PASSWORD: REDACTED` in `source.text`."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "A Kubernetes Secret's `data`/`stringData` is typed `map[string]string`, so a nested map or seq is not a shape valid input can take, and the name rules still apply to anything that is; no real failing input is described."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "The test \"the fixture's credentials reach neither the draft nor the database\" does exactly this — it stringifies the response and the stored document and asserts each of the three literal secrets is absent."
+    },
+    {
+      "index": 9,
+      "verdict": "false-positive",
+      "reason": "The unit suite has \"a Secret's values are not read, and do not survive the redaction the route runs first\", which redacts the fixture and asserts no secret reaches any item."
+    },
+    {
+      "index": 10,
+      "verdict": "false-positive",
+      "reason": "The drop reasons are distinct, self-identifying strings (\"a Deployment has no `metadata.name`\" vs. \"StatefulSet \"empty\" declares no containers\") and are pinned by an ordered `deepEqual`, so each is unambiguously tied to its object."
+    },
+    {
+      "index": 11,
+      "verdict": "false-positive",
+      "reason": "A vague coverage complaint rather than a defect, and the gaps named (nested structures, other data types) are not valid Secret/ConfigMap value shapes."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds a new session-authenticated, workspace-scoped write endpoint (`POST /drafts/kubernetes`) and tests its 401 and cross-tenant 404, so the authenticated surface is touched even though no auth logic itself changed."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "Right: `redactSecrets.js` gains the `k8s-env` and `k8s-secret` rules and the fixture carries live-looking credentials."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Right: the producer is deterministic, no allowance check or charge is added or changed, and the test asserts the quota is untouched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Right: no deletes, migrations or rewrites — the `source.producer` enum change is purely additive."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Right: nothing outbound is called; no model provider or third-party client is involved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Right: no version, packaging, CI or deploy-config change — only an optional `KUBERNETES_LOG_LEVEL` read with a default."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "summary": "All 11 local findings are false positives — nine of them restate \"secrets might leak\" against code and tests that demonstrably handle it, two are coverage complaints about tests that do assert the thing — while the review missed the actual `kind: List` redaction gap, the over-broad short-name host fallback, and the vacuous tenancy assertion; the triage, by contrast, is right on all six keys.",
+  "counts": {
+    "findings": 11,
+    "confirmed": 0,
+    "falsePositive": 11,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 4,
+    "independent": 4,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 3.0437954999999994,
+  "numTurns": 18,
+  "durationMs": 366902,
+  "sessionId": "18cda219-2d46-4bce-bed0-b8efa82816b9"
+}

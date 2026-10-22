@@ -1,0 +1,127 @@
+{
+  "item": "KOL-102",
+  "repo": "kol-emet",
+  "mergeSha": "c1946a266f82a96ace02f1f3352339cf3abe5b14",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:44:52.998Z",
+  "independent": [
+    {
+      "file": "client/src/composables/useEvents.js",
+      "line": 95,
+      "severity": "high",
+      "summary": "Treating `session-ended` as a permanent stop breaks \"Sign out everywhere else\": `POST /auth/revoke-other-sessions` calls `closeStreamsForUser(userId)`, which closes the caller's OWN stream with `{ error: 'session-ended' }` (server/src/routes/auth.js:1216, whose comment explicitly relies on \"the caller's client reconnects within seconds and is accepted, because its session was re-stamped above\"). The still-signed-in tab now sets `stopped = true`, never reconnects, and toasts \"you were signed out in another window\" — live sync is dead for the rest of that tab's life and the message is false."
+    },
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 1051,
+      "severity": "low",
+      "summary": "The two bulk handlers only call `loadEntities`, which rebuilds the sidebar list but never touches `selectedEntity` or the open panels (unlike `onEntityUpdated`, which replaces `selectedEntity`), so an entity a user has open that another client's draft apply edited keeps showing pre-apply content indefinitely."
+    },
+    {
+      "file": "client/src/composables/useEvents.js",
+      "line": 193,
+      "severity": "low",
+      "summary": "`STOP_REASONS[reason]` is an unguarded property lookup on a server-supplied string, so inherited keys are truthy: a frame carrying `{ error: 'toString' }` (or `constructor`, `valueOf`) is treated as a permanent stop and reported with a garbage message, instead of taking the deliberate \"unknown code is retried\" path — `Object.hasOwn` / a `Map` is what the stated rule needs."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The message is built by `STOP_REASONS['too-many-streams']` and names the limit (`useEvents.js:97`), and the layout toasts that `message` verbatim; the composable's test asserts the limit appears."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`onFrame` wraps `JSON.parse` in try/catch, logs at the light tier and returns without calling the handler — an unparseable frame is handled, and no handler sees a missing payload."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "`onStreamEnded?.()` is the final statement of the error path, nothing follows it, and the only registered handler is an `addToast` call — the described failure has no consequence in this code (and the finding contradicts itself about whether it is caught)."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "`log('verbose'/'normal')` is gated by `LEVELS`, so at the default `light` tier no payload is printed; the test asserting exactly this passes (I ran the suite)."
+    },
+    {
+      "index": 5,
+      "verdict": "false-positive",
+      "reason": "`WikiLayout.test.js` ('WikiLayout live sync') asserts `loadEntities` is called once with a reason matching /draft/i and /import/i for both frames; the composable suite correctly asserts only handler invocation."
+    },
+    {
+      "index": 6,
+      "verdict": "false-positive",
+      "reason": "The same WikiLayout group asserts `addToast` was called once per frame, with the actor label and the counts in the message."
+    },
+    {
+      "index": 7,
+      "verdict": "false-positive",
+      "reason": "`docs/api.md` adds a \"The frames\" table whose rows include `workspace:imported` (sent by `POST /import`, carrying `{ version, imported, actor }`)."
+    },
+    {
+      "index": 8,
+      "verdict": "false-positive",
+      "reason": "The actor label comes from the DB via `requireActor` (the member's own email), is broadcast only to streams already scoped to that workspace, and is identical to what every existing `entity:*` frame carries — no untrusted input and no new disclosure."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds `requireActor` to `POST /import` (a new 401 path) and rewrites how the client reacts to `session-ended`/revocation frames, so auth is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": false,
+      "reason": "No credential, token, key or secret is read, stored or logged anywhere in the diff; the tiered logging concerns entity content, not secrets."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff touches the AI allowance, billing or cost accounting."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff adds a broadcast and client listeners; no delete, overwrite or data-removing path is introduced (the test helper that empties a workspace is pre-existing)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Only the app's own `/events` and `/import` endpoints are involved — no third-party service call."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config or new required environment variable; the new client tier is a `localStorage` key."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "All eight local findings are false positives — several assert the absence of things the diff plainly contains (the docs table row, the `loadEntities`/`addToast` assertions, the limit-naming message) — and the review missed the one real regression, that the new permanent-stop handling of `session-ended` kills live sync in the tab that uses \"Sign out everywhere else\".",
+  "counts": {
+    "findings": 8,
+    "confirmed": 0,
+    "falsePositive": 8,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.4417395,
+  "numTurns": 25,
+  "durationMs": 273201,
+  "sessionId": "6bb5aa28-30f5-4e6f-86d4-054a21d93295"
+}

@@ -1,0 +1,100 @@
+{
+  "item": "KOL-092",
+  "repo": "kol-emet",
+  "mergeSha": "5169b772b45f6349f2ec49c3b5057b3aa7a49ff2",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:28:14.785Z",
+  "independent": [
+    {
+      "file": "server/src/routes/relationshipGroups.js",
+      "line": 155,
+      "severity": "low",
+      "summary": "The item's verify list requires a limit under the route minimum to be \"clamped rather than refused\", but `boundedInteger` returns null for `?limit=0` / `?limit=-1`, so those requests get the whole unbounded workspace list instead of a page of 1 (same for openQuestions.js:81); the behaviour is documented in docs/api.md and matches /entities, so it is a deliberate deviation from the stated criterion rather than a crash."
+    },
+    {
+      "file": "client/src/api/relationshipGroups.js",
+      "line": 90,
+      "severity": "low",
+      "summary": "The browser-side walk has no iteration bound — unlike the server test helpers, which guard at 400 requests — so any API response whose `nextAfter` fails to advance (a cursor echoed back, a proxy or a future server bug) spins `getAllGroups` in an endless request loop in the user's tab with no partial-failure path to report it."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "A missing test for an impossible state: the route only sets a non-null `nextAfter` when `rows.length > limit`, so an empty `items` with a live cursor cannot be served, and the walk's `do/while (after)` would keep paging anyway."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The diff rewrites both list handlers (relationshipGroups.js and openQuestions.js) with `boundedInteger`, `idCursor`, `{ items, nextAfter }` and a `limit + 1` read — the claim that no route changes are shown is simply untrue of this diff."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "This restates the pre-change state from the item description; the merged route caps at `GROUP_LIMIT_MAX` when `?limit=` is sent, and the unlimited bare array for a no-limit request is the deliberate, documented backwards-compatibility contract."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Untrue of the code: `after` only selects which page is served, and `query.limit(limit + 1)` is applied whenever a usable `?limit=` is present, so a first page is still a bounded page."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "GraphView.vue adds a production 401 branch (`err.status === 401 ? SESSION_EXPIRED : PARTIAL_GRAPH`) and the API wrapper now propagates the status to distinguish sign-in-again from a generic failure, so session-state handling is genuinely touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env secrets appear anywhere in the diff — only log-level env vars."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff touches billing, spend or allowances."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "No production code deletes or migrates anything; the cited line is a test DELETE against an ephemeral in-memory mongod, and the change is explicitly non-breaking (no-limit still returns the bare array)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The change alters the public REST contract of two endpoints (new `?limit=`/`?after=` envelope, docs/api.md updated, pre-cap-server compatibility handled), which is externally consumed surface."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, CI, build or deployment configuration is modified."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "All four findings are false positives — two of them merely restate the item's \"before\" state as if the diff were empty — and the triage is right on five of six categories, so the review added no usable signal on a change that is in fact careful and well tested.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.3347905,
+  "numTurns": 20,
+  "durationMs": 275097,
+  "sessionId": "7ea592a2-0f8e-44f0-8c79-540f885c6e98"
+}

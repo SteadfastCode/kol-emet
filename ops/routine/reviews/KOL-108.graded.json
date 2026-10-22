@@ -1,0 +1,69 @@
+{
+  "item": "KOL-108",
+  "repo": "kol-emet",
+  "mergeSha": "c29c37bd5d240d35a1acf40a31badb8bf7ce57c9",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:11:15.823Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It describes the pre-fix state: at the merged result `httpError()` sets the mark via `Object.defineProperty` (errorHandler.js:171), which is non-enumerable, so neither `Object.assign` nor spread copies it — the finding reports the very bug this change removes, and its 'attacker' scenario requires codebase code that spreads a caught error, of which there is none."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only touches error classification, its test, and the spec decision log — no auth, session, or role code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential or secret handling changes; the only occurrence of the word is a test `fields: ['secret']` fixture value."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No budget, pricing, or allowance code is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations, or data-mutating paths; the change adds a property descriptor on an in-memory Error."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound call or provider client is modified — the provider-error concern is only context for rule 5, and the test's provider fixtures are unchanged."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, version, or dependency changes; the only non-source edit is the markdown decision log."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model pointed at the right line and the right mechanism but inverted the direction of the change, reporting the fixed defect as a live vulnerability, and its triage was correct throughout.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.6556389999999999,
+  "numTurns": 10,
+  "durationMs": 55775,
+  "sessionId": "fa185113-5aac-4fb5-8706-c08198db6492"
+}

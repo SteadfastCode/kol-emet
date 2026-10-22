@@ -1,0 +1,107 @@
+{
+  "item": "KOL-088",
+  "repo": "kol-emet",
+  "mergeSha": "71cce48614f01ca2bd060dac237b27f21512902d",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:52:36.945Z",
+  "independent": [
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 80,
+      "severity": "low",
+      "summary": "`brief()` bounds caller-supplied values to 60 chars but does not strip CR/LF, so a client can forge log lines in the deploy console (e.g. `response_type=x%0A[oauth:light] GET /authorize serving the Allow page...`) — the values printed at light (`response_type`, `code_challenge_method`, `grant_type`, `client_id`) are all attacker-controlled and newlines pass through unescaped."
+    },
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 234,
+      "severity": "low",
+      "summary": "The new pending-code ceiling is global and `POST /authorize` has no rate limit, so any registered user (registration is open) can issue 500 approvals in a burst and make every other user's connector authorization fail with 503 for up to five minutes, repeatable indefinitely — an availability regression the unbounded map did not have; a per-user cap would bound the same memory without the cross-tenant denial."
+    },
+    {
+      "file": "server/src/routes/oauth.js",
+      "line": 290,
+      "severity": "low",
+      "summary": "`createHash('sha256').update(code_verifier)` still throws when `code_verifier` is absent or arrives as an array from a repeated parameter, so such a request becomes a 500 INTERNAL from the error handler instead of the `invalid_grant` refusal — the same malformed-input class the change hardened one line earlier for `code` (`typeof code === 'string'`) and that the fingerprint helper's comment says must 'reach its refusal line rather than throw'."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "Describes the pre-change code: the merged `POST /oauth/token` no longer logs `req.body`, and line 133 is now the discovery document's `authorization_endpoint`."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The `[...authCodes.keys()]` dump is gone — the miss line now prints only the fingerprint and `authCodes.size` (oauth.js:282) — and line 148 is now the `response_type` check."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The unbounded map is exactly what this change fixes: `sweepExpiredCodes()` runs on every issue and `maxPendingCodes()` caps the map with a 503 (oauth.js:116, 228-237)."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "The 'computed vs stored' challenge line was removed entirely; the mismatch refusal at oauth.js:296 names the rule and prints neither challenge."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change edits the OAuth authorize/token handlers, including a new 503 refusal path ahead of the identity write."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The whole change is about keeping codes, verifiers and challenges — credentials redeemable for MCP_BEARER_TOKEN — out of the log."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or AI-budget code is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "Nothing persisted is deleted or overwritten; the only new deletions are already-expired in-memory map entries that were invalid anyway, and the cited line 25 is a memory leak claim, not a destructive operation."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound third-party call is added or changed; the resource/bridge branch keeps its behaviour."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, CI or deploy config; the two new env vars both have defaults so nothing is required at deploy time."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "All four findings are restatements of the item's pre-fix problem description aimed at line numbers that no longer hold that code, so the local review contributed nothing about the merged change — though its triage was right on five of six categories.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.0345965,
+  "numTurns": 6,
+  "durationMs": 175778,
+  "sessionId": "b2a5d0e9-b65c-44fd-8ee1-efdfd3aef39b"
+}

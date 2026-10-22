@@ -1,0 +1,88 @@
+{
+  "item": "KOL-105",
+  "repo": "kol-emet",
+  "mergeSha": "bff791aaeed92a1fb24ea92a0ccae9c34bae2de2",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:19:04.932Z",
+  "independent": [
+    {
+      "file": "docs/data-model.md",
+      "line": 513,
+      "severity": "low",
+      "summary": "The Workspace schema block in docs/data-model.md still lists only name/ownerId/members/aiBudget/createdAt/updatedAt and omits the new `template` field, so the file CLAUDE.md calls the \"full schemas\" reference no longer matches server/src/models/Workspace.js:48 — every other field on the model is documented there, so this is the one gap."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The suite does verify exactly this: `describes a Software Architecture workspace by its own subject and types` asserts `prompt.includes(TEMPLATES['software-architecture'].description)` plus all five type names, and `names the workspace, and follows PATCH /workspace when it is renamed` asserts the name before and after a rename."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The `legacy` fixture deletes every EntityType in that workspace (`EntityType.deleteMany`, asserting `deletedCount > 0`) and the `falls back to type names...` test asserts the CATEGORIES fallback appears and that no empty list is rendered, which is the no-types case."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "The same `legacy` fixture `$unset`s `template` (asserting `modifiedCount === 1`) and the test asserts the prompt contains neither `Its subject:` nor the default template's description — precisely the no-template fallback."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "server/src/routes/auth.js is edited — the registration handler now stores `template: resolveTemplateKey(template)` on Workspace.create."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential, token, or env-secret handling is added or changed; the new CHAT_LOG_LEVEL verbose tier logs the prompt, not secrets."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The aiBudget/checkBudget/recordSpend path is untouched; only the prompt text and one extra read were added."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No production deletes, migrations, or backfills — the only deleteMany/$unset are inside the test fixture, and the new field is explicitly no-backfill."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The change alters the system prompt sent to the external model provider in POST /chat, so what leaves for a third-party API does change."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, deploy config, or release tooling is touched."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All three local findings are false positives asserting absent test coverage that the diff plainly adds, and while the triage answers are all correct they are generic; the review found nothing real.",
+  "counts": {
+    "findings": 3,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.6342389999999998,
+  "numTurns": 20,
+  "durationMs": 185645,
+  "sessionId": "b642aabe-4184-42d1-9071-3c89d752f3b2"
+}

@@ -76,6 +76,42 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-110) secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…**
+  Found by the grader of KOL-089 (high, server/src/lib/producers/redactSecrets.js:343).
+  `secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in
+  a `kind: List` document — exactly what `kubectl get secrets -o yaml` emits, a shape the
+  producer's own docs advertise as supported input — gets no by-position redaction; its
+  `stringData`/`data` values whose keys are not credential words (`POSTGRES_USER: appuser`,
+  `legacy.conf: <base64>`) are stored verbatim in `Draft.source.text`, which has no TTL and is
+  carried out verbatim by the exporter.
+- [ ] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…**
+  Found by the grader of KOL-089 (medium, server/src/lib/producers/kubernetes.js:483). The
+  host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS
+  suffix was stripped, so any external FQDN whose first label happens to match an in-file workload
+  or Service name is turned into an internal `Calls` edge instead of an External Dependency — e.g.
+  a stream with a Deployment named `api` and `value: https://api.stripe.com/v1` proposes `Calls
+  web → api` and never proposes `api.stripe.com` at all.
+- [ ] **(KOL-112) Treating session-ended as a permanent stop breaks "Sign out everywhere else": POST /auth/revoke-o…**
+  Found by the grader of KOL-102 (high, client/src/composables/useEvents.js:95). Treating
+  `session-ended` as a permanent stop breaks "Sign out everywhere else": `POST
+  /auth/revoke-other-sessions` calls `closeStreamsForUser(userId)`, which closes the caller's OWN
+  stream with `{ error: 'session-ended' }` (server/src/routes/auth.js:1216, whose comment
+  explicitly relies on "the caller's client reconnects within seconds and is accepted, because its
+  session was re-stamped above"). The still-signed-in tab now sets `stopped = true`, never
+  reconnects, and toasts "you were signed out in another window" — live sync is dead for the rest
+  of that tab's life and the message is false.
+- [ ] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…**
+  Found by the grader of KOL-103 (high, server/src/routes/chat.js:208). The write floor is
+  bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated
+  premise that "asking the assistant a question reads the graph and writes nothing to it"
+  (app.js:176-180, docs/api.md, Decision Log). On the Responses-API path (any provider with
+  `responsesApi: true` plus `MCP_SERVER_URL` set, app.js-adjacent chat.js:528) the route hands the
+  model this deployment's own MCP server via `mcpToolDef()` with `require_approval: 'never'` and
+  no `allowed_tools` restriction, authenticated with `MCP_BEARER_TOKEN`. The ten write tools
+  therefore run with the role of `Settings.mcpUserId` (normally an owner/editor), not the
+  caller's, so a viewer can say "create/rename/delete this entity" in chat and the write lands —
+  the same hole the item identified for the direct connector, left open for chat's relay to it,
+  and untested by the new MCP group.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

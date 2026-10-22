@@ -1,0 +1,69 @@
+{
+  "item": "KOL-107",
+  "repo": "kol-emet",
+  "mergeSha": "ec33339c157d9c689ed2d6ab4383bae080c6f1e3",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:13:18.301Z",
+  "independent": [],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It restates the pre-fix bug as if still present: in the merged code `checkTypeRows(collections.entityTypes, 'entityTypes')` runs at graphImporter.js:502-506 (wrapped in `fail`) before the `entityTypeDocs` loop at :510, and again in `planIds` at :385, so `[null]`/`[42]`/`['Worlds']`/`[{}]` refuse with `MALFORMED_DOCUMENT` → 400 via `STATUS_BY_CODE` in routes/import.js:117-122; line 475 is now just an `importLog` call."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, role or permission logic changes; `requireWorkspaceRole('owner')` and the test's register/login calls are untouched fixtures."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env-based secrets appear in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or quota/metering code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Production change only adds a pre-write validation pass; no deletes or overwrites, and the only deletions are the existing test helper emptying a fixture workspace."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations; all work is in-process validation plus Mongoose inserts already present."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, migration, dependency or deploy-config changes — the import document version list is unmodified."
+    }
+  ],
+  "missed": [],
+  "summary": "The local review produced a single finding that merely re-describes the bug KOL-107 fixes (at a line number that no longer holds that code), so it caught no real defect, while its triage answers were all correct.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.1417655,
+  "numTurns": 17,
+  "durationMs": 122447,
+  "sessionId": "01431283-e704-4d49-a5d1-ac7b2c1677c5"
+}

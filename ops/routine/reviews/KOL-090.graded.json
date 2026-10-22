@@ -1,0 +1,93 @@
+{
+  "item": "KOL-090",
+  "repo": "kol-emet",
+  "mergeSha": "6ed92bdec1759c79baee5bf6762399ef4e7eb87f",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:34:12.813Z",
+  "independent": [
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 162,
+      "severity": "low",
+      "summary": "After a refused switch (404), the select keeps showing the rejected workspace while the session still acts in the old one; the one-way `:value` binding is unchanged so Vue never re-patches the DOM value, and the `id === workspace.value?._id` guard plus an unchanged binding on re-open leave the control stuck displaying the wrong workspace."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The reload is the deliberate, documented design (the entity list, type registry and `/events` stream are all bound to the workspace being left) and is triggered only by an explicit user switch after the server has already committed the choice; no unsaved-state path is identified in this code."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`resolveWorkspace` re-checks the selected id against the caller's live membership list on every request (`server/src/middleware/workspace.js:192-206`) and falls back to the default, so a stale session id grants no access at all — the id is left in the session on purpose, documented against the `/events` long-response save race, and `resave: false` in `app.js:111` means no stale write-back occurs."
+    },
+    {
+      "index": 3,
+      "verdict": "duplicate",
+      "reason": "Same claim as finding 2 about the session id not being cleared, just anchored in the route file instead of the middleware — and equally untrue, since membership is re-verified per request."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "`workspaceSelect.test.js` has a dedicated `describe('a selection whose membership is then removed')` that revokes the membership and asserts `GET /workspace`, `GET /entities` and a write all resolve the default workspace instead of 403."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change rewrites `resolveWorkspace` (the tenancy/authorization boundary) and adds a membership-checked selection route with its own 401/404 handling."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential, token or secret handling is added or altered; the test's `delete process.env.BEARER_TOKEN` is env hygiene, not secret management."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches billing, allowances or AI cost accounting; per-workspace billing is explicitly out of scope."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No product-code deletes or data migrations; the only `$pull`/raw update is inside the test fixture setup."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "All new calls are internal (Mongo plus the app's own REST routes); no outbound third-party request is introduced."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only source, tests and docs changed — no deploy config, versioning, build or migration step."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found no real defects: two of its four findings restate the same mistaken claim that a stale session selection grants access (the middleware re-checks membership every request), one objects to a deliberate documented reload, and one asserts a missing test that the suite plainly contains — while the one genuine (if minor) UI-desync defect in the switcher went unnoticed; triage was entirely correct.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 1,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.3934950000000002,
+  "numTurns": 13,
+  "durationMs": 161811,
+  "sessionId": "7141ff45-809f-4788-96ac-4b407d0d1d25"
+}

@@ -1,0 +1,63 @@
+{
+  "item": "KOL-106",
+  "repo": "kol-emet",
+  "mergeSha": "ce09da7f705bc90080d28d1e6f19cdd147e0daf4",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:15:59.250Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only `server/tests/http/errorShape.test.js`'s directory-walk helpers and assertions; no auth route, session, or passkey code is changed."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "`redactSecrets.js` is only named in a new assertion string; no secret handling, redaction logic, or credential material is modified."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing, usage-metering, or billing code is in the diff — it is a test-only change."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only reads files with `readdirSync`/`readFileSync` in a test; nothing deletes, overwrites, or migrates data."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Provider/driver errors appear only in prose and regexes inside the test; no outbound call or external integration is added or altered."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No package manifest, deploy config, or version metadata is touched — only a test file."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects and marked every triage category untouched, which matches my own cold read: the test-only change correctly makes both sweeps recursive, matches `OUT_OF_SCOPE`/`STORED_EXEMPT` on server-root-relative paths (preserving the existing exclusions, since no other `bridge.js`/`mcp.js` exist), names all four producers instead of relying on the count floor, and the newly swept `src/lib/producers/*` files contain no `STORED_MESSAGE` match, so the suite stays green — zero findings was the right answer, even if the triage evidence was thin.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.0665459999999998,
+  "numTurns": 16,
+  "durationMs": 160920,
+  "sessionId": "1518d071-3d59-4902-a3a3-47627229c79d"
+}

@@ -1,0 +1,100 @@
+{
+  "item": "KOL-103",
+  "repo": "kol-emet",
+  "mergeSha": "623ae5b8f6417639c188f4ed55803d48f1f36f61",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-22T09:10:17.131Z",
+  "gradedAtUtc": "2026-10-22T09:57:07.270Z",
+  "independent": [
+    {
+      "file": "server/src/routes/chat.js",
+      "line": 208,
+      "severity": "high",
+      "summary": "The write floor is bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated premise that \"asking the assistant a question reads the graph and writes nothing to it\" (app.js:176-180, docs/api.md, Decision Log). On the Responses-API path (any provider with `responsesApi: true` plus `MCP_SERVER_URL` set, app.js-adjacent chat.js:528) the route hands the model this deployment's own MCP server via `mcpToolDef()` with `require_approval: 'never'` and no `allowed_tools` restriction, authenticated with `MCP_BEARER_TOKEN`. The ten write tools therefore run with the role of `Settings.mcpUserId` (normally an owner/editor), not the caller's, so a viewer can say \"create/rename/delete this entity\" in chat and the write lands — the same hole the item identified for the direct connector, left open for chat's relay to it, and untested by the new MCP group."
+    },
+    {
+      "file": "server/tests/http/writeRole.test.js",
+      "line": 64,
+      "severity": "low",
+      "summary": "The documented falsification check for the changelog rollback gate is wrong, so the behavioural sweep does not test what it claims. The swept URL is `/entities/<id>/rollback/<logId>`, which first passes the `/entities` mount (app.js:161) whose `requireWriteRole` already refuses a viewer; removing `requireWriteRole` from the rollback route in changelog.js:191 would still produce a 403 `NOT_WORKSPACE_EDITOR` in the behavioural sweep. Only the static assertion catches that regression, not \"both sweeps\" as the header states."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "This change gates /mcp by exactly the mechanism the item specified — `mcpWriteWorkspaceId()` in lib/mcpWorkspace.js, wired into all ten write tools in routes/mcp.js — so a viewer connector does not keep write access."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "`mcpWriteWorkspaceId` is defined in this same diff at server/src/lib/mcpWorkspace.js:64 and imported at routes/mcp.js:11."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "writeRole.test.js contains the test 'a viewer connector is refused every write tool, and the graph is untouched', which drives every write tool as a viewer and asserts `isError` plus a `NOT_WORKSPACE_EDITOR` message."
+    },
+    {
+      "index": 4,
+      "verdict": "duplicate",
+      "reason": "Same claim as finding 3 (MCP write tools untested for a viewer), and likewise untrue — the MCP describe block covers viewer refusals, viewer reads, an editor write and a role-less membership."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change is entirely authorization: a new role gate on every content router plus the MCP write path."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret handling changes; the only token in the diff is a fake bearer value inside the new test fixture."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Right that money is touched — `POST /drafts` spends the workspace AI allowance and is now gated ahead of `checkBudget`, with `aiBudget.spentMicros` asserted unmoved (evidence pointer is the wrong file, which does not affect the verdict)."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletions, migrations or data rewrites; DELETE routes are only gated, not changed."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound third-party calls are added or changed; the MCP surface is this server's own endpoint."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, env requirement or migration step in the diff."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "A poor review: all four findings are false — three assert gaps (MCP ungated, MCP write tools untested) that this very diff closes, and one claims a symbol is undefined that is defined in the diff — while the triage is entirely correct and the one real residual bypass (viewer writes via `POST /chat` relaying to the MCP server) was missed.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 1,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.0042085000000003,
+  "numTurns": 20,
+  "durationMs": 270287,
+  "sessionId": "058080d0-1d6f-4e9b-b049-1cb8611ad7fd"
+}
