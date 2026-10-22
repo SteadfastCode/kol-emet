@@ -9,6 +9,7 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import { mcpWorkspaceId, mcpWriteWorkspaceId, resolveMcpActor } from '../lib/mcpWorkspace.js';
+import { MCP_READ_SCOPE, MCP_SCOPE_HEADER, isReadScopeRequest } from '../lib/mcpScope.js';
 import EntityType from '../models/EntityType.js';
 import { getCategories } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
@@ -97,16 +98,31 @@ const BlockInput = z.object({
 // refuses a name the workspace has no type for, and the tool returns its message.
 const CATEGORY_HINT = 'call list_entity_types for the valid names';
 
-// Reads call mcpWorkspaceId(); the ten write tools call mcpWriteWorkspaceId(),
-// which is the same lookup plus the role the membership carries and a thrown
-// refusal below `editor` (KOL-103). /mcp never passes through
-// resolveWorkspace/requireWriteRole — it has its own bearer gate and every
-// tool scopes itself — so this is where the write floor is enforced for the
-// connector. A new write tool that reaches for mcpWorkspaceId() is the mistake
-// to look for; tests/http/writeRole.test.js drives every tool a viewer could
-// call and fails on one that answers instead of refusing.
-function createMcpServer() {
+// Reads are registered with `server.tool` and call mcpWorkspaceId(); the ten
+// write tools are registered with the `writeTool` below and call
+// mcpWriteWorkspaceId(), which is the same lookup plus the role the membership
+// carries and a thrown refusal below `editor` (KOL-103). /mcp never passes
+// through resolveWorkspace/requireWriteRole — it has its own bearer gate and
+// every tool scopes itself — so this is where the write floor is enforced for
+// the connector. A new write tool registered with `server.tool`, or reaching
+// for mcpWorkspaceId(), is the mistake to look for; tests/http/writeRole.test.js
+// drives every tool a viewer could call and fails on one that answers instead
+// of refusing, and checks the read set against lib/mcpScope.js.
+/**
+ * @param {object}  [options]
+ * @param {boolean} [options.readOnly] when true the ten write tools are not
+ *   registered at all, so this session advertises — and can call — only
+ *   MCP_READ_TOOLS. This is what the in-app assistant's relay gets (KOL-113):
+ *   it reaches `/mcp` with the connector's bearer token, so without it a chat
+ *   message could spend the connector's write access on behalf of a caller who
+ *   has none. Not registering them, rather than refusing inside them, so the
+ *   model is never offered a tool it cannot use. See lib/mcpScope.js.
+ */
+function createMcpServer({ readOnly = false } = {}) {
   const server = new McpServer({ name: 'kol-emet', version: '0.1.0' });
+
+  /** How every write tool is registered: a no-op on a read-only session. */
+  const writeTool = (...args) => (readOnly ? undefined : server.tool(...args));
 
   server.tool(
     'search_entities',
@@ -179,7 +195,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'create_entity',
     'Add a new wiki entity. Use blocks for structured content. ' +
     "category must name one of this workspace's entity types exactly — call list_entity_types first; any other name is refused.",
@@ -210,7 +226,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'update_entity',
     'Edit an existing wiki entity. Only provided fields are updated. To update blocks, pass the full blocks array — unlisted blocks are removed. ' +
     "A new category must name one of this workspace's entity types exactly — call list_entity_types first; any other name is refused.",
@@ -242,7 +258,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'add_open_question',
     'Create a new open question and link it to one or more entities.',
     {
@@ -345,7 +361,7 @@ function createMcpServer() {
   //                            parentage (depth 1) → "son" ✓
   // ─────────────────────────────────────────────────────────────────────────
 
-  server.tool(
+  writeTool(
     'add_relationship',
     'Create a relationship group with all its members in one call. This is the ONLY way to link entities — never use blocks for this. ' +
     'Pass every member upfront in the members array (minimum 2). Each member needs an entityId and a role label. ' +
@@ -376,7 +392,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'add_member_to_relationship',
     'Add one or more members to an existing relationship group in a single call. ' +
     'Use this when you have additional members to add after the group was created, or when adding the same person to multiple groups as part of building a tiered structure. ' +
@@ -413,7 +429,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'update_group_label',
     'Rename or clear the label of a relationship group (e.g. rename "parentage" to "Elias Family", or pass null to remove the label).',
     {
@@ -431,7 +447,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'remove_relationship',
     "Remove an entity's membership from a relationship group. If the group drops below 2 members it is automatically deleted. " +
     "Does NOT remove the entity from any sub-groups — use remove_subgroup_from_relationship first if you are dismantling a tiered structure.",
@@ -460,7 +476,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'update_relationship_label',
     "Update a specific member's label or notes within a relationship group. " +
     "Use this to correct a label after creation (e.g. change 'son' to 'adopted son'). " +
@@ -486,7 +502,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'add_subgroup_to_relationship',
     'Link an existing relationship group as a sub-group of a broader group, enabling context-correct label display. ' +
     'When viewing a co-member, the label comes from the most specific (deepest) group that contains BOTH the viewer and that co-member. ' +
@@ -531,7 +547,7 @@ function createMcpServer() {
     }
   );
 
-  server.tool(
+  writeTool(
     'remove_subgroup_from_relationship',
     'Unlink a sub-group from its parent relationship group. ' +
     'Any members of the sub-group who are not already direct members of the parent group will be automatically re-added to the parent (using the label they had in the sub-group) so no one disappears from the parent view.',
@@ -577,7 +593,11 @@ function createMcpServer() {
 
 // ─── Session management ───────────────────────────────────────────────────────
 
-const sessions = new Map(); // sessionId -> StreamableHTTPServerTransport
+// sessionId -> { transport, readOnly }. The scope is bound to the session
+// rather than re-read per request: it is a property of the client that
+// initialized it (the connector, or chat's read-only relay — see
+// lib/mcpScope.js), and the tools it may call were decided then.
+const sessions = new Map();
 
 router.post('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
@@ -585,7 +605,20 @@ router.post('/', async (req, res) => {
 
   if (sessionId && sessions.has(sessionId)) {
     console.log('[mcp] existing session:', sessionId);
-    const transport = sessions.get(sessionId);
+    const { transport, readOnly } = sessions.get(sessionId);
+
+    // Fails closed on the one mismatch that would be an escalation: a request
+    // asking for read scope landing on a session that can write. It cannot
+    // happen legitimately — a relay whose session this process forgot gets a
+    // 404 below and initializes a new, read-only one — so the only ways here
+    // are a session id reused across scopes or a caller trying to borrow the
+    // connector's. The reverse is allowed: a request with no scope header on a
+    // read-only session is narrower than it asks for, and that session has no
+    // write tools registered to reach anyway.
+    if (isReadScopeRequest(req.headers) && !readOnly) {
+      log('light', `refused ${req.method} ${req.path} with 403 (source: ${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} on session ${String(sessionId).slice(0, 8)}…, which was initialized with write access)`);
+      return res.status(403).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32002, message: 'Session scope mismatch — re-initialize' } });
+    }
 
     // Intercept response to log what we're actually sending back
     const origWrite = res.write.bind(res);
@@ -604,24 +637,34 @@ router.post('/', async (req, res) => {
 
   if (!sessionId && isInitializeRequest(req.body)) {
     console.log('[mcp] new session — creating McpServer');
+    // Whether this session may write is decided here, from the headers of the
+    // request that opens it, and not revisited: chat's relay marks itself
+    // read-only (KOL-113) while the Claude.ai connector sends no scope header
+    // and keeps the write tools it has always had.
+    const readOnly = isReadScopeRequest(req.headers);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
       onsessioninitialized: (id) => {
         console.log('[mcp] session initialized:', id);
-        sessions.set(id, transport);
+        sessions.set(id, { transport, readOnly });
       },
     });
     transport.onclose = () => {
       console.log('[mcp] session closed');
-      for (const [k, v] of sessions) { if (v === transport) sessions.delete(k); }
+      for (const [k, v] of sessions) { if (v.transport === transport) sessions.delete(k); }
     };
 
     let server;
     try {
-      server = createMcpServer();
+      server = createMcpServer({ readOnly });
       const toolNames = Object.keys(server._registeredTools ?? {});
       console.log('[mcp] registered tools:', toolNames.length ? toolNames : '(none)');
+      // Light tier: which scope a session was opened in, and what asked for
+      // it. A read-only session that should have been able to write — or a
+      // writable one that should not have been — is invisible afterwards
+      // otherwise, since the only trace is a tool the model never saw.
+      log('light', `session opened ${readOnly ? 'READ-ONLY' : 'with write access'} (source: ${readOnly ? `${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} on the initialize request` : 'no read scope header on the initialize request'}) — ${toolNames.length} tool(s) registered`);
     } catch (err) {
       console.error('[mcp] createMcpServer() threw:', err.message);
       return res.status(500).json({ error: 'mcp_init_failed' });
@@ -650,7 +693,7 @@ router.delete('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
   console.log('[mcp] DELETE session:', sessionId);
   if (sessionId && sessions.has(sessionId)) {
-    await sessions.get(sessionId).close();
+    await sessions.get(sessionId).transport.close();
     sessions.delete(sessionId);
   }
   res.status(204).send();

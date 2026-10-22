@@ -177,6 +177,15 @@ OpenAI-compatible client ([`aiProviders.js`](../server/src/lib/aiProviders.js)):
 The layer is provider-agnostic by design — any OpenAI-compatible endpoint is one more registry
 entry. Conversations persist per user (`Conversation`).
 
+Tool calling has two strategies and both are **read-only**. With `MCP_SERVER_URL` set, a provider
+whose registry entry says `responsesApi: true` is sent this deployment's own `/mcp` endpoint and
+calls it directly; everything else gets three function tools the route executes itself against the
+caller's workspace. The relay carries `MCP_BEARER_TOKEN`, which is the *connector's* identity rather
+than the chatter's, so it is restricted at both ends — `allowed_tools` on the tool definition and a
+`x-kol-emet-mcp-scope: read` header that makes `/mcp` register no write tools on that session
+(KOL-113, [`lib/mcpScope.js`](../server/src/lib/mcpScope.js)). The Claude.ai connector sends no such
+header and is unchanged.
+
 ## Data migrations
 One-off scripts in [`server/scripts/`](../server/scripts): `seed.js` (18 initial World Train
 entries), `migrate-blocks.js` (body → blocks), `migrate-entries-to-entities.js`, and

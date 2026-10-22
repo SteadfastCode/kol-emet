@@ -178,6 +178,14 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // conversation is the asker's own row (Conversation.userId), not shared
   // content. A floor on who may spend the workspace's AI allowance is a
   // pricing decision nobody has made — see the Decision Log for KOL-103.
+  //
+  // "Writes nothing to it" is now enforced rather than assumed (KOL-113). On
+  // the Responses-API path the route hands the provider this deployment's own
+  // /mcp endpoint with the connector's bearer token, so an unrestricted relay
+  // was a way around the gate above: the write tools behind that token run as
+  // Settings.mcpUserId, not as the caller. Chat's relay is a read-only MCP
+  // session — allowed_tools plus a scope header /mcp honours by registering no
+  // write tools. See lib/mcpScope.js.
   app.use('/chat', chatRouter);
   app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
   // Drafts are gated: a draft stages changes to the graph and `POST /:id/apply`

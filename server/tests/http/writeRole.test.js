@@ -45,6 +45,15 @@
  *     would otherwise keep full write access through Claude. Every advertised
  *     tool must be classified here as a read or a write, so a new tool cannot
  *     slip past this group either.
+ *   - **A read-only `/mcp` session has no write tools at all** (KOL-113). That
+ *     is the session the in-app assistant's relay opens: `POST /chat` hands the
+ *     provider this endpoint with the *connector's* bearer token, so an
+ *     unrestricted relay let any chat caller spend the connector's write access
+ *     — the floor above, bypassed one mount over. The group drives a second
+ *     session opened with chat's scope header, as a member who *may* write, and
+ *     demands that all ten writes are unreachable and the reads still answer.
+ *     `tests/http/chatMcpRelay.test.js` owns the other end: that chat sends
+ *     those headers and that `allowed_tools` in the first place.
  *
  * Deliberately **not** gated, and asserted as exemptions rather than silently
  * skipped: `/export` (reading is what a viewer is for), `/events` (a GET), and
@@ -66,7 +75,9 @@
  * both sweeps fail naming that route; make `requireWriteRole` gate every
  * method rather than only unsafe ones and the read group fails; make it pass
  * `viewer` and the behavioural sweep fails; put `mcpWorkspaceId()` back in any
- * write tool in `src/routes/mcp.js` and the MCP group fails.
+ * write tool in `src/routes/mcp.js` and the MCP group fails; register the write
+ * tools regardless of scope in `createMcpServer()`, or add one to
+ * `MCP_READ_TOOLS`, and the read-only group fails.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_WRITE_ROLE_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -109,6 +120,7 @@ import RelationshipType from '../../src/models/RelationshipType.js';
 import ChangeLog from '../../src/models/ChangeLog.js';
 import Draft from '../../src/models/Draft.js';
 import { setMcpUser } from '../../src/lib/mcpUserStore.js';
+import { MCP_READ_SCOPE, MCP_READ_TOOLS, MCP_SCOPE_HEADER } from '../../src/lib/mcpScope.js';
 
 // Environment before src/app.js is imported, for the reasons in mcp.test.js.
 process.env.NODE_ENV = 'test';
@@ -191,6 +203,8 @@ let app;
 let httpServer;
 let mcpUrl;
 let mcp;
+/** A second session over the same endpoint, opened with the read scope. */
+let mcpReadOnly;
 
 /** The three members of the one workspace. */
 let owner;
@@ -485,7 +499,15 @@ async function graphState() {
 
 // ─── MCP ─────────────────────────────────────────────────────────────────────
 
-/** The four tools that only read. Everything else must be a write. */
+/**
+ * The four tools that only read. Everything else must be a write.
+ *
+ * Retyped here rather than imported, and then asserted against
+ * `MCP_READ_TOOLS` (src/lib/mcpScope.js) below: that list is what chat's
+ * read-only relay is allowed to call (KOL-113), so a write tool added to it
+ * would hand the relay a write — and importing it as this group's definition of
+ * "a read" would make exactly that mistake invisible here.
+ */
 const MCP_READS = new Set(['search_entities', 'get_entity', 'list_entity_types', 'list_open_questions']);
 
 /** Arguments good enough to reach each write tool's workspace lookup. */
@@ -519,10 +541,28 @@ function mcpReadArgs() {
 
 /** Calls a tool and returns { isError, text }. */
 async function callTool(name, args) {
-  const res = await mcp.callTool({ name, arguments: args });
-  const text = (res.content ?? []).map(part => part.text ?? '').join('');
-  log('normal', `mcp ${name}(${JSON.stringify(args)}) → isError=${Boolean(res.isError)}: ${text.slice(0, 120)}`);
-  return { isError: Boolean(res.isError), text };
+  return await callToolOn(mcp, name, args);
+}
+
+/**
+ * The same, on a given client: the read-only group below drives a second
+ * session over the same endpoint and the same bearer token, so the only
+ * difference between them is the scope it was opened with.
+ *
+ * A tool a session never registered is a protocol error rather than a tool
+ * result, so a throw is reported as a refusal — which is the shape a read-only
+ * session produces for all ten writes.
+ */
+async function callToolOn(client, name, args) {
+  try {
+    const res = await client.callTool({ name, arguments: args });
+    const text = (res.content ?? []).map(part => part.text ?? '').join('');
+    log('normal', `mcp ${name}(${JSON.stringify(args)}) → isError=${Boolean(res.isError)}: ${text.slice(0, 120)}`);
+    return { isError: Boolean(res.isError), text };
+  } catch (err) {
+    log('normal', `mcp ${name}(${JSON.stringify(args)}) threw: ${err.message}`);
+    return { isError: true, text: err.message };
+  }
 }
 
 /** Points Settings.mcpUserId at a member, so the connector acts as them. */
@@ -555,10 +595,22 @@ before(async () => {
   });
   mcp = new Client({ name: 'kol-emet-tests', version: '0.0.0' });
   await mcp.connect(transport);
+
+  // The same endpoint and the same bearer token, opened with the scope header
+  // chat's relay sends (KOL-113): this is the session the in-app assistant gets.
+  const readOnlyTransport = new StreamableHTTPClientTransport(mcpUrl, {
+    requestInit: {
+      headers: { Authorization: `Bearer ${MCP_TOKEN}`, [MCP_SCOPE_HEADER]: MCP_READ_SCOPE },
+    },
+  });
+  mcpReadOnly = new Client({ name: 'kol-emet-tests-read-only', version: '0.0.0' });
+  await mcpReadOnly.connect(readOnlyTransport);
+  log('light', `second MCP session opened read-only (source: ${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} on the initialize request)`);
 });
 
 after(async () => {
   await mcp?.close();
+  await mcpReadOnly?.close();
   if (httpServer) {
     httpServer.closeAllConnections();
     await new Promise(resolve => httpServer.close(resolve));
@@ -806,6 +858,43 @@ describe('/mcp holds the same floor', () => {
     const created = JSON.parse(res.text);
     assert.equal(String(created.workspaceId), owner.workspaceId);
     assert.equal(await Entity.countDocuments({ _id: created._id, workspaceId: owner.workspaceId }), 1);
+  });
+
+  test("the read set this group classifies is the one chat's relay is given", async () => {
+    // Two lists that must not drift: what this file treats as a read, and what
+    // src/lib/mcpScope.js lets the in-app assistant's relay call. A write tool
+    // appearing on that list is a write offered to every chat caller (KOL-113).
+    assert.deepEqual([...MCP_READ_TOOLS].sort(), [...MCP_READS].sort(),
+      'MCP_READ_TOOLS (src/lib/mcpScope.js) and this group\'s MCP_READS disagree about which tools only read');
+  });
+
+  test('a read-only session advertises the read tools and nothing else', async () => {
+    const advertised = (await mcpReadOnly.listTools()).tools.map(t => t.name).sort();
+    assert.deepEqual(advertised, [...MCP_READ_TOOLS].sort(),
+      `a session opened with ${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} should carry no write tool: ${advertised.join(', ')}`);
+  });
+
+  test('a read-only session cannot write even as an editor, and the graph is untouched', async () => {
+    // The role behind the token is deliberately one that *may* write: this is
+    // the scope refusing, not the write floor, which is the whole point —
+    // chat's relay carries the connector's identity rather than the caller's.
+    await mcpActAs(editor);
+    const before = await graphState();
+
+    for (const [name, toolArgs] of Object.entries(mcpWriteArgs())) {
+      const res = await callToolOn(mcpReadOnly, name, toolArgs);
+      assert.equal(res.isError, true, `${name} should be unreachable on a read-only session, answered: ${res.text}`);
+    }
+
+    assert.deepEqual(await graphState(), before, 'a write on a read-only MCP session changed the graph');
+  });
+
+  test('a read-only session still reads', async () => {
+    await mcpActAs(editor);
+    for (const [name, toolArgs] of Object.entries(mcpReadArgs())) {
+      const res = await callToolOn(mcpReadOnly, name, toolArgs);
+      assert.equal(res.isError, false, `${name} should answer a read-only session, returned: ${res.text}`);
+    }
   });
 
   test('a member with no role at all is refused, not defaulted', async () => {
