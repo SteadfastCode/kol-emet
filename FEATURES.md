@@ -76,14 +76,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-110) secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…**
-  Found by the grader of KOL-089 (high, server/src/lib/producers/redactSecrets.js:343).
-  `secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in
-  a `kind: List` document — exactly what `kubectl get secrets -o yaml` emits, a shape the
-  producer's own docs advertise as supported input — gets no by-position redaction; its
-  `stringData`/`data` values whose keys are not credential words (`POSTGRES_USER: appuser`,
-  `legacy.conf: <base64>`) are stored verbatim in `Draft.source.text`, which has no TTL and is
-  carried out verbatim by the exporter.
 - [ ] **(KOL-111) The host-resolution fallback applies .split('.')[0] unconditionally, not only after a cluster-DNS…**
   Found by the grader of KOL-089 (medium, server/src/lib/producers/kubernetes.js:483). The
   host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS
@@ -140,6 +132,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-110) secretDataPairs only inspects a document's own root for kind: Secret, so a Secret wrapped in a ki…** (routine 2026-10-22, 71dd84d)
+  Found by the grader of KOL-089 (high, server/src/lib/producers/redactSecrets.js:343).
+  `secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in
+  a `kind: List` document — exactly what `kubectl get secrets -o yaml` emits, a shape the
+  producer's own docs advertise as supported input — gets no by-position redaction; its
+  `stringData`/`data` values whose keys are not credential words (`POSTGRES_USER: appuser`,
+  `legacy.conf: <base64>`) are stored verbatim in `Draft.source.text`, which has no TTL and is
+  carried out verbatim by the exporter.
 - [x] **(KOL-108) Rule 5's mark is copied by Object.assign, which the comment says it cannot be** (routine 2026-10-21, c29c37b)
   `RAISED_HERE` is a module-private Symbol set by plain assignment in `httpError()`
   (`server/src/middleware/errorHandler.js:163`), and the comment above it (`:132`) states the guarantee the mark exists
