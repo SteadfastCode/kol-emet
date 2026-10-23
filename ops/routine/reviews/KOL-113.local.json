@@ -1,0 +1,194 @@
+{
+  "item": "KOL-113",
+  "repo": "kol-emet",
+  "mergeSha": "0270e6d129ce86d224e834e9308a5c72c9749933",
+  "completedAtUtc": "2026-10-22T11:30:44.974Z",
+  "completeRunId": "2026-10-22T09:10:06.188Z",
+  "reviewRunId": "2026-10-23T07:01:09.522Z",
+  "reviewedAtUtc": "2026-10-23T07:21:21.550Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 68019,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/architecture.md"
+      ],
+      "part": null,
+      "bytes": 6664,
+      "contextBytes": 7722,
+      "promptTokens": 4244,
+      "completionTokens": 136,
+      "latencyMs": 19141,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/.env.example"
+      ],
+      "part": null,
+      "bytes": 13544,
+      "contextBytes": 847,
+      "promptTokens": 4080,
+      "completionTokens": 199,
+      "latencyMs": 21692,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/app.js",
+        "server/src/lib/mcpScope.js",
+        "server/src/routes/chat.js"
+      ],
+      "part": null,
+      "bytes": 8222,
+      "contextBytes": 6215,
+      "promptTokens": 4302,
+      "completionTokens": 134,
+      "latencyMs": 19226,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/mcp.js"
+      ],
+      "part": null,
+      "bytes": 11480,
+      "contextBytes": 0,
+      "promptTokens": 3566,
+      "completionTokens": 163,
+      "latencyMs": 18181,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/chatMcpRelay.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 14440,
+      "contextBytes": 0,
+      "promptTokens": 4476,
+      "completionTokens": 145,
+      "latencyMs": 20240,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/chatMcpRelay.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 5424,
+      "contextBytes": 8133,
+      "promptTokens": 4048,
+      "completionTokens": 127,
+      "latencyMs": 18092,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/writeRole.test.js"
+      ],
+      "part": null,
+      "bytes": 8460,
+      "contextBytes": 0,
+      "promptTokens": 2883,
+      "completionTokens": 129,
+      "latencyMs": 14343,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/routes/chat.js",
+      "line": 208,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "The write floor is bypassable through POST /chat, which this change deliberately leaves ungated.",
+      "scenario": "A viewer can ask the assistant to create or delete an entity in chat, and the write will land because the relayed `/mcp` session carries no write tools.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code explicitly states that on the Responses-API path, `POST /chat` hands the provider this deployment's own `/mcp` endpoint with `MCP_BEARER_TOKEN` and `require_approval: 'never'`, which makes it a read-only session."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/.env.example:157"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "docs/api.md:102"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/chat.js:183"
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "docs/api.md:90"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The write floor is bypassable through POST /chat, which this change deliberately leaves ungated. · The change introduces a security vulnerability by leaving the POST /chat endpoint ungated, allowing viewers to perform write operations through chat. · The write floor is bypassable through POST /chat, which this change deliberately leaves ungated. · The change introduces a new `readOnly` option for the MCP server, which determines whether write tools are registered. However, there is no proper handling of session scope mismatches, leading to potential security issues where read-only sessions can be used to perform write operations. · The write floor is bypassable through POST /chat, which this change deliberately leaves ungated. · One high-severity defect found: The write floor is bypassable through POST /chat. · One high-severity defect found: the write floor is bypassable through POST /chat.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 82410,
+    "completionTokens": 2390
+  },
+  "latencyMs": 355914
+}

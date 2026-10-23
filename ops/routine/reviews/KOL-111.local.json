@@ -1,0 +1,99 @@
+{
+  "item": "KOL-111",
+  "repo": "kol-emet",
+  "mergeSha": "fb59979b9306d95bc91477f124b56b85c61af0f9",
+  "completedAtUtc": "2026-10-22T10:42:15.122Z",
+  "completeRunId": "2026-10-22T09:10:06.188Z",
+  "reviewRunId": "2026-10-23T07:01:09.522Z",
+  "reviewedAtUtc": "2026-10-23T07:12:06.362Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 24509,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 14367,
+      "contextBytes": 0,
+      "promptTokens": 3926,
+      "completionTokens": 191,
+      "latencyMs": 20775,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js",
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": null,
+      "bytes": 10142,
+      "contextBytes": 0,
+      "promptTokens": 3151,
+      "completionTokens": 193,
+      "latencyMs": 18316,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 483,
+      "severity": "medium",
+      "confidence": 1,
+      "summary": "The host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS suffix was stripped.",
+      "scenario": "A stream with a Deployment named `api` and `value: https://api.stripe.com/v1` proposes `Calls web → api` and never proposes `api.stripe.com` at all.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "The code applies `.split('.')[0]` unconditionally, leading to the described scenario."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS suffix was stripped, so any external FQDN whose first label happens to match an in-file workload or Service name is turned into an internal `Calls` edge instead of an External Dependency. · The host-resolution fallback applies `.split('.')[0]` unconditionally, not only after a cluster-DNS suffix was stripped, so any external FQDN whose first label happens to match an in-file workload or Service name is turned into an internal `Calls` edge instead of an External Dependency.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 21141,
+    "completionTokens": 701
+  },
+  "latencyMs": 94587
+}

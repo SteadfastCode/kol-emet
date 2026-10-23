@@ -1,0 +1,99 @@
+{
+  "item": "KOL-110",
+  "repo": "kol-emet",
+  "mergeSha": "71dd84df97ad59a09618789c42ac409caacd32fc",
+  "completedAtUtc": "2026-10-22T10:26:18.977Z",
+  "completeRunId": "2026-10-22T09:10:06.188Z",
+  "reviewRunId": "2026-10-23T07:01:09.522Z",
+  "reviewedAtUtc": "2026-10-23T07:10:31.676Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v5",
+  "diffBytes": 19943,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11265,
+      "contextBytes": 3494,
+      "promptTokens": 4162,
+      "completionTokens": 257,
+      "latencyMs": 24855,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/redactSecrets.js",
+        "server/tests/unit/redactSecrets.test.js"
+      ],
+      "part": null,
+      "bytes": 8678,
+      "contextBytes": 0,
+      "promptTokens": 2954,
+      "completionTokens": 197,
+      "latencyMs": 17864,
+      "findings": 1,
+      "critiqued": 1,
+      "dropped": 1,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [
+    {
+      "file": "server/src/lib/producers/redactSecrets.js",
+      "line": 343,
+      "severity": "high",
+      "confidence": 1,
+      "summary": "`secretDataPairs` only inspects a document's own root for `kind: Secret`, so a Secret wrapped in a `kind: List` document gets no by-position redaction.",
+      "scenario": "When a Secret is nested within a `kind: List` document, as emitted by `kubectl get secrets -o yaml`, the `secretDataPairs` function does not correctly identify and redact the Secret's values. This results in sensitive information being stored verbatim in `Draft.source.text`, which has no TTL and can be exported verbatim.",
+      "critique": {
+        "verdict": "supported",
+        "reason": "`secretDataPairs` only inspects a document's own root for `kind: Secret`, so nested Secrets within a `kind: List` are not redacted."
+      }
+    }
+  ],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/src/lib/producers/redactSecrets.js:343"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change aims to fix an issue where Secrets nested within a `kind: List` document are not properly redacted by the `secretDataPairs` function. The fix involves modifying the function to visit every `Map` in the stream and read the `data` / `stringData` of each one that says `kind: Secret`, ensuring that all nested Secrets are correctly identified and redacted. · The change introduces a vulnerability where secrets wrapped inside a `kind: List` document are not properly redacted, leading to potential data exposure.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 21339,
+    "completionTokens": 839
+  },
+  "latencyMs": 102125
+}
