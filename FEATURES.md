@@ -61,18 +61,10 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-
-
-
-
-
-
-
-
-
-
-
-
+- [ ] **(KOL-017) Source-coverage pane in the draft review UI**
+  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
+  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
+  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
 
 ## Proposed
 
@@ -102,10 +94,6 @@ registration, or removes a feature.
   (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
   raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
   `server/scripts/try-generate.js` against Daniel's allowance.
-- [ ] **(KOL-017) Source-coverage pane in the draft review UI** [proposed]
-  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
-  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
-  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
 - [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
   An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
   a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
