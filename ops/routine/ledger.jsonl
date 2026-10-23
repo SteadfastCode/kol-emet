@@ -527,3 +527,21 @@
 {"event":"review-grade","item":"KOL-110","grader":"claude-opus-5","grades":{"findings":1,"confirmed":0,"falsePositive":1,"duplicate":0,"unverifiable":0,"missed":0,"independent":0,"triageChecked":6,"triageCorrect":6},"localPromptVersion":"v5","localModel":"qwen2.5-coder:14b","mergeSha":"71dd84df97ad59a09618789c42ac409caacd32fc","runId":"2026-10-23T08:10:17.684Z","costUsd":1.1056630000000003,"atUtc":"2026-10-23T08:28:37.400Z"}
 {"event":"review-grade","item":"KOL-104","grader":"claude-opus-5","grades":{"findings":4,"confirmed":0,"falsePositive":4,"duplicate":0,"unverifiable":0,"missed":3,"independent":3,"triageChecked":6,"triageCorrect":6},"localPromptVersion":"v5","localModel":"qwen2.5-coder:14b","mergeSha":"d70e7ccffb9e15e8f6a40b3fbafd9165b3a34b00","runId":"2026-10-23T08:10:17.684Z","costUsd":2.185613,"atUtc":"2026-10-23T08:28:37.400Z"}
 {"event":"note","text":"auto: promoted KOL-017 after 53.2h as a proposal; screen: A UI-only addition with a clear spec (render uncovered source spans from stored evidence offsets) and a concrete Vitest verify that distinguishes covered from uncovered text, with no auth, data or Daniel-only decisions involved.. Veto with: queue demote kol-emet KOL-017","source":"auto","command":"auto.promote","item":"KOL-017","atUtc":"2026-10-23T09:23:31.337Z"}
+{"event":"ack","items":["KOL-094"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.062Z"}
+{"event":"ack","items":["KOL-103"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.062Z"}
+{"event":"ack","items":["KOL-088"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-093"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-102"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-089"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-090"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-091"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-092"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-104"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-105"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-106"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-107"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-108"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-110"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-111"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-112"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
+{"event":"ack","items":["KOL-113"],"by":"daniel","source":"dashboard","atUtc":"2026-10-23T19:58:09.063Z"}
