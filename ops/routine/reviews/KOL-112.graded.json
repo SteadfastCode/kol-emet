@@ -1,0 +1,88 @@
+{
+  "item": "KOL-112",
+  "repo": "kol-emet",
+  "mergeSha": "2e77a7acefb6bc868b4f80b7bb72bdb3ae12e7b0",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-23T08:10:17.684Z",
+  "gradedAtUtc": "2026-10-23T08:18:20.115Z",
+  "independent": [
+    {
+      "file": "server/tests/unit/broadcaster.test.js",
+      "line": 745,
+      "severity": "low",
+      "summary": "The new 'a stream with no session id is closed' case documents itself as protecting the `BEARER_TOKEN` path (\"`null` matching `null` would silently keep a connector's stream open on an account deletion\"), but that scenario cannot occur: `routes/events.js` records `userId` and `sessionId` from the same `bySession` flag, so a bearer stream has `userId: null` and `closeStreamsForUser` never matches it at all — the test covers a userId-with-null-sessionId combination no production path can create, so its stated rationale (and the same claim in the broadcaster docstring and the Decision Log entry) is untrue of this code."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "This is the pre-fix bug the item describes, not the merged state: the route now passes `exceptSessionId: req.sessionID` so the caller's stream is never sent `session-ended`, and the cited useEvents.js line only gained a comment."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "Same mistake at the server end — auth.js:1223 calls `closeStreamsForUser(userId, REVOKE_SOURCE, { exceptSessionId: req.sessionID })`, so no `session-ended` frame reaches the calling session's streams."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "Restates the same already-fixed bug a third time, anchored at a test file's header comment rather than any defect in it; the new unit case asserts precisely the fixed behaviour."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff edits `POST /auth/sessions/revoke-all` in server/src/routes/auth.js and the session-scoped stream closer it calls."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or secret handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, or payment code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "`closeStreamsForUser` — the function whose signature and behaviour change — is also the account-deletion closer, and the diff changes which live connections are forcibly terminated."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Nothing calls out to a third-party service; all changes are in-process SSE bookkeeping."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, deploy, migration, or packaging change — only source, tests, and docs/spec prose."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "All three local findings are the item's own pre-fix bug description re-reported against the merged code that fixes it, so the review contributed nothing and missed the one small inaccuracy actually present.",
+  "counts": {
+    "findings": 3,
+    "confirmed": 0,
+    "falsePositive": 3,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.8546449999999999,
+  "numTurns": 10,
+  "durationMs": 93383,
+  "sessionId": "5ba4dfdc-6f08-48c4-9e58-22ce8f33db94"
+}

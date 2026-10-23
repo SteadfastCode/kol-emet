@@ -1,0 +1,107 @@
+{
+  "item": "KOL-104",
+  "repo": "kol-emet",
+  "mergeSha": "d70e7ccffb9e15e8f6a40b3fbafd9165b3a34b00",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-23T08:10:17.684Z",
+  "gradedAtUtc": "2026-10-23T08:28:37.097Z",
+  "independent": [
+    {
+      "file": "client/src/components/EntityHeader.vue",
+      "line": 76,
+      "severity": "medium",
+      "summary": "The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with no confirmation, and this collection has no ChangeLog trail or rollback (stated in the docs/api.md rows added by this same diff), so a mis-click permanently destroys a question; every other destructive action in this client confirms first (EntityDetail.vue:284 'Delete \"x\"? This cannot be undone.', RelationshipsSection.vue:449, PasskeySettings inline confirm)."
+    },
+    {
+      "file": "client/src/components/EntityHeader.vue",
+      "line": 218,
+      "severity": "low",
+      "summary": "The re-seed watcher fires on any incoming entity object — WikiLayout.vue:1012 replaces selectedEntity wholesale on every SSE entity:updated — and unconditionally clears newQuestion, editingId/editText, pendingId and addPending, so a concurrent edit by another client (or an MCP write) discards text typed into the add field or the open inline editor and re-enables a row's controls while its PUT/POST is still in flight, allowing a second conflicting write whose late response then appends or replaces a row in the freshly re-seeded list."
+    },
+    {
+      "file": "client/src/api/openQuestions.js",
+      "line": 23,
+      "severity": "low",
+      "summary": "The module sends X-SSE-Client-Id on every unsafe method \"so the live-sync stream can tell this tab's own writes from another's\", but no /open-questions handler broadcasts anything (unlike entities.js:283/313/351, tags.js:100, changelog.js:270), so the header is inert and a second tab viewing the same entity keeps rendering a question that was deleted or renamed — and keeps the stale open-count badge — until something else forces a refetch."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "removeQuestion() in EntityHeader.vue wraps deleteOpenQuestion in try/catch and surfaces the server's message through failed()/questionError, and the cited file is only 118 lines long so line 150 does not exist."
+    },
+    {
+      "index": 2,
+      "verdict": "false-positive",
+      "reason": "The question text is rendered with Vue mustache interpolation ({{ oq.question }}), which HTML-escapes; there is no v-html anywhere in the new markup, so no XSS vector exists."
+    },
+    {
+      "index": 3,
+      "verdict": "false-positive",
+      "reason": "asRow reads properties off the returned object — missing fields yield undefined rather than throwing — and every route returns the full OpenQuestion document, so the described crash cannot occur."
+    },
+    {
+      "index": 4,
+      "verdict": "false-positive",
+      "reason": "Exactly backwards: the single server change in this diff adds `runValidators: true` to the PUT findOneAndUpdate (openQuestions.js:205) so `{status:'banana'}` is now a 400 VALIDATION_FAILED, and line 215 is the DELETE handler, not the update."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds a new credentialed write surface plus a canWrite permission gate on the controls, and its new server suite exercises unauthenticated 401 and cross-workspace 404/entry_ids-dropping isolation."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env secrets appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches billing, quotas, or the AI allowance — open questions are free CRUD."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff adds a browser-reachable DELETE /open-questions/:id path (api module plus the ✕ button), which is genuinely destructive."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "All calls are to this app's own Express routes; no third-party service is contacted."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, migration, or version/config changes — only client code, a server one-liner, tests, and docs."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "All four findings are false positives — including one that asserts the absence of the very `runValidators: true` fix this diff adds — and the local review missed the unconfirmed irreversible delete and the re-seed watcher's clobbering of in-flight state, while its triage read was entirely right.",
+  "counts": {
+    "findings": 4,
+    "confirmed": 0,
+    "falsePositive": 4,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.185613,
+  "numTurns": 31,
+  "durationMs": 341312,
+  "sessionId": "df6aaabb-a99d-49b0-95cb-89cfa7b1aac0"
+}

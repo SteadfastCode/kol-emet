@@ -1,0 +1,78 @@
+{
+  "item": "KOL-111",
+  "repo": "kol-emet",
+  "mergeSha": "fb59979b9306d95bc91477f124b56b85c61af0f9",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-23T08:10:17.684Z",
+  "gradedAtUtc": "2026-10-23T08:20:48.516Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 720,
+      "severity": "low",
+      "summary": "The `service.namespace` branch accepts any namespace the file names anywhere, and `hostToEntity`/`workloads` never record which namespace a workload is in, so in a multi-namespace stream a host like `cache.prod` resolves to a workload named `cache` that actually lives in `team-b` — a `Calls` edge to the wrong object rather than an External Dependency."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "The merged tree no longer contains the unconditional `.split('.')[0]` — line 491 calls `resolveHost`, which only strips the first label after `CLUSTER_SUFFIX_RE.test(host)` matches, and the new test at kubernetes.test.js:460 asserts exactly the `api.stripe.com`/`api` scenario produces a Depends-on edge; the model restated the item's pre-fix bug as a live finding."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only the Kubernetes producer's host resolution, docs and tests — no session, passkey, OAuth or workspace-access code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential handling changed; redaction lives in redactSecrets.js, which this diff does not touch."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The producer is deterministic with no model call, so no allowance or billing path is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Nothing is deleted or overwritten; the change only classifies proposed draft items."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound request or third-party client is added — \"External Dependency\" here is just a proposed entity category, and no endpoint contract changed."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, migration, deploy config or dependency change; PRODUCER_VERSION stays kubernetes@1."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review produced no real findings — its single finding is the already-fixed bug named in the item restated as if still present — though its triage was entirely correct.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.0620170000000002,
+  "numTurns": 15,
+  "durationMs": 148365,
+  "sessionId": "3388bcfc-f5a8-49d0-9d25-b777f86b374e"
+}

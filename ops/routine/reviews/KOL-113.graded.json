@@ -1,0 +1,78 @@
+{
+  "item": "KOL-113",
+  "repo": "kol-emet",
+  "mergeSha": "0270e6d129ce86d224e834e9308a5c72c9749933",
+  "localPromptVersion": "v5",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-23T08:10:17.684Z",
+  "gradedAtUtc": "2026-10-23T08:16:46.690Z",
+  "independent": [
+    {
+      "file": "server/src/routes/chat.js",
+      "line": 203,
+      "severity": "medium",
+      "summary": "The relay still reads as the connector, not the caller: on the Responses-API path the model's search_entities/get_entity run through mcpWorkspaceId(), which resolves Settings.mcpUserId's workspace, so any chat user on that path gets answers out of the MCP user's graph rather than their own — a cross-tenant read in a multi-tenant deployment. The change closes the write half and documents this in the Decision Log as out of scope, but docs/api.md's new POST /chat note says only \"tools are read-only on both paths\" and never warns that the reads are not the caller's workspace."
+    }
+  ],
+  "grades": [
+    {
+      "index": 1,
+      "verdict": "false-positive",
+      "reason": "It restates the bug this change fixes and its own scenario refutes it — the read-only session registers no write tools, so create_entity is unreachable (verified in routes/mcp.js writeTool() and the probe in chatMcpRelay.test.js), meaning the write does not land."
+    }
+  ],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change is entirely about authorization scope on /mcp sessions (write-tool registration, scope header, 403 on scope mismatch)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "It edits the code that attaches MCP_BEARER_TOKEN to an outbound third-party request and documents that credential's identity semantics in .env.example."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff touches usage metering, budget checks, or billing — chat's spend path is unchanged."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "It changes registration of the ten write tools, including the delete/removal tools, so the destructive-operation surface is directly altered (narrowed)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "mcpToolDef() changes what is sent to the provider's Responses API — allowed_tools plus a new header on the tool definition."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, migration, or deploy/config rollout change; only a commented env-var example alongside code and tests."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The single finding is a restatement of the bug the change fixes, with a self-contradicting scenario, and the triage — while correct on all six keys — is the only part of the review that carries any value.",
+  "counts": {
+    "findings": 1,
+    "confirmed": 0,
+    "falsePositive": 1,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.1182535,
+  "numTurns": 8,
+  "durationMs": 122339,
+  "sessionId": "5424a590-093c-434b-b329-466b8f4bcf9f"
+}
