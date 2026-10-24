@@ -94,6 +94,20 @@ on that session at all** — the half that does not depend on a provider honouri
 Restoring write access through chat needs the relay to carry the *caller's* identity rather than the
 connector's, not the removal of this.
 
+**The reads behind that token are the connector's too, so read-only was only half of it (KOL-114).**
+A relayed `search_entities` or `get_entity` resolves its workspace with `mcpWorkspaceId()`, which
+reads `Settings.mcpUserId`'s workspace and never `req.workspaceId` — so for a caller who is not a
+member of the connector's workspace, a relayed read answers out of another tenant's graph. The relay
+is therefore offered **only when the connector stands in the caller's own workspace**
+(`relayDecision()` in [`routes/chat.js`](../server/src/routes/chat.js)); every other turn — and any
+turn where the connector is unauthorized or its workspace cannot be resolved — falls back to the
+Chat Completions path, whose `search_entities`, `get_entity` and `save_memory` this route executes
+itself against `req.workspaceId`. Both paths emit the same SSE events, so the fallback is invisible
+to the client; what it costs is `list_entity_types` and `list_open_questions`, which the Completions
+path has never offered. Naming the caller's workspace in a header on the relay instead was rejected:
+the credential beside it is the connector's, so that would let any holder of `MCP_BEARER_TOKEN` read
+*any* workspace.
+
 `/mcp` never passes through this middleware — it has its own bearer gate and each tool scopes
 itself — so the same floor is enforced there by
 [`lib/mcpWorkspace.js`](../server/src/lib/mcpWorkspace.js): read tools call `mcpWorkspaceId()`, the
@@ -110,7 +124,7 @@ Mount points and their guards:
 |--------|-------|------|-------|
 | `/auth` | mixed | none | Login/registration; individual routes guard themselves |
 | `/templates` | none | none | Workspace templates a signup can start from; public because the signup form is shown before an account exists |
-| `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace. A session opened with `x-kol-emet-mcp-scope: read` (chat's relay) registers the four read tools only |
+| `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace — which is why chat relays here only for a caller already in that workspace (KOL-114). A session opened with `x-kol-emet-mcp-scope: read` (chat's relay) registers the four read tools only |
 | `/` (oauth) | mixed | none | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | none | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
 | `/workspaces` | `requireAuth` | any member | The caller's memberships, and which one this session acts in. Deliberately **no** `resolveWorkspace`: a membership list is not content in one workspace, and the choice must not be gated on the role held in the workspace being left. Mounted ahead of the `/` changelog catch-all, whose `resolveWorkspace` would otherwise 403 a caller with no membership at all |
@@ -547,7 +561,7 @@ and timestamps only — never an email or a credential. The client logs its own 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/chat/providers` | Providers whose API key is configured on the server (`id`, `name`, `models`, `defaultModel`) |
-| POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Tools are read-only on both paths — on the Responses-API path the relayed `/mcp` session carries no write tools (KOL-113; see [Roles](#roles)). Persists to the conversation when `conversationId` is supplied — which must belong to the caller **and to the workspace the request acted in**, or it is `404 Conversation not found` before the stream opens and before anything is billed (KOL-091). The system prompt is built from the caller's memories *in that workspace* only. |
+| POST | `/chat` | Streaming chat over SSE. Body: `{ provider, model, messages, systemPrompt?, conversationId? }`. Tools are read-only on both paths — on the Responses-API path the relayed `/mcp` session carries no write tools (KOL-113; see [Roles](#roles)). **The relay reads as the connector, not as the caller**, so it is used only when `Settings.mcpUserId`'s workspace *is* the caller's; otherwise the turn takes the Chat Completions path and the tools run here against `req.workspaceId` (KOL-114). Either way no tool answers out of another tenant's graph. Persists to the conversation when `conversationId` is supplied — which must belong to the caller **and to the workspace the request acted in**, or it is `404 Conversation not found` before the stream opens and before anything is billed (KOL-091). The system prompt is built from the caller's memories *in that workspace* only. |
 
 Providers are defined in [`lib/aiProviders.js`](../server/src/lib/aiProviders.js) and reached through
 an OpenAI-compatible client. Currently registered: **OpenRouter** (primary), the native **Claude

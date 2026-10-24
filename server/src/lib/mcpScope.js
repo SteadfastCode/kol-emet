@@ -29,6 +29,15 @@
  * until it does, a write through chat lands in whichever workspace
  * `Settings.mcpUserId` happens to belong to, which need not be the one the
  * question was asked in.
+ *
+ * The same is true of the *reads* on this list, which is why read-only was
+ * only half the fix (KOL-114): a relayed `search_entities` answers out of the
+ * connector's workspace, so for a caller who is not a member of it that is a
+ * cross-tenant read. The relay is therefore built at all only when the
+ * connector stands in the caller's own workspace — `relayDecision()` in
+ * routes/chat.js — and every other turn is answered on the Chat Completions
+ * path, whose tools run here against `req.workspaceId`. These four are the
+ * ceiling for a relayed session; that check is whether there is one.
  */
 
 /**

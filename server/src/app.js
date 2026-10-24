@@ -186,6 +186,12 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // Settings.mcpUserId, not as the caller. Chat's relay is a read-only MCP
   // session — allowed_tools plus a scope header /mcp honours by registering no
   // write tools. See lib/mcpScope.js.
+  //
+  // "Reads the graph" means the caller's own graph (KOL-114). The reads behind
+  // that token are the connector's too, so the relay is only used when the
+  // connector stands in the caller's workspace; every other turn takes the
+  // Chat Completions path, whose tools the route executes itself against
+  // req.workspaceId. See relayDecision() in routes/chat.js.
   app.use('/chat', chatRouter);
   app.use('/conversations', requireAuth, resolveWorkspace, conversationsRouter);
   // Drafts are gated: a draft stages changes to the graph and `POST /:id/apply`
