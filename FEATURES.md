@@ -61,10 +61,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-017) Source-coverage pane in the draft review UI**
-  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
-  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
-  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
 
 ## Proposed
 
@@ -107,6 +103,10 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-017) Source-coverage pane in the draft review UI** (routine 2026-10-23, 1e673ed)
+  "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
+  alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
+  Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
 - [x] **(KOL-113) The write floor is bypassable through POST /chat, which this change deliberately leaves ungated o…** (routine 2026-10-22, 0270e6d)
   Found by the grader of KOL-103 (high, server/src/routes/chat.js:208). The write floor is
   bypassable through `POST /chat`, which this change deliberately leaves ungated on the stated

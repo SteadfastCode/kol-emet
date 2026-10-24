@@ -79,7 +79,7 @@
     "KOL-017": {
       "order": 5,
       "title": "Source-coverage pane in the draft review UI",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-017",
