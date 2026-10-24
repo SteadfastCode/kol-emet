@@ -45,6 +45,10 @@
         />
       </div>
 
+      <!-- "Here is the text I did not use" — the one thing the item list
+           cannot show, because the item that would show it was never proposed. -->
+      <SourceCoverage :draft="draft" source="DraftReview" />
+
       <p v-if="draft.counts?.dropped" class="dropped">
         {{ draft.counts.dropped }} item{{ draft.counts.dropped === 1 ? " wasn't" : "s weren't" }} usable
         and {{ draft.counts.dropped === 1 ? 'was' : 'were' }} left out.
@@ -72,6 +76,7 @@
 <script setup>
 import { ref, onMounted, computed, inject } from 'vue';
 import DraftItemCard from './DraftItemCard.vue';
+import SourceCoverage from './SourceCoverage.vue';
 import EntityEditor from '../EntityEditor.vue';
 import { useDraftReview } from '../../composables/useDraftReview.js';
 
