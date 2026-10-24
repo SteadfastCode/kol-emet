@@ -51,7 +51,7 @@ const IRON_GATE = {
 };
 
 function run(rawEntities, rawRelationships = [], existingEntities = [IRON_GATE]) {
-  return normalizeDraft(rawEntities, rawRelationships, {
+  return normalizeDraft(rawEntities, rawRelationships, [], {
     categories: CATEGORIES,
     sourceText: SOURCE,
     existingEntities,
@@ -158,6 +158,7 @@ describe('normalizeDraft — matching a proposed relationship against existing g
       // what makes their ids known before anything is applied.
       [{ title: 'Mira', category: 'Characters' }, { title: 'The Iron Gate', category: 'Worlds' }],
       relationships,
+      [],
       { categories: CATEGORIES, sourceText: SOURCE, existingEntities: entities, existingGroups: groups },
     );
 
@@ -250,6 +251,7 @@ describe('normalizeDraft — matching a proposed relationship against existing g
     const { items } = normalizeDraft(
       [{ title: 'Silas', category: 'Characters' }],
       [{ label: 'Keepers', members: [{ name: 'Silas', role: 'Keeper' }, { name: 'The Iron Gate', role: 'Kept' }] }],
+      [],
       { categories: CATEGORIES, sourceText: SOURCE, existingEntities: [MIRA, IRON_GATE], existingGroups: [KEEPERS] },
     );
     const group = items.find(i => i.kind === 'relationship');

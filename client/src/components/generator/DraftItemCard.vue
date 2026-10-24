@@ -39,6 +39,9 @@
     <p v-if="item.flags?.includes('member_dropped')" class="flag">
       One or more members couldn't be matched and were left out.
     </p>
+    <p v-if="item.flags?.includes('link_dropped')" class="flag">
+      This was asked about something that couldn't be matched to an entity.
+    </p>
     <p v-if="item.flags?.includes('no_evidence')" class="flag subtle">
       No supporting quote — check this one against your notes.
     </p>

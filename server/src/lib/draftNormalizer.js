@@ -13,6 +13,9 @@
 
 import { z } from 'zod';
 import { normalizeTitle, similarity } from './similarity.js';
+// The per-run question cap is declared beside the prompt that asks for it, so
+// the number the model is given and the number enforced here cannot drift.
+import { MAX_QUESTIONS } from './generatorPrompts.js';
 
 export const DUPLICATE_THRESHOLD = 0.72;
 export const MAX_ITEMS = 60;
@@ -23,6 +26,24 @@ const rawEntitySchema = z.object({
   summary:  z.string().max(400).optional().default(''),
   body:     z.string().optional().default(''),
   tags:     z.array(z.string()).optional().default([]),
+  quote:    z.string().optional().default(''),
+});
+
+/**
+ * Pass-3 output. `entities` is a list of NAMES, resolved here the same way a
+ * relationship member is: the model has no way to know an ObjectId, and a
+ * question is worth keeping even when it can be tied to nothing.
+ *
+ * A model that emits one name as a bare string rather than a one-element array
+ * is coerced rather than dropped — the slip is common on small models and the
+ * intent is unambiguous.
+ */
+const rawOpenQuestionSchema = z.object({
+  question: z.string().min(1).max(1000),
+  entities: z.preprocess(
+    v => (typeof v === 'string' ? [v] : v),
+    z.array(z.string()).optional().default([]),
+  ),
   quote:    z.string().optional().default(''),
 });
 
@@ -249,12 +270,18 @@ function locateEvidence(quote, index, chunkIndex = 0) {
 /**
  * @param {object[]} rawEntities      parsed pass-1 output
  * @param {object[]} rawRelationships parsed pass-2 output
- * @param {object}   ctx  { categories, sourceText, existingEntities, existingGroups }
- *                        existingEntities: [{_id, title, updatedAt}]
- *                        existingGroups:   [{_id, label, members: [{refId, label}]}]
+ * @param {object[]} rawOpenQuestions parsed pass-3 output
+ * @param {object}   ctx  { categories, sourceText, existingEntities, existingGroups,
+ *                          existingQuestions }
+ *                        existingEntities:  [{_id, title, updatedAt}]
+ *                        existingGroups:    [{_id, label, members: [{refId, label}]}]
+ *                        existingQuestions: [{_id, question}]
  */
-export function normalizeDraft(rawEntities, rawRelationships, ctx) {
-  const { categories, sourceText, existingEntities = [], existingGroups = [] } = ctx;
+export function normalizeDraft(rawEntities, rawRelationships, rawOpenQuestions, ctx) {
+  const {
+    categories, sourceText,
+    existingEntities = [], existingGroups = [], existingQuestions = [],
+  } = ctx;
   const items = [];
   const dropReasons = [];
 
@@ -416,5 +443,103 @@ export function normalizeDraft(rawEntities, rawRelationships, ctx) {
     });
   }
 
+  // ── open questions ───────────────────────────────────────────────
+  // Last, so a question can name an entity from either this run or the live
+  // roster, and so the 'q' keys read after the 'e' and 'r' ones. Unlike a
+  // relationship, a question needs no resolvable link at all: "who built the
+  // gate?" is worth asking of a wiki that has no gate entity yet.
+  let q = 0;
+  const existingQuestionKeys = new Set(existingQuestions.map(x => questionKey(x.question)));
+  const seenQuestions = new Set();
+  for (const raw of Array.isArray(rawOpenQuestions) ? rawOpenQuestions : []) {
+    if (items.length >= MAX_ITEMS) { dropReasons.push('item cap reached'); break; }
+    // Separate from MAX_ITEMS and much smaller: the review queue is the scarce
+    // resource, and a model asked for questions will keep producing them long
+    // after it has run out of ones the notes actually raise.
+    if (q >= MAX_QUESTIONS) { dropReasons.push(`open-question cap reached (${MAX_QUESTIONS})`); break; }
+
+    const parsed = rawOpenQuestionSchema.safeParse(raw);
+    if (!parsed.success) {
+      dropReasons.push(`open question failed validation: ${parsed.error.issues[0]?.message ?? 'unknown'}`);
+      continue;
+    }
+    const v = parsed.data;
+
+    const question = v.question.trim();
+    const key = questionKey(question);
+    if (!key) { dropReasons.push('open question had no text'); continue; }
+    if (seenQuestions.has(key)) {
+      dropReasons.push(`duplicate open question "${question}" within the same run`);
+      continue;
+    }
+    // Re-importing an unchanged source is the ordinary case, and there is no
+    // 'update' op for a question — applyOpenQuestion only creates — so the
+    // alternative to dropping it is a second copy of a question the workspace
+    // already holds. Dropped rather than silently skipped: the count is
+    // reported, so the UI says "1 item couldn't be used" instead of showing
+    // one fewer than it found.
+    if (existingQuestionKeys.has(key)) {
+      dropReasons.push(`open question "${question}" is already in this workspace`);
+      continue;
+    }
+    seenQuestions.add(key);
+
+    // entry_ids are flat strings, the shape OpenQuestion.entry_ids and
+    // POST /open-questions take. An entity this run proposes has no id yet, so
+    // its localKey stands in and the applier resolves it once that item lands —
+    // which is also what `dependsOn` tells the review UI, so rejecting the
+    // entity does not leave an accepted question pointing at nothing.
+    const entryIds = [];
+    const dependsOn = [];
+    const flags = [];
+    for (const name of v.entities) {
+      const nameKey = normalizeTitle(name);
+      const local = nameToLocal.get(name) ?? keyToLocal.get(nameKey);
+      const existing = existingByKey.get(nameKey);
+
+      if (local) {
+        if (!entryIds.includes(local)) entryIds.push(local);
+        if (!dependsOn.includes(local)) dependsOn.push(local);
+      } else if (existing) {
+        // A string, like every other id in `proposed`: this payload is the
+        // JSON shape the edit validator checks and the exporter carries out.
+        const id = String(existing._id);
+        if (!entryIds.includes(id)) entryIds.push(id);
+      } else {
+        if (!flags.includes('link_dropped')) flags.push('link_dropped');
+        dropReasons.push(`open question link "${name}" matched no entity`);
+      }
+    }
+    if (!v.quote) flags.push('no_evidence');
+
+    items.push({
+      localKey: `q${++q}`,
+      seq: items.length,
+      kind: 'open_question',
+      // No 'update': a question is never matched against an existing one, it is
+      // dropped above when the workspace already holds it.
+      op: 'create',
+      input: { evidence: locateEvidence(v.quote, searchIndex), contextEntityIds: [] },
+      proposed: { question, entry_ids: entryIds },
+      matchedBy: 'none',
+      dependsOn,
+      flags,
+    });
+  }
+
   return { items, dropReasons };
 }
+
+/**
+ * Questions are compared case-insensitively, with padding and the trailing
+ * question mark ignored, so "Who built the gate?" and "who built the gate"
+ * are one question. Nothing fuzzier: "Who built the gate?" and "Who built the
+ * Iron Gate?" are two different questions, and a near-miss threshold here
+ * would drop the second one on the strength of the first.
+ */
+const questionKey = q => String(q ?? '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim()
+  .replace(/[?!.\u2026]+$/, '')
+  .trim();

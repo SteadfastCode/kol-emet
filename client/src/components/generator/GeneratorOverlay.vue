@@ -110,6 +110,7 @@ function describe(ev) {
       : 'Finding entities…';
   }
   if (ev.stage === 'relationships') return 'Working out relationships…';
+  if (ev.stage === 'open_questions') return 'Looking for open questions…';
   if (ev.stage === 'normalizing')   return 'Checking against your existing graph…';
   return 'Working…';
 }

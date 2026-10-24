@@ -623,7 +623,7 @@ Event frames on the stream:
 | `type` | Payload |
 |--------|---------|
 | `created` | `{ draftId }` — emitted immediately, before any model call |
-| `stage` | `{ stage: 'entities' \| 'relationships' \| 'normalizing', chunk?, of? }` |
+| `stage` | `{ stage: 'entities' \| 'relationships' \| 'open_questions' \| 'normalizing', chunk?, of? }` |
 | `done` | `{ draftId, counts, route, budget }` |
 | `error` | `{ message, code, ref, draftId }` — `message` is a sentence safe to show, `code` what to branch on, `ref` (an unmapped failure only, else `null`) the server log's index to the real error. Never the provider's own text — see [Errors](#errors) |
 

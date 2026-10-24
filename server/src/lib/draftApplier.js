@@ -34,6 +34,8 @@ import { describeFailure, publicFailure } from './failureNote.js';
 //             relationship write, naming what that write was matched against
 //             rather than only what it produced — including a recorded target
 //             the write had to drop, and which members it no longer held
+//             — and per open question whose entry_ids did not all survive the
+//             workspace check
 //   normal  — light (every line this module logs today is light or verbose;
 //             the tier is kept so a new per-item line has somewhere to go)
 //   verbose — light, plus each member label or note an update actually changed
@@ -325,19 +327,49 @@ async function findOrCreateGroup(p, members, ctx, item) {
 
 async function applyOpenQuestion(item, ctx) {
   const p = payloadOf(item);
-  const linkIds = (p.entry_ids ?? [])
-    .map(k => ctx.localKeys.get(k) ?? k)
-    .filter(Boolean);
+
+  // An entry_id is either an entity that already exists or the localKey of a
+  // sibling item in this same draft, which has an id only once that item has
+  // landed (draftNormalizer's open-question loop). A key that did not land is
+  // blocked, not failed: nothing went wrong here, the entity the question is
+  // about just is not in the graph. Blocked rather than dropped because a
+  // question quietly linked to one of the two entities it was accepted for is
+  // not the question anyone approved.
+  const linkIds = [];
+  for (const k of p.entry_ids ?? []) {
+    if (!k) continue;
+    const resolved = ctx.localKeys.get(k) ?? k;
+    if (!mongoose.isValidObjectId(resolved)) {
+      throw publicFailure('APPLY_DEPENDENCY_MISSING', `depends on "${k}", which was not applied`, { blocked: true });
+    }
+    linkIds.push(resolved);
+  }
+
+  // Scoped before the write and not only on the back-reference below: these ids
+  // travel in a payload a human can edit, and POST /open-questions drops
+  // entry_ids outside the workspace rather than storing them. Same rule here,
+  // so an id edited in by hand cannot link a question to another tenant's
+  // entity. Dropping is reported, since the stored question then says less than
+  // the accepted payload did.
+  const scoped = linkIds.length
+    ? (await Entity.find({ _id: { $in: linkIds }, workspaceId: ctx.workspaceId }).select('_id').lean()).map(e => e._id)
+    : [];
+  if (scoped.length !== linkIds.length) {
+    log('light',
+      `item ${item.localKey}: dropped ${linkIds.length - scoped.length} of ${linkIds.length} ` +
+      `entry_id(s) — not entities of this workspace (source: the ` +
+      `${item.accepted ? 'edited' : 'proposed'} payload of draft ${ctx.draftId})`);
+  }
 
   const oq = await OpenQuestion.create({
     question: p.question,
-    entry_ids: linkIds,
+    entry_ids: scoped,
     workspaceId: ctx.workspaceId,
   });
 
-  if (linkIds.length) {
+  if (scoped.length) {
     await Entity.updateMany(
-      { _id: { $in: linkIds }, workspaceId: ctx.workspaceId },
+      { _id: { $in: scoped }, workspaceId: ctx.workspaceId },
       { $addToSet: { open_questions: oq._id } }
     );
   }

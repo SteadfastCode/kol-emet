@@ -46,6 +46,7 @@ try {
 
 const entities = result.items.filter(i => i.kind === 'entity');
 const rels = result.items.filter(i => i.kind === 'relationship');
+const questions = result.items.filter(i => i.kind === 'open_question');
 
 console.log(`\n${'='.repeat(70)}`);
 console.log(`route      : ${result.route.provider}/${result.route.model}`);
@@ -54,7 +55,7 @@ console.log(`time       : ${Date.now() - t0}ms`);
 console.log(`parsedVia  : ${result.diagnostics.parsedVia.join(', ')}`);
 console.log(`repaired   : ${result.diagnostics.repairAttempted}`);
 console.log(`passes     : ${result.diagnostics.passes}`);
-console.log(`proposed   : ${entities.length} entities, ${rels.length} relationships`);
+console.log(`proposed   : ${entities.length} entities, ${rels.length} relationships, ${questions.length} open questions`);
 console.log(`dropped    : ${result.diagnostics.dropReasons.length}`);
 const u = result.diagnostics.usage ?? {};
 const inTok = u.promptTokens ?? 0, outTok = u.completionTokens ?? 0;
@@ -85,6 +86,16 @@ for (const it of rels) {
     const via = m.localKey ? `-> ${m.localKey}` : `-> existing ${m.refId}`;
     console.log(`     ${m.name} as "${m.label ?? '?'}"  ${via}`);
   }
+  if (it.dependsOn.length) console.log(`     dependsOn: ${it.dependsOn.join(', ')}`);
+}
+
+for (const it of questions) {
+  console.log(`\n${it.localKey}  ${it.proposed.question}${it.flags.length ? `  {${it.flags.join(',')}}` : ''}`);
+  // Either a localKey from this run or an existing entity's id — the same two
+  // cases a relationship member has, in a flat array of strings.
+  if (it.proposed.entry_ids.length) console.log(`     about: ${it.proposed.entry_ids.join(', ')}`);
+  const ev = it.input.evidence;
+  console.log(`     evidence: ${ev.charStart === null ? '(not located)' : `${ev.charStart}-${ev.charEnd}`} "${(ev.quote || '').slice(0, 60)}"`);
   if (it.dependsOn.length) console.log(`     dependsOn: ${it.dependsOn.join(', ')}`);
 }
 

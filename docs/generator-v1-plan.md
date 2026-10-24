@@ -81,13 +81,18 @@ vanishing.
 
 ## Generation
 
-Two narrow passes (entities per chunk, then relationships over the merged name list), temperature 0,
-hard chunking so weak models never see too much at once. Per-item validation drops bad items rather
-than failing the run, and **the drop count is surfaced in the UI** — "N items couldn't be used"
-rather than silently showing 8 of 12.
+Three narrow passes — entities per chunk, then relationships over the merged name list, then open
+questions over the same list — temperature 0, hard chunking so weak models never see too much at
+once. Per-item validation drops bad items rather than failing the run, and **the drop count is
+surfaced in the UI** — "N items couldn't be used" rather than silently showing 8 of 12.
 
 Dedup is exact-normalised-title server-side (flips the item to `op: 'update'` with a staleness
-baseline) plus a fuzzy candidate flagged as `duplicate_candidate` and **never auto-merged**.
+baseline) plus a fuzzy candidate flagged as `duplicate_candidate` and **never auto-merged**. A
+proposed question is deduped against the workspace's own questions on exact wording and **dropped**,
+not updated: `applyOpenQuestion` only creates, so the alternative to dropping is a second copy. The
+question pass is also capped per run (`MAX_QUESTIONS`, 8), because the review queue is the scarce
+resource and a model asked for questions keeps producing them after it has run out of ones the notes
+raise.
 
 ## Review UX
 
@@ -127,8 +132,11 @@ the graph, with the full decision record exportable as training data. What was a
 is still unbuilt:
 
 - **Source-coverage pane** (item 5 above). The evidence offsets it needs are already stored.
-- **Open-question item kind in generation.** The applier handles `open_question` items; the
-  generator does not emit them yet.
+- ✅ **Open-question item kind in generation** — shipped 2026-10-24 (KOL-016): pass 3 in
+  `lib/generatorPrompts.js` (`openQuestionPrompt`) plus the raw schema and matching in
+  `lib/draftNormalizer.js`. A question links entities by name, resolved to a sibling item's localKey
+  (with `dependsOn`, so the review UI blocks it if that entity is rejected) or to an existing
+  entity's id.
 - ✅ **Account-deletion hard delete** (item 2 above) — shipped 2026-09-10: the cascade (KOL-015) and
   its caller `DELETE /auth/account` (KOL-021). `Draft` is in `WORKSPACE_SCOPED_MODELS` in
   `server/src/lib/accountDeleter.js`, so deleting an account hard-deletes its drafts.
