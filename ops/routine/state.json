@@ -1,25 +1,8 @@
 {
   "version": 1,
   "items": {
-    "KOL-047": {
-      "order": 1,
-      "title": "Bridge error handling, logging and reconnect",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-047",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-10-24T07:10:42.990Z",
-      "runId": "2026-10-24T07:10:10.689Z",
-      "lastFail": null
-    },
     "KOL-012": {
-      "order": 2,
+      "order": 1,
       "title": "GitHub Actions CI running both test suites and the client build",
       "status": "pending",
       "attempts": 0,
@@ -39,7 +22,7 @@
       "lastFail": null
     },
     "KOL-013": {
-      "order": 3,
+      "order": 2,
       "title": "Refresh dependencies against the 50 open Dependabot advisories",
       "status": "pending",
       "attempts": 0,
@@ -60,7 +43,7 @@
       "lastFail": null
     },
     "KOL-109": {
-      "order": 4,
+      "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -77,12 +60,12 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 5,
+      "order": 4,
       "title": "Emit `open_question` items from the generator",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-016",
       "dependsOn": [
         "KOL-009"
       ],
@@ -91,12 +74,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-24T07:26:10.995Z",
+      "runId": "2026-10-24T07:10:10.689Z",
       "lastFail": null
     },
     "KOL-014": {
-      "order": 6,
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -113,7 +96,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 7,
+      "order": 6,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -130,7 +113,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 8,
+      "order": 7,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -144,6 +127,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-047": {
+      "order": null,
+      "title": "Bridge error handling, logging and reconnect",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-047",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-24T07:10:42.990Z",
+      "runId": "2026-10-24T07:10:10.689Z",
       "lastFail": null
     },
     "KOL-115": {
