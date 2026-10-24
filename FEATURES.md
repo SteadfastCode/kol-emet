@@ -64,13 +64,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-115) The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…**
-  Found by the grader of KOL-104 (medium, client/src/components/EntityHeader.vue:76). The ✕ button
-  calls removeQuestion() and issues DELETE /open-questions/:id on a single click with no
-  confirmation, and this collection has no ChangeLog trail or rollback (stated in the docs/api.md
-  rows added by this same diff), so a mis-click permanently destroys a question; every other
-  destructive action in this client confirms first (EntityDetail.vue:284 'Delete "x"? This cannot
-  be undone.', RelationshipsSection.vue:449, PasskeySettings inline confirm).
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
@@ -95,6 +88,13 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-115) The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…** (routine 2026-10-23, c4a7155)
+  Found by the grader of KOL-104 (medium, client/src/components/EntityHeader.vue:76). The ✕ button
+  calls removeQuestion() and issues DELETE /open-questions/:id on a single click with no
+  confirmation, and this collection has no ChangeLog trail or rollback (stated in the docs/api.md
+  rows added by this same diff), so a mis-click permanently destroys a question; every other
+  destructive action in this client confirms first (EntityDetail.vue:284 'Delete "x"? This cannot
+  be undone.', RelationshipsSection.vue:449, PasskeySettings inline confirm).
 - [x] **(KOL-114) The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…** (routine 2026-10-23, b463033)
   Found by the grader of KOL-113 (medium, server/src/routes/chat.js:203). The relay still reads as
   the connector, not the caller: on the Responses-API path the model's search_entities/get_entity

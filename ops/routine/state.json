@@ -79,7 +79,7 @@
     "KOL-115": {
       "order": 5,
       "title": "The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-115",
