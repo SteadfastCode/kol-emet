@@ -205,14 +205,19 @@ const QUESTIONS = [
   { _id: 'q2', question: 'How long is the northern line?', status: 'resolved' },
 ];
 
-/** Mounts the page with the real header, so the open-question section renders. */
-async function openPanel(entity = { ...ENTITY, open_questions: QUESTIONS }) {
+/**
+ * Mounts the page with the real header, so the open-question section renders.
+ * `opts` reaches `mount` — the one case that asserts about focus needs
+ * `attachTo`, since a detached tree has no `document.activeElement`.
+ */
+async function openPanel(entity = { ...ENTITY, open_questions: QUESTIONS }, opts = {}) {
   const { loadEntityTypes } = await import('../composables/useEntityTypes.js').then((m) => m.useEntityTypes());
   await loadEntityTypes('EntityDetail.test.js');
 
   const wrapper = mount(EntityDetail, {
     props: { entity, loading: false, breadcrumbs: [] },
     global: { stubs: { BreadcrumbBar: true, BlockList: true, RelationshipsSection: true } },
+    ...opts,
   });
   await flushPromises();
   return wrapper;
@@ -364,15 +369,98 @@ describe('EntityDetail open questions', () => {
     expect(wrapper.get('.oq-error').text()).toBe('Read-only access');
   });
 
-  it('a delete answering 204 removes exactly one row', async () => {
-    const wrapper = await openPanel();
+  // ─── Deleting asks first (KOL-115) ─────────────────────────────────────────
+  //
+  // `DELETE /open-questions/:id` is the one write in this section with nothing
+  // behind it: the collection records no ChangeLog and has no rollback route,
+  // so a question deleted by a mis-click is gone. The ✕ asks; only the Delete
+  // it opens calls the route.
+
+  const deletesSent = () => calls.filter((c) => c.key.startsWith('DELETE /open-questions'));
+
+  it('a single click on the ✕ sends nothing and offers the choice on that row', async () => {
+    const wrapper = await openPanel(undefined, { attachTo: document.body });
     routes['DELETE /open-questions/q2'] = () => [204, null];
 
     await questionRow(wrapper, 'How long is the northern line?').get('button[title="Delete question"]').trigger('click');
     await flushPromises();
 
+    expect(deletesSent()).toEqual([]);
+    const row = questionRow(wrapper, 'How long is the northern line?');
+    expect(row.text()).toContain('Delete permanently?');
+    // The ✕ it replaced is where the keyboard was, so the answer has to be
+    // reachable without tabbing back from the top of the page.
+    expect(document.activeElement).toBe(button(row, 'Delete').element);
+    // Nothing else on the armed row can be hit by accident meanwhile.
+    expect(row.find('button[title="Edit question"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('Keep leaves the question, the list and the ✕ exactly as they were', async () => {
+    const wrapper = await openPanel();
+    const before = rows(wrapper);
+    routes['DELETE /open-questions/q2'] = () => [204, null];
+
+    await questionRow(wrapper, 'How long is the northern line?').get('button[title="Delete question"]').trigger('click');
+    await button(questionRow(wrapper, 'How long is the northern line?'), 'Keep').trigger('click');
+    await flushPromises();
+
+    expect(deletesSent()).toEqual([]);
+    expect(rows(wrapper)).toEqual(before);
+    const row = questionRow(wrapper, 'How long is the northern line?');
+    expect(row.text()).not.toContain('Delete permanently?');
+    expect(row.find('button[title="Delete question"]').exists()).toBe(true);
+  });
+
+  it('a confirmed delete answering 204 removes exactly one row', async () => {
+    const wrapper = await openPanel();
+    routes['DELETE /open-questions/q2'] = () => [204, null];
+
+    await questionRow(wrapper, 'How long is the northern line?').get('button[title="Delete question"]').trigger('click');
+    await button(questionRow(wrapper, 'How long is the northern line?'), 'Delete').trigger('click');
+    await flushPromises();
+
     expect(rows(wrapper)).toEqual([{ status: 'open', text: 'Who stokes it on the night run?' }]);
-    expect(calls.filter((c) => c.key.startsWith('DELETE /open-questions'))).toHaveLength(1);
+    expect(deletesSent()).toHaveLength(1);
+  });
+
+  it('a second ✕ moves the choice rather than arming two rows at once', async () => {
+    const wrapper = await openPanel();
+
+    await questionRow(wrapper, 'How long is the northern line?').get('button[title="Delete question"]').trigger('click');
+    await questionRow(wrapper, 'Who stokes it on the night run?').get('button[title="Delete question"]').trigger('click');
+    await flushPromises();
+
+    expect(questionRow(wrapper, 'How long is the northern line?').text()).not.toContain('Delete permanently?');
+    expect(questionRow(wrapper, 'Who stokes it on the night run?').text()).toContain('Delete permanently?');
+    expect(deletesSent()).toEqual([]);
+
+    // Opening any editor ends the choice: rewriting a question is a different
+    // intention from deleting one.
+    await questionRow(wrapper, 'How long is the northern line?').get('button[title="Edit question"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('.oq-list').text()).not.toContain('Delete permanently?');
+  });
+
+  it('a refused delete keeps the row and leaves the choice open to retry', async () => {
+    const wrapper = await openPanel();
+    const answers = [[404, { error: 'Open question not found' }], [204, null]];
+    routes['DELETE /open-questions/q2'] = () => answers.shift();
+
+    await questionRow(wrapper, 'How long is the northern line?').get('button[title="Delete question"]').trigger('click');
+    await button(questionRow(wrapper, 'How long is the northern line?'), 'Delete').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.get('.oq-error').text()).toBe('Open question not found');
+    expect(rows(wrapper)).toHaveLength(2);
+    const row = questionRow(wrapper, 'How long is the northern line?');
+    expect(row.text()).toContain('Delete permanently?');
+
+    // Still one click away, and still only that row's.
+    await button(row, 'Delete').trigger('click');
+    await flushPromises();
+    expect(deletesSent()).toHaveLength(2);
+    expect(rows(wrapper)).toEqual([{ status: 'open', text: 'Who stokes it on the night run?' }]);
   });
 
   it('offers no controls on a snapshot, and still shows the questions', async () => {

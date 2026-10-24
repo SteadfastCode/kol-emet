@@ -66,20 +66,44 @@
             </template>
             <template v-else>
               <span class="oq-text">{{ oq.question }}</span>
-              <button
-                v-if="canWrite"
-                type="button" class="icon-btn oq-action"
-                title="Edit question"
-                :disabled="pendingId === oq._id"
-                @click.stop="startQuestionEdit(oq)"
-              ><PencilIcon /></button>
-              <button
-                v-if="canWrite"
-                type="button" class="icon-btn oq-action"
-                title="Delete question"
-                :disabled="pendingId === oq._id"
-                @click.stop="removeQuestion(oq)"
-              >✕</button>
+
+              <!-- The ✕ asks; it does not delete. `DELETE /open-questions/:id`
+                   is permanent — this collection writes no ChangeLog and has no
+                   rollback route — so a mis-click would destroy the question
+                   outright. Inline rather than window.confirm, like the passkey
+                   rows: the question stays on screen beside the choice, and the
+                   other rows' controls stay usable. -->
+              <template v-if="canWrite && confirmingId === oq._id">
+                <span class="oq-confirm">Delete permanently?</span>
+                <button
+                  :ref="(el) => { if (el) confirmButton = el; }"
+                  type="button" class="btn-sm danger"
+                  title="Open questions keep no history, so this cannot be undone"
+                  :disabled="pendingId === oq._id"
+                  @click.stop="removeQuestion(oq)"
+                >{{ pendingId === oq._id ? 'Deleting…' : 'Delete' }}</button>
+                <button
+                  type="button" class="btn-sm"
+                  :disabled="pendingId === oq._id"
+                  @click.stop="cancelDelete"
+                >Keep</button>
+              </template>
+              <template v-else>
+                <button
+                  v-if="canWrite"
+                  type="button" class="icon-btn oq-action"
+                  title="Edit question"
+                  :disabled="pendingId === oq._id"
+                  @click.stop="startQuestionEdit(oq)"
+                ><PencilIcon /></button>
+                <button
+                  v-if="canWrite"
+                  type="button" class="icon-btn oq-action"
+                  title="Delete question"
+                  :disabled="pendingId === oq._id"
+                  @click.stop="askDelete(oq)"
+                >✕</button>
+              </template>
             </template>
           </div>
 
@@ -133,7 +157,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch } from 'vue';
+import { ref, computed, reactive, watch, nextTick } from 'vue';
 import { useEntityTypes } from '../composables/useEntityTypes.js';
 import {
   createOpenQuestion,
@@ -160,6 +184,13 @@ import PencilIcon from './icons/PencilIcon.vue';
  * `entry_ids` outside the workspace, and could normalize or refuse the text).
  * A refused write leaves the list exactly as it was and says so above it.
  *
+ * Deleting asks first (KOL-115). The delete is the one write here with nothing
+ * behind it: `/open-questions` writes no ChangeLog and has no rollback route,
+ * so the question and its back-links are simply gone. The ✕ therefore opens an
+ * inline Delete / Keep choice on the row — the same shape PasskeySettings uses,
+ * and the same promise EntityDetail and RelationshipsSection make with
+ * window.confirm — and only that Delete calls the route.
+ *
  * The local rows are re-seeded whenever a fresh `entity.open_questions` array
  * arrives — a reopened panel, or the populated answer to an entity save — so
  * the server's account wins over ours as soon as there is one.
@@ -175,7 +206,9 @@ import PencilIcon from './icons/PencilIcon.vue';
  *             asked for it. A status write and a text write are both a
  *             `PUT /open-questions/:id` and otherwise indistinguishable after
  *             the fact. Failed writes too, with their status.
- *   normal  — light, plus every re-seed from the entity prop and its row count
+ *   normal  — light, plus every re-seed from the entity prop and its row count,
+ *             and every delete that was asked for and then kept — the write
+ *             that did not happen is the one a surprised reader asks about
  *   verbose — normal, plus each row as the server returned it
  */
 
@@ -209,6 +242,15 @@ const questionError = ref('');
 const editingId = ref(null);
 const editText = ref('');
 const newQuestion = ref('');
+/** The id of the question whose ✕ has been clicked and not yet answered, or null. */
+const confirmingId = ref(null);
+/**
+ * The Delete button of the row being confirmed, so the keyboard can reach it:
+ * the ✕ that had focus is the element the confirmation replaces, and without
+ * this a keyboard user would be tabbing from the top of the page to answer.
+ * One row confirms at a time, so one plain handle is enough.
+ */
+let confirmButton = null;
 
 /** Only what the entity populate carries, so a row's shape never varies. */
 const asRow = (q) => ({ _id: String(q._id), question: q.question, status: q.status });
@@ -219,6 +261,7 @@ watch(() => props.entity?.open_questions, (rows) => {
   questions.value = (rows ?? []).map(asRow);
   questionError.value = '';
   editingId.value = null;
+  confirmingId.value = null;
   pendingId.value = null;
   addPending.value = false;
   newQuestion.value = '';
@@ -261,6 +304,7 @@ function startQuestionEdit(oq) {
   editingId.value = oq._id;
   editText.value = oq.question;
   questionError.value = '';
+  confirmingId.value = null;   // rewriting a question is not deleting it
 }
 
 function cancelQuestionEdit() {
@@ -303,16 +347,39 @@ async function toggleStatus(oq) {
   }
 }
 
+/** Opens the row's Delete / Keep choice and puts the keyboard on Delete. */
+async function askDelete(oq) {
+  if (pendingId.value) return;
+  confirmingId.value = oq._id;
+  questionError.value = '';
+  log('normal', `asked whether to delete ${oq._id} (source: the ✕ on that row)`);
+  await nextTick();
+  confirmButton?.focus();
+}
+
+function cancelDelete() {
+  log('normal', `kept ${confirmingId.value} (source: the "Keep" button on that row)`);
+  confirmingId.value = null;
+  confirmButton = null;
+}
+
 async function removeQuestion(oq) {
   if (pendingId.value) return;
+  // The guard lives here and not only in the template: nothing may delete a
+  // question the reader was not asked about, so an unconfirmed call asks.
+  if (confirmingId.value !== oq._id) return askDelete(oq);
   pendingId.value = oq._id;
   questionError.value = '';
   try {
     await deleteOpenQuestion(oq._id);
     questions.value = questions.value.filter(q => q._id !== oq._id);
     if (editingId.value === oq._id) cancelQuestionEdit();
-    log('light', `deleted ${oq._id}: the whole question ${JSON.stringify(oq.question)} (source: the ✕ on that row)`);
+    confirmingId.value = null;
+    confirmButton = null;
+    log('light', `deleted ${oq._id}: the whole question ${JSON.stringify(oq.question)} (source: the confirmed Delete on that row)`);
   } catch (err) {
+    // The choice stays open on the row the error names, so the retry is still
+    // one click away and no other row has quietly become armed.
     failed('deleting question', oq._id, err);
   } finally {
     pendingId.value = null;
@@ -399,6 +466,7 @@ async function save() {
 .oq-badge-btn:hover:not(:disabled) { background: #4a2c00; }
 .oq-badge-btn:disabled { cursor: default; opacity: 0.6; }
 .oq-item.oq-resolved .oq-badge-btn { background: #222; }
+.oq-confirm { color: #e07070; flex-shrink: 0; }
 .oq-action { color: #8a6030; flex-shrink: 0; }
 .oq-action:hover:not(:disabled) { color: #f0a040; }
 .oq-action:disabled { cursor: default; opacity: 0.5; }
