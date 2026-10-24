@@ -64,7 +64,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-115) The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…**
+- [x] **(KOL-115) The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…**
   Found by the grader of KOL-104 (medium, client/src/components/EntityHeader.vue:76). The ✕ button
   calls removeQuestion() and issues DELETE /open-questions/:id on a single click with no
   confirmation, and this collection has no ChangeLog trail or rollback (stated in the docs/api.md

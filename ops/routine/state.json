@@ -76,42 +76,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-114": {
+    "KOL-115": {
       "order": 5,
-      "title": "The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…",
-      "status": "done",
+      "title": "The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-114",
+      "branch": "routine/item/KOL-115",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-24T00:30:31.892Z",
+      "claimedAtUtc": "2026-10-24T00:41:46.458Z",
       "runId": "2026-10-24T00:11:06.124Z",
       "lastFail": null
     },
-    "KOL-115": {
-      "order": 6,
-      "title": "The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-016": {
-      "order": 8,
+      "order": 7,
       "title": "Emit `open_question` items from the generator",
       "status": "pending",
       "attempts": 0,
@@ -147,7 +130,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 9,
+      "order": 8,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -164,7 +147,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 10,
+      "order": 9,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -178,6 +161,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-114": {
+      "order": null,
+      "title": "The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-114",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-24T00:30:31.892Z",
+      "runId": "2026-10-24T00:11:06.124Z",
       "lastFail": null
     },
     "KOL-017": {
