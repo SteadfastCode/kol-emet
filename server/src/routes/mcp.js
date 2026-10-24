@@ -9,6 +9,8 @@ import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import { mcpWorkspaceId, mcpWriteWorkspaceId, resolveMcpActor } from '../lib/mcpWorkspace.js';
+// One shape, and one JSON log record, for every refused MCP request (KOL-047).
+import { refuseMcp, mcpLogRecord, shortSession } from '../lib/mcpFailure.js';
 import { MCP_READ_SCOPE, MCP_SCOPE_HEADER, isReadScopeRequest } from '../lib/mcpScope.js';
 import EntityType from '../models/EntityType.js';
 import { getCategories } from '../config/categories.js';
@@ -17,6 +19,10 @@ import { openQuestionsIn, entriesIn, ownEntryIds } from '../lib/scopedPopulate.j
 import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
 const router = Router();
+
+// Named in every refusal record and error body, so a log or a client can tell
+// which of the two MCP endpoints answered (the other is /bridge/mcp).
+const ENDPOINT = '/mcp';
 
 // Actor and workspace resolution live in lib/mcpWorkspace.js, shared with /bridge/mcp.
 
@@ -67,18 +73,23 @@ router.use((req, res, next) => {
   log('normal', `${req.method} ${req.path} — session: ${req.headers['mcp-session-id'] ?? 'none'} — auth: ${req.headers['authorization'] ? 'present' : 'missing'}`);
 
   if (DISABLED) {
-    log('light', `refused ${req.method} ${req.path} with 503 (source: MCP_BEARER_TOKEN unset in production)`);
-    return res.status(503).json({ error: 'MCP not configured' });
+    return refuseMcp(req, res, {
+      endpoint: ENDPOINT, reason: 'not_configured', log,
+      source: 'MCP_BEARER_TOKEN unset while NODE_ENV=production, read at module load',
+    });
   }
   if (!MCP_TOKEN) return next(); // dev mode: no token required
 
   const auth = req.headers['authorization'];
   if (auth !== `Bearer ${MCP_TOKEN}`) {
-    log('light', `refused ${req.method} ${req.path} with 401 (source: Authorization header ${auth ? 'did not match MCP_BEARER_TOKEN' : 'absent'})`);
     // The rejected header is a credential someone typed; verbose only, so it
-    // never lands in a deployed log by default.
+    // never lands in a deployed log by default. The record below says whether
+    // one was presented at all, never its value.
     log('verbose', `rejected Authorization header: ${auth ?? '(none)'}`);
-    return res.status(401).json({ error: 'Unauthorized' });
+    return refuseMcp(req, res, {
+      endpoint: ENDPOINT, reason: 'unauthorized', log,
+      source: `Authorization header ${auth ? 'did not match MCP_BEARER_TOKEN' : 'absent'}`,
+    });
   }
   next();
 });
@@ -599,6 +610,27 @@ function createMcpServer({ readOnly = false } = {}) {
 // lib/mcpScope.js), and the tools it may call were decided then.
 const sessions = new Map();
 
+// Session ids this process issued and has since closed, newest last, capped.
+// A refusal can then say *which* kind of session loss happened: an id this
+// process closed (a client that kept using a session after DELETE, or after
+// its transport dropped) logs `session_closed`, while one it never had logs
+// `session_unknown` — a restart, a second instance, or a made-up id. Both
+// answer the same 404 asking for a re-handshake; only the record tells them
+// apart, and that distinction is what KOL-047 was filed to recover.
+const CLOSED_SESSION_MEMORY = 256;
+const closedSessions = new Map(); // sessionId -> { closedAt, source }
+
+function rememberClosed(sessionId, source) {
+  if (!sessionId) return;
+  closedSessions.delete(sessionId);
+  closedSessions.set(sessionId, { closedAt: new Date().toISOString(), source });
+  // Bounded: this is a diagnostic, never a reason to hold memory for a client
+  // that is gone. Oldest out first.
+  while (closedSessions.size > CLOSED_SESSION_MEMORY) {
+    closedSessions.delete(closedSessions.keys().next().value);
+  }
+}
+
 router.post('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
   console.log('[mcp] POST body:', JSON.stringify(req.body)?.slice(0, 200));
@@ -616,8 +648,10 @@ router.post('/', async (req, res) => {
     // read-only session is narrower than it asks for, and that session has no
     // write tools registered to reach anyway.
     if (isReadScopeRequest(req.headers) && !readOnly) {
-      log('light', `refused ${req.method} ${req.path} with 403 (source: ${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} on session ${String(sessionId).slice(0, 8)}…, which was initialized with write access)`);
-      return res.status(403).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32002, message: 'Session scope mismatch — re-initialize' } });
+      return refuseMcp(req, res, {
+        endpoint: ENDPOINT, reason: 'session_scope_mismatch', log,
+        source: `${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} on session ${shortSession(sessionId)}, which was initialized with write access`,
+      });
     }
 
     // Intercept response to log what we're actually sending back
@@ -652,7 +686,12 @@ router.post('/', async (req, res) => {
     });
     transport.onclose = () => {
       console.log('[mcp] session closed');
-      for (const [k, v] of sessions) { if (v.transport === transport) sessions.delete(k); }
+      for (const [k, v] of sessions) {
+        if (v.transport !== transport) continue;
+        sessions.delete(k);
+        rememberClosed(k, 'the transport for this session closed');
+        log('normal', `session ${shortSession(k)} closed (source: transport onclose) — ${sessions.size} live session(s) remain`);
+      }
     };
 
     let server;
@@ -667,7 +706,10 @@ router.post('/', async (req, res) => {
       log('light', `session opened ${readOnly ? 'READ-ONLY' : 'with write access'} (source: ${readOnly ? `${MCP_SCOPE_HEADER}: ${MCP_READ_SCOPE} on the initialize request` : 'no read scope header on the initialize request'}) — ${toolNames.length} tool(s) registered`);
     } catch (err) {
       console.error('[mcp] createMcpServer() threw:', err.message);
-      return res.status(500).json({ error: 'mcp_init_failed' });
+      return refuseMcp(req, res, {
+        endpoint: ENDPOINT, reason: 'init_failed', log,
+        source: `createMcpServer() threw: ${err.message}`,
+      });
     }
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
@@ -677,17 +719,29 @@ router.post('/', async (req, res) => {
   if (sessionId) {
     // Unknown session: 404 so the client re-initializes (MCP spec), instead of a 400 that stops it.
     // Sessions are in memory and every deploy forgets them; see routes/bridge.js for the incident.
-    log('light', `unknown session ${String(sessionId).slice(0, 8)}… → 404 (source: not in this process's session map)`);
-    return res.status(404).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32001, message: 'Session not found — re-initialize' } });
+    const closed = closedSessions.get(sessionId);
+    return refuseMcp(req, res, {
+      endpoint: ENDPOINT, reason: closed ? 'session_closed' : 'session_unknown', log,
+      source: closed
+        ? `this process issued the session and closed it at ${closed.closedAt} (${closed.source})`
+        : "not in this process's session map and not among the sessions it closed — issued by another process, or lost when this one restarted",
+      extra: { liveSessions: sessions.size },
+    });
   }
-  console.log('[mcp] rejected — no session and not an initialize request');
-  res.status(400).json({ error: 'Bad request: missing or invalid session ID' });
+  // The bare 400 from this branch was the incident (see lib/mcpFailure.js): a
+  // client that believes it has a session, sending none, told only "missing or
+  // invalid session ID" with no way to read "re-handshake" out of it.
+  return refuseMcp(req, res, {
+    endpoint: ENDPOINT, reason: 'session_missing', log,
+    source: `no mcp-session-id header and the request was ${req.body?.method ? `method "${req.body.method}"` : 'not a JSON-RPC request'}, not initialize`,
+  });
 });
 
 // JSON response mode does not use a persistent GET SSE stream
-router.get('/', (req, res) => {
-  res.status(405).set('Allow', 'POST').send('Method Not Allowed');
-});
+router.get('/', (req, res) => refuseMcp(req, res, {
+  endpoint: ENDPOINT, reason: 'method_not_allowed', log, headers: { Allow: 'POST' },
+  source: 'GET on /mcp: this endpoint runs in JSON response mode and opens no standalone SSE stream',
+}));
 
 router.delete('/', async (req, res) => {
   const sessionId = req.headers['mcp-session-id'];
@@ -695,6 +749,17 @@ router.delete('/', async (req, res) => {
   if (sessionId && sessions.has(sessionId)) {
     await sessions.get(sessionId).transport.close();
     sessions.delete(sessionId);
+    rememberClosed(sessionId, 'DELETE /mcp from the client');
+    log('light', `session ${shortSession(sessionId)} ended (source: DELETE ${ENDPOINT} from the client) — ${sessions.size} live session(s) remain`);
+  } else if (sessionId) {
+    // Not an error (the spec's DELETE is idempotent), but worth a record: a
+    // client tearing down a session this process never had is the same loss
+    // that makes its next call a 404.
+    log('normal', mcpLogRecord({
+      event: 'mcp_delete_unknown_session', endpoint: ENDPOINT, req, status: 204,
+      source: "DELETE for a session id not in this process's session map",
+      extra: { liveSessions: sessions.size },
+    }));
   }
   res.status(204).send();
 });
