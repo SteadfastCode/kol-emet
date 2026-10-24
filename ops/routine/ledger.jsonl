@@ -554,3 +554,4 @@
 {"event":"ack","items":["KOL-017"],"by":"daniel","source":"dashboard","atUtc":"2026-10-24T04:14:42.003Z"}
 {"event":"ack","items":["KOL-114"],"by":"daniel","source":"dashboard","atUtc":"2026-10-24T04:14:42.003Z"}
 {"event":"ack","items":["KOL-115"],"by":"daniel","source":"dashboard","atUtc":"2026-10-24T04:14:42.003Z"}
+{"event":"note","text":"bridge queue.promote stripped [proposed] from KOL-047 in place (under Workqueue Items)","source":"bridge","command":"queue.promote","item":"KOL-047","atUtc":"2026-10-24T04:27:49.588Z"}
