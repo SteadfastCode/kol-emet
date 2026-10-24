@@ -79,7 +79,7 @@
     "KOL-114": {
       "order": 5,
       "title": "The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-114",

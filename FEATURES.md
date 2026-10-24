@@ -64,14 +64,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-114) The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…**
-  Found by the grader of KOL-113 (medium, server/src/routes/chat.js:203). The relay still reads as
-  the connector, not the caller: on the Responses-API path the model's search_entities/get_entity
-  run through mcpWorkspaceId(), which resolves Settings.mcpUserId's workspace, so any chat user on
-  that path gets answers out of the MCP user's graph rather than their own — a cross-tenant read
-  in a multi-tenant deployment. The change closes the write half and documents this in the
-  Decision Log as out of scope, but docs/api.md's new POST /chat note says only "tools are
-  read-only on both paths" and never warns that the reads are not the caller's workspace.
 - [ ] **(KOL-115) The ✕ button calls removeQuestion() and issues DELETE /open-questions/:id on a single click with…**
   Found by the grader of KOL-104 (medium, client/src/components/EntityHeader.vue:76). The ✕ button
   calls removeQuestion() and issues DELETE /open-questions/:id on a single click with no
@@ -103,6 +95,14 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-114) The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…** (routine 2026-10-23, b463033)
+  Found by the grader of KOL-113 (medium, server/src/routes/chat.js:203). The relay still reads as
+  the connector, not the caller: on the Responses-API path the model's search_entities/get_entity
+  run through mcpWorkspaceId(), which resolves Settings.mcpUserId's workspace, so any chat user on
+  that path gets answers out of the MCP user's graph rather than their own — a cross-tenant read
+  in a multi-tenant deployment. The change closes the write half and documents this in the
+  Decision Log as out of scope, but docs/api.md's new POST /chat note says only "tools are
+  read-only on both paths" and never warns that the reads are not the caller's workspace.
 - [x] **(KOL-017) Source-coverage pane in the draft review UI** (routine 2026-10-23, 1e673ed)
   "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
   alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
