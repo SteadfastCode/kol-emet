@@ -60,10 +60,38 @@ identity and read and write the whole workspace through `/mcp`.
 
 The endpoint has its own bearer gate (`MCP_BEARER_TOKEN`), read once at process start:
 configured → the token is required; unset outside production → open, so a local Claude Code session
-needs no secret; unset **in** production → the endpoint is disabled and every request answers
-`503 {"error": "MCP not configured"}`, with the reason logged once at startup. An unset token in a
-deployed process is a misconfiguration, not an invitation — treating it as "no auth needed" would
-publish every tool above to the internet unauthenticated.
+needs no secret; unset **in** production → the endpoint is disabled and every request answers `503`,
+with the reason logged once at startup. An unset token in a deployed process is a misconfiguration,
+not an invitation — treating it as "no auth needed" would publish every tool above to the internet
+unauthenticated.
+
+**Refusals** (both endpoints, [`lib/mcpFailure.js`](../server/src/lib/mcpFailure.js), KOL-047). Every
+refused request answers a JSON-RPC error body whose `data` carries a machine-readable `reason` and a
+`retry` directive, plus a sentence a client can show a person:
+
+```json
+{ "jsonrpc": "2.0", "id": 7, "error": { "code": -32001,
+  "message": "This server has no record of that MCP session — …",
+  "data": { "reason": "session_unknown", "retry": "reinitialize", "endpoint": "/mcp", "status": 404 } } }
+```
+
+`retry` is the field a client branches on: `reinitialize` (run `initialize` again and replay the
+call), `after_delay` (the server cannot serve this right now — not configured, or it failed building
+a session), `never` (a human has to act: a bad token, or a method this endpoint does not answer).
+A chat that cannot tell those apart goes quiet instead of re-handshaking, which is the incident this
+came from. Statuses are unchanged — `401` wrong/absent token, `403` session scope mismatch, `404`
+session not found, `405` GET, `503` not configured, and `400` for a non-initialize request with no
+session id — only the body says why.
+
+Each refusal also emits exactly one JSON log record at the `light` tier (`MCP_LOG_LEVEL`,
+`BRIDGE_LOG_LEVEL`): `event`, endpoint, JSON-RPC method, **tool**, caller (ip, user-agent, client,
+and whether a bearer header was presented — never its value), status, code, `reason`, and `source`,
+the sentence saying why this request was rejected. `reason` is finer than the wire answer on purpose:
+`session_unknown` and `session_closed` are the same 404, but only one means this process issued the
+session and let it go, so `/mcp` keeps a bounded ledger of the ids it closed. `/bridge/mcp` is
+stateless and ignores a session id it is sent, recording that as
+`bridge_session_header_ignored` / `stateless_server_mismatch`; a bridge tool that refuses its
+arguments records `bridge_tool_failed` with its tool name.
 
 The root [`.mcp.json`](../.mcp.json) points Claude Code at the local dev endpoint
 (`http://localhost:3004/mcp`) via the HTTP transport. (The old standalone stdio package and its

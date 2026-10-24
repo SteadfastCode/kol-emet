@@ -477,6 +477,21 @@ function postInitialize(app) {
     });
 }
 
+/**
+ * Every refusal from `/mcp` is one JSON-RPC error body carrying a
+ * machine-readable `reason` and a `retry` directive (src/lib/mcpFailure.js),
+ * plus a sentence a client can show. Asserted as a whole, so a refusal that
+ * loses `data` — the half a client branches on — fails here (KOL-047).
+ */
+function assertRefusal(res, { reason, retry, code, status }) {
+  assert.equal(res.body?.jsonrpc, '2.0', `a refusal must be a JSON-RPC error body: ${JSON.stringify(res.body)}`);
+  assert.equal(res.body?.error?.code, code, `wrong JSON-RPC code: ${JSON.stringify(res.body)}`);
+  assert.deepEqual(res.body?.error?.data, { reason, retry, endpoint: '/mcp', status },
+    `wrong machine-readable refusal data: ${JSON.stringify(res.body)}`);
+  assert.ok(/[a-z]\.$/.test(res.body?.error?.message ?? ''),
+    `a refusal needs a sentence a client can show, got: ${JSON.stringify(res.body?.error?.message)}`);
+}
+
 /** The one startup line the router logs, isolated from anything else it said. */
 function decisionLine(startupLog) {
   const lines = startupLog.filter(line => line.includes('gate is'));
@@ -500,7 +515,10 @@ describe('the auth gate under other startup configurations', () => {
       const res = await postInitialize(app);
 
       assert.equal(res.status, 503, `a deployed process with no token must not serve /mcp, got ${res.status}: ${JSON.stringify(res.body)}`);
-      assert.deepEqual(res.body, { error: 'MCP not configured' });
+      // KOL-047: a JSON-RPC error body, and `retry` says back off rather than
+      // re-handshake — an unset token clears when an operator sets it, which no
+      // amount of re-initializing will do.
+      assertRefusal(res, { reason: 'not_configured', retry: 'after_delay', code: -32000, status: 503 });
       // The refusal has to land before the transport does anything, or a
       // misconfigured process still accumulates sessions from the internet.
       assert.equal(res.headers['mcp-session-id'], undefined, 'a disabled endpoint must not mint a session id');
@@ -512,7 +530,7 @@ describe('the auth gate under other startup configurations', () => {
       // than the request happening to miss a handler.
       const get = await request(app).get('/mcp');
       assert.equal(get.status, 503, `GET /mcp should be refused, got ${get.status}`);
-      assert.deepEqual(get.body, { error: 'MCP not configured' });
+      assertRefusal(get, { reason: 'not_configured', retry: 'after_delay', code: -32000, status: 503 });
 
       const del = await request(app).delete('/mcp').set('mcp-session-id', 'no-such-session');
       assert.equal(del.status, 503, `DELETE /mcp should be refused, got ${del.status}`);
@@ -592,7 +610,9 @@ describe('the auth gate under other startup configurations', () => {
       const res = await postInitialize(app);
 
       assert.equal(res.status, 401, `a configured endpoint must refuse with 401, got ${res.status}: ${JSON.stringify(res.body)}`);
-      assert.deepEqual(res.body, { error: 'Unauthorized' });
+      // And `retry: never` is the half a client acts on: a wrong credential is
+      // not a lost session, so re-handshaking is the wrong move (KOL-047).
+      assertRefusal(res, { reason: 'unauthorized', retry: 'never', code: -32000, status: 401 });
     });
 
     test('the configured token still initializes in production', async () => {
@@ -611,13 +631,85 @@ describe('the auth gate under other startup configurations', () => {
 });
 
 describe('session loss', () => {
+  const post = () => request(app).post('/mcp')
+    .set('Authorization', `Bearer ${MCP_TOKEN}`).set('Accept', 'application/json, text/event-stream');
+
   test('an unknown session id answers 404 (re-initialize), not 400', async () => {
-    const res = await request(app).post('/mcp')
-      .set('Authorization', `Bearer ${MCP_TOKEN}`).set('Accept', 'application/json, text/event-stream')
+    const res = await post()
       .set('mcp-session-id', '00000000-dead-beef-0000-000000000000')
       .send({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} });
     assert.equal(res.status, 404, `${res.status} ${res.text}`);
     assert.equal(res.body.error.code, -32001);
+    assertRefusal(res, { reason: 'session_unknown', retry: 'reinitialize', code: -32001, status: 404 });
+  });
+
+  /**
+   * The incident KOL-047 was filed for. A client that believes it holds a
+   * session, sending none, used to get `400 {"error":"Bad request: missing or
+   * invalid session ID"}` — not JSON-RPC, nothing to branch on — and the chat
+   * side stopped rather than re-handshaking. The status stays 400 (the spec's
+   * answer for a non-initialize request with no session); what it now carries
+   * is `retry: reinitialize`, which is the difference between a channel that
+   * recovers and one that goes quiet.
+   */
+  test('no session id and no initialize is a 400 that says re-initialize', async () => {
+    const res = await post().send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'search_entities', arguments: {} } });
+    assert.equal(res.status, 400, `${res.status} ${res.text}`);
+    assertRefusal(res, { reason: 'session_missing', retry: 'reinitialize', code: -32001, status: 400 });
+    assert.doesNotMatch(res.text, /missing or invalid session ID/, 'the bare sentence from the incident must be gone');
+  });
+
+  /**
+   * A session this process issued and then closed is diagnosed apart from one
+   * it never had: same 404 on the wire, different `reason`, and the record says
+   * when and how it went. Without that split, "the deploy forgot it" and "the
+   * client tore it down and kept calling" are the same log line.
+   */
+  test('a session this process closed is reported as closed, not unknown', async () => {
+    const init = await post().send({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: LATEST_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'kol-emet-tests', version: '0.0.0' } },
+    });
+    const sessionId = init.headers['mcp-session-id'];
+    assert.ok(sessionId, `initialize must mint a session: ${init.status} ${init.text}`);
+    await request(app).delete('/mcp').set('Authorization', `Bearer ${MCP_TOKEN}`).set('mcp-session-id', sessionId).expect(204);
+
+    const res = await post().set('mcp-session-id', sessionId).send({ jsonrpc: '2.0', id: 5, method: 'tools/list', params: {} });
+    assert.equal(res.status, 404, `${res.status} ${res.text}`);
+    assertRefusal(res, { reason: 'session_closed', retry: 'reinitialize', code: -32001, status: 404 });
+  });
+
+  /**
+   * The server-side half: one parseable record per refusal, naming the tool
+   * that was refused and the caller. "bridge_poll was refused forty times for
+   * this client" is the question the logs could not answer during the incident.
+   */
+  test('a refusal logs one JSON record with the tool, the caller and why', async () => {
+    const { lines } = await captureRouterLog(() => post()
+      .set('mcp-session-id', '00000000-0000-0000-0000-00000000beef')
+      .set('User-Agent', 'kol-emet-tests/0.0.0')
+      .send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'get_entity', arguments: { id: 'x' } } }));
+
+    const records = lines
+      .map((line) => line.slice(line.indexOf('{')))
+      .filter((text) => text.startsWith('{'))
+      .map((text) => { try { return JSON.parse(text); } catch { return null; } })
+      .filter((r) => r?.event === 'mcp_request_refused');
+    assert.equal(records.length, 1, `exactly one refusal record per refused request; got ${records.length} in ${JSON.stringify(lines)}`);
+
+    const [r] = records;
+    assert.equal(r.endpoint, '/mcp');
+    assert.equal(r.status, 404);
+    assert.equal(r.reason, 'session_unknown');
+    assert.equal(r.retry, 'reinitialize');
+    assert.equal(r.rpc, 'tools/call');
+    assert.equal(r.tool, 'get_entity', 'the tool name is the field the incident needed');
+    assert.equal(r.requestId, 6);
+    assert.equal(r.caller.ua, 'kol-emet-tests/0.0.0');
+    assert.equal(r.caller.auth, 'bearer', 'the presentation of the credential, never its value');
+    assert.doesNotMatch(JSON.stringify(r), new RegExp(MCP_TOKEN), 'a record must never carry the token');
+    // The light-tier rule: say the source of the answer, not just the answer.
+    assert.match(r.source, /not in this process's session map/);
   });
 });
 

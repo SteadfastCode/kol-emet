@@ -53,6 +53,8 @@ import { setMcpUser } from '../lib/mcpUserStore.js';
 // The approval form binds the MCP identity, so it is behind a live-session
 // guard rather than reading `req.session.userId` itself (KOL-098).
 import { requireLoginSession, resolveLoginSession } from '../middleware/auth.js';
+// One shape, and one JSON log record, for every refused bridge request (KOL-047).
+import { refuseMcp, mcpLogRecord } from '../lib/mcpFailure.js';
 
 const router = Router();
 
@@ -185,16 +187,22 @@ router.post(`${ISSUER_PATH}/oauth/token`, form, (req, res) => {
 router.use(MCP_PATH, (req, res, next) => {
   log('normal', `${req.method} ${MCP_PATH} — session: ${req.headers['mcp-session-id'] ?? 'none'} — auth: ${req.headers['authorization'] ? 'present' : 'missing'}`);
   if (!BRIDGE_TOKEN) {
-    log('light', `refused ${req.method} ${MCP_PATH} with 503 (source: BRIDGE_TOKEN unset)`);
-    return res.status(503).json({ error: 'Bridge not configured' });
+    return refuseMcp(req, res, {
+      endpoint: MCP_PATH, reason: 'not_configured', log,
+      source: 'BRIDGE_TOKEN unset, read at module load — the gate fails closed in every environment',
+    });
   }
   const auth = req.headers['authorization'];
   if (auth !== `Bearer ${BRIDGE_TOKEN}`) {
-    log('light', `refused ${req.method} ${MCP_PATH} with 401 (source: Authorization header ${auth ? 'did not match BRIDGE_TOKEN' : 'absent'})`);
+    // The rejected header is a credential someone typed; verbose only. The
+    // record says whether one was presented at all, never its value.
     log('verbose', `rejected Authorization header: ${auth ?? '(none)'}`);
-    // Names the resource metadata so an OAuth-capable client can find the bridge's own issuer.
-    res.set('WWW-Authenticate', `Bearer resource_metadata="${resourceMetadataUrl(req)}"`);
-    return res.status(401).json({ error: 'Unauthorized' });
+    return refuseMcp(req, res, {
+      endpoint: MCP_PATH, reason: 'unauthorized', log,
+      source: `Authorization header ${auth ? 'did not match BRIDGE_TOKEN' : 'absent'}`,
+      // Names the resource metadata so an OAuth-capable client can find the bridge's own issuer.
+      headers: { 'WWW-Authenticate': `Bearer resource_metadata="${resourceMetadataUrl(req)}"` },
+    });
   }
   next();
 });
@@ -208,6 +216,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const json = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] });
 const failure = (msg) => ({ isError: true, content: [{ type: 'text', text: msg }] });
 
+// Enough of a request for the log record when a server is built outside one.
+const NO_REQUEST = { method: 'POST', headers: {}, body: null };
+
+/**
+ * A tool that refuses its arguments is a failed bridge request too — it answers
+ * 200 with `isError`, so nothing else in this file would record it. KOL-047
+ * wants every failure readable afterwards with its tool name and caller, so
+ * each refusal logs one record alongside the content the client sees.
+ */
+function toolFailure(req, tool, detail) {
+  log('light', mcpLogRecord({
+    event: 'bridge_tool_failed', endpoint: MCP_PATH, req: req ?? NO_REQUEST, status: 200,
+    reason: 'tool_arguments_refused', source: detail, extra: { tool },
+  }));
+  return failure(detail);
+}
+
 function view(m) {
   return {
     id: String(m._id), to: m.to, session: m.session, kind: m.kind, text: m.text,
@@ -218,8 +243,14 @@ function view(m) {
 }
 const presenceView = (p) => ({ host: p.host, sessions: p.sessions, announced_at: p.announcedAt });
 
-export function createBridgeServer() {
+/**
+ * `req` is the request this server was built for (the transport is stateless,
+ * so that is exactly one request). It is only ever read to name the caller in a
+ * failure record; a server built without one still works.
+ */
+export function createBridgeServer(req = null) {
   const server = new McpServer({ name: 'steadfast-bridge', version: '0.1.0' });
+  const fail = (tool, detail) => toolFailure(req, tool, detail);
 
   server.tool(
     'bridge_send',
@@ -234,13 +265,13 @@ export function createBridgeServer() {
     },
     async ({ to, text, session, kind = 'message', command, reply_to }) => {
       const workspaceId = await mcpWorkspaceId();
-      if (kind === 'command' && !command?.name) return failure('kind "command" needs command.name');
+      if (kind === 'command' && !command?.name) return fail('bridge_send', 'kind "command" needs command.name');
       let replyTo = null;
       if (reply_to) {
-        if (!mongoose.isValidObjectId(reply_to)) return failure(`reply_to is not a valid id: ${reply_to}`);
+        if (!mongoose.isValidObjectId(reply_to)) return fail('bridge_send', `reply_to is not a valid id: ${reply_to}`);
         // Only this workspace's messages can be answered — a foreign id is refused, not silently dropped.
         const parent = await BridgeMessage.exists({ _id: reply_to, workspaceId });
-        if (!parent) return failure(`reply_to not found: ${reply_to}`);
+        if (!parent) return fail('bridge_send', `reply_to not found: ${reply_to}`);
         replyTo = parent._id;
       }
       const m = await BridgeMessage.create({
@@ -409,7 +440,7 @@ export function createBridgeServer() {
     async (a) => {
       const workspaceId = await mcpWorkspaceId();
       const syncedAt = new Date(a.synced_at);
-      if (Number.isNaN(syncedAt.getTime())) return failure(`synced_at is not a date: ${a.synced_at}`);
+      if (Number.isNaN(syncedAt.getTime())) return fail('bridge_sync_routine', `synced_at is not a date: ${a.synced_at}`);
       const repoDoc = {
         github: a.github ?? null, host: a.host ?? null, syncedAt, factsHash: a.facts_hash ?? null, counts: a.counts ?? {},
         lastCompleted: a.last_completed ? { ...a.last_completed, at: date(a.last_completed.at) } : {},
@@ -492,7 +523,7 @@ export function createBridgeServer() {
     async ({ repo, item }) => {
       const workspaceId = await mcpWorkspaceId();
       const d = await RoutineItem.findOne({ workspaceId, repo, itemId: item }).lean();
-      if (!d) return failure(`no item ${item} in ${repo} (as of the last sync)`);
+      if (!d) return fail('bridge_kb_item', `no item ${item} in ${repo} (as of the last sync)`);
       return json(itemView(d));
     }
   );
@@ -517,21 +548,47 @@ export const BRIDGE_TOOLS = ['bridge_send', 'bridge_poll', 'bridge_ack', 'bridge
 // the same; the header is ignored.
 
 router.post(MCP_PATH, async (req, res) => {
+  // A client still carrying an mcp-session-id is served (the header is
+  // ignored), but it is recorded: a chat that keeps presenting a session id
+  // here is a client built against the old stateful endpoint, and knowing that
+  // from the logs is the difference between "the server lost the session" and
+  // "the client never needed one". Not a failure, so `normal` rather than
+  // `light`.
+  if (req.headers['mcp-session-id']) {
+    log('normal', mcpLogRecord({
+      event: 'bridge_session_header_ignored', endpoint: MCP_PATH, req, status: 200,
+      reason: 'stateless_server_mismatch',
+      source: 'this endpoint is stateless (sessionIdGenerator: undefined); it issues and validates no session id, so the header was ignored and the request served',
+    }));
+  }
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-  const server = createBridgeServer();
+  const server = createBridgeServer(req);
   res.on('close', () => { transport.close().catch(() => {}); server.close().catch(() => {}); });
   try {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
-    log('light', `request failed: ${err.message}`);
-    if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32603, message: 'Internal error' } });
+    if (!res.headersSent) {
+      return refuseMcp(req, res, {
+        endpoint: MCP_PATH, reason: 'internal_error', log,
+        source: `the transport threw while handling the request: ${err.message}`,
+      });
+    }
+    // Already streaming: the client gets whatever the transport managed to
+    // write, so the record is all that is left.
+    log('light', mcpLogRecord({
+      event: 'mcp_request_refused', endpoint: MCP_PATH, req, status: res.statusCode,
+      reason: 'internal_error', source: `the transport threw after the response had begun: ${err.message}`,
+    }));
   }
 });
 
 // Stateless: no standalone SSE stream to open, and nothing to delete — but a client closing what it
 // believes is a session must not see an error.
-router.get(MCP_PATH, (req, res) => res.status(405).set('Allow', 'POST, DELETE').send('Method Not Allowed'));
+router.get(MCP_PATH, (req, res) => refuseMcp(req, res, {
+  endpoint: MCP_PATH, reason: 'method_not_allowed', log, headers: { Allow: 'POST, DELETE' },
+  source: 'GET on a stateless endpoint: there is no standalone SSE stream to open',
+}));
 router.delete(MCP_PATH, (req, res) => res.status(204).send());
 
 function escapeHtml(str) {

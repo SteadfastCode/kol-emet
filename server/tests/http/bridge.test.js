@@ -163,6 +163,109 @@ describe('gate', () => {
   });
 });
 
+/**
+ * Every refusal from `/bridge/mcp` is one JSON-RPC error body with a
+ * machine-readable `reason` and a `retry` directive, and one parseable log
+ * record (src/lib/mcpFailure.js). KOL-047: during the incident the chat side
+ * saw bare 400s it could not branch on, and the server kept no record naming
+ * the tool or the caller, so neither end could say what had broken.
+ */
+function assertRefusal(res, { reason, retry, code, status }) {
+  assert.equal(res.body?.jsonrpc, '2.0', `a refusal must be a JSON-RPC error body: ${JSON.stringify(res.body)}`);
+  assert.equal(res.body?.error?.code, code, `wrong JSON-RPC code: ${JSON.stringify(res.body)}`);
+  assert.deepEqual(res.body?.error?.data, { reason, retry, endpoint: '/bridge/mcp', status },
+    `wrong machine-readable refusal data: ${JSON.stringify(res.body)}`);
+  assert.ok(/[a-z]\.$/.test(res.body?.error?.message ?? ''),
+    `a refusal needs a sentence a client can show, got: ${JSON.stringify(res.body?.error?.message)}`);
+}
+
+/** Runs `fn` with BRIDGE_LOG_LEVEL forced to `level` and console.log captured. */
+async function captureBridgeLog(level, fn) {
+  const saved = process.env.BRIDGE_LOG_LEVEL;
+  process.env.BRIDGE_LOG_LEVEL = level;
+  const lines = [];
+  const realLog = console.log;
+  console.log = (...args) => { lines.push(args.join(' ')); };
+  try {
+    return { lines, value: await fn() };
+  } finally {
+    console.log = realLog;
+    if (saved === undefined) delete process.env.BRIDGE_LOG_LEVEL;
+    else process.env.BRIDGE_LOG_LEVEL = saved;
+  }
+}
+
+/** The JSON records of one `event` among captured log lines. */
+function records(lines, event) {
+  return lines
+    .map((line) => line.slice(line.indexOf('{')))
+    .filter((text) => text.startsWith('{'))
+    .map((text) => { try { return JSON.parse(text); } catch { return null; } })
+    .filter((r) => r?.event === event);
+}
+
+describe('refusals are machine-readable and logged (KOL-047)', () => {
+  const post = (token) => {
+    const r = request(app).post('/bridge/mcp').set('Accept', 'application/json, text/event-stream');
+    return token === undefined ? r : r.set('Authorization', `Bearer ${token}`);
+  };
+  const frame = { jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'bridge_poll', arguments: { for: 'chat' } } };
+
+  test('a wrong token says "never retry", not "re-handshake"', async () => {
+    const res = await post('nope').send(frame);
+    assert.equal(res.status, 401, res.text);
+    assertRefusal(res, { reason: 'unauthorized', retry: 'never', code: -32000, status: 401 });
+    // The refusal still names the bridge's own issuer; the new body did not cost that.
+    assert.match(res.headers['www-authenticate'] ?? '', /resource_metadata=/);
+  });
+
+  test('a refused request logs one record with the tool, the caller and why', async () => {
+    const { lines } = await captureBridgeLog('light', () => post('nope')
+      .set('User-Agent', 'bridge-tests/0.0.0').send(frame));
+    const found = records(lines, 'mcp_request_refused');
+    assert.equal(found.length, 1, `one record per refusal; got ${found.length} in ${JSON.stringify(lines)}`);
+    const [r] = found;
+    assert.equal(r.endpoint, '/bridge/mcp');
+    assert.equal(r.status, 401);
+    assert.equal(r.reason, 'unauthorized');
+    assert.equal(r.tool, 'bridge_poll', 'the tool name is the field the incident needed');
+    assert.equal(r.rpc, 'tools/call');
+    assert.equal(r.caller.ua, 'bridge-tests/0.0.0');
+    assert.equal(r.caller.auth, 'bearer');
+    assert.doesNotMatch(JSON.stringify(r), /test-bridge-token-distinct|test-mcp-bearer-token/, 'no record may carry a token');
+    assert.match(r.source, /did not match BRIDGE_TOKEN/);
+  });
+
+  test('a session id on a stateless endpoint is served, and recorded as such', async () => {
+    const { lines, value: res } = await captureBridgeLog('normal', () => post(BRIDGE_TOKEN)
+      .set('mcp-session-id', '00000000-dead-beef-0000-000000000000')
+      .send({ jsonrpc: '2.0', id: 12, method: 'tools/list', params: {} }));
+    assert.equal(res.status, 200, res.text);
+    const found = records(lines, 'bridge_session_header_ignored');
+    assert.equal(found.length, 1, `the ignored header is recorded: ${JSON.stringify(lines)}`);
+    assert.equal(found[0].reason, 'stateless_server_mismatch');
+    assert.match(found[0].source, /stateless/);
+  });
+
+  test('a tool that refuses its arguments is recorded with its name', async () => {
+    const { lines } = await captureBridgeLog('light', () => post(BRIDGE_TOKEN).send({
+      jsonrpc: '2.0', id: 13, method: 'tools/call',
+      params: { name: 'bridge_send', arguments: { to: 'box', text: 'hi', reply_to: 'not-an-id' } },
+    }));
+    const found = records(lines, 'bridge_tool_failed');
+    assert.equal(found.length, 1, `a tool refusal is a failed request too: ${JSON.stringify(lines)}`);
+    assert.equal(found[0].tool, 'bridge_send');
+    assert.match(found[0].source, /reply_to is not a valid id/);
+  });
+
+  test('GET answers a JSON-RPC refusal and still names its Allow header', async () => {
+    const res = await request(app).get('/bridge/mcp').set('Authorization', `Bearer ${BRIDGE_TOKEN}`);
+    assert.equal(res.status, 405);
+    assert.equal(res.headers['allow'], 'POST, DELETE');
+    assertRefusal(res, { reason: 'method_not_allowed', retry: 'never', code: -32600, status: 405 });
+  });
+});
+
 describe('stateless transport: a deploy strands no one', () => {
   const frame = { jsonrpc: '2.0', id: 7, method: 'tools/list', params: {} };
   const post = () => request(app).post('/bridge/mcp').set('Authorization', `Bearer ${BRIDGE_TOKEN}`).set('Accept', 'application/json, text/event-stream');
