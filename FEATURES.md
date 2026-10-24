@@ -64,7 +64,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-114) The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…**
+- [x] **(KOL-114) The relay still reads as the connector, not the caller: on the Responses-API path the model's sea…**
   Found by the grader of KOL-113 (medium, server/src/routes/chat.js:203). The relay still reads as
   the connector, not the caller: on the Responses-API path the model's search_entities/get_entity
   run through mcpWorkspaceId(), which resolves Settings.mcpUserId's workspace, so any chat user on
