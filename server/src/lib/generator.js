@@ -12,13 +12,17 @@
  */
 
 import { makeClient, PROVIDERS, isConfigured } from './aiProviders.js';
-import { entityPrompt, relationshipPrompt, PROMPT_VERSION, ROLE_STYLES, DEFAULT_ROLE_STYLE } from './generatorPrompts.js';
+import {
+  entityPrompt, relationshipPrompt, openQuestionPrompt,
+  PROMPT_VERSION, ROLE_STYLES, DEFAULT_ROLE_STYLE,
+} from './generatorPrompts.js';
 import { normalizeDraft } from './draftNormalizer.js';
 import { getCategories } from '../config/categories.js';
 import { publicFailure } from './failureNote.js';
 import Entity from '../models/Entity.js';
 import RelationshipType from '../models/RelationshipType.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
+import OpenQuestion from '../models/OpenQuestion.js';
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 function log(level, msg) {
@@ -223,21 +227,36 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
     log('normal', 'skipping relationship pass — fewer than 2 names available');
   }
 
+  // ── pass 3: open questions over the same closed name list ──────────────────
+  // Runs whether or not there are names: a question needs no entity to be
+  // worth asking, and a braindump that proposed nothing can still be a page of
+  // things the author has not decided.
+  onStage({ stage: 'open_questions' });
+  const oqSystem = openQuestionPrompt({ names });
+  const { value: oqValue } = await callWithRepair(client, route.model, oqSystem, source.slice(0, MAX_CHARS), diag);
+  diag.passes++;
+  const rawOpenQuestions = oqValue ?? [];
+  log('normal', `${rawOpenQuestions.length} raw open questions`);
+
   // ── normalize ──────────────────────────────────────────────────────────────
   onStage({ stage: 'normalizing' });
   // The links the workspace already has: a relationship the model re-describes
   // becomes an update to the group holding it rather than a second copy.
   const existingGroups = await RelationshipGroup.find({ workspaceId })
     .select('_id label members.refId members.refModel members.label').lean();
-  const { items, dropReasons } = normalizeDraft(rawEntities, rawRelationships, {
-    categories, sourceText: source, existingEntities, existingGroups,
+  // Same reason for questions: there is no 'update' op for one, so a question
+  // the workspace already holds is dropped rather than asked twice.
+  const existingQuestions = await OpenQuestion.find({ workspaceId }).select('_id question').lean();
+  const { items, dropReasons } = normalizeDraft(rawEntities, rawRelationships, rawOpenQuestions, {
+    categories, sourceText: source, existingEntities, existingGroups, existingQuestions,
   });
   diag.dropReasons = dropReasons;
   diag.generationMs = Date.now() - started;
 
   log('light',
     `produced ${items.length} item(s) from ${rawEntities.length} raw entities + ` +
-    `${rawRelationships.length} raw relationships; ${dropReasons.length} dropped; ${diag.generationMs}ms`);
+    `${rawRelationships.length} raw relationships + ${rawOpenQuestions.length} raw open ` +
+    `questions; ${dropReasons.length} dropped; ${diag.generationMs}ms`);
 
   return {
     items,

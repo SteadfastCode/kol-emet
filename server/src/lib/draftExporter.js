@@ -253,7 +253,17 @@ function exportPayload(kind, payload, ref) {
   if (kind === 'open_question') {
     return {
       question: p.question,
-      entry_ids: (p.entry_ids ?? []).map(id => ref(id)),
+      // An entry_id is either an entity that already exists — an ObjectId,
+      // which `ref` maps — or the localKey of a sibling item in this draft,
+      // which the normalizer stores as-is because the id does not exist until
+      // the apply writes it. A relationship member carries that distinction in
+      // its own `localKey` field; entry_ids is a flat array of strings (the
+      // shape OpenQuestion.entry_ids takes), so it is read off the shape here.
+      // Both end up as `local:<key>`, which is the form a model should learn to
+      // emit — pseudonymising the literal 'e1' would teach it an id instead.
+      entry_ids: (p.entry_ids ?? []).map(id => (
+        OBJECT_ID_RE.test(String(id)) ? ref(id) : `local:${String(id)}`
+      )),
     };
   }
 

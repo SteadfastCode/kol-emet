@@ -63,8 +63,8 @@
  * would still fail here — but the tripwire itself would not catch it.
  * Tightening the pattern is a change to the exporter, not to this suite.
  *
- * Out of scope: `normalizeDraft` (KOL-016), and the export route and script,
- * which need a database.
+ * Out of scope: `normalizeDraft` (its own suites), and the export route and
+ * script, which need a database.
  *
  * Pure: mongoose is imported only to mint ObjectIds and to build an unsaved
  * Draft document. Nothing connects.
@@ -108,7 +108,10 @@ function assertTrips(fn, path) {
  *   e1  a created entity, accepted and applied — siblings refer to its result
  *       id, which should therefore export as `local:e1`
  *   r1  a relationship between e1 and an existing entity, edited, then applied
- *   q1  an open question linking both, rejected (the null `accepted` is the label)
+ *   q1  an open question linking both, rejected (the null `accepted` is the label).
+ *       Its `entry_ids` hold resolved ids, as a draft that has been applied
+ *       has them; one test below re-points them at a localKey instead, which is
+ *       the shape the normalizer emits before an apply.
  *   e2  an update to the existing entity, still pending
  *
  * Every item sets every field the exporter reads, at the schema's own default
@@ -439,6 +442,25 @@ describe('toJsonl', () => {
     // A rejection keeps its item, with a null `accepted` as the label.
     assert.equal(q1.decision, 'rejected');
     assert.equal(q1.accepted, null);
+  });
+
+  test('an entry_id naming a sibling item exports as a local key, not a pseudonym', () => {
+    // The shape a generated question has BEFORE any apply (KOL-016): the entity
+    // it is about has no id yet, so `entry_ids` carries that item's localKey
+    // and the applier resolves it. Only the localKey form is exercised here —
+    // e1 is rolled back to pending, so there is no result id for the
+    // local-ref index to match on, and `local:e1` can only come from the key.
+    const { draft, ids } = buildDraft();
+    const [e1, , q1] = draft.items;
+    e1.applyState = 'pending';
+    e1.resultId = null;
+    e1.appliedAt = null;
+    q1.proposed = { question: q1.proposed.question, entry_ids: ['e1', ids.existing] };
+
+    const record = JSON.parse(toJsonl(draft, { pseudonym: makePseudonymizer(SECRET) }));
+    const p = makePseudonymizer(SECRET);
+
+    assert.deepEqual(record.items[2].proposed.entry_ids, ['local:e1', p(ids.existing, 'ent')]);
   });
 
   test('exports a mongoose document exactly as it exports the lean object', () => {
