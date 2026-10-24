@@ -62,7 +62,7 @@
     "KOL-016": {
       "order": 4,
       "title": "Emit `open_question` items from the generator",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-016",

@@ -47,11 +47,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009)
-  The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
-  (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
-  raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
-  `server/scripts/try-generate.js` against Daniel's allowance.
 
 ## Proposed
 
@@ -74,6 +69,11 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-016) Emit `open_question` items from the generator** (needs KOL-009) (routine 2026-10-24, d63964d)
+  The applier and `validateItemPayload` already handle kind `open_question`; `server/src/lib/generatorPrompts.js` and `normalizeDraft`
+  (`server/src/lib/draftNormalizer.js`) do not emit it (`docs/generator-v1-plan.md`, Remaining work). Add the prompt section plus a
+  raw open-question schema in the normalizer with a fixture-based unit test. Tagged because final verification is a paid run of
+  `server/scripts/try-generate.js` against Daniel's allowance.
 - [x] **(KOL-047) Bridge error handling, logging and reconnect** (routine 2026-10-24, 11f5fde)
   Filed after the chat side broke: `bridge_poll` returned repeated bare HTTP 400 "missing or invalid
   session ID" while `bridge_send` still worked, then send started failing the same way — the reply
