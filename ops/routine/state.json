@@ -4,7 +4,7 @@
     "KOL-047": {
       "order": 1,
       "title": "Bridge error handling, logging and reconnect",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-047",
