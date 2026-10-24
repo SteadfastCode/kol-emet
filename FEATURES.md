@@ -48,6 +48,23 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
+- [ ] **(KOL-122) Backlog audit: file new candidates under Proposed** [not-before: 2026-10-31]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
+
 ## Proposed
 
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
@@ -64,6 +81,149 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+
+- [ ] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing** [proposed]
+  `server/src/routes/openQuestions.js` imports no broadcaster and calls `broadcast()` nowhere, so the three write
+  handlers (POST `/` :132, PUT `/:id` :160, DELETE `/:id` :215) are invisible to every other open client. The entity
+  routes get their frames for free from `logCreate`/`logUpdate`/`logDelete` (`server/src/lib/changeLogger.js:59,83,105`)
+  and this collection has no ChangeLog at all, so there is nothing to inherit. The browser already assumes otherwise:
+  `client/src/api/openQuestions.js:23` sends `X-SSE-Client-Id` on every unsafe method "so the live-sync stream can tell
+  this tab's own writes from another's", and that header is inert — a second tab viewing the same entity keeps
+  rendering a question that was deleted, renamed or resolved minutes ago. Found by the grader of KOL-104 (low,
+  `client/src/api/openQuestions.js:23`). KOL-102 fixed the bulk-write half of live sync and named this one out of scope.
+  Build: three frames mirroring the entity vocabulary — `question:created`, `question:updated`, `question:deleted` —
+  emitted through `broadcast(name, payload, { workspaceId: req.workspaceId, excludeClientId })`
+  (`server/src/lib/broadcaster.js:349`) with `excludeClientId` read as the entity routes read it
+  (`req.headers['x-sse-client-id'] ?? null`, `server/src/routes/entities.js:283`). Each payload carries the question row
+  and its `entry_ids`, so a listener can tell whether the entity it is showing is affected without a refetch. Emit the
+  same frames from the MCP tool, which writes `OpenQuestion.create` directly rather than through this route
+  (`server/src/routes/mcp.js:283`, workspace from `mcpWriteWorkspaceId()`, no client to exclude) — a question an agent
+  raised appearing in the open tab is the whole point of the feature. Handle them in
+  `client/src/composables/useEvents.js` next to `onFrame('entity:updated', …)` (:231) and wire them in
+  `client/src/components/WikiLayout.vue` so the open-questions section follows.
+  Files: `server/src/routes/openQuestions.js`, `server/src/routes/mcp.js`, `client/src/composables/useEvents.js`,
+  `client/src/components/WikiLayout.vue`, `server/tests/http/openQuestions.test.js`,
+  `client/src/composables/useEvents.test.js`, `docs/api.md` (the `/open-questions` and `/events` rows).
+  Verify: `cd server && yarn test` with a case per write asserting one frame delivered to a second client in the same
+  workspace, none to a client in another, and none to the writer's own client id; `cd client && yarn test --run` with a
+  `useEvents.test.js` case per frame; `cd server && node --check src/index.js`; `cd client && yarn build`.
+  Out of scope: giving open questions a ChangeLog trail or rollback (its own item, and the reason KOL-115 added a
+  confirmation rather than an undo); relationship-group writes, which broadcast nothing either and need their own event
+  vocabulary; `Last-Event-ID` replay for a client that was disconnected; and any change to the question list's order.
+
+- [ ] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section** [proposed]
+  `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
+  `newQuestion`, `editingId`/`editText`, `confirmingId`, `pendingId` and `addPending`. `WikiLayout.vue:1012` replaces
+  `selectedEntity` wholesale on every `entity:updated` frame, and `PUT /entities/:id` populates `open_questions`
+  (`server/src/routes/entities.js:310`), so any edit to the same entity by another browser, the chat relay or an MCP
+  client re-seeds the section underneath the user: text typed into "Add a question" is discarded, an open inline editor
+  closes mid-sentence, and `pendingId`/`addPending` are cleared while that row's own `PUT`/`POST` is still in flight —
+  the controls re-enable, a second conflicting write becomes possible, and the first write's late response then appends
+  or replaces a row in the freshly re-seeded list. Found by the grader of KOL-104 (low,
+  `client/src/components/EntityHeader.vue:218`).
+  Build: re-seed the rows from the server as it does now, but keep the state that belongs to the user rather than to the
+  server — the add field's text, and the open editor's id and text, dropped only when that row is absent from the
+  incoming list — and leave `pendingId`/`addPending` to the write that set them, which already clears them in its own
+  `finally` (`commitEdit`, same file). `confirmingId` keeps being cleared: a delete confirmation should not survive the
+  row changing underneath it. The component's light tier logs the source of every write already; add one line naming
+  what a re-seed kept and what it dropped, since a re-seed that silently keeps state is exactly what a surprised reader
+  asks about.
+  Files: `client/src/components/EntityHeader.vue`, new `client/src/components/EntityHeader.test.js` — the component has
+  no test today, so this is also the first one for the open-questions UI that KOL-104 and KOL-115 built.
+  Verify: `cd client && yarn test --run` with cases for: a re-seed during typing keeps the add text; a re-seed whose
+  list no longer holds the row being edited closes that editor; a re-seed during an in-flight write leaves that row
+  disabled; and the existing seed-on-open behaviour unchanged. `cd client && yarn build`.
+  Out of scope: conflict resolution between two edits of the same question (last write wins, as everywhere else in this
+  client), the live-sync frames the section still does not receive, and any change to WikiLayout's wholesale
+  `selectedEntity` replacement — the panel's other sections depend on it.
+
+- [ ] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces** [proposed]
+  `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
+  is any namespace the file names (:720), but `hostToEntity` is keyed by bare workload name only (:404-405) and
+  `workloads` never records which namespace a workload is in. In a multi-namespace stream — `kubectl get all -A -o yaml`,
+  the input the producer's own header invites (:15) — `cache.prod` therefore resolves to a workload named `cache` that
+  may live in `team-b`, proposing a `Calls` edge to the wrong object instead of an External Dependency;
+  two same-named workloads in two namespaces also collide in the map, where the last document silently wins. Found by
+  the grader of KOL-111 (low, `server/src/lib/producers/kubernetes.js:720`).
+  Build: record each workload's namespace (`default` when it declares none, matching the `namespaces` seed at :248),
+  key `hostToEntity` by `name.namespace` as well as by bare `name`, and resolve a two-label host only against the
+  workload in that namespace. A bare host that is ambiguous across namespaces resolves to nothing and takes the path
+  the file already has for an unreadable reference — a `drop()` reason or an External Dependency, whichever the
+  existing convention makes true — rather than guessing one of them.
+  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js`, and the
+  `POST /drafts/kubernetes` row in `docs/api.md` if the edge classification changes.
+  Verify: `cd server && yarn test` with unit cases for: `cache.prod` alongside a `cache` in `team-b` (no Calls edge to
+  it), two same-named workloads in two namespaces (both proposed, neither shadowed), a `name.namespace` host that does
+  match (still a Calls edge), and the existing `api.stripe.com` case still a Depends-on.
+  `cd server && node --check src/index.js`.
+  Out of scope: reading `NetworkPolicy` or `Ingress` for cross-namespace intent, modelling namespaces as entities of
+  their own (a template decision, not a producer one), and the compose and OpenAPI producers' host resolution.
+
+- [ ] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work** [proposed]
+  KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
+  input that makes the next backlog audit file a duplicate — and three more have gone stale since. (1)
+  `docs/generator-v1-plan.md` lists the **source-coverage pane** under "Remaining work" and its open question 5 still
+  reads "Agreed in scope; **not built**": it shipped 2026-10-23 as KOL-017
+  (`client/src/components/generator/SourceCoverage.vue`, `client/src/lib/sourceCoverage.js`, and its test). (2)
+  `docs/roadmap.md` Phase 7 says "repo, k8s and DB-schema are **next**": the Kubernetes producer shipped 2026-10-21 as
+  KOL-089 (`server/src/lib/producers/kubernetes.js`, `POST /drafts/kubernetes`), leaving repo and DB-schema. (3)
+  `docs/wishlist.md` lists "Bulk import endpoint" as open under Data & API: `POST /import` shipped 2026-10-15 as
+  KOL-077 (`server/src/routes/import.js`, `server/src/lib/graphImporter.js`).
+  Build: mark each shipped line the way these three files already mark their others — a ✅ with the item id and the
+  date — and leave the line in place; nothing is deleted, because the goal is an accurate list rather than a shorter
+  one. Where a line is only half shipped (Phase 7's producers), say which half is left.
+  Files: `docs/generator-v1-plan.md`, `docs/roadmap.md`, `docs/wishlist.md`.
+  Verify: `git diff --name-only` names exactly those three files; `cd server && yarn test` and
+  `cd client && yarn test --run && yarn build` still green — this is documentation only, so movement in either suite
+  means the diff touched more than it should.
+  Out of scope: any code change at all (a line that turns out to describe something genuinely unbuilt is left alone and
+  becomes its own queue item); deciding whether Phase 5 or Phase 7 is the current one, which both claim today — a
+  sequencing call for Daniel; and rewriting either plan's prose.
+
+- [ ] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must** [proposed]
+  Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
+  generations may be used to improve the product, with **no opt-out on the free tier**. What the page actually says
+  (`client/src/views/LoginView.vue:96-98`) is one sentence about account deletion — "You can delete your account and
+  all of its data at any time from Settings." (KOL-021) — and `client/src/views/LoginView.test.js:73-84` pins exactly
+  that sentence, so nothing is drifting unnoticed. Meanwhile `Draft` keeps the whole decision record
+  (`input`/`proposed`/`accepted`, permanent by design, no TTL) and `server/src/lib/draftExporter.js` exports it as
+  training data. The plan's "Remaining work" names this as the one unbuilt half of a decision already taken; for a
+  public product with open registration, every account created before it lands agreed to nothing.
+  Build: add the agreed disclosure beside the existing sentence in the same `.login-disclosure` block, worded as the
+  settled policy restated plainly, and extend the test to pin both sentences (and to keep asserting the block is absent
+  in login mode).
+  Files: `client/src/views/LoginView.vue`, `client/src/views/LoginView.test.js`, `docs/generator-v1-plan.md` (tick the
+  "Signup disclosure copy" line).
+  Verify: `cd client && yarn test --run` and `cd client && yarn build`.
+  Out of scope: a terms-of-service or privacy page; an opt-out control, or a paid tier that has one — both are pricing
+  decisions nobody has made; and any change to what is stored or exported, which is already settled and built.
+
+- [ ] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft** [proposed]
+  `docs/roadmap.md` Phase 7 names repo, k8s and DB-schema as the remaining producers; k8s shipped (KOL-089), and of the
+  two left the DB-schema one needs no credential — a `.sql` dump is a file the customer already has, and "point it at
+  your schema and watch it map your data model" is the promise the compose (KOL-033) and OpenAPI (KOL-051) producers
+  already made for their formats. The seam exists: `fileProducerRoute` (`server/src/routes/drafts.js:323`, used at
+  :447, :464, :483) takes `{route, producer, producerVersion, parse, ParseError, maxChars, defaultTitle, needs, log}`
+  and does tenancy, the character cap, credential redaction, the source fingerprint, the entity-type check and the
+  tiered logging once, and `requireWriteRole` is on the mount (`server/src/app.js:199`), so a fourth producer is a
+  parser plus a registration.
+  Build: `server/src/lib/producers/sqlSchema.js` reading `CREATE TABLE` statements — ANSI plus the Postgres and MySQL
+  spellings a real dump contains — into a Data Store entity per table with its columns as `attribute` blocks, and a
+  relationship per `REFERENCES`/`FOREIGN KEY` using the relationship type the Software Architecture template already
+  names. A statement it cannot read is a drop reason surfaced in the UI, not a refusal of the file, exactly as in the
+  other three; a file with no readable `CREATE TABLE` at all is the refusal. Register `POST /drafts/sql` through
+  `fileProducerRoute`, and teach `client/src/lib/importFile.js` the `.sql` extension — its three current producers are
+  detected by YAML/JSON keys (:86-88), so this is the first one recognised by extension alone.
+  Files: new `server/src/lib/producers/sqlSchema.js`, `server/src/routes/drafts.js`, `client/src/lib/importFile.js`,
+  `client/src/components/generator/BraindumpInput.vue`, new `server/tests/unit/sqlSchema.test.js`, new
+  `server/tests/http/sqlDraft.test.js`, `docs/api.md`.
+  Verify: `cd server && yarn test` — unit cases per statement shape (quoted identifiers, inline vs. table-level foreign
+  keys, a composite key, an unreadable statement becoming a drop reason) plus an http case that a posted dump becomes a
+  draft scoped to the caller's workspace, mirroring `server/tests/http/kubernetesDraft.test.js`;
+  `cd server && node --check src/index.js`; `cd client && yarn test --run && yarn build`.
+  Out of scope: the repo producer (its own item); reading a live database or an ORM's migrations, which needs a
+  credential or a toolchain; indexes, views, triggers and grants; and any model call — this producer is deterministic
+  like the other three.
 
 ## Blocked Items
 
