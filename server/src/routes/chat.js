@@ -3,12 +3,16 @@
  *
  * Two tool-calling strategies are supported transparently:
  *
- *   Responses API  — providers with responsesApi:true AND MCP_SERVER_URL configured.
- *                    Uses client.responses.create with type:'mcp'; the provider
+ *   Responses API  — providers with responsesApi:true, MCP_SERVER_URL configured,
+ *                    AND the MCP connector standing in the caller's own
+ *                    workspace (KOL-114 — see relayDecision). Uses
+ *                    client.responses.create with type:'mcp'; the provider
  *                    calls the MCP server directly on our behalf.
  *
- *   Completions API — universal fallback. Uses client.chat.completions.create with
- *                    type:'function' tools executed server-side against the database.
+ *   Completions API — universal fallback, and the only path for a caller whose
+ *                    workspace is not the connector's. Uses
+ *                    client.chat.completions.create with type:'function' tools
+ *                    executed server-side against req.workspaceId.
  *
  * Both paths emit identical SSE events to the client:
  *   { type: 'delta',   content: string }  — text chunk
@@ -36,6 +40,7 @@ import { personalScope } from '../lib/personalScope.js';
 import { checkBudget, recordSpend } from '../lib/usageMeter.js';
 import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 import { MCP_READ_SCOPE, MCP_READ_TOOLS, MCP_SCOPE_HEADER } from '../lib/mcpScope.js';
+import { mcpWorkspaceId } from '../lib/mcpWorkspace.js';
 
 const router = Router();
 
@@ -199,6 +204,11 @@ function buildSystemPrompt(memories = [], workspace = {}) {
  * header, which routes/mcp.js honours by registering no write tools on this
  * session at all. See lib/mcpScope.js for why read-only is the floor until the
  * relay can carry the caller's own identity.
+ *
+ * Read-only is not by itself enough, because the *reads* are the connector's
+ * too: `relayDecision()` below is what decides this definition is ever built,
+ * and it only is when the connector stands in the caller's own workspace
+ * (KOL-114).
  */
 function mcpToolDef() {
   // Light tier: the relay's restriction is otherwise invisible — a write that
@@ -215,6 +225,91 @@ function mcpToolDef() {
     },
     allowed_tools: [...MCP_READ_TOOLS],
     require_approval: 'never',
+  };
+}
+
+/**
+ * Whether this turn may take the Responses-API path — a tenancy question, not
+ * only a capability one (KOL-114).
+ *
+ * The relay hands a third party `MCP_BEARER_TOKEN`, and that token is the
+ * *connector's* identity: every tool behind it resolves its workspace from
+ * `Settings.mcpUserId` (lib/mcpWorkspace.js), never from `req.workspaceId`.
+ * KOL-113 closed the write half of that and left the read half open, which is
+ * a tenancy bug of its own: a member of workspace B asking a question had
+ * `search_entities` and `get_entity` answered out of workspace A — content
+ * they are not a member of, reached through their own session, on an endpoint
+ * every other route scopes to them. On a deployment with one account it is
+ * invisible; on the multi-tenant product it is a cross-tenant read.
+ *
+ * So the relay is offered only when the connector **stands in the caller's own
+ * workspace**, and every other turn takes the Chat Completions path, whose
+ * tools this route executes itself against `req.workspaceId` (`executeTool`)
+ * and which is therefore scoped to the caller by construction. The fallback is
+ * a working path and not a degradation of principle: the caller keeps
+ * `search_entities`, `get_entity` and `save_memory`, correctly scoped, and
+ * loses only `list_entity_types` / `list_open_questions`, which the Completions
+ * path has never offered.
+ *
+ * Chosen over three alternatives:
+ *
+ *   - **Naming the caller's workspace in a header on the relay.** Chat sets
+ *     those headers, so the model cannot reach them — but the credential
+ *     beside them is the connector's, so anyone holding `MCP_BEARER_TOKEN`
+ *     could then name *any* workspace and read it. That widens the token from
+ *     one workspace to all of them in order to fix a leak of one.
+ *   - **Refusing the turn.** A 4xx for a question the Completions path answers
+ *     correctly takes a working feature away from every caller whose workspace
+ *     is not the connector's — which, on a real deployment, is almost all of
+ *     them.
+ *   - **Documenting it and moving on.** KOL-113's Decision Log entry called
+ *     the `MCP_SERVER_URL` path "a single-tenant deployment option", but the
+ *     only action that advice leaves a multi-tenant operator is to unset the
+ *     variable, which turns the relay off for the one workspace where it was
+ *     sound as well.
+ *
+ * Fails closed. A connector that was never authorized, or whose user has no
+ * workspace, throws out of `mcpWorkspaceId()` and takes the fallback too —
+ * which is also the better answer there, since every relayed tool call would
+ * have come back carrying that same error as its result.
+ *
+ * Restoring the relay for everyone is still the work KOL-113 named: it has to
+ * carry the *caller's* identity rather than the connector's.
+ *
+ * @param {{responsesApi?: boolean}} providerCfg the PROVIDERS entry for this turn
+ * @param {string} providerId its key, for the log line
+ * @param {import('mongoose').Types.ObjectId|string} workspaceId `req.workspaceId`
+ * @returns {Promise<{relay: boolean, reason: string}>} `reason` names the input
+ *   that decided it — the source of the verdict, not the verdict restated
+ */
+async function relayDecision(providerCfg, providerId, workspaceId) {
+  if (providerCfg?.responsesApi !== true) {
+    return { relay: false, reason: `provider "${providerId}" is responsesApi: false in lib/aiProviders.js` };
+  }
+  if (!process.env.MCP_SERVER_URL) {
+    return { relay: false, reason: 'MCP_SERVER_URL is unset, so there is no endpoint to relay to' };
+  }
+
+  let connectorWorkspaceId;
+  try {
+    connectorWorkspaceId = String(await mcpWorkspaceId());
+  } catch (err) {
+    return {
+      relay: false,
+      reason: `the connector's workspace could not be resolved from Settings.mcpUserId (${err.message})`,
+    };
+  }
+
+  if (connectorWorkspaceId !== String(workspaceId)) {
+    return {
+      relay: false,
+      reason: `the connector stands in workspace ${connectorWorkspaceId} (Settings.mcpUserId) and this turn is in ${workspaceId} (resolveWorkspace), so a relayed read would answer out of another tenant's graph`,
+    };
+  }
+
+  return {
+    relay: true,
+    reason: `the connector's workspace (Settings.mcpUserId) is this turn's own workspace ${connectorWorkspaceId}`,
   };
 }
 
@@ -396,10 +491,18 @@ async function streamViaCompletions(client, model, systemPrompt, messages, send,
     if (delta?.tool_calls) {
       for (const tc of delta.tool_calls) {
         if (!pendingToolCalls[tc.index]) {
+          // Every field starts empty and is filled by the accumulation below,
+          // including the name — seeding it from this same chunk left it
+          // doubled, because the `+=` that follows ran on the chunk that
+          // created the slot as well. A provider sends the function name in
+          // the first `tool_calls` delta, so *every* tool call on this path
+          // arrived as `search_entitiessearch_entities` and came back
+          // "Unknown tool". Nothing covered it until KOL-114 drove this path
+          // for a caller the relay may not answer.
           pendingToolCalls[tc.index] = {
-            id:       tc.id ?? '',
+            id:       '',
             type:     'function',
-            function: { name: tc.function?.name ?? '', arguments: '' },
+            function: { name: '', arguments: '' },
           };
         }
         const slot = pendingToolCalls[tc.index];
@@ -549,10 +652,18 @@ router.post('/', requireAuth, resolveWorkspace, async (req, res) => {
   try {
     const client = makeClient(provider);
 
-    const useResponsesApi =
-      providerCfg.responsesApi === true && !!process.env.MCP_SERVER_URL;
+    // Which tool-calling strategy this turn gets, and why. Light tier because
+    // the choice is otherwise invisible from the outside — both paths emit the
+    // same SSE events and answer in the same voice, so a relayed turn reading
+    // the wrong tenant's graph (the bug KOL-114 is about) and a locally
+    // executed one reading the right one look identical afterwards. The line
+    // names the input that decided it, not just the path taken.
+    const relay = await relayDecision(providerCfg, provider, req.workspaceId);
+    chatLog('light', relay.relay
+      ? `tool path: Responses-API MCP relay — ${relay.reason}`
+      : `tool path: Chat Completions, tools executed here against workspace ${req.workspaceId} — no relay because ${relay.reason}`);
 
-    const assistantText = useResponsesApi
+    const assistantText = relay.relay
       ? await streamViaResponsesApi(client, effectiveModel, effectiveSystem, messages, send, ctx)
       : await streamViaCompletions(client, effectiveModel, effectiveSystem, messages, send, ctx,
           wikiTools(categories));

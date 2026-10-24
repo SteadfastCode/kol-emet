@@ -40,12 +40,23 @@
  *     on chat's relay rather than a lockout of `/mcp`.
  *   - **A read-scoped request cannot borrow a writable session.** The one
  *     mismatch that would be an escalation is a 403.
+ *   - **The relay is only used inside the connector's own workspace**
+ *     (KOL-114). Read-only was half the fix: the *reads* behind that token are
+ *     the connector's too, so a caller who is not a member of
+ *     `Settings.mcpUserId`'s workspace had `search_entities` answered out of
+ *     another tenant's graph. `relayDecision()` sends those callers down the
+ *     Chat Completions path instead, which executes its tools here against
+ *     `req.workspaceId` — so the last group drives that path for real and
+ *     asserts what the search came back with.
  *
  * Falsification: drop `allowed_tools` from `mcpToolDef()` and the first group
  * fails; drop the scope header and the probe advertises fourteen tools and the
  * write lands; register the write tools regardless of scope in
  * `createMcpServer()` and the same two fail; remove the mismatch guard in
- * `routes/mcp.js` and the last test fails.
+ * `routes/mcp.js` and the 403 test fails; make `relayDecision()` return
+ * `{ relay: true }` whenever `MCP_SERVER_URL` is set (what this file's subject
+ * did before KOL-114) and the whole last group fails — the second tenant's
+ * turn is relayed, and the read it gets back is the connector's workspace.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_CHAT_MCP_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -129,6 +140,20 @@ const MCP_WRITE_TOOLS = [
 /** What a write attempted through the relay would be called. */
 const RELAYED_TITLE = 'Relayed Write';
 
+/**
+ * An entity that exists only in the connector's workspace. A relayed read
+ * returns it to whoever asked, whatever workspace they are in — which is the
+ * cross-tenant read KOL-114 closes, so its title is what the last group looks
+ * for in another tenant's tool results.
+ */
+const CONNECTOR_TITLE = 'Connector Workspace Only';
+
+/** The same, in the second tenant's workspace: their search must find this. */
+const OTHER_TITLE = 'Second Tenant Only';
+
+/** What the fake provider says once it has the tool results in hand. */
+const LOCAL_ANSWER = 'answered from the local tools';
+
 let app;
 let httpServer;
 let mcpUrl;
@@ -136,11 +161,15 @@ let provider;
 
 let owner;
 let viewer;
+/** A second tenant: their own account, their own workspace, no overlap. */
+let other;
 
 /** Every tool definition the fake provider was handed, in order. */
 const toolDefs = [];
 /** What the fake provider's MCP probe found, one entry per chat turn. */
 const probes = [];
+/** Every `/chat/completions` body the fake provider received, in order. */
+const completions = [];
 
 /**
  * Connects to the MCP endpoint a tool definition names, with the headers it
@@ -183,10 +212,45 @@ async function probeMcp(toolDef) {
   return { advertised, write, read };
 }
 
+/** One SSE frame per chunk, then `[DONE]`, as an OpenAI-compatible stream. */
+function sendChunks(res, chunks) {
+  res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+  for (const chunk of chunks) res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  res.end('data: [DONE]\n\n');
+}
+
 /**
- * A stand-in for an OpenAI-compatible `/v1/responses` endpoint: records the
+ * The Chat Completions half of the fake provider, which KOL-114 made
+ * load-bearing: it is the path every caller outside the connector's workspace
+ * now takes, so it is not enough to assert that nothing was relayed — what
+ * that path *read* is the point. So this does what a real model does with the
+ * function tools it is handed: asks for `search_entities` on the first call,
+ * and on the second one the route hands it the tool results, which is where a
+ * cross-tenant read would be visible.
+ */
+function respondCompletions(res, body) {
+  const final = (body.messages ?? []).some(m => m.role === 'tool');
+  log('normal', `fake provider answering /chat/completions (${final ? 'answer' : 'tool'} phase) with ${body.tools?.length ?? 0} function tool(s)`);
+  if (!final) {
+    return sendChunks(res, [
+      { choices: [{ index: 0, delta: { tool_calls: [{
+        index: 0, id: 'call_search', type: 'function',
+        function: { name: 'search_entities', arguments: '{}' },
+      }] } }] },
+      { choices: [], usage: { prompt_tokens: 9, completion_tokens: 4 } },
+    ]);
+  }
+  return sendChunks(res, [
+    { choices: [{ index: 0, delta: { content: LOCAL_ANSWER } }] },
+    { choices: [], usage: { prompt_tokens: 13, completion_tokens: 5 } },
+  ]);
+}
+
+/**
+ * A stand-in for an OpenAI-compatible provider. On `/responses`: records the
  * body, uses the MCP tool it was handed exactly as the real one would, then
- * streams one text delta and a `response.completed` carrying usage.
+ * streams one text delta and a `response.completed` carrying usage. On
+ * `/chat/completions`: see `respondCompletions` above.
  */
 function startFakeProvider() {
   const server = http.createServer((req, res) => {
@@ -197,6 +261,13 @@ function startFakeProvider() {
       const toolDef = (body.tools ?? []).find(t => t.type === 'mcp');
       log('light', `fake provider got ${req.method} ${req.url} (source: POST /chat) with ${body.tools?.length ?? 0} tool(s); mcp scope header: ${toolDef?.headers?.[MCP_SCOPE_HEADER] ?? '(none)'}`);
       log('verbose', `fake provider body: ${raw}`);
+
+      if (req.url.includes('/chat/completions')) {
+        completions.push(body);
+        respondCompletions(res, body);
+        return;
+      }
+
       if (toolDef) {
         toolDefs.push(toolDef);
         try {
@@ -261,6 +332,32 @@ async function turn(who) {
   return { toolDef: toolDefs.at(-1), probe: probes.at(-1) };
 }
 
+/**
+ * One chat turn that must *not* reach the relay: the Chat Completions path.
+ * Returns the first body the provider got (to inspect the tools it was
+ * offered) and the tool results the route sent back on the second call.
+ */
+async function localTurn(who, content = 'What is in this wiki?') {
+  const relayed = toolDefs.length;
+  const seen = completions.length;
+
+  const res = await who.agent.post('/chat').send({
+    provider: 'openai',
+    messages: [{ role: 'user', content }],
+  });
+  assert.equal(res.status, 200, `POST /chat as ${who.email} failed: ${res.status} ${res.text}`);
+  assert.match(res.text, /"type":"done"/, `the turn should have completed: ${res.text}`);
+  assert.equal(toolDefs.length, relayed,
+    `the turn should not have been relayed to /mcp at all; ${toolDefs.length - relayed} tool definition(s) went out`);
+
+  const bodies = completions.slice(seen);
+  assert.equal(bodies.length, 2,
+    `the Completions path should have called twice — tools, then the answer; got ${bodies.length}`);
+  const toolResults = (bodies[1].messages ?? []).filter(m => m.role === 'tool').map(m => m.content);
+  log('normal', `local turn as ${who.email} got tool result(s): ${toolResults.join(' | ').slice(0, 200)}`);
+  return { offered: bodies[0], toolResults, text: res.text };
+}
+
 before(async () => {
   await db.connect();
 
@@ -283,6 +380,24 @@ before(async () => {
 
   owner = await registerOwner('chat-relay-owner@example.test');
   viewer = await addMember('chat-relay-viewer@example.test', owner.workspaceId, 'viewer');
+  // A second tenant, registered the same way, so their workspace is their own
+  // and the connector is a stranger to it (KOL-114).
+  other = await registerOwner('chat-relay-other@example.test');
+
+  // One marker entity per workspace: a relayed read answers out of the
+  // connector's, a locally executed one out of the caller's, and the titles
+  // are what the last group tells them apart by.
+  await Entity.create({
+    title: CONNECTOR_TITLE, category: 'Characters',
+    summary: 'Lives in the workspace the connector is authorized for.',
+    workspaceId: owner.workspaceId,
+  });
+  await Entity.create({
+    title: OTHER_TITLE, category: 'Characters',
+    summary: 'Lives in the second tenant\'s workspace.',
+    workspaceId: other.workspaceId,
+  });
+  log('light', `seeded "${CONNECTOR_TITLE}" in ${owner.workspaceId} and "${OTHER_TITLE}" in ${other.workspaceId} (source: Entity.create)`);
 
   // The connector is authorized as the **owner**: every refusal in this file is
   // therefore the relay's read-only scope and not the role behind the token.
@@ -401,6 +516,59 @@ describe('/mcp itself is unchanged for the connector', () => {
       log('normal', `scope mismatch answered 403: ${res.text}`);
     } finally {
       await client.close();
+    }
+  });
+});
+
+describe("chat relays only inside the connector's own workspace", () => {
+  test("a caller in another tenant's workspace is not relayed at all", async () => {
+    const { offered } = await localTurn(other);
+
+    assert.ok(
+      !(offered.tools ?? []).some(t => t.type === 'mcp'),
+      `a caller outside the connector's workspace was handed an MCP tool: ${JSON.stringify(offered.tools)}`,
+    );
+    const names = (offered.tools ?? []).filter(t => t.type === 'function').map(t => t.function?.name).sort();
+    assert.deepEqual(names, ['get_entity', 'save_memory', 'search_entities'],
+      `they should get the function tools instead: ${names.join(', ')}`);
+  });
+
+  test("the search that answers them reads their own graph, not the connector's", async () => {
+    // The assertion the bug fails. Before KOL-114 this turn went to the relay,
+    // whose search_entities resolves Settings.mcpUserId's workspace, so the
+    // connector's entity came back to a user who is not a member of it.
+    const { toolResults, text } = await localTurn(other, 'List everything you can find.');
+    const joined = toolResults.join('\n');
+
+    assert.ok(!joined.includes(CONNECTOR_TITLE),
+      `the second tenant's search returned the connector workspace's entity: ${joined}`);
+    assert.ok(joined.includes(OTHER_TITLE),
+      `the second tenant's search should have found their own entity: ${joined}`);
+    assert.match(text, new RegExp(LOCAL_ANSWER), 'the fallback should still have answered the caller');
+  });
+
+  test('a caller inside the connector\'s workspace is still relayed, exactly as before', async () => {
+    // The control: the gate is on whose workspace it is, not on chat as such,
+    // so the one deployment where the relay was sound keeps it.
+    const { toolDef, probe } = await turn(owner);
+
+    assert.equal(toolDef.server_url, mcpUrl.toString());
+    assert.deepEqual([...(toolDef.allowed_tools ?? [])].sort(), [...MCP_READ_TOOLS].sort());
+    assert.equal(probe.read.refused, false, `the relay should still read: ${probe.read.text}`);
+  });
+
+  test('with no connector authorized the relay is offered to nobody', async () => {
+    // Fails closed: mcpWorkspaceId() throws, and a turn that cannot establish
+    // whose workspace the token stands in takes the local path. Which is also
+    // the better answer — every relayed call would have come back carrying
+    // "MCP connector not authorized" as its result.
+    await setMcpUser(null);
+    try {
+      const { offered } = await localTurn(owner);
+      assert.ok(!(offered.tools ?? []).some(t => t.type === 'mcp'),
+        'an unauthorized connector still got a relay');
+    } finally {
+      await setMcpUser(owner.userId);
     }
   });
 });
