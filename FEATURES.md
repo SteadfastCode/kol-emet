@@ -61,7 +61,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-017) Source-coverage pane in the draft review UI**
+- [x] **(KOL-017) Source-coverage pane in the draft review UI**
   "Here is the text I did not use": evidence offsets are already stored on draft items; render the uncovered spans of the source
   alongside `client/src/components/generator/DraftReview.vue`. Agreed in scope; needs UI judgement.
   Verify: a Vitest test that a fixture draft with one evidence span marks the remainder as uncovered.
