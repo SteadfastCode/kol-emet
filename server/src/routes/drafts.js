@@ -26,6 +26,10 @@ import {
   parseKubernetes, KubernetesParseError, PRODUCER as K8S_PRODUCER,
   PRODUCER_VERSION as K8S_PRODUCER_VERSION, MAX_KUBERNETES_CHARS,
 } from '../lib/producers/kubernetes.js';
+import {
+  parseSqlSchema, SqlParseError, PRODUCER as SQL_PRODUCER,
+  PRODUCER_VERSION as SQL_PRODUCER_VERSION, MAX_SQL_CHARS,
+} from '../lib/producers/sqlSchema.js';
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { errorLog } from '../middleware/errorHandler.js';
@@ -51,7 +55,8 @@ const MIN_RUN_MICROS = Number(process.env.GENERATOR_MIN_RUN_MICROS ?? 15_000); /
 // those out, which costs no cron.
 const STALE_GENERATING_MS = 10 * 60 * 1000;
 
-// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL / KUBERNETES_LOG_LEVEL = off | light | normal | verbose (default light)
+// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL / KUBERNETES_LOG_LEVEL / SQL_SCHEMA_LOG_LEVEL
+//   = off | light | normal | verbose (default light)
 //   light   — one line per draft created, naming the request, file and workspace
 //   normal  — light, plus every refused request and every drop reason
 //   verbose — normal, plus each proposed item
@@ -318,9 +323,10 @@ router.post('/', async (req, res, next) => {
  * @param {number} spec.maxChars         character cap on the uploaded text
  * @param {string} spec.defaultTitle     the draft's title when no filename is given
  * @param {string} spec.needs            names the import in the missing-types refusal
+ * @param {string} spec.parsedVia        what read the file, for Draft.diagnostics.parsedVia
  * @param {Function} spec.log            this producer's tiered logger
  */
-function fileProducerRoute({ route, producer, producerVersion, parse, ParseError, maxChars, defaultTitle, needs, log }) {
+function fileProducerRoute({ route, producer, producerVersion, parse, ParseError, maxChars, defaultTitle, needs, parsedVia, log }) {
   return async (req, res, next) => {
     const { text, filename } = req.body ?? {};
     const refuse = (status, error, extra = {}) => {
@@ -404,9 +410,10 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
         route: { provider: null, model: null, strategy: 'deterministic' },
         items,
         diagnostics: {
-          // The `yaml` reader parses both producers' files, JSON included —
-          // JSON is YAML, which is what lets one path give both line numbers.
-          parsedVia: ['yaml'],
+          // What read the file. The three YAML producers share one reader —
+          // JSON is YAML, which is what lets one path give both line numbers —
+          // and the SQL one lexes the dump itself, so each producer names its own.
+          parsedVia: [parsedVia],
           dropReasons,
           passes: 1,
           generationMs: Date.now() - started,
@@ -451,6 +458,7 @@ router.post('/compose', fileProducerRoute({
   maxChars: MAX_COMPOSE_CHARS,
   defaultTitle: 'docker-compose',
   needs: 'a docker-compose import',
+  parsedVia: 'yaml',
   log: producerLogger('COMPOSE_LOG_LEVEL', 'drafts:compose'),
 }));
 
@@ -468,6 +476,7 @@ router.post('/openapi', fileProducerRoute({
   maxChars: MAX_OPENAPI_CHARS,
   defaultTitle: 'openapi',
   needs: 'an OpenAPI import',
+  parsedVia: 'yaml',
   log: producerLogger('OPENAPI_LOG_LEVEL', 'drafts:openapi'),
 }));
 
@@ -487,7 +496,28 @@ router.post('/kubernetes', fileProducerRoute({
   maxChars: MAX_KUBERNETES_CHARS,
   defaultTitle: 'kubernetes',
   needs: 'a Kubernetes import',
+  parsedVia: 'yaml',
   log: producerLogger('KUBERNETES_LOG_LEVEL', 'drafts:kubernetes'),
+}));
+
+/**
+ * POST /drafts/sql — a SQL schema dump becomes a reviewable draft: a Data Store
+ * per `CREATE TABLE` with its columns as attribute blocks, and a Depends on
+ * group per foreign key, inline, table-level or in the trailing `ALTER TABLE …
+ * ADD CONSTRAINT` form pg_dump emits. A statement it cannot read is a drop
+ * reason; a file with no readable `CREATE TABLE` is the refusal.
+ */
+router.post('/sql', fileProducerRoute({
+  route: '/drafts/sql',
+  producer: SQL_PRODUCER,
+  producerVersion: SQL_PRODUCER_VERSION,
+  parse: parseSqlSchema,
+  ParseError: SqlParseError,
+  maxChars: MAX_SQL_CHARS,
+  defaultTitle: 'sql-schema',
+  needs: 'a SQL schema import',
+  parsedVia: 'sql',
+  log: producerLogger('SQL_SCHEMA_LOG_LEVEL', 'drafts:sql'),
 }));
 
 // ─── Decision routes ─────────────────────────────────────────────────────────

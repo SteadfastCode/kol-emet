@@ -13,15 +13,17 @@
 
 const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.text', '.rtf'];
 const DOCX_EXTENSIONS = ['.docx'];
-// A docker-compose file, an OpenAPI document and a Kubernetes manifest are not
-// notes: each goes to its own producer (POST /drafts/compose, /drafts/openapi,
-// /drafts/kubernetes), which reads the structure rather than a model. `.json`
-// is here for an OpenAPI document saved as JSON, which is how most tools emit one.
-const PRODUCER_EXTENSIONS = ['.yml', '.yaml', '.json'];
+// A docker-compose file, an OpenAPI document, a Kubernetes manifest and a SQL
+// schema dump are not notes: each goes to its own producer (POST
+// /drafts/compose, /drafts/openapi, /drafts/kubernetes, /drafts/sql), which
+// reads the structure rather than a model. `.json` is here for an OpenAPI
+// document saved as JSON, which is how most tools emit one.
+const PRODUCER_EXTENSIONS = ['.yml', '.yaml', '.json', '.sql'];
 
 export const ACCEPT_ATTR = [...TEXT_EXTENSIONS, ...DOCX_EXTENSIONS, ...PRODUCER_EXTENSIONS].join(',');
 export const SUPPORTED_LABEL =
-  'Text, Markdown, Word, docker-compose, OpenAPI or Kubernetes manifests (.txt, .md, .docx, .yml, .json)';
+  'Text, Markdown, Word, docker-compose, OpenAPI, Kubernetes manifests or SQL schemas ' +
+  '(.txt, .md, .docx, .yml, .json, .sql)';
 
 const extOf = name => {
   const i = String(name).lastIndexOf('.');
@@ -65,11 +67,18 @@ function topLevelKeys(text) {
 }
 
 /**
- * Which producer a structured file goes to, decided by its CONTENT rather than
- * its extension: a manifest, an OpenAPI document and a docker-compose file all
- * arrive as `.yaml`, so the extension cannot choose between them.
+ * Which producer a structured file goes to.
  *
- * The order is the specificity order, for files that could be read two ways.
+ * `.sql` is decided by the EXTENSION, and it is the only one that is: a schema
+ * dump has no top-level key to read, and nothing else in this list arrives
+ * under that name. It is therefore checked first, before the text is scanned
+ * for keys it does not have.
+ *
+ * The rest are decided by their CONTENT rather than their extension: a
+ * manifest, an OpenAPI document and a docker-compose file all arrive as
+ * `.yaml`, so the extension cannot choose between them.
+ *
+ * Their order is the specificity order, for files that could be read two ways.
  * `openapi:`/`swagger:` wins first, because a spec that happens to name a
  * `services` tag is still a spec. `apiVersion` + `kind` together come next, and
  * both are required: `kind` alone is a word a CI config or a JSON schema uses,
@@ -77,11 +86,13 @@ function topLevelKeys(text) {
  * last, which is the compose file's one distinguishing key.
  *
  * @param {string} text
- * @returns {'openapi'|'kubernetes'|'compose'|null} null when it is none of
- *   them, which is the client's own refusal — there is nothing to send and no
- *   producer to send it to
+ * @param {string} [name]  the file's name, for the `.sql` reading
+ * @returns {'sql'|'openapi'|'kubernetes'|'compose'|null} null when it is none
+ *   of them, which is the client's own refusal — there is nothing to send and
+ *   no producer to send it to
  */
-export function producerFor(text) {
+export function producerFor(text, name = '') {
+  if (extOf(name) === '.sql') return 'sql';
   const keys = topLevelKeys(text);
   if (keys.includes('openapi') || keys.includes('swagger')) return 'openapi';
   if (keys.includes('apiVersion') && keys.includes('kind')) return 'kubernetes';

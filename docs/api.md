@@ -604,6 +604,7 @@ the graph. Nothing here writes to `entities` or `relationshipgroups` except `POS
 | POST | `/drafts/compose` | Build a draft from a docker-compose file — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | POST | `/drafts/openapi` | Build a draft from an OpenAPI 3.x or Swagger 2.0 document (JSON or YAML) — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | POST | `/drafts/kubernetes` | Build a draft from a `---` stream of Kubernetes manifests — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
+| POST | `/drafts/sql` | Build a draft from a SQL schema dump — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | GET | `/drafts/:id` | Full draft including `items` and the source text. |
 | PATCH | `/drafts/:id/items/:itemId` | Record one decision. Body: `{ decision: 'accepted' \| 'edited' \| 'rejected', payload?, note? }`. `payload` is required for `edited` and is validated against the same schema `POST /entities` accepts. |
 | POST | `/drafts/:id/items/:itemId/retarget` | Resolve a duplicate: `{ targetEntityId }` turns a create into an update against that entity; `null` reverts it to a create. Entity items only. |
@@ -797,6 +798,72 @@ keys are followed, within the document that declares them.
 
 `KUBERNETES_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers and a
 separate setting again.
+
+### `POST /drafts/sql`
+
+The fourth vertical-ingestion producer
+([`server/src/lib/producers/sqlSchema.js`](../server/src/lib/producers/sqlSchema.js)), and the same
+route as the other three with a different parse: one request in, the finished draft out, no SSE, no
+allowance check, no generation lock, and the same decision and apply routes afterwards. Recorded on
+the draft: `source.producer: 'sql-schema'`, `source.producerVersion: 'sql-schema@1'`, the same
+`source.textHash`, `grounding.categories`, `route.strategy: 'deterministic'`, and
+`diagnostics.parsedVia: ['sql']` — this is the one producer the `yaml` reader does not read.
+**Credentials are stripped before the dump is stored**, by the same `redactSecrets` pass and for the
+same reasons: a dump's header records the connection string it was taken with, and a column `DEFAULT`
+is where a seeded token ends up.
+
+The input is **the DDL**: `pg_dump --schema-only`, `mysqldump --no-data`, a migration directory
+concatenated, a schema exported by a GUI. It is the one producer that needs no credential of any kind
+— the file is already on the customer's disk. Reading a live database or an ORM's migrations is not
+this route.
+
+**The dump is lexed, not pattern-matched.** Comments (`--`, `#`, `/* */`) are dropped; a string
+literal, a dollar-quoted body (`$$ … $$`, so a Postgres function's semicolons do not end its
+statement) and a quoted identifier (`"…"`, `` `…` ``, `[…]`) are each one token. So a comment or a
+string holding the word REFERENCES, a semicolon or a bracket cannot change the reading, and an
+identifier's quotes are not part of its name.
+
+| SQL | Proposed |
+|-----|----------|
+| `CREATE TABLE` (ANSI, plus `IF NOT EXISTS`, `TEMPORARY`/`UNLOGGED`, and the Postgres, MySQL and SQL Server identifier quotings) | One **Data Store** titled the table's name — or `<schema>.<name>` when the file declares the same bare name under more than one schema, so a multi-schema dump proposes both rather than the second being dropped as a duplicate. An `attribute` block for a declared schema (*Schema*) and one per column, labelled with the column's name and valued with its type plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared; tag `sql-schema`. Capped at 80 columns, the rest a drop reason. |
+| A column's inline `REFERENCES`, a table-level `FOREIGN KEY (…) REFERENCES …`, and `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY` — the form **pg_dump** emits for every key it writes | `Depends on` group — Dependent, Dependency. One link per pair of tables however many keys join them, and however many columns a key spans. A key a table has on itself proposes none. |
+
+A column's `DEFAULT` is deliberately not carried into its attribute: it is where a dump keeps a
+credential, and `redactSecrets` has already taken that out. A table-level `PRIMARY KEY (a, b)` or
+`UNIQUE (a, b)` marks each of its columns `PRIMARY KEY (composite)` / `UNIQUE (composite)`, because a
+column that is one of two in a key is not a key on its own. MySQL's inline `KEY`/`UNIQUE KEY` indexes
+are read as constraints, not columns — and a column *called* `key` is still a column. Indexes, views,
+triggers, grants and `ALTER TABLE … ADD COLUMN` are not read.
+
+A foreign key's target resolves as ambiguously as SQL resolves it: the exact `schema.name`; failing
+that the referencing table's **own** schema, where the search path looks first; failing that the one
+table of that name the file declares. A bare name the file declares in several schemas and in none of
+them the referencing table's is a **drop reason**, not a guess. A target the file does not declare at
+all can still land on an entity the workspace already has, by title; otherwise it is dropped and said
+so.
+
+A statement with no reading — `CREATE TABLE … AS SELECT` (no column list), an unclosed column list, a
+quote or comment that runs off the end of the file — is a **drop reason**, not a refusal: refusing a
+2,000-line dump over one materialised view would cost the reviewer every table in it. Everything that
+is neither a `CREATE TABLE` nor a foreign-key `ALTER TABLE` is passed over in silence, because a dump
+is mostly `SET`, `CREATE INDEX`, `COMMENT ON` and, with data, thousands of INSERTs.
+
+Titles and groups are deduplicated against the workspace exactly as the other three producers' are
+(`matchedBy: 'exact-normalized-title'` / `'same-members-and-label'`), so re-importing an unchanged
+dump proposes updates rather than a second copy of everything, and leaves out the column blocks its
+targets already carry. A near-miss is flagged `duplicate_candidate`, never merged.
+
+| Status | Meaning |
+|--------|---------|
+| 201 | The draft, `status: 'ready'` |
+| 400 | `text` missing or longer than 60,000 characters; no readable `CREATE TABLE` in the file (the message says what the producer reads, and names the first drop reason when a `CREATE TABLE` was found but could not be read); or the workspace lacks the `Data Store` entity type (`{ error, missingCategories }`) — no draft is created |
+
+`SQL_SCHEMA_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers and a
+separate setting again.
+
+The client sends a `.sql` file here on its **extension** — the only producer chosen that way, since a
+dump has no top-level key to read and nothing else arrives under that name
+([`client/src/lib/importFile.js`](../client/src/lib/importFile.js)).
 
 **Out of scope:** Helm charts and kustomize overlays (templated input, and their own problem), reading
 a live cluster or any kubeconfig, and drift detection.

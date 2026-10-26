@@ -5,8 +5,8 @@
       <p>
         Paste or import rough notes — a character sketch, a session of worldbuilding, a chapter
         of background. Kol Emet reads them and proposes entities and relationships for you to
-        review. A docker-compose file, an OpenAPI document or a Kubernetes manifest becomes
-        a draft of its services, APIs and what they depend on.
+        review. A docker-compose file, an OpenAPI document, a Kubernetes manifest or a SQL
+        schema becomes a draft of its services, tables, APIs and what they depend on.
         <strong>Nothing is saved until you approve it.</strong>
       </p>
     </div>
@@ -23,7 +23,7 @@
         ref="ta"
         v-model="text"
         class="dump"
-        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx, a docker-compose .yml, an OpenAPI .yml/.json or a Kubernetes manifest here."
+        placeholder="Tamsin runs the salvage yard out on the Rift Verge. Her younger brother Cael gambles, and owes money to a woman called Iseult Vane…&#10;&#10;Or drop a .txt, .md, .docx, a docker-compose .yml, an OpenAPI .yml/.json, a Kubernetes manifest or a .sql schema here."
         :disabled="busy || importing"
         @keydown.meta.enter="submit"
         @keydown.ctrl.enter="submit"
@@ -77,7 +77,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { extractAll, extractText, isProducerFile, producerFor, ACCEPT_ATTR } from '../../lib/importFile.js';
-import { createComposeDraft, createOpenApiDraft, createKubernetesDraft } from '../../api/drafts.js';
+import { createComposeDraft, createOpenApiDraft, createKubernetesDraft, createSqlDraft } from '../../api/drafts.js';
 
 const props = defineProps({
   maxChars:  { type: Number, default: 25000 },
@@ -141,23 +141,26 @@ const PRODUCERS = {
   compose: createComposeDraft,
   openapi: createOpenApiDraft,
   kubernetes: createKubernetesDraft,
+  sql: createSqlDraft,
 };
 
 /**
- * A docker-compose file, an OpenAPI document or a Kubernetes manifest skips the
- * textarea: its draft is built from the file's structure, not generated from
- * notes, so there is nothing to edit first and no allowance spent. The finished
- * draft goes straight to review.
+ * A docker-compose file, an OpenAPI document, a Kubernetes manifest or a SQL
+ * schema skips the textarea: its draft is built from the file's structure, not
+ * generated from notes, so there is nothing to edit first and no allowance
+ * spent. The finished draft goes straight to review.
  *
  * Which producer it goes to is decided by the file's content, not its
- * extension — all three arrive as `.yaml`, and an OpenAPI document arrives as
- * `.json` as often as not. A file that is none of them is refused here rather
- * than posted hopefully, so the message can name every thing it could have been.
+ * extension — the first three arrive as `.yaml`, and an OpenAPI document
+ * arrives as `.json` as often as not. `.sql` is the one exception, recognised
+ * by its name: a schema dump has no top-level key to read. A file that is none
+ * of them is refused here rather than posted hopefully, so the message can name
+ * every thing it could have been.
  */
 async function ingestStructured(list) {
   importErrors.value = [];
   if (list.length > 1) {
-    importErrors.value = ['Import a docker-compose, OpenAPI or Kubernetes file on its own — it becomes a draft directly, not notes.'];
+    importErrors.value = ['Import a docker-compose, OpenAPI, Kubernetes or .sql file on its own — it becomes a draft directly, not notes.'];
     if (picker.value) picker.value.value = '';
     return;
   }
@@ -166,12 +169,12 @@ async function ingestStructured(list) {
   importingName.value = list[0].name;
   try {
     const { name, text: source } = await extractText(list[0]);
-    const producer = producerFor(source);
+    const producer = producerFor(source, name);
     if (!producer) {
       throw new Error(
         `"${name}" doesn't look like an OpenAPI document, a Kubernetes manifest or a ` +
         'docker-compose file — it needs a top-level `openapi:`, `swagger:`, `services:` ' +
-        'or `apiVersion:` and `kind:` key.'
+        'or `apiVersion:` and `kind:` key. A SQL schema is recognised by its `.sql` name.'
       );
     }
     const draft = await PRODUCERS[producer]({ text: source, filename: name });

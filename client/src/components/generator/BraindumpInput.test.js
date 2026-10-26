@@ -1,27 +1,29 @@
 /**
  * The braindump input's import routing. Notes (.txt/.md/.docx) are appended to
  * the textarea for editing before a generation; a docker-compose file, an
- * OpenAPI document and a Kubernetes manifest are not notes, so each skips the
- * textarea and goes to its own producer (POST /drafts/compose, /drafts/openapi,
- * /drafts/kubernetes), and the finished draft is handed up (`drafted`) for the
- * overlay's review stage.
+ * OpenAPI document, a Kubernetes manifest and a SQL schema are not notes, so
+ * each skips the textarea and goes to its own producer (POST /drafts/compose,
+ * /drafts/openapi, /drafts/kubernetes, /drafts/sql), and the finished draft is
+ * handed up (`drafted`) for the overlay's review stage.
  *
  * These pin that split, and the thing that decides it: the producer is chosen
- * by the file's CONTENT, not its extension — all three kinds arrive as `.yaml`
- * — the file is sent verbatim with its filename, a refusal is shown rather than
- * swallowed, and a producer file mixed into a multi-file import is refused
- * before anything is sent.
+ * by the file's CONTENT, not its extension — the three YAML kinds all arrive as
+ * `.yaml` — except `.sql`, which is chosen by its name because a schema dump
+ * has no top-level key to read. The file is sent verbatim with its filename, a
+ * refusal is shown rather than swallowed, and a producer file mixed into a
+ * multi-file import is refused before anything is sent.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import BraindumpInput from './BraindumpInput.vue';
-import { createComposeDraft, createOpenApiDraft, createKubernetesDraft } from '../../api/drafts.js';
+import { createComposeDraft, createOpenApiDraft, createKubernetesDraft, createSqlDraft } from '../../api/drafts.js';
 import { isProducerFile, producerFor, ACCEPT_ATTR } from '../../lib/importFile.js';
 
 vi.mock('../../api/drafts.js', () => ({
   createComposeDraft: vi.fn(),
   createOpenApiDraft: vi.fn(),
   createKubernetesDraft: vi.fn(),
+  createSqlDraft: vi.fn(),
 }));
 
 beforeEach(() => { vi.clearAllMocks(); });
@@ -35,6 +37,12 @@ const OPENAPI_JSON = JSON.stringify({
   info: { title: 'Legacy Orders', version: '1.2.0' },
   paths: { '/orders': { get: {} } },
 }, null, 2);
+const SCHEMA = [
+  'CREATE TABLE users (',
+  '  id BIGSERIAL PRIMARY KEY,',
+  '  email VARCHAR(255) NOT NULL UNIQUE',
+  ');',
+].join('\n');
 // A manifest is a `---` stream, which is the shape that makes `apiVersion` +
 // `kind` a per-document pair rather than a single top-level one.
 const MANIFEST = [
@@ -55,11 +63,12 @@ async function drop(wrapper, files) {
 }
 
 describe('BraindumpInput import routing', () => {
-  it('accepts .yml, .yaml and .json, and recognises them as producer files', () => {
-    expect(ACCEPT_ATTR.split(',')).toEqual(expect.arrayContaining(['.yml', '.yaml', '.json', '.md', '.docx']));
+  it('accepts .yml, .yaml, .json and .sql, and recognises them as producer files', () => {
+    expect(ACCEPT_ATTR.split(',')).toEqual(expect.arrayContaining(['.yml', '.yaml', '.json', '.sql', '.md', '.docx']));
     expect(isProducerFile({ name: 'docker-compose.YML' })).toBe(true);
     expect(isProducerFile({ name: 'compose.yaml' })).toBe(true);
     expect(isProducerFile({ name: 'openapi.json' })).toBe(true);
+    expect(isProducerFile({ name: 'schema.SQL' })).toBe(true);
     expect(isProducerFile({ name: 'notes.md' })).toBe(false);
   });
 
@@ -77,6 +86,20 @@ describe('BraindumpInput import routing', () => {
     // a Kubernetes object.
     expect(producerFor('kind: Deployment\nmetadata: {}\n')).toBe(null);
     expect(producerFor('$schema: http://json-schema.org/schema\nkind: object\n')).toBe(null);
+  });
+
+  it('chooses the SQL producer from the .sql name, which is the one extension reading', () => {
+    // A dump has no top-level key to read, so the name is the only signal —
+    // and the name decides it whatever the content looks like.
+    expect(producerFor(SCHEMA, 'schema.sql')).toBe('sql');
+    expect(producerFor(SCHEMA, 'dump.SQL')).toBe('sql');
+    // Without the name there is nothing to go on, which is the refusal path.
+    expect(producerFor(SCHEMA)).toBe(null);
+    // A name of .sql wins over keys that would otherwise choose: a dump is a
+    // dump even if a comment in it happens to read like YAML.
+    expect(producerFor('services:\n  web: {}\n', 'weird.sql')).toBe('sql');
+    // And a YAML file is still chosen by its content.
+    expect(producerFor(COMPOSE, 'docker-compose.yml')).toBe('compose');
   });
 
   it('sends a dropped compose file verbatim to the compose producer and hands the draft up', async () => {
@@ -131,6 +154,20 @@ describe('BraindumpInput import routing', () => {
     expect(wrapper.get('textarea').element.value).toBe('');
   });
 
+  it('sends a .sql file to the SQL producer', async () => {
+    const draft = { _id: 'd5', status: 'ready', counts: { proposed: 3 } };
+    createSqlDraft.mockResolvedValue(draft);
+    const wrapper = mount(BraindumpInput);
+
+    await drop(wrapper, [fakeFile('schema.sql', SCHEMA)]);
+
+    expect(createSqlDraft).toHaveBeenCalledWith({ text: SCHEMA, filename: 'schema.sql' });
+    expect(createComposeDraft).not.toHaveBeenCalled();
+    expect(createKubernetesDraft).not.toHaveBeenCalled();
+    expect(wrapper.emitted('drafted')).toEqual([[draft]]);
+    expect(wrapper.get('textarea').element.value).toBe('');   // the DDL does not land in the notes
+  });
+
   it('refuses a structured file that is none of them, without sending anything', async () => {
     const wrapper = mount(BraindumpInput);
 
@@ -139,6 +176,7 @@ describe('BraindumpInput import routing', () => {
     expect(createComposeDraft).not.toHaveBeenCalled();
     expect(createOpenApiDraft).not.toHaveBeenCalled();
     expect(createKubernetesDraft).not.toHaveBeenCalled();
+    expect(createSqlDraft).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('doesn\'t look like an OpenAPI document, a Kubernetes manifest or a docker-compose file');
     expect(wrapper.emitted('drafted')).toBeUndefined();
   });
@@ -160,7 +198,7 @@ describe('BraindumpInput import routing', () => {
 
     expect(createComposeDraft).not.toHaveBeenCalled();
     expect(createOpenApiDraft).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Import a docker-compose, OpenAPI or Kubernetes file on its own');
+    expect(wrapper.text()).toContain('Import a docker-compose, OpenAPI, Kubernetes or .sql file on its own');
     expect(wrapper.get('textarea').element.value).toBe('');
   });
 
