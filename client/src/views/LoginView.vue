@@ -93,9 +93,16 @@
           </button>
         </form>
 
-        <p v-if="mode === 'register'" class="login-disclosure">
-          You can delete your account and all of its data at any time from Settings.
-        </p>
+        <!-- Open question 2 of docs/generator-v1-plan.md, settled by Daniel 2026-09-05:
+             signup discloses that reviewed generations may be used to improve the product,
+             with no opt-out on the free tier (KOL-120). `Draft` keeps the whole decision
+             record and draftExporter.js exports it, so this is the half that says so.
+             The deletion line below it is KOL-021's. Two paragraphs rather than one
+             run-on: the test pins each sentence on its own. -->
+        <div v-if="mode === 'register'" class="login-disclosure">
+          <p>AI-generated drafts you review may be used to improve the product, and the free tier has no opt-out.</p>
+          <p>You can delete your account and all of its data at any time from Settings.</p>
+        </div>
 
         <template v-if="mode === 'login'">
           <div class="divider"><span>or</span></div>
@@ -468,4 +475,7 @@ input:disabled { opacity: 0.5; }
   margin: 10px 0 0;
   line-height: 1.5;
 }
+
+.login-disclosure p { margin: 0; }
+.login-disclosure p + p { margin-top: 6px; }
 </style>

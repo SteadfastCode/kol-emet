@@ -112,8 +112,8 @@ so bulk acceptance can never rubber-stamp the uncertain ones.
    gets slower rather than stopping" fallback needs its own decision. Deferred by Daniel.
 2. ~~**Retention policy.**~~ **Settled 2026-09-05.** Account deletion **hard-deletes** drafts;
    signup **discloses** that reviewed generations may be used to improve the product, with **no
-   opt-out on the free tier**. The hard delete is built (✅ shipped 2026-09-10, KOL-015 + KOL-021);
-   the disclosure is not — see Remaining work.
+   opt-out on the free tier**. Both halves are built: the hard delete ✅ shipped 2026-09-10
+   (KOL-015 + KOL-021), the disclosure ✅ shipped 2026-10-26 (KOL-120).
 3. ~~**Product-facing name.**~~ **Settled 2026-09-05: "Draft".** The code originally said
    `Proposal` while the UI was to say "Draft"; Daniel chose to make them match rather than let the
    two drift, so the model, routes and collection were all renamed to `drafts`. The Decision Log's
@@ -143,9 +143,11 @@ is still unbuilt:
 - ✅ **Account-deletion hard delete** (item 2 above) — shipped 2026-09-10: the cascade (KOL-015) and
   its caller `DELETE /auth/account` (KOL-021). `Draft` is in `WORKSPACE_SCOPED_MODELS` in
   `server/src/lib/accountDeleter.js`, so deleting an account hard-deletes its drafts.
-- **Signup disclosure copy** (item 2 above). KOL-021 did put one line under the signup form, but it
-  discloses account deletion; the copy agreed here — reviewed generations may be used to improve the
-  product, with no opt-out on the free tier — is still unwritten.
+- ✅ **Signup disclosure copy** (item 2 above) — shipped 2026-10-26 (KOL-120): the
+  `.login-disclosure` block in `client/src/views/LoginView.vue` now carries the copy agreed here
+  — reviewed drafts may be used to improve the product, with no opt-out on the free tier —
+  beside KOL-021's account-deletion line. `LoginView.test.js` pins both sentences verbatim and in
+  order. Still undecided, and so deliberately unsaid: any opt-out, and any paid tier that has one.
 - **Post-trial self-hosted fallback** (item 1 above).
 
 ## Build sequence
