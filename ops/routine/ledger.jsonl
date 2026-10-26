@@ -583,3 +583,4 @@
 {"event":"complete","runId":"2026-10-26T19:57:46.163Z","item":"KOL-121","mergeSha":"71ef0b4272dd20709c58538dacf24e473213461b","durationMin":24,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-10-26T20:29:16.493Z"}
 {"event":"note","text":"resupply: unparked KOL-122 (was not-before 2026-10-31) so the next fire files new proposals","source":"auto","command":"auto.resupply","item":"KOL-122","atUtc":"2026-10-26T20:52:15.618Z"}
 {"event":"claim","runId":"2026-10-26T20:51:46.920Z","item":"KOL-122","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-10-26T20:52:30.104Z"}
+{"event":"complete","runId":"2026-10-26T20:51:46.920Z","item":"KOL-122","mergeSha":"6453b769cd00205b37a2b5eaa1307b92b8c47041","durationMin":14,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-10-26T21:06:16.714Z"}
