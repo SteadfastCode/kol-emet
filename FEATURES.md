@@ -50,7 +50,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section**
+- [x] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section**
   `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
   `newQuestion`, `editingId`/`editText`, `confirmingId`, `pendingId` and `addPending`. `WikiLayout.vue:1012` replaces
   `selectedEntity` wholesale on every `entity:updated` frame, and `PUT /entities/:id` populates `open_questions`
