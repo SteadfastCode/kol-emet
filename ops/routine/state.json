@@ -59,42 +59,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-118": {
+    "KOL-119": {
       "order": 4,
-      "title": "A two-label env host in a Kubernetes import resolves across namespaces",
-      "status": "done",
+      "title": "Second stale-doc sweep: three more lines that say \"not built\" about shipped work",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-118",
+      "branch": "routine/item/KOL-119",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-26T19:30:19.558Z",
+      "claimedAtUtc": "2026-10-26T19:46:24.912Z",
       "runId": "2026-10-26T19:03:45.433Z",
       "lastFail": null
     },
-    "KOL-119": {
-      "order": 5,
-      "title": "Second stale-doc sweep: three more lines that say \"not built\" about shipped work",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-120": {
-      "order": 6,
+      "order": 5,
       "title": "The signup disclosure does not disclose what the settled policy says it must",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -145,7 +128,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -162,7 +145,7 @@
       "lastFail": null
     },
     "KOL-121": {
-      "order": 10,
+      "order": 9,
       "title": "Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft",
       "status": "pending",
       "attempts": 0,
@@ -176,6 +159,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-118": {
+      "order": null,
+      "title": "A two-label env host in a Kubernetes import resolves across namespaces",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-118",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-26T19:30:19.558Z",
+      "runId": "2026-10-26T19:03:45.433Z",
       "lastFail": null
     },
     "KOL-117": {

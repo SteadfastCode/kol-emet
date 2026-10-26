@@ -52,7 +52,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work**
+- [x] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work**
   KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
   input that makes the next backlog audit file a duplicate — and three more have gone stale since. (1)
   `docs/generator-v1-plan.md` lists the **source-coverage pane** under "Remaining work" and its open question 5 still
