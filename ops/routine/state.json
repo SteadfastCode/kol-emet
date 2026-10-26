@@ -62,7 +62,7 @@
     "KOL-121": {
       "order": 4,
       "title": "Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-121",

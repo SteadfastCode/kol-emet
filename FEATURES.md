@@ -54,7 +54,29 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft**
+
+## Proposed
+
+- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
+  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
+  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
+  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
+  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
+  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
+- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
+  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
+  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
+  `usageMeter` test.
+- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
+  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
+  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
+  Atlas index change is not something a migration script alone should decide.
+
+## Blocked Items
+
+## Completed Items
+
+- [x] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft** (routine 2026-10-26, 71ef0b4)
   `docs/roadmap.md` Phase 7 names repo, k8s and DB-schema as the remaining producers; k8s shipped (KOL-089), and of the
   two left the DB-schema one needs no credential — a `.sql` dump is a file the customer already has, and "point it at
   your schema and watch it map your data model" is the promise the compose (KOL-033) and OpenAPI (KOL-051) producers
@@ -80,28 +102,6 @@ registration, or removes a feature.
   Out of scope: the repo producer (its own item); reading a live database or an ORM's migrations, which needs a
   credential or a toolchain; indexes, views, triggers and grants; and any model call — this producer is deterministic
   like the other three.
-
-## Proposed
-
-- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
-  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
-  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
-  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
-  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
-  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
-- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
-  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
-  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
-  `usageMeter` test.
-- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
-  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
-  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
-  Atlas index change is not something a migration script alone should decide.
-
-## Blocked Items
-
-## Completed Items
-
 - [x] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must** (routine 2026-10-26, ca06e62)
   Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
   generations may be used to improve the product, with **no opt-out on the free tier**. What the page actually says
