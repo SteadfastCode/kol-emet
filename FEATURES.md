@@ -52,26 +52,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work**
-  KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
-  input that makes the next backlog audit file a duplicate — and three more have gone stale since. (1)
-  `docs/generator-v1-plan.md` lists the **source-coverage pane** under "Remaining work" and its open question 5 still
-  reads "Agreed in scope; **not built**": it shipped 2026-10-23 as KOL-017
-  (`client/src/components/generator/SourceCoverage.vue`, `client/src/lib/sourceCoverage.js`, and its test). (2)
-  `docs/roadmap.md` Phase 7 says "repo, k8s and DB-schema are **next**": the Kubernetes producer shipped 2026-10-21 as
-  KOL-089 (`server/src/lib/producers/kubernetes.js`, `POST /drafts/kubernetes`), leaving repo and DB-schema. (3)
-  `docs/wishlist.md` lists "Bulk import endpoint" as open under Data & API: `POST /import` shipped 2026-10-15 as
-  KOL-077 (`server/src/routes/import.js`, `server/src/lib/graphImporter.js`).
-  Build: mark each shipped line the way these three files already mark their others — a ✅ with the item id and the
-  date — and leave the line in place; nothing is deleted, because the goal is an accurate list rather than a shorter
-  one. Where a line is only half shipped (Phase 7's producers), say which half is left.
-  Files: `docs/generator-v1-plan.md`, `docs/roadmap.md`, `docs/wishlist.md`.
-  Verify: `git diff --name-only` names exactly those three files; `cd server && yarn test` and
-  `cd client && yarn test --run && yarn build` still green — this is documentation only, so movement in either suite
-  means the diff touched more than it should.
-  Out of scope: any code change at all (a line that turns out to describe something genuinely unbuilt is left alone and
-  becomes its own queue item); deciding whether Phase 5 or Phase 7 is the current one, which both claim today — a
-  sequencing call for Daniel; and rewriting either plan's prose.
 
 - [ ] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must**
   Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
@@ -139,6 +119,26 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work** (routine 2026-10-26, 10cbc68)
+  KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
+  input that makes the next backlog audit file a duplicate — and three more have gone stale since. (1)
+  `docs/generator-v1-plan.md` lists the **source-coverage pane** under "Remaining work" and its open question 5 still
+  reads "Agreed in scope; **not built**": it shipped 2026-10-23 as KOL-017
+  (`client/src/components/generator/SourceCoverage.vue`, `client/src/lib/sourceCoverage.js`, and its test). (2)
+  `docs/roadmap.md` Phase 7 says "repo, k8s and DB-schema are **next**": the Kubernetes producer shipped 2026-10-21 as
+  KOL-089 (`server/src/lib/producers/kubernetes.js`, `POST /drafts/kubernetes`), leaving repo and DB-schema. (3)
+  `docs/wishlist.md` lists "Bulk import endpoint" as open under Data & API: `POST /import` shipped 2026-10-15 as
+  KOL-077 (`server/src/routes/import.js`, `server/src/lib/graphImporter.js`).
+  Build: mark each shipped line the way these three files already mark their others — a ✅ with the item id and the
+  date — and leave the line in place; nothing is deleted, because the goal is an accurate list rather than a shorter
+  one. Where a line is only half shipped (Phase 7's producers), say which half is left.
+  Files: `docs/generator-v1-plan.md`, `docs/roadmap.md`, `docs/wishlist.md`.
+  Verify: `git diff --name-only` names exactly those three files; `cd server && yarn test` and
+  `cd client && yarn test --run && yarn build` still green — this is documentation only, so movement in either suite
+  means the diff touched more than it should.
+  Out of scope: any code change at all (a line that turns out to describe something genuinely unbuilt is left alone and
+  becomes its own queue item); deciding whether Phase 5 or Phase 7 is the current one, which both claim today — a
+  sequencing call for Daniel; and rewriting either plan's prose.
 - [x] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces** (routine 2026-10-26, a2d6dab)
   `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
   is any namespace the file names (:720), but `hostToEntity` is keyed by bare workload name only (:404-405) and

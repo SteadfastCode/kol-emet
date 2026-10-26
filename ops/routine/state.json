@@ -62,7 +62,7 @@
     "KOL-119": {
       "order": 4,
       "title": "Second stale-doc sweep: three more lines that say \"not built\" about shipped work",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-119",
