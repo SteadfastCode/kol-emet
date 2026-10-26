@@ -51,7 +51,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces**
+- [x] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces**
   `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
   is any namespace the file names (:720), but `hostToEntity` is keyed by bare workload name only (:404-405) and
   `workloads` never records which namespace a workload is in. In a multi-namespace stream — `kubectl get all -A -o yaml`,
