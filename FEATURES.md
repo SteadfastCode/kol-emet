@@ -49,6 +49,22 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-129) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-02]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 
 
 
@@ -71,6 +87,192 @@ registration, or removes a feature.
   `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
   expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
   Atlas index change is not something a migration script alone should decide.
+
+- [ ] **(KOL-123) A user can create a second workspace, seeded from a template or left empty** [proposed]
+  `POST /auth/register` (`server/src/routes/auth.js:218`) is the only thing in the product that has ever created a
+  `Workspace`, so every account has exactly one for life. Everything around that hole is already built: `GET /workspaces`
+  lists the memberships and `POST /workspaces/:id/select` makes one the session's (`server/src/routes/workspace.js:135,158`),
+  the switcher in Settings renders only `v-if="workspaces.length > 1"` and its own comment says that is "every account
+  until invites land" (`client/src/components/WikiLayout.vue:153-156`), and `seedWorkspace(workspaceId, templateKey)`
+  plus the public `GET /templates` are what registration itself calls. A second workspace is also the only thing that
+  makes `POST /import` usable: it refuses a non-empty workspace with 409 `WORKSPACE_NOT_EMPTY`
+  (`server/src/routes/import.js:61`), and the one workspace an account has was seeded at signup.
+  Build: `POST /workspaces` on `workspacesRouter` — `{ name, template }`, `requireAuth` and deliberately no
+  `resolveWorkspace` (the caller is not acting in the new workspace yet), owner membership for the creator, `template`
+  resolved through `resolveTemplateKey` (`server/src/lib/workspaceSeeder.js:39`) and an unknown one refused as
+  registration refuses it (KOL-031), plus `template: null` meaning **seed nothing**, so an import has somewhere to land.
+  Name validated by the rule `PATCH /workspace` already uses (`WORKSPACE_NAME_MAX`, 1–80). A cap on how many workspaces
+  one account may own, because this is an authenticated create loop on an open-registration product — the signup
+  ceiling (KOL-050, KOL-081) is the precedent, and a refusal with its own error code is cheaper than a quota to
+  administer. It does NOT select the new workspace: the client calls the existing select route afterwards, so one path
+  stays the only writer of that session field. Client: a "New workspace" form in the Settings → Workspace group beside
+  the switcher, and the switcher stops hiding itself at a single membership.
+  Files: `server/src/routes/workspace.js`, `server/src/routes/auth.js` (extract the create-and-seed pair both callers
+  now need), `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, a new
+  `server/tests/http/workspaceCreate.test.js`, `client/src/components/WikiLayout.test.js`, `docs/api.md`,
+  `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a create seeds the named template and the creator is its owner;
+  `template: null` leaves it empty and `POST /import` then accepts it; an unknown template is 400; the cap refuses the
+  n+1-th; another user's workspaces stay invisible to `GET /workspaces`; and the new workspace is not the session's
+  until selected. `cd client && yarn test --run`; `cd client && yarn build`; `cd server && node --check src/index.js`.
+  Out of scope: deleting a workspace (its own item — it would reuse the cascade in `lib/accountDeleter.js` and needs a
+  confirmation flow), billing or per-plan limits, invites and membership management (KOL-124), and moving content
+  between workspaces.
+
+- [ ] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member** [proposed]
+  `Workspace.members` has carried a `role` of `owner | editor | viewer` since KOL-071
+  (`server/src/models/Workspace.js:14`), `requireWorkspaceRole`/`requireWriteRole` gate every content write on it
+  (`server/src/middleware/workspace.js:245,290`, KOL-103), and Settings already tells a caller "Only an owner can rename
+  this workspace. Your role here is …" (`client/src/components/WikiLayout.vue:151`). Nothing can produce such a member:
+  registration writes the single owner (`server/src/routes/auth.js:220`) and no route adds, re-roles or removes a
+  membership, so `editor` and `viewer` are unreachable on a real deployment and the write floor is exercised only by
+  tests. "Invite collaborators to a workspace" is the Phase 8 line in `docs/roadmap.md:106` and in `docs/wishlist.md`.
+  The narrow reading, which is the decision this item makes: an invite names an **email address**, and delivers nothing.
+  `POST /workspace/invites { email, role }` (owner only) stores a pending invite; the invitee sees it on `GET /invites`,
+  matched case-insensitively against their own account email — the identifier registration already keeps unique — and
+  `POST /invites/:id/accept` writes the membership while `/decline` drops it. No mail is sent (an outbound mail
+  credential is out of scope) and no invite link or token is minted. An invite to an address with no account simply
+  waits, and nothing tells the inviter whether that address is registered, which is also the privacy answer.
+  Build: a `WorkspaceInvite` model (workspaceId, lowercased email, role, invitedBy, createdAt), the three routes above,
+  `PATCH /workspace/members/:userId { role }` and `DELETE /workspace/members/:userId` for an owner, and the two guards
+  the data model implies: a workspace always keeps at least one owner (the last one cannot be demoted or removed — the
+  mirror of KOL-025's "an account keeps one way in"), and an invite to someone already a member is a 409.
+  `lib/accountDeleter.js:154` refuses to delete an account holding a workspace it does not solely own; that refusal
+  becomes reachable for the first time here, so it needs a test that proves it still fires.
+  Files: new `server/src/models/WorkspaceInvite.js`, `server/src/routes/workspace.js`, `server/src/app.js` (the
+  `/invites` mount is not workspace-scoped, like `/workspaces`), `server/src/lib/accountDeleter.js` (invites are
+  workspace-scoped data to sweep), `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, `docs/api.md`,
+  `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: an owner may invite and an editor or viewer may not; an invitee who
+  accepts can then do exactly what their role allows, driven through a real content route rather than read off the
+  membership row; one user cannot accept another's invite; the last owner cannot be demoted or removed; a removed member
+  loses access on their next request; and account deletion sweeps invites and still refuses a shared workspace.
+  `cd client && yarn test --run`; `cd client && yarn build`.
+  Out of scope: email delivery and invite links, seat billing, per-entity or per-category permissions, transferring
+  ownership outright, and per-user MCP identity (KOL-014) — a shared workspace makes that sharper but does not change it.
+
+- [ ] **(KOL-125) A local model is configured by a URL, not an API key: Ollama as a first-class provider** [proposed]
+  CLAUDE.md requires the model layer to work with local models, and `docs/roadmap.md:108` carries it as a Phase 8 line.
+  The registry is already shaped for it — one OpenAI-compatible client per provider with its own `baseURL`
+  (`server/src/lib/aiProviders.js:17-83`) — but `isConfigured` is `Boolean(process.env[p.envKey])` (:87), so a provider
+  is usable only when it has an **API key**, and Ollama has none. The nearest thing today is `steadfast`, which is
+  Daniel's own box: a hardcoded tailnet `baseURL`, a `STEADFAST_AI_API_KEY` its gateway requires, and a curated list of
+  the models that box has pulled (:72-82). Someone self-hosting this product beside `ollama serve` cannot use its AI at
+  all without inventing a dummy key, and ChatPanel tells them "No AI providers configured. Add API keys to the server
+  .env file." (`client/src/components/ChatPanel.vue:93`) — advice that is wrong for the one provider needing no key.
+  Build: an `ollama` entry whose base URL comes from `OLLAMA_BASE_URL` (default `http://127.0.0.1:11434/v1`), with
+  `envKey: null` read as *configured when its base URL is set*, and the placeholder key the Ollama OpenAI-compatible
+  endpoint ignores. Its model list is **discovered**, not curated: `GET {baseURL}/models` at listing time, cached
+  briefly, falling back to an empty list the picker shows as "no models pulled" rather than an error — a hardcoded list
+  is wrong for a server whose models are whatever its owner pulled. Metering: add `ollama` to `SELF_HOSTED_PROVIDERS`
+  (`server/src/config/pricing.js:65`) so it is charged the self-hosted rate and not zero, which is the decision
+  `SELF_HOSTED_PRICE` already records; a deployment where local inference genuinely costs nothing is a pricing decision
+  (see KOL-018), not a provider one. The empty-state copy becomes key-or-URL.
+  Files: `server/src/lib/aiProviders.js`, `server/src/config/pricing.js`, `server/src/routes/chat.js:561`
+  (`GET /chat/providers`), `server/.env.example`, `client/src/components/ChatPanel.vue`,
+  `server/tests/unit/pricing.test.js`, a new case group over provider listing, `docs/architecture.md:201` (the provider
+  tiers), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: `isConfigured('ollama')` true on a base URL alone and false with
+  neither; a key-based provider with no key still unconfigured (the new rule must not widen the others); the listing
+  including `ollama` when its URL is set; a failed discovery leaving the provider listed with no models instead of
+  throwing; and `costMicros` charging it the self-hosted rate. `cd client && yarn test --run`;
+  `cd client && yarn build`.
+  Out of scope: shipping, packaging or pulling models for Ollama; a per-workspace default provider (it is per request
+  today); the Responses-API/MCP relay path (Ollama advertises no `responsesApi`); and any change to what `steadfast` is.
+
+- [ ] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft** [proposed]
+  `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
+  docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);
+  `server/src/lib/producers/` holds exactly those four. "Point it at your repo" needs a Git credential, which an
+  unattended item may not take, so the narrow reading is the part of a repo a person can hand over as a file: its
+  **dependency manifest**.
+  Build: `server/src/lib/producers/packageManifest.js` and `POST /drafts/manifest`, plugged into `fileProducerRoute`
+  (`server/src/routes/drafts.js:330`) exactly as the other four are (:452-517), so the redaction seam, the source hash,
+  the re-import block pruning, the entity-type check, the draft row and the log tiers are inherited rather than copied.
+  It reads one manifest, choosing the format from the file's own content the way the OpenAPI producer chooses its
+  dialect: `package.json`, `pyproject.toml`, `go.mod` or `Cargo.toml`. Output in the Software Architecture template's
+  vocabulary (`server/src/config/templates.js:48-52`): one **Service** for the module itself (name, version and runtime
+  as attribute blocks, the manifest's own description as a text block), one **External Dependency** per direct runtime
+  dependency with its version constraint as an attribute, and a `Depends on` group per edge. Direct dependencies only —
+  a lockfile's transitive closure is hundreds of entities and would spend `MAX_ITEMS` (60,
+  `lib/draftNormalizer.js:21`) on noise — and dev or test dependencies are dropped with a drop reason rather than
+  silently.
+  Files: new `server/src/lib/producers/packageManifest.js`, `server/src/routes/drafts.js`,
+  `server/src/models/Draft.js:117` (the `source.producer` enum), `client/src/components/generator/BraindumpInput.vue`
+  (the upload control's accepted kinds), `client/src/api/drafts.js`, a new
+  `server/tests/unit/packageManifest.test.js`, the drafts HTTP tests, `docs/roadmap.md`, `docs/api.md`, the Decision Log.
+  Verify: `cd server && yarn test` with fixture cases per format: the module becomes one Service; direct dependencies
+  become External Dependencies with `Depends on` groups; dev dependencies are dropped with a reason; a manifest that
+  parses but names no dependencies is a one-item draft rather than a refusal; an unreadable file is 400 with a line
+  number; a re-import of an unchanged manifest proposes no new blocks; and the item cap holds on a manifest with 500
+  dependencies. `cd client && yarn test --run`; `cd client && yarn build`.
+  Out of scope: anything that reads a Git remote or a checkout (credential), lockfiles and transitive trees, monorepo
+  workspace globs, parsing source for call graphs, and license or vulnerability data.
+
+- [ ] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision** [proposed]
+  The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
+  already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,
+  `POST /drafts/*` loads `blocks` for the matched targets alone and runs `pruneKnownBlocks`
+  (`server/src/routes/drafts.js:374-379`, `lib/producers/dockerCompose.js:66-94`). **The braindump path has no such
+  pass.** `lib/generator.js:177` builds its roster as `.select('_id title updatedAt')`, `normalizeDraft` turns the
+  model's body into one text block and marks the item `op: 'update'` on an exact normalized-title match
+  (`lib/draftNormalizer.js:324-339`), and nothing compares it with what the entity holds — so generating twice over the
+  same notes, or over a superset of them (add a paragraph, re-generate — the workflow the overlay invites), appends a
+  byte-identical text block to every entity it matched.
+  The second half is true of both paths and is what makes the first worth fixing properly: after pruning an item can be
+  left proposing **nothing** — no blocks, no tag the entity lacks, and a summary the applier will not write over
+  (`draftApplier.js:122-124,147`) — and it is still queued as a decision, unflagged, so `POST /drafts/:id/decide-clean`
+  accepts it (`routes/drafts.js:662`) and `applyEntityUpdate` writes a `ChangeLog` row whose `changes` diff is empty
+  (`lib/changeLogger.js:68-81`). The review queue and the `Draft` corpus — which the Decision Log calls the training
+  corpus, not a work queue — fill with examples where accept and reject mean the same thing.
+  Build: one shared place for the create / update / nothing-left decision, used by the normalizer and the four
+  producers, which repeat it five times today (`draftNormalizer.js:289,329-339`, `dockerCompose.js:243,416-423`,
+  `openApi.js:484,515-522`, `kubernetes.js:602,634-641`, `sqlSchema.js:678,719-726`). Give the braindump path the same
+  enriched-target pass the route already has, move `withoutKnownBlocks` out of `producers/dockerCompose.js` (where its
+  three siblings import it from) into `lib/`, and **drop** an update item left proposing nothing, counted in
+  `diagnostics.dropReasons` as already in the graph and unchanged. Dropping rather than flagging: a flag makes
+  `decide-clean` skip it, which leaves the reviewer the same list to read.
+  Files: `server/src/lib/generator.js`, `server/src/lib/draftNormalizer.js`, `server/src/lib/producers/*.js`,
+  `server/src/routes/drafts.js`, the draft normalizer and four producer test files,
+  `server/tests/lib/draftApplier.test.js`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a braindump item whose text block the target already holds proposes
+  no blocks; an update left with nothing is absent from `items` and named in `dropReasons`; an update still carrying one
+  new tag or one new block survives; a dropped item does not blank the source span it was located in
+  (`client/src/lib/sourceCoverage.js` derives coverage from the items, so the located quote has to survive the drop);
+  and the four producers' existing fixtures unchanged. `cd client && yarn test --run`.
+  Out of scope: overwriting or diffing a human's prose (the append-only rule stands), an update op for open questions
+  (named as still open in KOL-016), re-generating a draft in place, and drift detection against a connected source.
+
+- [ ] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can** [proposed]
+  `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
+  (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same
+  `bySession` flag — both or neither (`server/src/routes/events.js:22-27`). A `BEARER_TOKEN` stream therefore carries
+  `userId: null` and is never matched at all. Three places say otherwise: the docstring at `broadcaster.js:226-228` ("A
+  client with no session id — the `BEARER_TOKEN` path — is never the spared one: `null` matching `null` would silently
+  keep a connector's stream open on an account deletion"), the Decision Log's KOL-112 entry, which repeats the
+  sentence, and the test `a stream with no session id is closed, spared session or not`
+  (`server/tests/unit/broadcaster.test.js:744-757`), which connects `{ userId: 'u1', sessionId: null }` — a combination
+  no production path can create — and presents it as covering the connector path. Found by the grader of KOL-112 (low,
+  `server/tests/unit/broadcaster.test.js:745`).
+  The guard itself is right and stays: `null` must never read as "this is the session that asked". What is wrong is the
+  claim, and behind it a small real gap — nothing ends a connector's stream when the account whose workspace it watches
+  is deleted. Being workspace-scoped it receives nothing afterwards, but it holds a socket and one of that tenant's
+  capped stream slots (KOL-062) until the client hangs up.
+  Build, in this order: give the test a fixture the code can actually see (a session-authenticated stream that is not
+  the spared one) and a rationale that matches it; correct the docstring and the Decision Log sentence to say what is
+  true — a bearer stream is not matched by the user-keyed closer at all; then either record a resolved `userId` on a
+  bearer stream in `routes/events.js` so the existing closer reaches it (the comment there explains why `sessionId` must
+  stay null, since the keep-alive sweep would drop the stream as "session gone"; `userId` carries no such problem), or
+  say in the same docstring that nothing closes it and why that is acceptable. The first is a few lines and leaves the
+  three corrected sentences describing a path that exists, so prefer it and record the choice.
+  Files: `server/src/lib/broadcaster.js`, `server/src/routes/events.js`, `server/tests/unit/broadcaster.test.js`,
+  `server/tests/http/sessionRevocation.test.js`, `kol_emet_spec.md` (the KOL-112 entry).
+  Verify: `cd server && yarn test` — the corrected sparing case runs red against a `closeStreamsForUser` that reads
+  `null` as the spared session, and a new case pins what happens to a bearer-authenticated stream on an account
+  deletion. `cd server && node --check src/index.js`.
+  Out of scope: closing a bearer stream on `POST /auth/sessions/revoke-all` (that route is about sessions, and a
+  connector holds none), the session-store limit the Decision Log already records, and any change to the
+  `session-ended` contract.
 
 ## Blocked Items
 
