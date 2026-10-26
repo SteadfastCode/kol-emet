@@ -71,9 +71,11 @@
   writes** — always a reviewable diff (see approval model below). **Shipped 2026-09-06 as Generator
   v1**; design and remaining stretch items in [generator-v1-plan.md](generator-v1-plan.md).
 - **Vertical ingestion** — for architecture: repo / OpenAPI / docker-compose / k8s / DB-schema →
-  proposed system graph. ("Point it at your repo and watch it map your services.") Two producers are
-  built — docker-compose (**shipped 2026-09-17**, KOL-033) and OpenAPI (**shipped 2026-10-06**,
-  KOL-051); repo, k8s and DB-schema are **next**.
+  proposed system graph. ("Point it at your repo and watch it map your services.") Three producers
+  are built — docker-compose (**shipped 2026-09-17**, KOL-033), OpenAPI (**shipped 2026-10-06**,
+  KOL-051) and k8s (✅ **shipped 2026-10-21**, KOL-089 —
+  `server/src/lib/producers/kubernetes.js`, `POST /drafts/kubernetes`); repo and DB-schema are
+  **next**.
 - **Continuous sync / drift detection** — the graph is derived from connected sources; when a source
   changes, the system finds the delta and *proposes* an update. The promise: **the model never goes
   stale.** This is the generator pointed at *changes* rather than a one-time import. Not built;

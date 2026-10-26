@@ -23,7 +23,8 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 
 ## Data & API
 - ✅ workspaceId enforcement in all queries (multi-tenancy) — shipped 2026-09-03; see roadmap Phase 8
-- Bulk import endpoint
+- ✅ Bulk import endpoint — `POST /import` shipped 2026-10-15 (KOL-077);
+  `server/src/routes/import.js` over `server/src/lib/graphImporter.js`
 - Full-text search index on blocks data
 
 ## MCP / AI

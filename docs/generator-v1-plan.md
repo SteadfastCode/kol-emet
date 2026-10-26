@@ -123,7 +123,7 @@ so bulk acceptance can never rubber-stamp the uncertain ones.
    queue that uncapped input would need is a later milestone, not a v1 blocker.
 5. **Source-coverage pane.** The judge on product strength rated "here is the text I did *not* use"
    the single strongest trust signal in any design, and the data ships in v1 either way. Agreed in
-   scope; **not built** — see Remaining work.
+   scope; ✅ **shipped 2026-10-23** (KOL-017) — see Remaining work.
 
 ## Remaining work
 
@@ -131,7 +131,10 @@ v1 is complete: braindump or imported file → generated draft → per-item revi
 the graph, with the full decision record exportable as training data. What was agreed, and what of it
 is still unbuilt:
 
-- **Source-coverage pane** (item 5 above). The evidence offsets it needs are already stored.
+- ✅ **Source-coverage pane** (item 5 above) — shipped 2026-10-23 (KOL-017):
+  `client/src/components/generator/SourceCoverage.vue` renders the used/unused spans computed by
+  `client/src/lib/sourceCoverage.js` (covered by `SourceCoverage.test.js`) from the evidence
+  offsets the pipeline already stored.
 - ✅ **Open-question item kind in generation** — shipped 2026-10-24 (KOL-016): pass 3 in
   `lib/generatorPrompts.js` (`openQuestionPrompt`) plus the raw schema and matching in
   `lib/draftNormalizer.js`. A question links entities by name, resolved to a sibling item's localKey
