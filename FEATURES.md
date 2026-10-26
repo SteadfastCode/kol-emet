@@ -49,7 +49,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing**
+- [x] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing**
   `server/src/routes/openQuestions.js` imports no broadcaster and calls `broadcast()` nowhere, so the three write
   handlers (POST `/` :132, PUT `/:id` :160, DELETE `/:id` :215) are invisible to every other open client. The entity
   routes get their frames for free from `logCreate`/`logUpdate`/`logDelete` (`server/src/lib/changeLogger.js:59,83,105`)
