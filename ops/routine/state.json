@@ -59,26 +59,26 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-119": {
+    "KOL-120": {
       "order": 4,
-      "title": "Second stale-doc sweep: three more lines that say \"not built\" about shipped work",
-      "status": "done",
-      "attempts": 1,
+      "title": "The signup disclosure does not disclose what the settled policy says it must",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-119",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-26T19:46:24.912Z",
-      "runId": "2026-10-26T19:03:45.433Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
-    "KOL-120": {
+    "KOL-121": {
       "order": 5,
-      "title": "The signup disclosure does not disclose what the settled policy says it must",
+      "title": "Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft",
       "status": "pending",
       "attempts": 0,
       "cluster": null,
@@ -144,21 +144,21 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-121": {
-      "order": 9,
-      "title": "Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft",
-      "status": "pending",
-      "attempts": 0,
+    "KOL-119": {
+      "order": null,
+      "title": "Second stale-doc sweep: three more lines that say \"not built\" about shipped work",
+      "status": "done",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-119",
       "dependsOn": [],
       "needsHuman": false,
-      "proposed": true,
+      "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-26T19:46:24.912Z",
+      "runId": "2026-10-26T19:03:45.433Z",
       "lastFail": null
     },
     "KOL-118": {
