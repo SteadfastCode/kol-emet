@@ -49,34 +49,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing**
-  `server/src/routes/openQuestions.js` imports no broadcaster and calls `broadcast()` nowhere, so the three write
-  handlers (POST `/` :132, PUT `/:id` :160, DELETE `/:id` :215) are invisible to every other open client. The entity
-  routes get their frames for free from `logCreate`/`logUpdate`/`logDelete` (`server/src/lib/changeLogger.js:59,83,105`)
-  and this collection has no ChangeLog at all, so there is nothing to inherit. The browser already assumes otherwise:
-  `client/src/api/openQuestions.js:23` sends `X-SSE-Client-Id` on every unsafe method "so the live-sync stream can tell
-  this tab's own writes from another's", and that header is inert — a second tab viewing the same entity keeps
-  rendering a question that was deleted, renamed or resolved minutes ago. Found by the grader of KOL-104 (low,
-  `client/src/api/openQuestions.js:23`). KOL-102 fixed the bulk-write half of live sync and named this one out of scope.
-  Build: three frames mirroring the entity vocabulary — `question:created`, `question:updated`, `question:deleted` —
-  emitted through `broadcast(name, payload, { workspaceId: req.workspaceId, excludeClientId })`
-  (`server/src/lib/broadcaster.js:349`) with `excludeClientId` read as the entity routes read it
-  (`req.headers['x-sse-client-id'] ?? null`, `server/src/routes/entities.js:283`). Each payload carries the question row
-  and its `entry_ids`, so a listener can tell whether the entity it is showing is affected without a refetch. Emit the
-  same frames from the MCP tool, which writes `OpenQuestion.create` directly rather than through this route
-  (`server/src/routes/mcp.js:283`, workspace from `mcpWriteWorkspaceId()`, no client to exclude) — a question an agent
-  raised appearing in the open tab is the whole point of the feature. Handle them in
-  `client/src/composables/useEvents.js` next to `onFrame('entity:updated', …)` (:231) and wire them in
-  `client/src/components/WikiLayout.vue` so the open-questions section follows.
-  Files: `server/src/routes/openQuestions.js`, `server/src/routes/mcp.js`, `client/src/composables/useEvents.js`,
-  `client/src/components/WikiLayout.vue`, `server/tests/http/openQuestions.test.js`,
-  `client/src/composables/useEvents.test.js`, `docs/api.md` (the `/open-questions` and `/events` rows).
-  Verify: `cd server && yarn test` with a case per write asserting one frame delivered to a second client in the same
-  workspace, none to a client in another, and none to the writer's own client id; `cd client && yarn test --run` with a
-  `useEvents.test.js` case per frame; `cd server && node --check src/index.js`; `cd client && yarn build`.
-  Out of scope: giving open questions a ChangeLog trail or rollback (its own item, and the reason KOL-115 added a
-  confirmation rather than an undo); relationship-group writes, which broadcast nothing either and need their own event
-  vocabulary; `Last-Event-ID` replay for a client that was disconnected; and any change to the question list's order.
 
 - [ ] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section**
   `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
@@ -213,6 +185,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing** (routine 2026-10-26, 859c779)
+  `server/src/routes/openQuestions.js` imports no broadcaster and calls `broadcast()` nowhere, so the three write
+  handlers (POST `/` :132, PUT `/:id` :160, DELETE `/:id` :215) are invisible to every other open client. The entity
+  routes get their frames for free from `logCreate`/`logUpdate`/`logDelete` (`server/src/lib/changeLogger.js:59,83,105`)
+  and this collection has no ChangeLog at all, so there is nothing to inherit. The browser already assumes otherwise:
+  `client/src/api/openQuestions.js:23` sends `X-SSE-Client-Id` on every unsafe method "so the live-sync stream can tell
+  this tab's own writes from another's", and that header is inert — a second tab viewing the same entity keeps
+  rendering a question that was deleted, renamed or resolved minutes ago. Found by the grader of KOL-104 (low,
+  `client/src/api/openQuestions.js:23`). KOL-102 fixed the bulk-write half of live sync and named this one out of scope.
+  Build: three frames mirroring the entity vocabulary — `question:created`, `question:updated`, `question:deleted` —
+  emitted through `broadcast(name, payload, { workspaceId: req.workspaceId, excludeClientId })`
+  (`server/src/lib/broadcaster.js:349`) with `excludeClientId` read as the entity routes read it
+  (`req.headers['x-sse-client-id'] ?? null`, `server/src/routes/entities.js:283`). Each payload carries the question row
+  and its `entry_ids`, so a listener can tell whether the entity it is showing is affected without a refetch. Emit the
+  same frames from the MCP tool, which writes `OpenQuestion.create` directly rather than through this route
+  (`server/src/routes/mcp.js:283`, workspace from `mcpWriteWorkspaceId()`, no client to exclude) — a question an agent
+  raised appearing in the open tab is the whole point of the feature. Handle them in
+  `client/src/composables/useEvents.js` next to `onFrame('entity:updated', …)` (:231) and wire them in
+  `client/src/components/WikiLayout.vue` so the open-questions section follows.
+  Files: `server/src/routes/openQuestions.js`, `server/src/routes/mcp.js`, `client/src/composables/useEvents.js`,
+  `client/src/components/WikiLayout.vue`, `server/tests/http/openQuestions.test.js`,
+  `client/src/composables/useEvents.test.js`, `docs/api.md` (the `/open-questions` and `/events` rows).
+  Verify: `cd server && yarn test` with a case per write asserting one frame delivered to a second client in the same
+  workspace, none to a client in another, and none to the writer's own client id; `cd client && yarn test --run` with a
+  `useEvents.test.js` case per frame; `cd server && node --check src/index.js`; `cd client && yarn build`.
+  Out of scope: giving open questions a ChangeLog trail or rollback (its own item, and the reason KOL-115 added a
+  confirmation rather than an undo); relationship-group writes, which broadcast nothing either and need their own event
+  vocabulary; `Last-Event-ID` replay for a client that was disconnected; and any change to the question list's order.
 - [x] **(KOL-109) Backlog audit: file new candidates under Proposed** (routine 2026-10-24, 8f86084)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,

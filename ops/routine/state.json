@@ -62,7 +62,7 @@
     "KOL-116": {
       "order": 4,
       "title": "Open-question writes reach no other tab: `/open-questions` broadcasts nothing",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-116",
