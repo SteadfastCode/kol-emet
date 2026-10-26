@@ -62,7 +62,7 @@
     "KOL-120": {
       "order": 4,
       "title": "The signup disclosure does not disclose what the settled policy says it must",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-120",

@@ -53,23 +53,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must**
-  Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
-  generations may be used to improve the product, with **no opt-out on the free tier**. What the page actually says
-  (`client/src/views/LoginView.vue:96-98`) is one sentence about account deletion — "You can delete your account and
-  all of its data at any time from Settings." (KOL-021) — and `client/src/views/LoginView.test.js:73-84` pins exactly
-  that sentence, so nothing is drifting unnoticed. Meanwhile `Draft` keeps the whole decision record
-  (`input`/`proposed`/`accepted`, permanent by design, no TTL) and `server/src/lib/draftExporter.js` exports it as
-  training data. The plan's "Remaining work" names this as the one unbuilt half of a decision already taken; for a
-  public product with open registration, every account created before it lands agreed to nothing.
-  Build: add the agreed disclosure beside the existing sentence in the same `.login-disclosure` block, worded as the
-  settled policy restated plainly, and extend the test to pin both sentences (and to keep asserting the block is absent
-  in login mode).
-  Files: `client/src/views/LoginView.vue`, `client/src/views/LoginView.test.js`, `docs/generator-v1-plan.md` (tick the
-  "Signup disclosure copy" line).
-  Verify: `cd client && yarn test --run` and `cd client && yarn build`.
-  Out of scope: a terms-of-service or privacy page; an opt-out control, or a paid tier that has one — both are pricing
-  decisions nobody has made; and any change to what is stored or exported, which is already settled and built.
 
 - [ ] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft**
   `docs/roadmap.md` Phase 7 names repo, k8s and DB-schema as the remaining producers; k8s shipped (KOL-089), and of the
@@ -119,6 +102,23 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must** (routine 2026-10-26, ca06e62)
+  Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
+  generations may be used to improve the product, with **no opt-out on the free tier**. What the page actually says
+  (`client/src/views/LoginView.vue:96-98`) is one sentence about account deletion — "You can delete your account and
+  all of its data at any time from Settings." (KOL-021) — and `client/src/views/LoginView.test.js:73-84` pins exactly
+  that sentence, so nothing is drifting unnoticed. Meanwhile `Draft` keeps the whole decision record
+  (`input`/`proposed`/`accepted`, permanent by design, no TTL) and `server/src/lib/draftExporter.js` exports it as
+  training data. The plan's "Remaining work" names this as the one unbuilt half of a decision already taken; for a
+  public product with open registration, every account created before it lands agreed to nothing.
+  Build: add the agreed disclosure beside the existing sentence in the same `.login-disclosure` block, worded as the
+  settled policy restated plainly, and extend the test to pin both sentences (and to keep asserting the block is absent
+  in login mode).
+  Files: `client/src/views/LoginView.vue`, `client/src/views/LoginView.test.js`, `docs/generator-v1-plan.md` (tick the
+  "Signup disclosure copy" line).
+  Verify: `cd client && yarn test --run` and `cd client && yarn build`.
+  Out of scope: a terms-of-service or privacy page; an opt-out control, or a paid tier that has one — both are pricing
+  decisions nobody has made; and any change to what is stored or exported, which is already settled and built.
 - [x] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work** (routine 2026-10-26, 10cbc68)
   KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
   input that makes the next backlog audit file a duplicate — and three more have gone stale since. (1)
