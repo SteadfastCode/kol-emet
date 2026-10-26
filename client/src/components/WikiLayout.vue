@@ -987,6 +987,49 @@ function buildChangeMessage(changes) {
   return parts.length ? `updated — ${parts.join('; ')}` : 'updated';
 }
 
+// ─── Open-question frames (KOL-116) ───────────────────────────────────────────
+
+/**
+ * Whether a `question:*` frame changes what the open detail panel is showing.
+ *
+ * Two ways it can: the question is linked to that entity *now* (the frame's
+ * `entry_ids`, which is why the payload carries them), or it was a moment ago
+ * and no longer is — a question moved off this entity, or deleted from it, is a
+ * change to this panel too, and the only record of the old link is the list the
+ * panel is already holding.
+ */
+function questionTouchesPanel({ question, questionId, entry_ids }) {
+  const shown = selectedEntity.value;
+  if (!shown) return false;
+  if ((entry_ids ?? []).some(id => String(id) === String(shown._id))) return true;
+  const id = String(questionId ?? question?._id);
+  return (shown.open_questions ?? []).some(q => String(q._id) === id);
+}
+
+/**
+ * Refetches the entity on screen so its open-question section re-seeds from the
+ * server, and says who. A refetch rather than a patch: the section renders what
+ * the server last said about the entity (the populate on `GET /entities/:id`),
+ * and the server is the one that decides what a write actually did.
+ *
+ * A frame for an entity nobody is looking at is dropped on purpose — the
+ * sidebar does not show questions, so there would be nothing to update and a
+ * toast about an entity off screen is noise.
+ */
+function refreshQuestions(payload, message) {
+  if (!questionTouchesPanel(payload)) return;
+  const shown = selectedEntity.value;
+  selectEntity(shown._id);
+  addToast({
+    actorLabel:  'Open questions',
+    actorType:   'system',
+    message,
+    entityId:    shown._id,
+    entityTitle: shown.title,
+    changeType:  'updated',
+  });
+}
+
 // ─── SSE event handlers ───────────────────────────────────────────────────────
 
 useEvents({
@@ -1070,6 +1113,25 @@ useEvents({
       message:    `imported ${counts.entities ?? 0} entities, ${counts.relationshipGroups ?? 0} relationships and ${counts.openQuestions ?? 0} open questions`,
       changeType: 'created',
     });
+  },
+
+  // ── Open questions (KOL-116) ──
+  // Their own collection on their own route, so none of this rides along with
+  // an entity frame. The panel renders a question from the populated
+  // `entity.open_questions` it was given (components/EntityHeader.vue), so the
+  // refresh is a refetch of the entity on screen — and only when the frame
+  // actually touches it, which the payload's `entry_ids` is there to say.
+
+  onQuestionCreated(payload) {
+    refreshQuestions(payload, 'added a question to');
+  },
+
+  onQuestionUpdated(payload) {
+    refreshQuestions(payload, 'changed a question on');
+  },
+
+  onQuestionDeleted(payload) {
+    refreshQuestions(payload, 'removed a question from');
   },
 
   // The server ended this stream for good — a session signed out elsewhere, or
