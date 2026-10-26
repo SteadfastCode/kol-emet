@@ -49,25 +49,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-
-## Proposed
-
-- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
-  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
-  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
-  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
-  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
-  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
-- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
-  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
-  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
-  `usageMeter` test.
-- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
-  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
-  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
-  Atlas index change is not something a migration script alone should decide.
-
-- [ ] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing** [proposed]
+- [ ] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing**
   `server/src/routes/openQuestions.js` imports no broadcaster and calls `broadcast()` nowhere, so the three write
   handlers (POST `/` :132, PUT `/:id` :160, DELETE `/:id` :215) are invisible to every other open client. The entity
   routes get their frames for free from `logCreate`/`logUpdate`/`logDelete` (`server/src/lib/changeLogger.js:59,83,105`)
@@ -96,7 +78,7 @@ registration, or removes a feature.
   confirmation rather than an undo); relationship-group writes, which broadcast nothing either and need their own event
   vocabulary; `Last-Event-ID` replay for a client that was disconnected; and any change to the question list's order.
 
-- [ ] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section** [proposed]
+- [ ] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section**
   `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
   `newQuestion`, `editingId`/`editText`, `confirmingId`, `pendingId` and `addPending`. `WikiLayout.vue:1012` replaces
   `selectedEntity` wholesale on every `entity:updated` frame, and `PUT /entities/:id` populates `open_questions`
@@ -122,7 +104,7 @@ registration, or removes a feature.
   client), the live-sync frames the section still does not receive, and any change to WikiLayout's wholesale
   `selectedEntity` replacement — the panel's other sections depend on it.
 
-- [ ] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces** [proposed]
+- [ ] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces**
   `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
   is any namespace the file names (:720), but `hostToEntity` is keyed by bare workload name only (:404-405) and
   `workloads` never records which namespace a workload is in. In a multi-namespace stream — `kubectl get all -A -o yaml`,
@@ -144,7 +126,7 @@ registration, or removes a feature.
   Out of scope: reading `NetworkPolicy` or `Ingress` for cross-namespace intent, modelling namespaces as entities of
   their own (a template decision, not a producer one), and the compose and OpenAPI producers' host resolution.
 
-- [ ] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work** [proposed]
+- [ ] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work**
   KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
   input that makes the next backlog audit file a duplicate — and three more have gone stale since. (1)
   `docs/generator-v1-plan.md` lists the **source-coverage pane** under "Remaining work" and its open question 5 still
@@ -165,7 +147,7 @@ registration, or removes a feature.
   becomes its own queue item); deciding whether Phase 5 or Phase 7 is the current one, which both claim today — a
   sequencing call for Daniel; and rewriting either plan's prose.
 
-- [ ] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must** [proposed]
+- [ ] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must**
   Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
   generations may be used to improve the product, with **no opt-out on the free tier**. What the page actually says
   (`client/src/views/LoginView.vue:96-98`) is one sentence about account deletion — "You can delete your account and
@@ -182,6 +164,23 @@ registration, or removes a feature.
   Verify: `cd client && yarn test --run` and `cd client && yarn build`.
   Out of scope: a terms-of-service or privacy page; an opt-out control, or a paid tier that has one — both are pricing
   decisions nobody has made; and any change to what is stored or exported, which is already settled and built.
+
+## Proposed
+
+- [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
+  Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
+  connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
+  own workspace; `resolveUserId` in `server/src/middleware/workspace.js` inherits the same limit for `BEARER_TOKEN`. Proposal:
+  per-authorization opaque tokens stored with `userId` + `workspaceId`, resolved by the `/mcp` middleware and `requireAuth`; env tokens
+  keep working during migration. Design approval first (storage, rotation, re-authorization UX), then 2–3 workqueue items; verify with an extended `mcp.test.js` where A and B each authorize and see only their own entities.
+- [ ] **(KOL-018) Post-trial self-hosted fallback** [needs-human]
+  An exhausted allowance blocks `steadfast` runs too (`checkBudget`, `server/src/lib/usageMeter.js`). Deferred by Daniel — options:
+  a separate self-hosted allowance, a slower free lane, or stay blocked. Decision first; then a small metered change with a
+  `usageMeter` test.
+- [ ] **(KOL-019) Lift the ChangeLog 30-day TTL for versioned workspaces** [needs-human]
+  `server/src/models/ChangeLog.js` indexes `createdAt` with `expireAfterSeconds` = 30 days; the Decision Log says history cannot
+  expire once versioning is the product. Needs a data decision (per-workspace flag, partial TTL index, or archive collection) — an
+  Atlas index change is not something a migration script alone should decide.
 
 - [ ] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft** [proposed]
   `docs/roadmap.md` Phase 7 names repo, k8s and DB-schema as the remaining producers; k8s shipped (KOL-089), and of the
