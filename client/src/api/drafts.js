@@ -69,6 +69,16 @@ export const createKubernetesDraft = ({ text, filename }) =>
   req('/drafts/kubernetes', { method: 'POST', body: JSON.stringify({ text, filename }) });
 
 /**
+ * The same, for a SQL schema dump — `pg_dump --schema-only`, `mysqldump
+ * --no-data`, a concatenated migration directory: each `CREATE TABLE` becomes a
+ * Data Store with its columns as attribute blocks, and each foreign key a
+ * Depends on link. A statement the producer cannot read is a drop reason on an
+ * otherwise ready draft; a file with no readable `CREATE TABLE` is a 400.
+ */
+export const createSqlDraft = ({ text, filename }) =>
+  req('/drafts/sql', { method: 'POST', body: JSON.stringify({ text, filename }) });
+
+/**
  * Start a generation, yielding progress events:
  *   { type: 'created', draftId }
  *   { type: 'stage',   stage, chunk?, of? }
