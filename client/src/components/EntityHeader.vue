@@ -192,8 +192,14 @@ import PencilIcon from './icons/PencilIcon.vue';
  * window.confirm — and only that Delete calls the route.
  *
  * The local rows are re-seeded whenever a fresh `entity.open_questions` array
- * arrives — a reopened panel, or the populated answer to an entity save — so
- * the server's account wins over ours as soon as there is one.
+ * arrives — a reopened panel, the populated answer to an entity save, or the
+ * panel's refetch after somebody else's question write — so the server's
+ * account of the rows wins over ours as soon as there is one. What the reader
+ * is in the middle of is theirs rather than the server's and survives that
+ * re-seed (KOL-117): the text in "Add a question", and an open editor whose row
+ * is still on the incoming list. A delete confirmation does not survive — it
+ * was asked about a row that has just changed underneath it. A *different*
+ * entity arriving in the panel is not a re-seed and keeps none of it.
  *
  * `canWrite` false renders the list as it always was, with no controls: the
  * panel also shows deleted entities' snapshots, and a question written against
@@ -205,10 +211,12 @@ import PencilIcon from './icons/PencilIcon.vue';
  *   light   — every write: the question id, the field that changed, and what
  *             asked for it. A status write and a text write are both a
  *             `PUT /open-questions/:id` and otherwise indistinguishable after
- *             the fact. Failed writes too, with their status.
- *   normal  — light, plus every re-seed from the entity prop and its row count,
- *             and every delete that was asked for and then kept — the write
- *             that did not happen is the one a surprised reader asks about
+ *             the fact. Failed writes too, with their status. And every re-seed
+ *             from the entity prop, naming what it kept of the reader's own
+ *             state and what it dropped — a re-seed that silently keeps state
+ *             is exactly what a surprised reader asks about
+ *   normal  — light, plus every delete that was asked for and then kept — the
+ *             write that did not happen is the one a surprised reader asks about
  *   verbose — normal, plus each row as the server returned it
  */
 
@@ -255,17 +263,72 @@ let confirmButton = null;
 /** Only what the entity populate carries, so a row's shape never varies. */
 const asRow = (q) => ({ _id: String(q._id), question: q.question, status: q.status });
 
+/**
+ * The entity the rows above were seeded from, as a string id, or null before
+ * the first seed. A re-seed of the same entity and a different entity arriving
+ * in the panel reach this component as the same watcher fire — WikiLayout
+ * replaces `selectedEntity` wholesale and the panel is not keyed, so nothing
+ * here is remounted — and only the first is a re-seed of what the reader is
+ * looking at.
+ */
+let seededFor = null;
+
 // A fresh array from the server replaces ours; a re-render with the same array
 // identity leaves our writes alone.
+//
+// The rows are the server's, but what is half-done is the reader's. Any write
+// to this entity by somebody else — another tab, the chat relay, an MCP client,
+// or this tab's own entity save — arrives here as a fresh array, and clearing
+// everything on each one discarded text mid-sentence and re-enabled rows whose
+// own write had not come back yet (KOL-117).
 watch(() => props.entity?.open_questions, (rows) => {
-  questions.value = (rows ?? []).map(asRow);
+  const entityId = props.entity?._id ? String(props.entity._id) : null;
+  const sameEntity = seededFor !== null && entityId === seededFor;
+  const incoming = (rows ?? []).map(asRow);
+  const kept = [];
+  const dropped = [];
+
+  // The add field's text survives a re-seed of this entity, and goes when the
+  // panel has moved on: it was typed for the section that just went away.
+  if (!sameEntity) {
+    if (newQuestion.value) dropped.push('the "Add a question" text (another entity)');
+    newQuestion.value = '';
+  } else if (newQuestion.value) {
+    kept.push(`the "Add a question" text (${newQuestion.value.length} chars)`);
+  }
+
+  // The open editor survives as long as its row does: a row the incoming list
+  // no longer holds has nothing left to save the typed text to.
+  if (editingId.value) {
+    if (sameEntity && incoming.some(q => q._id === editingId.value)) {
+      kept.push(`the editor open on ${editingId.value}`);
+    } else {
+      dropped.push(`the editor open on ${editingId.value} (${sameEntity ? 'no longer on the list' : 'another entity'})`);
+      editingId.value = null;
+      editText.value = '';
+    }
+  }
+
+  // A delete confirmation is always dropped: it was asked about a row that has
+  // just changed underneath it, so the answer would be about something else.
+  if (confirmingId.value) {
+    dropped.push(`the delete confirmation on ${confirmingId.value}`);
+    confirmingId.value = null;
+    confirmButton = null;
+  }
+
+  // `pendingId` and `addPending` are left to the write that set them, which
+  // clears them in its own `finally`. Clearing them here re-enabled a row whose
+  // `PUT`/`DELETE` was still in flight: a second conflicting write became
+  // possible, and the first one's late answer then landed in a list that had
+  // already been re-seeded.
+  if (pendingId.value) kept.push(`the write in flight on ${pendingId.value}`);
+  if (addPending.value) kept.push('the add in flight');
+
+  questions.value = incoming;
   questionError.value = '';
-  editingId.value = null;
-  confirmingId.value = null;
-  pendingId.value = null;
-  addPending.value = false;
-  newQuestion.value = '';
-  log('normal', `seeded ${questions.value.length} question(s) for ${props.entity?._id} (source: entity.open_questions)`);
+  seededFor = entityId;
+  log('light', `${sameEntity ? 're-seeded' : 'seeded'} ${incoming.length} question(s) for ${entityId} (source: entity.open_questions); kept ${kept.join(', ') || 'nothing'}; dropped ${dropped.join(', ') || 'nothing'}`);
   for (const row of questions.value) log('verbose', `${row._id} [${row.status}] ${JSON.stringify(row.question)}`);
 }, { immediate: true });
 
@@ -280,21 +343,36 @@ function failed(what, id, err) {
 async function addQuestion() {
   const text = newQuestion.value.trim();
   if (!text || addPending.value) return;
+  // Read once, up front: a re-seed can land before this write comes back, and
+  // the list it was written against is the only one it may appear on.
+  const entityId = String(props.entity._id);
   addPending.value = true;
   questionError.value = '';
   try {
     // Linked to the entity whose panel this is, which is the only entity this
     // section knows about. The server drops the id if it is not in the
     // workspace, so the question that comes back is what was actually linked.
-    const created = await createOpenQuestion({ question: text, entry_ids: [props.entity._id] });
-    questions.value = [...questions.value, asRow(created)];
-    newQuestion.value = '';
-    log('light', `created ${created._id}: question + entry_ids [${props.entity._id}] (source: the "Add a question" field)`);
+    const created = await createOpenQuestion({ question: text, entry_ids: [entityId] });
+    const row = asRow(created);
+    if (seededFor === entityId) {
+      // Upsert, not append: a re-seed while this POST was in flight may already
+      // carry the created question (the panel refetches the entity on an
+      // open-question frame), and appending would list one `_id` twice.
+      questions.value = questions.value.some(q => q._id === row._id)
+        ? questions.value.map(q => (q._id === row._id ? row : q))
+        : [...questions.value, row];
+      newQuestion.value = '';
+      log('light', `created ${created._id}: question + entry_ids [${entityId}] (source: the "Add a question" field)`);
+    } else {
+      // Written, just not onto this list: the panel is showing another entity
+      // now, and the row — and the text that is in the field — belong to it.
+      log('light', `created ${created._id} against ${entityId}: not listed, the panel is on ${seededFor} now (source: the "Add a question" field)`);
+    }
     log('verbose', `server returned ${JSON.stringify(created)}`);
   } catch (err) {
     // The typed text stays in the field: the question the server refused is not
     // put on the list, and retrying should not mean typing it again.
-    failed('creating a question against', props.entity?._id, err);
+    failed('creating a question against', entityId, err);
   } finally {
     addPending.value = false;
   }
