@@ -31,6 +31,16 @@
  *   env / envFrom URL host naming nothing
  *     in the file                         -> External Dependency + "Depends on"
  *
+ * NAMESPACES: the input the header above invites is a whole cluster, and in one
+ * of those a name is not unique — two teams run a `cache`, and a host that
+ * carries a namespace means THAT namespace. So every object's namespace is
+ * recorded (`default` when it declares none); a name that appears in more than
+ * one of them is titled `name.namespace`, so both objects are proposed instead
+ * of the second being dropped as a duplicate of the first; a Service's selector
+ * reaches only its own namespace, as Kubernetes' does; and a host is resolved
+ * against the namespace it names, or the reading pod's own (resolveHost).
+ * KOL-118.
+ *
  * A `kind` this mapping has no reading for — Ingress, HorizontalPodAutoscaler,
  * CustomResourceDefinition, anything a controller of its own owns — is a drop
  * reason naming the kind, not a refusal: a namespace dump is mostly objects
@@ -82,6 +92,21 @@ export const MAX_KUBERNETES_CHARS = MAX_COMPOSE_CHARS;
 
 /** Workload kinds that run containers, i.e. the ones that become an entity. */
 const WORKLOAD_KINDS = new Set(['Deployment', 'StatefulSet', 'DaemonSet']);
+
+/**
+ * The namespace an object that declares none lives in, which is Kubernetes' own
+ * default. It is a real namespace name, not a placeholder: `postgres.default` is
+ * the DNS name of a `postgres` that declares no `metadata.namespace`.
+ */
+const DEFAULT_NAMESPACE = 'default';
+
+/**
+ * The kinds whose `metadata.name` becomes part of an entity title — a workload's
+ * or a claim's title outright, a Service's the stem of one API title per port.
+ * Which namespaces each of those names appears in is what decides whether the
+ * title needs qualifying (KOL-118).
+ */
+const TITLED_KINDS = new Set([...WORKLOAD_KINDS, 'PersistentVolumeClaim', 'Service']);
 
 /**
  * Kinds this mapping deliberately passes over without a drop reason: they
@@ -241,11 +266,6 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   // have a `kind:` in it — would propose nonsense from a file the person
   // picked by mistake.
   const objects = [];
-  // Every namespace this file names, which is what tells a `service.namespace`
-  // host apart from an external two-label one (resolveHost). `default` is in it
-  // from the start because that is where an object declaring no namespace
-  // lives, so `postgres.default` names the same thing a bare `postgres` does.
-  const namespaces = new Set(['default']);
   for (let i = 0; i < docs.length; i++) {
     const doc = docs[i];
     const read = readerFor(doc);
@@ -256,10 +276,20 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
     const apiVersion = (read.scalarString(read.pairOf(root, 'apiVersion')?.value) ?? '').trim();
     if (!kind || !apiVersion) continue;
     const name = (read.scalarString(read.nodeAt(root, ['metadata', 'name'])) ?? '').trim();
-    const namespace = (read.scalarString(read.nodeAt(root, ['metadata', 'namespace'])) ?? '').trim();
-    if (namespace) namespaces.add(namespace.toLowerCase());
-    if (kind === 'Namespace' && name) namespaces.add(name.toLowerCase());
-    objects.push({ index: i, read, root, kind, apiVersion, name, kindOffset: kindPair?.key?.range?.[0] });
+    // The namespace this object LIVES IN, kept per object rather than pooled
+    // into one set of every namespace the file mentions. The pooled set could
+    // only say that `prod` was a namespace somewhere in the stream, so a host
+    // of `cache.prod` resolved to any workload named `cache` — one in `team-b`
+    // included. Per object, `cache.prod` reaches the `cache` in `prod` and
+    // nothing else, and two workloads called `cache` in two namespaces are two
+    // objects rather than one that shadows the other (KOL-118).
+    const declared = (read.scalarString(read.nodeAt(root, ['metadata', 'namespace'])) ?? '').trim();
+    objects.push({
+      index: i, read, root, kind, apiVersion, name,
+      namespace: (declared || DEFAULT_NAMESPACE).toLowerCase(),
+      declaredNamespace: declared || null,
+      kindOffset: kindPair?.key?.range?.[0],
+    });
   }
 
   if (!objects.length) {
@@ -278,6 +308,31 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   };
 
   const where = obj => `${obj.kind}${obj.name ? ` "${obj.name}"` : ''}`;
+
+  // Which namespaces each title-bearing name appears in. A name that appears in
+  // one keeps it — which is every single-namespace file, i.e. nearly all of them
+  // — and a name in two is two different objects, so each is titled
+  // `name.namespace` and BOTH are proposed. Keyed on the bare name alone rather
+  // than per kind, so a Deployment and the Service in front of it still agree on
+  // whether the name needs qualifying.
+  const namespacesOfName = new Map();
+  for (const obj of objects) {
+    if (!obj.name || !TITLED_KINDS.has(obj.kind)) continue;
+    const key = obj.name.toLowerCase();
+    if (!namespacesOfName.has(key)) namespacesOfName.set(key, new Set());
+    namespacesOfName.get(key).add(obj.namespace);
+  }
+  const titleFor = obj => (namespacesOfName.get(obj.name.toLowerCase())?.size > 1
+    ? `${obj.name}.${obj.namespace}`
+    : obj.name);
+
+  /** The namespace an object declares, as a block, so a reviewer can tell two same-named objects apart. */
+  const namespaceBlock = (obj, blocks) => {
+    if (obj.declaredNamespace) {
+      blocks.push({ type: 'attribute', order: blocks.length, data: { label: 'Namespace', value: obj.declaredNamespace } });
+    }
+    return blocks;
+  };
 
   // ── pass 1: workloads, claims, config maps ─────────────────────────────────
   const entities = [];            // { title, category, summary, blocks, offset }
@@ -334,8 +389,10 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
       if (modes.length) blocks.push({ type: 'attribute', order: blocks.length, data: { label: 'Access modes', value: modes.join(', ') } });
       const className = read.scalarString(read.nodeAt(root, ['spec', 'storageClassName']));
       if (className) blocks.push({ type: 'attribute', order: blocks.length, data: { label: 'Storage class', value: className } });
+      namespaceBlock(obj, blocks);
+      const title = titleFor(obj);
       const claim = {
-        title: name,
+        title,
         category: DATA_STORE,
         summary: storage
           ? `Claims ${storage} of storage (Kubernetes PersistentVolumeClaim).`
@@ -344,7 +401,7 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
         offset: obj.kindOffset,
       };
       entities.push(claim);
-      if (!entityByTitle.has(name)) entityByTitle.set(name, claim);
+      if (!entityByTitle.has(title)) entityByTitle.set(title, claim);
       continue;
     }
 
@@ -381,9 +438,11 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
     if (replicas != null) {
       blocks.push({ type: 'attribute', order: blocks.length, data: { label: 'Replicas', value: replicas } });
     }
+    namespaceBlock(obj, blocks);
 
+    const title = titleFor(obj);
     const entity = {
-      title: name,
+      title,
       category,
       summary: image
         ? `Runs the ${image} image (Kubernetes ${kind}).`
@@ -392,8 +451,8 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
       offset: obj.kindOffset,
     };
     entities.push(entity);
-    if (!entityByTitle.has(name)) entityByTitle.set(name, entity);
-    workloads.push({ name, obj, read, labels, containers });
+    if (!entityByTitle.has(title)) entityByTitle.set(title, entity);
+    workloads.push({ name, title, namespace: obj.namespace, obj, read, labels, containers });
     if (!containers.length) drop(`${where(obj)} declares no containers`);
   }
 
@@ -401,8 +460,21 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   // A host inside the cluster is a Service name, not a workload name, so this
   // pass is also what lets an env URL of `postgres:5432` reach the StatefulSet
   // behind the Service called `postgres`.
+  // `name` -> `namespace` -> the entity title that pair resolves to. Nested
+  // rather than one map keyed `name.namespace`, because the set of namespaces a
+  // name appears in is exactly what decides whether a BARE host is readable:
+  // one namespace and it names that object, several and it names whichever one
+  // sits beside the reading pod — or nothing at all (resolveHost, KOL-118).
   const hostToEntity = new Map();
-  for (const w of workloads) hostToEntity.set(w.name.toLowerCase(), w.name);
+  const addHost = (name, namespace, title) => {
+    const key = name.toLowerCase();
+    let perNamespace = hostToEntity.get(key);
+    if (!perNamespace) hostToEntity.set(key, perNamespace = new Map());
+    // First binding of a (name, namespace) wins, which is how a workload's own
+    // name keeps precedence over a Service alias onto something else.
+    if (!perNamespace.has(namespace)) perNamespace.set(namespace, title);
+  };
+  for (const w of workloads) addHost(w.name, w.namespace, w.title);
 
   for (const obj of services) {
     const { read, root, name } = obj;
@@ -422,27 +494,32 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
       }
     }
 
-    // All of the selector's labels have to match, which is what Kubernetes
-    // itself does. A Service with no selector (ExternalName, or one whose
-    // Endpoints are managed by hand) selects nothing by definition.
+    // All of the selector's labels have to match, AND the workload has to be in
+    // the Service's own namespace, which is what Kubernetes itself does: a
+    // selector reaches pods beside it and never across a namespace boundary. A
+    // Service with no selector (ExternalName, or one whose Endpoints are managed
+    // by hand) selects nothing by definition.
     const matches = Object.keys(selector).length
-      ? workloads.filter(w => Object.entries(selector).every(([k, v]) => w.labels[k] === v))
+      ? workloads.filter(w => w.namespace === obj.namespace
+        && Object.entries(selector).every(([k, v]) => w.labels[k] === v))
       : [];
 
-    const provider = matches[0]?.name ?? null;
+    const provider = matches[0]?.title ?? null;
     if (!Object.keys(selector).length) {
       drop(`Service "${name}" has no \`spec.selector\`, so no workload in this file provides it`);
     } else if (!provider) {
       const described = Object.entries(selector).map(([k, v]) => `${k}=${v}`).join(', ');
-      drop(`Service "${name}" selects ${described}, which no workload in this file carries`);
+      drop(`Service "${name}" selects ${described}, which no workload in namespace ` +
+        `\`${obj.namespace}\` carries`);
     } else if (matches.length > 1) {
-      drop(`Service "${name}" selects ${matches.length} workloads (${matches.map(w => w.name).join(', ')}); ` +
+      drop(`Service "${name}" selects ${matches.length} workloads (${matches.map(w => w.title).join(', ')}); ` +
         `"${provider}" is proposed as its provider`);
     }
 
     // The Service's name is the DNS name every other pod reaches it on, so it
-    // resolves to the workload behind it rather than to one of its APIs.
-    if (provider && !hostToEntity.has(name.toLowerCase())) hostToEntity.set(name.toLowerCase(), provider);
+    // resolves to the workload behind it rather than to one of its APIs — and
+    // only for pods that reach it by the namespace it is actually in.
+    if (provider) addHost(name, obj.namespace, provider);
 
     const ports = read.seqItems(read.nodeAt(root, ['spec', 'ports']));
     if (!ports.length) {
@@ -457,17 +534,17 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
         drop(`a port of Service "${name}" has no \`port\`, so there is nothing to title an API after`);
         continue;
       }
-      const title = `${name}:${number}`;
+      const title = `${titleFor(obj)}:${number}`;
       const protocol = read.scalarString(read.pairOf(port, 'protocol')?.value) ?? 'TCP';
       const target = read.scalarString(read.pairOf(port, 'targetPort')?.value);
       const portName = read.scalarString(read.pairOf(port, 'name')?.value);
       const type = read.scalarString(read.nodeAt(root, ['spec', 'type'])) ?? 'ClusterIP';
       const offset = portPair?.key?.range?.[0] ?? obj.kindOffset;
 
-      const blocks = [
+      const blocks = namespaceBlock(obj, [
         { type: 'attribute', order: 0, data: { label: 'Port', value: `${number}/${protocol}${target ? ` → ${target}` : ''}` } },
         { type: 'attribute', order: 1, data: { label: 'Service type', value: type } },
-      ];
+      ]);
       const api = {
         title,
         category: API,
@@ -488,22 +565,32 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
     const { read } = w;
     for (const { key, value, offset } of envEntries(w, read, configMaps)) {
       for (const host of urlHosts(value)) {
-        const target = resolveHost(host, hostToEntity, namespaces);
+        const { target, ambiguousIn } = resolveHost(host, hostToEntity, w.namespace);
         if (target) {
-          addEdge('Calls', CALLS, w.name, target, offset);
+          addEdge('Calls', CALLS, w.title, target, offset);
+        } else if (ambiguousIn) {
+          // The file DOES name this host, in several namespaces and none of them
+          // this pod's, so the External Dependency reading — "a host naming
+          // nothing in the file" (see the mapping at the top) — is not true of
+          // it, and picking one of the candidates would be a guess. So it is
+          // said out loud and nothing is proposed, the same as any other
+          // reference this producer cannot read (KOL-118).
+          drop(`"${host}" in ${w.title}'s ${key} names an object in ` +
+            `${ambiguousIn.map(ns => `\`${ns}\``).join(' and ')} and none in \`${w.namespace}\`, ` +
+            'so nothing was proposed for it');
         } else if (!LOCAL_HOSTS.has(host) && !host.startsWith('127.')) {
           if (!entityByTitle.has(host)) {
             const external = {
               title: host,
               category: EXTERNAL_DEPENDENCY,
-              summary: `External host referenced by ${w.name} (${key}).`,
+              summary: `External host referenced by ${w.title} (${key}).`,
               blocks: [],
               offset,
             };
             externals.push(external);
             entityByTitle.set(host, external);
           }
-          addEdge('Depends on', DEPENDS, w.name, host, offset);
+          addEdge('Depends on', DEPENDS, w.title, host, offset);
         }
       }
     }
@@ -683,42 +770,88 @@ function envEntries(workload, read, configMaps) {
 }
 
 /**
- * The entity an env URL's host names, or null when it names nothing in the file.
+ * What an env URL's host names: `{ target }` when it reaches one entity in this
+ * file, `{ ambiguousIn: [namespace, …] }` when the name is in the file but in
+ * several namespaces and none of them the reading pod's, and neither when it
+ * names nothing here at all.
  *
- * Three host forms resolve, and no others:
+ * `hostToEntity` is `name` -> `namespace` -> entity title, so the namespace a
+ * host carries is CHECKED rather than thrown away. Four readings, in order:
  *
- *   `postgres`                            a workload's own name, or a Service's
- *   `postgres.prod.svc[.cluster.local]`   a cluster-DNS name — `.svc` is proof
- *                                         the host is inside the cluster, so
- *                                         the namespace in it need not be one
- *                                         this file declares
- *   `postgres.prod`                       service.namespace, but only when
- *                                         `prod` is a namespace this file names
+ *   `postgres`                            an exact name wins first, because a
+ *                                         workload name may be a DNS subdomain
+ *                                         and so may carry a dot of its own
+ *   `postgres`                            else the `postgres` in the reading
+ *                                         pod's own namespace — where Kubernetes
+ *                                         looks first — and failing that the
+ *                                         only `postgres` in the file
+ *   `postgres.prod`                       the `postgres` in `prod`, and nothing
+ *                                         else: a `postgres` in `team-b` is a
+ *                                         different object and this host does
+ *                                         not name it
+ *   `postgres.prod.svc[.cluster.local]`   the `postgres` in `prod`; failing
+ *                                         that the only `postgres` in the file,
+ *                                         because the suffix is already proof
+ *                                         the host is inside the cluster and a
+ *                                         manifest is free to reach a namespace
+ *                                         no document here declares
  *
- * What makes this a function rather than one `??` chain is what it refuses: the
- * first label of a host is NOT a candidate on its own. The fallback used to
- * apply `.split('.')[0]` to every host, whether or not a cluster suffix had
- * just come off it, so any external FQDN whose first label happened to collide
- * with a workload or Service name in the same file became an internal `Calls`
- * edge: a stream carrying a Deployment called `api` beside a `web` whose env
- * holds `https://api.stripe.com/v1` proposed `Calls web → api` and never
- * proposed `api.stripe.com` as a dependency at all — and had the env been on
- * `api` itself, addEdge's self-edge guard would have dropped the host without
- * proposing anything (KOL-111). A cluster suffix, or a second label that is a
- * namespace of this file's, is the only place a short name can now hide.
+ * What this refuses is as much the point as what it resolves. The first label of
+ * a host is NOT a candidate on its own: the fallback used to apply
+ * `.split('.')[0]` to every host, whether or not a cluster suffix had just come
+ * off it, so any external FQDN whose first label happened to collide with a
+ * workload or Service name in the same file became an internal `Calls` edge — a
+ * stream carrying a Deployment called `api` beside a `web` whose env holds
+ * `https://api.stripe.com/v1` proposed `Calls web → api` and never proposed
+ * `api.stripe.com` as a dependency at all, and had the env been on `api` itself,
+ * addEdge's self-edge guard would have dropped the host without proposing
+ * anything (KOL-111). And a NAMESPACE is not a candidate on its own either: a
+ * two-label host used to resolve on nothing more than its second label being a
+ * namespace named somewhere in the stream, so in `kubectl get all -A` output —
+ * the input this producer's own header invites — `cache.prod` reached a `cache`
+ * in `team-b` and proposed a `Calls` edge to the wrong object (KOL-118).
  */
-function resolveHost(host, hostToEntity, namespaces) {
-  const exact = hostToEntity.get(host);
-  if (exact) return exact;
+function resolveHost(host, hostToEntity, readerNamespace) {
+  const exact = readIn(hostToEntity.get(host), readerNamespace);
+  if (exact.target || exact.ambiguousIn) return exact;
+
   if (CLUSTER_SUFFIX_RE.test(host)) {
-    // `postgres.prod.svc.cluster.local` -> `postgres`. The namespace is not
-    // checked: the suffix already says this is a cluster name, and a manifest
-    // is free to reach a Service in a namespace no document here declares.
-    return hostToEntity.get(host.replace(CLUSTER_SUFFIX_RE, '').split('.')[0]) ?? null;
+    // `postgres.prod.svc.cluster.local` -> the `postgres` in `prod`, or the only
+    // `postgres` there is. Matching the namespace is preferred but not required
+    // here, which is the one place a cluster name is read more loosely than a
+    // bare `name.namespace`: the suffix says the host is in-cluster, and the
+    // namespace it names may belong to no document in the file.
+    const labels = host.replace(CLUSTER_SUFFIX_RE, '').split('.');
+    const perNamespace = hostToEntity.get(labels[0]);
+    if (labels.length === 2 && perNamespace?.has(labels[1])) {
+      return { target: perNamespace.get(labels[1]), ambiguousIn: null };
+    }
+    return readIn(perNamespace, readerNamespace);
   }
+
   const labels = host.split('.');
-  if (labels.length === 2 && namespaces.has(labels[1])) return hostToEntity.get(labels[0]) ?? null;
-  return null;
+  if (labels.length === 2) {
+    const perNamespace = hostToEntity.get(labels[0]);
+    if (perNamespace?.has(labels[1])) return { target: perNamespace.get(labels[1]), ambiguousIn: null };
+  }
+  return { target: null, ambiguousIn: null };
+}
+
+/**
+ * One name's `namespace` -> title map, read the way a pod in `readerNamespace`
+ * reads a bare host: its own namespace first, because that is where Kubernetes'
+ * search path looks; then, when the name is in exactly one namespace, that one,
+ * so a file whose manifests are vague about namespaces still resolves the way it
+ * always did. A name in SEVERAL namespaces, none of them the reader's, names no
+ * one thing — it reports the candidates rather than picking one of them.
+ */
+function readIn(perNamespace, readerNamespace) {
+  if (!perNamespace?.size) return { target: null, ambiguousIn: null };
+  if (perNamespace.has(readerNamespace)) {
+    return { target: perNamespace.get(readerNamespace), ambiguousIn: null };
+  }
+  if (perNamespace.size === 1) return { target: [...perNamespace.values()][0], ambiguousIn: null };
+  return { target: null, ambiguousIn: [...perNamespace.keys()].sort() };
 }
 
 /** Lower-cased hosts of every URL in `value`; templated hosts are skipped. */
