@@ -62,18 +62,18 @@
     "KOL-120": {
       "order": 4,
       "title": "The signup disclosure does not disclose what the settled policy says it must",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-120",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-26T19:58:42.771Z",
+      "runId": "2026-10-26T19:57:46.163Z",
       "lastFail": null
     },
     "KOL-121": {

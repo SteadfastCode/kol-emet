@@ -53,7 +53,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must**
+- [x] **(KOL-120) The signup disclosure does not disclose what the settled policy says it must**
   Open question 2 of `docs/generator-v1-plan.md`, settled by Daniel 2026-09-05: signup **discloses** that reviewed
   generations may be used to improve the product, with **no opt-out on the free tier**. What the page actually says
   (`client/src/views/LoginView.vue:96-98`) is one sentence about account deletion — "You can delete your account and
