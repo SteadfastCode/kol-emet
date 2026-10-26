@@ -71,13 +71,20 @@ describe('LoginView credential-manager attributes', () => {
 });
 
 describe('LoginView signup disclosure', () => {
-  const DISCLOSURE = 'You can delete your account and all of its data at any time from Settings.';
+  // Both halves of open question 2 of docs/generator-v1-plan.md, settled 2026-09-05:
+  // the training-data use with no free-tier opt-out (KOL-120), and the hard delete
+  // (KOL-021). Pinned verbatim and in order, so neither can be reworded away.
+  const TRAINING_USE =
+    'AI-generated drafts you review may be used to improve the product, and the free tier has no opt-out.';
+  const DELETION = 'You can delete your account and all of its data at any time from Settings.';
 
-  it('create-account mode carries it, directly under the form', async () => {
+  it('create-account mode carries both sentences, directly under the form', async () => {
     const wrapper = mount(LoginView);
     await switchTo(wrapper, 'Create account');
 
-    expect(wrapper.get('form + .login-disclosure').text()).toBe(DISCLOSURE);
+    const sentences = wrapper.get('form + .login-disclosure').findAll('p');
+
+    expect(sentences.map((p) => p.text())).toEqual([TRAINING_USE, DELETION]);
   });
 
   it('sign-in mode does not', () => {
