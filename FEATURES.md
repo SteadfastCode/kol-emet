@@ -51,27 +51,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces**
-  `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
-  is any namespace the file names (:720), but `hostToEntity` is keyed by bare workload name only (:404-405) and
-  `workloads` never records which namespace a workload is in. In a multi-namespace stream — `kubectl get all -A -o yaml`,
-  the input the producer's own header invites (:15) — `cache.prod` therefore resolves to a workload named `cache` that
-  may live in `team-b`, proposing a `Calls` edge to the wrong object instead of an External Dependency;
-  two same-named workloads in two namespaces also collide in the map, where the last document silently wins. Found by
-  the grader of KOL-111 (low, `server/src/lib/producers/kubernetes.js:720`).
-  Build: record each workload's namespace (`default` when it declares none, matching the `namespaces` seed at :248),
-  key `hostToEntity` by `name.namespace` as well as by bare `name`, and resolve a two-label host only against the
-  workload in that namespace. A bare host that is ambiguous across namespaces resolves to nothing and takes the path
-  the file already has for an unreadable reference — a `drop()` reason or an External Dependency, whichever the
-  existing convention makes true — rather than guessing one of them.
-  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js`, and the
-  `POST /drafts/kubernetes` row in `docs/api.md` if the edge classification changes.
-  Verify: `cd server && yarn test` with unit cases for: `cache.prod` alongside a `cache` in `team-b` (no Calls edge to
-  it), two same-named workloads in two namespaces (both proposed, neither shadowed), a `name.namespace` host that does
-  match (still a Calls edge), and the existing `api.stripe.com` case still a Depends-on.
-  `cd server && node --check src/index.js`.
-  Out of scope: reading `NetworkPolicy` or `Ingress` for cross-namespace intent, modelling namespaces as entities of
-  their own (a template decision, not a producer one), and the compose and OpenAPI producers' host resolution.
 
 - [ ] **(KOL-119) Second stale-doc sweep: three more lines that say "not built" about shipped work**
   KOL-079 fixed three of these on 2026-10-15 for exactly this reason — a doc that describes shipped work as open is the
@@ -160,6 +139,27 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces** (routine 2026-10-26, a2d6dab)
+  `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
+  is any namespace the file names (:720), but `hostToEntity` is keyed by bare workload name only (:404-405) and
+  `workloads` never records which namespace a workload is in. In a multi-namespace stream — `kubectl get all -A -o yaml`,
+  the input the producer's own header invites (:15) — `cache.prod` therefore resolves to a workload named `cache` that
+  may live in `team-b`, proposing a `Calls` edge to the wrong object instead of an External Dependency;
+  two same-named workloads in two namespaces also collide in the map, where the last document silently wins. Found by
+  the grader of KOL-111 (low, `server/src/lib/producers/kubernetes.js:720`).
+  Build: record each workload's namespace (`default` when it declares none, matching the `namespaces` seed at :248),
+  key `hostToEntity` by `name.namespace` as well as by bare `name`, and resolve a two-label host only against the
+  workload in that namespace. A bare host that is ambiguous across namespaces resolves to nothing and takes the path
+  the file already has for an unreadable reference — a `drop()` reason or an External Dependency, whichever the
+  existing convention makes true — rather than guessing one of them.
+  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js`, and the
+  `POST /drafts/kubernetes` row in `docs/api.md` if the edge classification changes.
+  Verify: `cd server && yarn test` with unit cases for: `cache.prod` alongside a `cache` in `team-b` (no Calls edge to
+  it), two same-named workloads in two namespaces (both proposed, neither shadowed), a `name.namespace` host that does
+  match (still a Calls edge), and the existing `api.stripe.com` case still a Depends-on.
+  `cd server && node --check src/index.js`.
+  Out of scope: reading `NetworkPolicy` or `Ingress` for cross-namespace intent, modelling namespaces as entities of
+  their own (a template decision, not a producer one), and the compose and OpenAPI producers' host resolution.
 - [x] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section** (routine 2026-10-26, 33d8f67)
   `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
   `newQuestion`, `editingId`/`editText`, `confirmingId`, `pendingId` and `addPending`. `WikiLayout.vue:1012` replaces

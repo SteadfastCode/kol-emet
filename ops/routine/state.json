@@ -62,7 +62,7 @@
     "KOL-118": {
       "order": 4,
       "title": "A two-label env host in a Kubernetes import resolves across namespaces",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-118",
