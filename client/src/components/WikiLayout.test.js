@@ -36,8 +36,13 @@ import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts.js';
 // left mounted keeps answering keys for the rest of the file. Unmount them all.
 enableAutoUnmount(afterEach);
 
-const { entities, loadEntities, selectEntity, realEntities } = vi.hoisted(() => ({
+const { entities, loadEntities, selectEntity, realEntities, stubbedEntities } = vi.hoisted(() => ({
   entities: [], loadEntities: vi.fn(), selectEntity: vi.fn(),
+  // The last stubbed composable the layout took, so the live-sync group can put
+  // an entity on screen — the open-question frames only act on the panel that
+  // is open. A holder rather than a shared ref: every other group here expects
+  // its own mount to start with nothing selected.
+  stubbedEntities: {},
   // The paged-load group at the bottom needs the *real* composable — the thing
   // it asserts is that two pages end up as one list of cards — while every
   // other group here needs the stub. A flag, rather than a second test file
@@ -48,11 +53,16 @@ vi.mock('../composables/useEntities.js', async (importOriginal) => {
   const { ref } = await import('vue');
   const actual = await importOriginal();
   return {
-    useEntities: () => (realEntities.value ? actual.useEntities() : {
-      entities: ref(entities), selectedEntity: ref(null), sidebarLoading: ref(false), detailLoading: ref(false),
-      loadError: ref(null),
-      loadEntities, selectEntity, addEntity: vi.fn(), editEntity: vi.fn(), removeEntity: vi.fn(),
-    }),
+    useEntities: () => {
+      if (realEntities.value) return actual.useEntities();
+      const stub = {
+        entities: ref(entities), selectedEntity: ref(null), sidebarLoading: ref(false), detailLoading: ref(false),
+        loadError: ref(null),
+        loadEntities, selectEntity, addEntity: vi.fn(), editEntity: vi.fn(), removeEntity: vi.fn(),
+      };
+      stubbedEntities.last = stub;
+      return stub;
+    },
   };
 });
 // Mocked for the paged-load group, which is the only one that reaches it: the
@@ -801,6 +811,7 @@ describe('WikiLayout live sync', () => {
   beforeEach(() => {
     useEvents.mockClear();
     loadEntities.mockClear();
+    selectEntity.mockClear();
     addToast.mockClear();
   });
 
@@ -837,6 +848,92 @@ describe('WikiLayout live sync', () => {
     expect(loadEntities.mock.calls.at(-1)[0]).toMatch(/import/i);
     expect(addToast).toHaveBeenCalledTimes(1);
     expect(addToast.mock.calls[0][0].message).toContain('18 entities');
+  });
+
+  /**
+   * The open-question frames (KOL-116). The panel renders questions from the populated
+   * `entity.open_questions` it was handed, so the layout's answer to a frame is a refetch of the
+   * entity on screen — and only when the frame touches it, which is what the payload's `entry_ids`
+   * are for. A frame about an entity nobody is looking at has nothing to update: the sidebar shows
+   * no questions.
+   *
+   * Falsification: drop any one `onQuestion*` handler from the `useEvents` call and that case fails
+   * on the refetch it never asked for; ignore `entry_ids` and refetch unconditionally and the
+   * "another entity" case fails; look only at `entry_ids` and the delete case fails (a question
+   * removed from this entity is not in them).
+   */
+  const onScreen = (entity) => {
+    stubbedEntities.last.selectedEntity.value = entity;
+  };
+  const PANEL = { _id: 'e1', title: 'Boiler Room', open_questions: [{ _id: 'q1', question: 'Who stokes it?', status: 'open' }] };
+
+  it('refetches the open entity and says so when another client adds a question to it', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    onScreen({ ...PANEL });
+    selectEntity.mockClear();
+
+    sseHandlers().onQuestionCreated({
+      question: { _id: 'q2', question: 'And how fast?', status: 'open' }, entry_ids: ['e1'],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(selectEntity).toHaveBeenCalledWith('e1');
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0]).toMatchObject({ entityId: 'e1', entityTitle: 'Boiler Room' });
+    expect(addToast.mock.calls[0][0].message).toMatch(/question/i);
+  });
+
+  it('refetches when a question is resolved or renamed on the open entity', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    onScreen({ ...PANEL });
+    selectEntity.mockClear();
+
+    sseHandlers().onQuestionUpdated({
+      question: { _id: 'q1', question: 'Who stokes it?', status: 'resolved' }, entry_ids: ['e1'],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(selectEntity).toHaveBeenCalledWith('e1');
+    expect(addToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches when a question the open entity is showing is deleted, though it names no entity', async () => {
+    // A delete's `entry_ids` are the links that existed; a question moved *off* this entity names
+    // somewhere else entirely. Either way the panel is holding a row the server no longer has.
+    const wrapper = shallowMount(WikiLayout);
+    onScreen({ ...PANEL });
+    selectEntity.mockClear();
+
+    sseHandlers().onQuestionDeleted({
+      questionId: 'q1', question: { _id: 'q1', question: 'Who stokes it?', status: 'open' }, entry_ids: [],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(selectEntity).toHaveBeenCalledWith('e1');
+  });
+
+  it('ignores a question frame for another entity, and one with no panel open', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    onScreen({ ...PANEL });
+    selectEntity.mockClear();
+
+    sseHandlers().onQuestionCreated({
+      question: { _id: 'q9', question: 'Whose shed?', status: 'open' }, entry_ids: ['e2'],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(selectEntity).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
+
+    // And with nothing on screen there is nothing to refetch either.
+    onScreen(null);
+    sseHandlers().onQuestionCreated({
+      question: { _id: 'q9', question: 'Whose shed?', status: 'open' }, entry_ids: ['e1'],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(selectEntity).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
   });
 
   it('says so when the server ends the stream for good', () => {

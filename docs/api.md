@@ -337,9 +337,9 @@ different tag and is never touched. `:tag` is a URL path segment — percent-enc
 |--------|-------|-------------|
 | GET | `/open-questions` | List, newest first (ordered by `_id` descending, which is creation order and, unlike `createdAt`, unique). Supports `?status=open|resolved`. Populates `entry_ids`. **Pagination (opt-in):** with `?limit=` (an integer 1–200; clamped to 200 above it, and *no limit* for anything else — `0`, `-1`, `abc`, a repeated parameter or `?limit[$gt]=1`) the response is an envelope `{ items, nextAfter: <id> | null }` instead of a bare array. Without `limit` the response is the unbounded bare array it has always been, so existing callers are unaffected. Pages are keyset, not offset: send the previous page's `nextAfter` back as `?after=<id>`. `nextAfter` is `null` on the last page, and a present but unusable `after` is **400** rather than a silent first page. There is no `total`: nothing pages this route for a "page 2 of 7", and a count per page is a second query. |
 | GET | `/open-questions/:id` | Single question, with `entry_ids` populated (`title`, `category`). 404 for a question outside the workspace. |
-| POST | `/open-questions` | Create `{ question, entry_ids?: ObjectId[] }` → **201** with the created document (not populated). A missing or blank `question` is **400** `{ error: "VALIDATION_FAILED", fields }`. `status` is always `open` on a new question; it is not taken from the body. Each kept `entry_ids` entry gets the question `$addToSet`-ed onto its `open_questions`, so the link exists on both sides. `entry_ids` naming entities outside the caller's workspace are **dropped, not refused** — they are never stored and their entities are never back-linked — so the response is the only account of what was actually linked. |
-| PUT | `/open-questions/:id` | Update `{ question?, status?, entry_ids? }` → 200 with the question, `entry_ids` populated. **Only the fields the body names are written**, so a `{ status }` write cannot rewrite the text and a `{ question }` write cannot change the status; a body naming none is a 200 no-op. `status` must be `open` or `resolved` and `question` must be non-blank — the update runs the schema's validators, so another value is **400** `{ error: "VALIDATION_FAILED", fields }` and nothing is written (only the paths the body names are validated). `entry_ids` **replaces** the list and syncs the back-links on both sides — removed entities are `$pull`-ed, added ones `$addToSet`-ed — under the same workspace rule as POST. 404 for a question outside the workspace. |
-| DELETE | `/open-questions/:id` | Delete → **204**, and the question's id is `$pull`-ed from the `open_questions` of every entity it was linked to. 404 for a question outside the workspace, including a second delete of the same id. |
+| POST | `/open-questions` | Create `{ question, entry_ids?: ObjectId[] }` → **201** with the created document (not populated). A missing or blank `question` is **400** `{ error: "VALIDATION_FAILED", fields }`. `status` is always `open` on a new question; it is not taken from the body. Each kept `entry_ids` entry gets the question `$addToSet`-ed onto its `open_questions`, so the link exists on both sides. `entry_ids` naming entities outside the caller's workspace are **dropped, not refused** — they are never stored and their entities are never back-linked — so the response is the only account of what was actually linked. Broadcasts [`question:created`](#the-frames) to the workspace's other tabs. |
+| PUT | `/open-questions/:id` | Update `{ question?, status?, entry_ids? }` → 200 with the question, `entry_ids` populated. **Only the fields the body names are written**, so a `{ status }` write cannot rewrite the text and a `{ question }` write cannot change the status; a body naming none is a 200 no-op. `status` must be `open` or `resolved` and `question` must be non-blank — the update runs the schema's validators, so another value is **400** `{ error: "VALIDATION_FAILED", fields }` and nothing is written (only the paths the body names are validated). `entry_ids` **replaces** the list and syncs the back-links on both sides — removed entities are `$pull`-ed, added ones `$addToSet`-ed — under the same workspace rule as POST. 404 for a question outside the workspace. A write that happened broadcasts [`question:updated`](#the-frames); a refused one broadcasts nothing. |
+| DELETE | `/open-questions/:id` | Delete → **204**, and the question's id is `$pull`-ed from the `open_questions` of every entity it was linked to. 404 for a question outside the workspace, including a second delete of the same id. Broadcasts [`question:deleted`](#the-frames), which carries the row that is gone — the 204 carries nothing and this collection keeps no snapshot anywhere else (it has no `ChangeLog` trail and no rollback route). |
 
 Open questions are *read* on the entity as well: `GET /entities` and `GET /entities/:id` populate
 each entity's `open_questions` with `question` and `status` (workspace-scoped —
@@ -1018,17 +1018,31 @@ non-empty workspace are each their own item.
 | `entity:created` | every entity create | `{ entity, actor, changes }` | inserts the row |
 | `entity:updated` | every entity update | `{ entity, actor, changes }` | replaces the row |
 | `entity:deleted` | every entity delete | `{ entityId, entityTitle, actor, snapshot, deletedAt }` | drops the row |
+| `question:created` | `POST /open-questions`, and the MCP `add_open_question` | `{ question, entry_ids }` | refetches the entity on screen if `entry_ids` names it |
+| `question:updated` | `PUT /open-questions/:id` | `{ question, entry_ids }` | as above |
+| `question:deleted` | `DELETE /open-questions/:id` | `{ questionId, question, entry_ids }` | as above, or if the panel is showing that question |
 | `draft:applied` | `POST /drafts/:id/apply` | `{ draftId, applied, failed, blocked, skipped, actor }` | refetches the list |
 | `workspace:imported` | `POST /import` | `{ version, imported, actor }` | refetches the list |
 | `error` | the server, before it closes a stream | `{ error, limit? }` | see *Ending a stream* below |
 
-The last two are the **bulk writes**: one frame for a request that wrote many rows, rather than a
+`draft:applied` and `workspace:imported` are the **bulk writes**: one frame for a request that wrote many rows, rather than a
 burst of per-entity events a 30-item apply would flood every open tab with (the applier passes
 `broadcast: false` through `lib/changeLogger.js`; the importer never used the per-entity path at
 all). The trade is that one frame cannot say *which* rows moved, so the client refetches rather
 than patching — and that a frame nothing listens for is a bulk write no other tab ever sees, which
 is what KOL-102 fixed. Both exclude the client that asked, by its `x-sse-client-id`, since that one
 has the response.
+
+The three `question:*` frames (KOL-116) are the open-question collection's own vocabulary. Entity
+frames come out of `lib/changeLogger.js` — the audit row and the broadcast are one call — and this
+collection writes no `ChangeLog`, so there was nothing to inherit and `/open-questions` broadcast
+nothing at all: a second tab went on rendering a question that had been renamed, resolved or
+deleted. `question` is the row as the panel renders it (`_id`, `question`, `status`, timestamps) and
+`entry_ids` is **always bare string ids**, never the populated `{ title, category }` rows `PUT`
+answers with — they are what lets a listener decide whether the entity it is showing is affected
+without a refetch. The MCP `add_open_question` tool emits `question:created` itself, since it writes
+the collection directly rather than through the route, and excludes no client (an MCP session holds
+no `/events` stream). No actor is named on these frames: the route resolves none.
 
 Not broadcast yet, and deliberately: relationship-group writes (they have no `ChangeLog` and so
 need an event vocabulary of their own) and anything on `/chat`, which is a separate SSE channel with

@@ -24,7 +24,17 @@
  *   **The default log tier carries no payload.** Every frame used to be
  *   `console.log`ged whole, entity bodies included.
  *
- * Falsification: drop the two new `onFrame` registrations and the first group
+ *   **An open-question write reaches this tab** (KOL-116). `/open-questions` is
+ *   its own collection on its own route with no `ChangeLog`, so nothing about a
+ *   question rides along with an entity frame — and the route broadcast nothing
+ *   at all, so a second tab went on rendering a question that had been renamed,
+ *   resolved or deleted. The three `question:*` frames each have to call their
+ *   handler once with the payload, `entry_ids` included: that list is how the
+ *   layout decides whether the panel on screen is affected
+ *   (components/WikiLayout.test.js pins that half).
+ *
+ * Falsification: drop the two bulk-write `onFrame` registrations and the first
+ * group fails; drop the three `question:*` ones and the open-question group
  * fails; read `es.readyState` instead of `e.data` on the error path and the
  * stop cases reconnect; keep the fixed 3000 ms and the backoff case fails; log
  * `e.data` at the light tier and the last case fails.
@@ -178,6 +188,55 @@ describe('a bulk write', () => {
 
     expect(onEntityUpdated).toHaveBeenCalledTimes(1);
     expect(reported.some((l) => l.includes('draft:applied handler threw'))).toBe(true);
+  });
+});
+
+describe('an open-question write', () => {
+  const QUESTION = { _id: 'q1', question: 'Who stokes it on the night run?', status: 'open' };
+
+  it('reaches this tab through question:created, once, with the row and its entry_ids', () => {
+    const onQuestionCreated = vi.fn();
+    wrapper = connected({ onQuestionCreated });
+
+    latest().frame('question:created', { question: QUESTION, entry_ids: ['e1', 'e2'] });
+
+    expect(onQuestionCreated).toHaveBeenCalledTimes(1);
+    expect(onQuestionCreated.mock.calls[0][0]).toEqual({ question: QUESTION, entry_ids: ['e1', 'e2'] });
+  });
+
+  it('reaches this tab through question:updated, once', () => {
+    const onQuestionUpdated = vi.fn();
+    wrapper = connected({ onQuestionUpdated });
+
+    latest().frame('question:updated', {
+      question: { ...QUESTION, status: 'resolved' }, entry_ids: ['e1'],
+    });
+
+    expect(onQuestionUpdated).toHaveBeenCalledTimes(1);
+    expect(onQuestionUpdated.mock.calls[0][0].question.status).toBe('resolved');
+    expect(onQuestionUpdated.mock.calls[0][0].entry_ids).toEqual(['e1']);
+  });
+
+  it('reaches this tab through question:deleted, once, naming the id that is gone', () => {
+    const onQuestionDeleted = vi.fn();
+    wrapper = connected({ onQuestionDeleted });
+
+    latest().frame('question:deleted', { questionId: 'q1', question: QUESTION, entry_ids: ['e1'] });
+
+    expect(onQuestionDeleted).toHaveBeenCalledTimes(1);
+    expect(onQuestionDeleted.mock.calls[0][0].questionId).toBe('q1');
+    expect(onQuestionDeleted.mock.calls[0][0].entry_ids).toEqual(['e1']);
+  });
+
+  it('carries no payload at the default log tier', () => {
+    // The same rule the entity frames follow: the light tier says *which* row a
+    // frame was about, never what it said. A question's text is content.
+    wrapper = connected({ onQuestionCreated: vi.fn() });
+    logged = [];
+
+    latest().frame('question:created', { question: QUESTION, entry_ids: ['e1'] });
+
+    expect(logged.join('\n')).not.toContain('night run');
   });
 });
 

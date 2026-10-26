@@ -24,6 +24,16 @@
  *
  *   `?status=` filters the list the panel's badge counts from.
  *
+ *   **Each write reaches the workspace's other tabs** (KOL-116). This route
+ *   imported no broadcaster at all, so every open-question write was invisible
+ *   in every other open client: the entity routes get their frames from
+ *   `logCreate`/`logUpdate`/`logDelete` and this collection has no ChangeLog to
+ *   hang one on. The three cases below are the only place the fan-out and the
+ *   write path meet — that a frame is emitted per write, that it carries the
+ *   row and its `entry_ids`, that it is scoped to one workspace, and that the
+ *   tab which asked for the write (the `X-SSE-Client-Id` the browser echoes)
+ *   does not receive its own echo.
+ *
  *   Tenancy, which is the whole reason these routes cannot be taken on trust:
  *   another workspace's entity id is **dropped from `entry_ids` rather than
  *   stored** (and its entity is never back-linked), and another workspace's
@@ -45,7 +55,7 @@
  *   verbose — normal, plus the body each request came back with
  */
 
-import { describe, test, before, after } from 'node:test';
+import { describe, test, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import session from 'express-session';
@@ -76,8 +86,16 @@ delete process.env.BEARER_TOKEN;
 process.env.SEED_LOG_LEVEL ??= 'off';
 process.env.OPEN_QUESTION_LIST_LOG_LEVEL ??= 'off';
 process.env.CHANGELOG_LOG_LEVEL ??= 'off';
+// The live-sync group below drives real broadcasts; both of these narrate every
+// one of them, which is readable when a frame is being chased and noise here.
+process.env.SSE_LOG_LEVEL ??= 'off';
+process.env.OPEN_QUESTION_SSE_LOG_LEVEL ??= 'off';
 
 const { createApp } = await import('../../src/app.js');
+// The same module instance the app broadcasts through — one process, one client
+// map — so a connection registered here really is a listener on the route's
+// fan-out. See the live-sync group at the bottom.
+const { addClient, removeClient } = await import('../../src/lib/broadcaster.js');
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -385,5 +403,172 @@ describe('DELETE /open-questions/:id', () => {
 
     assert.equal((await alice.agent.delete(`/open-questions/${created._id}`)).status, 204);
     assert.equal((await alice.agent.delete(`/open-questions/${created._id}`)).status, 404);
+  });
+});
+
+/**
+ * Live sync (KOL-116): the frames a write puts on `/events`.
+ *
+ * Listeners are registered straight into the broadcaster with a fake `res`,
+ * rather than opened as real `GET /events` sockets. The subject here is the
+ * *route* — whether it broadcasts at all, with what payload, scoped to whom —
+ * and `addClient` is the whole of what a connection is to a broadcast
+ * (`tests/http/events.test.js` owns the socket's own behaviour over real
+ * sockets, and `tests/unit/broadcaster.test.js` the fan-out's). The write
+ * itself is a real request through supertest, which is the half that was
+ * missing: the frame has to come out of the handler.
+ *
+ * Falsification: drop any one `broadcastQuestion*` call from
+ * `src/routes/openQuestions.js` and that write's case fails with no frame;
+ * drop `workspaceId` from the options and every case fails (the broadcaster
+ * delivers to nobody); drop `excludeClientId` and the writer's-own-tab
+ * assertion fails; return the populated `entry_ids` straight from PUT instead
+ * of normalising to ids and the PUT case fails on the payload shape.
+ */
+describe('the frames a write broadcasts', () => {
+  /** Every client registered by the current test, dropped in afterEach. */
+  let connected = [];
+  let clientCounter = 0;
+
+  afterEach(() => {
+    for (const clientId of connected) removeClient(clientId);
+    connected = [];
+  });
+
+  /** One SSE frame as the broadcaster wrote it. */
+  function parseFrame(chunk) {
+    const event = /^event: (.*)$/m.exec(chunk)?.[1] ?? null;
+    const raw = /^data: (.*)$/m.exec(chunk)?.[1] ?? null;
+    let data = null;
+    try { data = raw === null ? null : JSON.parse(raw); } catch { data = raw; }
+    return { event, data };
+  }
+
+  /**
+   * A listener in `who`'s workspace, collecting what it receives. The returned
+   * `clientId` is what a browser would echo back as `X-SSE-Client-Id`.
+   */
+  function listen(label, who) {
+    const received = [];
+    const clientId = `${label}-${(clientCounter += 1)}`;
+    const added = addClient(clientId, { write: (chunk) => received.push(parseFrame(chunk)) },
+      who.workspaceId, { userId: who.userId });
+    assert.ok(added.accepted, `the broadcaster refused a listener for ${label}: ${JSON.stringify(added)}`);
+    connected.push(clientId);
+    log('light', `listening as ${clientId} in workspace ${who.workspaceId} (source: addClient)`);
+    return {
+      clientId,
+      received,
+      named: (event) => received.filter((f) => f.event === event),
+      // The `question:*` traffic alone. The fixtures these tests build are
+      // entities, and an entity create broadcasts its own frame from a
+      // fire-and-forget `logCreate` that can land at any point after — so
+      // "received nothing" has to mean "received no question frame", not
+      // "received no frame".
+      questions: () => received.filter((f) => (f.event ?? '').startsWith('question:')),
+    };
+  }
+
+  test('POST sends one question:created to the other tab, and not to the writer or another workspace', async () => {
+    const entityId = await createEntity(alice, 'Brake Van');
+    const writer = listen('alice/writing-tab', alice);
+    const other = listen('alice/other-tab', alice);
+    const stranger = listen('bob/tab', bob);
+
+    const res = await alice.agent
+      .post('/open-questions')
+      .set('X-SSE-Client-Id', writer.clientId)
+      .send({ question: 'Who rides in the brake van?', entry_ids: [entityId] });
+    assert.equal(res.status, 201, `POST answered ${res.status}: ${JSON.stringify(res.body)}`);
+
+    const frames = other.named('question:created');
+    assert.equal(frames.length, 1, `the other tab received ${JSON.stringify(other.questions())}`);
+    assert.equal(frames[0].data.question._id, String(res.body._id));
+    assert.equal(frames[0].data.question.question, 'Who rides in the brake van?');
+    assert.equal(frames[0].data.question.status, 'open');
+    // The entities the frame is about, so a tab can tell whether the panel it
+    // is showing is affected without asking the server.
+    assert.deepEqual(frames[0].data.entry_ids, [entityId]);
+
+    assert.deepEqual(writer.questions(), [], 'the tab that did the write received its own echo');
+    assert.deepEqual(stranger.questions(), [], "another workspace's tab received this workspace's write");
+  });
+
+  test('PUT sends one question:updated, with entry_ids as plain ids rather than populated rows', async () => {
+    const from = await createEntity(alice, 'Guard Compartment');
+    const to = await createEntity(alice, 'Luggage Rack');
+    const created = await createQuestion(alice, 'Where does the guard sit?', [from]);
+    const writer = listen('alice/writing-tab', alice);
+    const other = listen('alice/other-tab', alice);
+    const stranger = listen('bob/tab', bob);
+
+    const res = await alice.agent
+      .put(`/open-questions/${created._id}`)
+      .set('X-SSE-Client-Id', writer.clientId)
+      .send({ status: 'resolved', entry_ids: [to] });
+    assert.equal(res.status, 200, `PUT answered ${res.status}: ${JSON.stringify(res.body)}`);
+
+    const frames = other.named('question:updated');
+    assert.equal(frames.length, 1, `the other tab received ${JSON.stringify(other.questions())}`);
+    assert.equal(frames[0].data.question._id, String(created._id));
+    assert.equal(frames[0].data.question.status, 'resolved');
+    // The response populates `entry_ids` to `{ title, category }`; the frame
+    // must not, or a listener would have to know which write it came from.
+    assert.deepEqual(frames[0].data.entry_ids, [to],
+      `entry_ids should be bare ids: ${JSON.stringify(frames[0].data.entry_ids)}`);
+
+    assert.deepEqual(writer.questions(), [], 'the tab that did the write received its own echo');
+    assert.deepEqual(stranger.questions(), [], "another workspace's tab received this workspace's write");
+  });
+
+  test('DELETE sends one question:deleted, carrying the row that is now gone', async () => {
+    const entityId = await createEntity(alice, 'Observation Car');
+    const created = await createQuestion(alice, 'Who cleans the glass?', [entityId]);
+    const writer = listen('alice/writing-tab', alice);
+    const other = listen('alice/other-tab', alice);
+    const stranger = listen('bob/tab', bob);
+
+    const res = await alice.agent
+      .delete(`/open-questions/${created._id}`)
+      .set('X-SSE-Client-Id', writer.clientId);
+    assert.equal(res.status, 204, `DELETE answered ${res.status}: ${JSON.stringify(res.body)}`);
+
+    const frames = other.named('question:deleted');
+    assert.equal(frames.length, 1, `the other tab received ${JSON.stringify(other.questions())}`);
+    assert.equal(frames[0].data.questionId, String(created._id));
+    // A 204 carries nothing and this collection keeps no snapshot, so the frame
+    // is the only account of what was deleted.
+    assert.equal(frames[0].data.question.question, 'Who cleans the glass?');
+    assert.deepEqual(frames[0].data.entry_ids, [entityId],
+      'the entities whose panels just changed were not named');
+
+    assert.deepEqual(writer.questions(), [], 'the tab that did the write received its own echo');
+    assert.deepEqual(stranger.questions(), [], "another workspace's tab received this workspace's write");
+  });
+
+  test('a refused write broadcasts nothing', async () => {
+    // The frame follows the write, not the request: a 400 left nothing to tell
+    // another tab about, and a frame for it would have every listener refetch
+    // an entity that did not change.
+    const created = await createQuestion(alice, 'Does a refusal travel?');
+    const other = listen('alice/other-tab', alice);
+
+    const res = await alice.agent.put(`/open-questions/${created._id}`).send({ status: 'banana' });
+    assert.equal(res.status, 400, `PUT answered ${res.status}: ${JSON.stringify(res.body)}`);
+
+    assert.deepEqual(other.questions(), [], `a refused write still broadcast: ${JSON.stringify(other.questions())}`);
+  });
+
+  test('a write with no X-SSE-Client-Id reaches every tab in the workspace', async () => {
+    // The MCP tool and curl have no stream to exclude; so does a browser whose
+    // stream has not come back yet.
+    const first = listen('alice/tab-1', alice);
+    const second = listen('alice/tab-2', alice);
+
+    const res = await alice.agent.post('/open-questions').send({ question: 'Who asked, though?' });
+    assert.equal(res.status, 201, `POST answered ${res.status}: ${JSON.stringify(res.body)}`);
+
+    assert.equal(first.named('question:created').length, 1, `tab 1 received ${JSON.stringify(first.questions())}`);
+    assert.equal(second.named('question:created').length, 1, `tab 2 received ${JSON.stringify(second.questions())}`);
   });
 });

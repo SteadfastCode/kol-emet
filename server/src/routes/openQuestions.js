@@ -4,6 +4,11 @@ import Entity from '../models/Entity.js';
 import { entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { boundedInteger, idCursor } from '../lib/searchFilter.js';
+import {
+  broadcastQuestionCreated,
+  broadcastQuestionUpdated,
+  broadcastQuestionDeleted,
+} from '../lib/questionEvents.js';
 
 const router = Router();
 
@@ -32,6 +37,14 @@ function log(level, msg) {
   const active = LEVELS[process.env.OPEN_QUESTION_LIST_LOG_LEVEL] ?? LEVELS.light;
   if (active >= LEVELS[level]) console.log(`[openQuestions:${level}] ${msg}`);
 }
+
+/**
+ * The tab that asked for a write, so its own frame is not echoed back to it —
+ * read exactly as the entity routes read it (`routes/entities.js`): the browser
+ * echoes the `client:id` the SSE stream gave it (`client/src/api/openQuestions.js`),
+ * and a caller with no stream — curl, the API's own tests — simply sends none.
+ */
+const writingClient = (req) => req.headers['x-sse-client-id'] ?? null;
 
 /**
  * The page sizes `GET /open-questions` will serve. Below the minimum is no page
@@ -150,6 +163,15 @@ router.post('/', async (req, res, next) => {
       );
     }
 
+    // Every other open tab in the workspace, so a question raised here appears
+    // there without a reload (KOL-116). After the back-links, so a listener
+    // that does refetch an entity reads the finished write.
+    broadcastQuestionCreated(oq, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: 'POST /open-questions',
+    });
+
     res.status(201).json(oq);
   } catch (err) {
     next(err);
@@ -205,6 +227,15 @@ router.put('/:id', async (req, res, next) => {
     const oq = await OpenQuestion.findOneAndUpdate(scope, update, { new: true, runValidators: true })
       .populate(entriesIn(req.workspaceId));
     if (!oq) return res.status(404).json({ error: 'Not found' });
+
+    // `entry_ids` is populated here and raw on the other two writes; the frame
+    // normalises both to ids (lib/questionEvents.js).
+    broadcastQuestionUpdated(oq, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `PUT /open-questions/${req.params.id}`,
+    });
+
     res.json(oq);
   } catch (err) {
     next(err);
@@ -225,6 +256,14 @@ router.delete('/:id', async (req, res, next) => {
       { _id: { $in: oq.entry_ids }, workspaceId: req.workspaceId },
       { $pull: { open_questions: oq._id } }
     );
+
+    // The row as it was, so another tab can drop it and name it in a toast: a
+    // 204 carries nothing, and this collection keeps no snapshot anywhere else.
+    broadcastQuestionDeleted(oq, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `DELETE /open-questions/${req.params.id}`,
+    });
 
     res.status(204).send();
   } catch (err) {

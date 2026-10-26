@@ -15,6 +15,7 @@ import { MCP_READ_SCOPE, MCP_SCOPE_HEADER, isReadScopeRequest } from '../lib/mcp
 import EntityType from '../models/EntityType.js';
 import { getCategories } from '../config/categories.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
+import { broadcastQuestionCreated } from '../lib/questionEvents.js';
 import { openQuestionsIn, entriesIn, ownEntryIds } from '../lib/scopedPopulate.js';
 import { searchTerm, keywordFilter } from '../lib/searchFilter.js';
 
@@ -287,6 +288,12 @@ function createMcpServer({ readOnly = false } = {}) {
           { $addToSet: { open_questions: oq._id } }
         );
       }
+      // This tool writes the collection directly rather than through
+      // `POST /open-questions`, so it emits that route's frame itself — a
+      // question an agent raised appearing in the open tab is the whole point
+      // of the feature (KOL-116). No client to exclude: the caller is an MCP
+      // session, not a browser holding an `/events` stream.
+      broadcastQuestionCreated(oq, { workspaceId, source: 'MCP add_open_question' });
       return { content: [{ type: 'text', text: JSON.stringify(oq, null, 2) }] };
     }
   );

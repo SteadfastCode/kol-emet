@@ -19,7 +19,9 @@ export let sseClientId = null;
  *   `server/src/lib/changeLogger.js`), which is cheap on the wire and useless
  *   if nothing listens: `draft:applied` and `workspace:imported` are therefore
  *   first-class here, each reloading the list rather than patching it, because
- *   one frame cannot say which rows moved.
+ *   one frame cannot say which rows moved. The same rule brought the three
+ *   `question:*` frames here (KOL-116): an open question is its own document on
+ *   its own route, so nothing about it rides along with an entity's frame.
  *
  *   **A frame the server wrote is a stop, not a retry.** An `EventSource`
  *   reports two unrelated things as `error`: a transport failure (no `data`),
@@ -114,6 +116,9 @@ export const STOP_REASONS = Object.freeze({
  * @param {(payload: object) => void} [handlers.onEntityDeleted]
  * @param {(payload: object) => void} [handlers.onDraftApplied]     one bulk write: a draft reached the graph
  * @param {(payload: object) => void} [handlers.onWorkspaceImported] one bulk write: a graph was imported
+ * @param {(payload: object) => void} [handlers.onQuestionCreated]   `{ question, entry_ids }`
+ * @param {(payload: object) => void} [handlers.onQuestionUpdated]   `{ question, entry_ids }`
+ * @param {(payload: object) => void} [handlers.onQuestionDeleted]   `{ questionId, question, entry_ids }`
  * @param {(ended: {reason: string, message: string, limit: number|null}) => void} [handlers.onStreamEnded]
  *   the server ended this stream for good; nothing will reconnect
  */
@@ -123,6 +128,9 @@ export function useEvents({
   onEntityDeleted,
   onDraftApplied,
   onWorkspaceImported,
+  onQuestionCreated,
+  onQuestionUpdated,
+  onQuestionDeleted,
   onStreamEnded,
 } = {}) {
   let es = null;
@@ -237,6 +245,18 @@ export function useEvents({
       (p) => onDraftApplied?.(p));
     onFrame('workspace:imported', (p) => `${p.imported?.entities ?? 0} entities imported`,
       (p) => onWorkspaceImported?.(p));
+
+    // Open questions (KOL-116). Their own collection, their own vocabulary:
+    // `/open-questions` writes no ChangeLog, so these frames come from the
+    // route rather than riding along with an entity's. Each payload carries
+    // the row and the `entry_ids` it is linked to, so a listener can tell
+    // whether the entity it is showing is affected without a refetch.
+    onFrame('question:created', (p) => `question ${p.question?._id} on ${p.entry_ids?.length ?? 0} entity(ies)`,
+      (p) => onQuestionCreated?.(p));
+    onFrame('question:updated', (p) => `question ${p.question?._id} on ${p.entry_ids?.length ?? 0} entity(ies)`,
+      (p) => onQuestionUpdated?.(p));
+    onFrame('question:deleted', (p) => `question ${p.questionId}`,
+      (p) => onQuestionDeleted?.(p));
 
     socket.addEventListener('error', (e) => handleError(e, socket));
   }
