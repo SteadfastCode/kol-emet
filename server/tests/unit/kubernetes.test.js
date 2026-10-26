@@ -30,6 +30,14 @@
  *                                                   collision tests fail
  *   - resolveHost's namespace branch removed     -> `cache.acme` stops being a
  *                                                   call
+ *   - hostToEntity flattened back to a map of
+ *     bare names                                 -> `cache.prod` resolves to a
+ *                                                   `cache` in `team-b` again
+ *   - titleFor's qualification removed           -> the second of two same-named
+ *                                                   workloads is dropped as a
+ *                                                   duplicate of the first
+ *   - the selector's namespace check removed     -> a Service in `prod` claims a
+ *                                                   workload in `team-b`
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_KUBERNETES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -332,11 +340,12 @@ describe('re-importing the same file', () => {
 
 describe('other manifest shapes', () => {
   const manifest = (...docs) => docs.join('\n---\n');
-  const deployment = (name, image, labels = { app: name }) => [
+  const deployment = (name, image, labels = { app: name }, namespace = null) => [
     'apiVersion: apps/v1',
     'kind: Deployment',
     'metadata:',
     `  name: ${name}`,
+    ...(namespace ? [`  namespace: ${namespace}`] : []),
     'spec:',
     '  template:',
     '    metadata:',
@@ -405,7 +414,7 @@ describe('other manifest shapes', () => {
     assert.deepEqual(entities(items).map(i => i.proposed.title), ['web', 'legacy:443']);
     assert.deepEqual(edges(items, 'Exposes'), [], 'nothing in the file provides it');
     assert.deepEqual(dropReasons, [
-      'Service "legacy" selects app=gone, which no workload in this file carries',
+      'Service "legacy" selects app=gone, which no workload in namespace `default` carries',
     ]);
   });
 
@@ -490,17 +499,16 @@ describe('other manifest shapes', () => {
     assert.deepEqual(edges(items, 'Depends on'), ['Dependent:api → Dependency:api.stripe.com']);
   });
 
-  test('a `service.namespace` host resolves when the namespace is one the file names', () => {
+  test('a `service.namespace` host resolves to the object in THAT namespace', () => {
     // Written without `.svc`, which resolves in-cluster off the pod's search
-    // path. Three sources for the namespace: a `kind: Namespace` object, the
-    // reader's own `metadata.namespace`, and `default`, where an object that
-    // declares no namespace lives.
+    // path. Three namespaces that line up three different ways: one both ends
+    // declare (`acme`), the reading pod's own (`team-b`), and `default`, where
+    // an object that declares no namespace lives.
     const text = manifest(
-      ['apiVersion: v1', 'kind: Namespace', 'metadata:', '  name: acme'].join('\n'),
-      deployment('cache', 'redis:7', { app: 'cache' }),
-      ['apiVersion: v1', 'kind: Service', 'metadata:', '  name: cache', 'spec:', '  selector:',
-        '    app: cache', '  ports:', '    - port: 6379'].join('\n'),
-      deployment('db', 'postgres:16'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'acme'),
+      ['apiVersion: v1', 'kind: Service', 'metadata:', '  name: cache', '  namespace: acme',
+        'spec:', '  selector:', '    app: cache', '  ports:', '    - port: 6379'].join('\n'),
+      deployment('db', 'postgres:16', { app: 'db' }, 'team-b'),
       deployment('queue', 'ghcr.io/acme/queue:1'),
       ['apiVersion: apps/v1', 'kind: Deployment', 'metadata:', '  name: api', '  namespace: team-b',
         'spec:', '  template:', '    metadata:', '      labels:', '        app: api',
@@ -518,6 +526,106 @@ describe('other manifest shapes', () => {
       'Caller:api → Callee:queue',
     ]);
     assert.deepEqual(edges(items, 'Depends on'), []);
+    // Each object declaring a namespace carries it, so the two ends of an edge
+    // can be told apart in the review UI.
+    assert.equal(attribute(entityNamed(items, 'db'), 'Namespace'), 'team-b');
+    assert.equal(attribute(entityNamed(items, 'queue'), 'Namespace'), undefined,
+      'an object that declares no namespace says nothing about one');
+  });
+
+  test('a `name.namespace` host does NOT reach a same-named workload in another namespace', () => {
+    // KOL-118, the bug this file's namespace handling was built for: the second
+    // label used to be checked only against the set of namespaces the stream
+    // mentioned ANYWHERE, so `cache.prod` resolved to any workload called
+    // `cache` — the one in `team-b` included. It names nothing in `prod`, so it
+    // is an external host like any other.
+    const text = manifest(
+      [deployment('api', 'ghcr.io/acme/api:1', { app: 'api' }, 'prod'),
+        '          env:',
+        '            - name: CACHE_URL',
+        '              value: redis://cache.prod:6379/0',
+      ].join('\n'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'team-b'),
+    );
+    const { items } = parse(text, {}, 'a two-label host naming a namespace its workload is not in');
+    assert.deepEqual(edges(items, 'Calls'), [], 'the `cache` in team-b is a different object');
+    assert.deepEqual(edges(items, 'Depends on'), ['Dependent:api → Dependency:cache.prod']);
+    assert.equal(entityNamed(items, 'cache.prod').proposed.category, 'External Dependency');
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['api', 'cache', 'cache.prod']);
+  });
+
+  test('two same-named workloads in two namespaces are both proposed, neither shadowing the other', () => {
+    // `hostToEntity` and the title map were keyed by bare name, so the second
+    // `cache` in a `kubectl get all -A` stream was dropped as a duplicate of the
+    // first and every host that named it reached the first instead (KOL-118).
+    const text = manifest(
+      [deployment('cache', 'redis:7', { app: 'cache' }, 'prod'),
+        '          env:',
+        '            - name: PEER_URL',
+        '              value: redis://cache.team-b:6379/0',
+      ].join('\n'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'team-b'),
+    );
+    const { items, dropReasons } = parse(text, {}, 'one name, two namespaces');
+    assert.deepEqual(entities(items).map(i => [i.proposed.title, i.proposed.category]), [
+      ['cache.prod', 'Data Store'],
+      ['cache.team-b', 'Data Store'],
+    ]);
+    assert.deepEqual(dropReasons, [], 'neither is a duplicate of the other');
+    assert.equal(attribute(entityNamed(items, 'cache.prod'), 'Namespace'), 'prod');
+    assert.deepEqual(edges(items, 'Calls'), ['Caller:cache.prod → Callee:cache.team-b'],
+      'and the edge reaches the one the host actually names');
+  });
+
+  test('a bare host that is a name in several namespaces, and in none of them the reader’s, resolves to nothing', () => {
+    // A bare host is read the way Kubernetes reads it — the pod's own namespace
+    // first. When the pod's namespace holds no such name and several others do,
+    // the host names no one object: the file plainly contains candidates, so it
+    // is not an External Dependency either, and picking one of them would be a
+    // guess. Said out loud as a drop reason instead.
+    const caches = [
+      deployment('cache', 'redis:7', { app: 'cache' }, 'prod'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'team-b'),
+    ];
+    const reader = namespace => [
+      deployment('api', 'ghcr.io/acme/api:1', { app: 'api' }, namespace),
+      '          env:',
+      '            - name: CACHE_URL',
+      '              value: redis://cache:6379/0',
+    ].join('\n');
+
+    const fromElsewhere = parse(manifest(reader('edge'), ...caches), {}, 'a bare ambiguous host');
+    assert.deepEqual(edges(fromElsewhere.items, 'Calls'), []);
+    assert.deepEqual(edges(fromElsewhere.items, 'Depends on'), [],
+      'a name this file holds twice is not an external host');
+    assert.deepEqual(entities(fromElsewhere.items).map(i => i.proposed.title),
+      ['api', 'cache.prod', 'cache.team-b']);
+    assert.deepEqual(fromElsewhere.dropReasons, [
+      '"cache" in api\'s CACHE_URL names an object in `prod` and `team-b` and none in `edge`, '
+      + 'so nothing was proposed for it',
+    ]);
+
+    // The same host from a pod that DOES sit beside one of them is not ambiguous
+    // at all — that is the namespace Kubernetes' own search path would reach.
+    const fromProd = parse(manifest(reader('prod'), ...caches), {}, 'the same host from inside prod');
+    assert.deepEqual(edges(fromProd.items, 'Calls'), ['Caller:api → Callee:cache.prod']);
+    assert.deepEqual(fromProd.dropReasons, []);
+  });
+
+  test('a Service’s selector does not reach a workload in another namespace', () => {
+    // Kubernetes matches a selector against pods beside it and never across a
+    // namespace boundary, so a Service in `prod` provides nothing here.
+    const text = manifest(
+      deployment('cache', 'redis:7', { app: 'cache' }, 'team-b'),
+      ['apiVersion: v1', 'kind: Service', 'metadata:', '  name: cache', '  namespace: prod',
+        'spec:', '  selector:', '    app: cache', '  ports:', '    - port: 6379'].join('\n'),
+    );
+    const { items, dropReasons } = parse(text, {}, 'a Service selecting across a namespace');
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['cache.team-b', 'cache.prod:6379']);
+    assert.deepEqual(edges(items, 'Exposes'), []);
+    assert.deepEqual(dropReasons, [
+      'Service "cache" selects app=cache, which no workload in namespace `prod` carries',
+    ]);
   });
 
   test('a two-label external host is not resolved by a namespace this file never names', () => {
