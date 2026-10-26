@@ -45,18 +45,18 @@
     "KOL-122": {
       "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-122",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-26T20:52:30.104Z",
+      "runId": "2026-10-26T20:51:46.920Z",
       "lastFail": null
     },
     "KOL-014": {
