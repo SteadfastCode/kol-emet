@@ -136,7 +136,7 @@ registration, or removes a feature.
   Out of scope: email delivery and invite links, seat billing, per-entity or per-category permissions, transferring
   ownership outright, and per-user MCP identity (KOL-014) — a shared workspace makes that sharper but does not change it.
 
-- [ ] **(KOL-125) A local model is configured by a URL, not an API key: Ollama as a first-class provider** [proposed]
+- [ ] **(KOL-125) A local model is configured by a URL, not an API key: Ollama as a first-class provider** [needs-human]
   CLAUDE.md requires the model layer to work with local models, and `docs/roadmap.md:108` carries it as a Phase 8 line.
   The registry is already shaped for it — one OpenAI-compatible client per provider with its own `baseURL`
   (`server/src/lib/aiProviders.js:17-83`) — but `isConfigured` is `Boolean(process.env[p.envKey])` (:87), so a provider
