@@ -59,42 +59,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-120": {
+    "KOL-121": {
       "order": 4,
-      "title": "The signup disclosure does not disclose what the settled policy says it must",
-      "status": "done",
+      "title": "Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-120",
+      "branch": "routine/item/KOL-121",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-26T19:58:42.771Z",
+      "claimedAtUtc": "2026-10-26T20:05:42.125Z",
       "runId": "2026-10-26T19:57:46.163Z",
       "lastFail": null
     },
-    "KOL-121": {
-      "order": 5,
-      "title": "Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-014": {
-      "order": 6,
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 7,
+      "order": 6,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 8,
+      "order": 7,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -142,6 +125,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-120": {
+      "order": null,
+      "title": "The signup disclosure does not disclose what the settled policy says it must",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-120",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-26T19:58:42.771Z",
+      "runId": "2026-10-26T19:57:46.163Z",
       "lastFail": null
     },
     "KOL-119": {

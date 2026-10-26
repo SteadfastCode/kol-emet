@@ -54,7 +54,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft**
+- [x] **(KOL-121) Fourth vertical-ingestion producer: a SQL schema becomes a reviewable Draft**
   `docs/roadmap.md` Phase 7 names repo, k8s and DB-schema as the remaining producers; k8s shipped (KOL-089), and of the
   two left the DB-schema one needs no credential — a `.sql` dump is a file the customer already has, and "point it at
   your schema and watch it map your data model" is the promise the compose (KOL-033) and OpenAPI (KOL-051) producers
