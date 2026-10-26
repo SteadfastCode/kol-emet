@@ -62,7 +62,7 @@
     "KOL-117": {
       "order": 4,
       "title": "A concurrent entity update wipes what you were typing in the open-questions section",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-117",

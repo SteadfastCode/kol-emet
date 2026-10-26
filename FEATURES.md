@@ -50,31 +50,6 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [x] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section**
-  `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
-  `newQuestion`, `editingId`/`editText`, `confirmingId`, `pendingId` and `addPending`. `WikiLayout.vue:1012` replaces
-  `selectedEntity` wholesale on every `entity:updated` frame, and `PUT /entities/:id` populates `open_questions`
-  (`server/src/routes/entities.js:310`), so any edit to the same entity by another browser, the chat relay or an MCP
-  client re-seeds the section underneath the user: text typed into "Add a question" is discarded, an open inline editor
-  closes mid-sentence, and `pendingId`/`addPending` are cleared while that row's own `PUT`/`POST` is still in flight —
-  the controls re-enable, a second conflicting write becomes possible, and the first write's late response then appends
-  or replaces a row in the freshly re-seeded list. Found by the grader of KOL-104 (low,
-  `client/src/components/EntityHeader.vue:218`).
-  Build: re-seed the rows from the server as it does now, but keep the state that belongs to the user rather than to the
-  server — the add field's text, and the open editor's id and text, dropped only when that row is absent from the
-  incoming list — and leave `pendingId`/`addPending` to the write that set them, which already clears them in its own
-  `finally` (`commitEdit`, same file). `confirmingId` keeps being cleared: a delete confirmation should not survive the
-  row changing underneath it. The component's light tier logs the source of every write already; add one line naming
-  what a re-seed kept and what it dropped, since a re-seed that silently keeps state is exactly what a surprised reader
-  asks about.
-  Files: `client/src/components/EntityHeader.vue`, new `client/src/components/EntityHeader.test.js` — the component has
-  no test today, so this is also the first one for the open-questions UI that KOL-104 and KOL-115 built.
-  Verify: `cd client && yarn test --run` with cases for: a re-seed during typing keeps the add text; a re-seed whose
-  list no longer holds the row being edited closes that editor; a re-seed during an in-flight write leaves that row
-  disabled; and the existing seed-on-open behaviour unchanged. `cd client && yarn build`.
-  Out of scope: conflict resolution between two edits of the same question (last write wins, as everywhere else in this
-  client), the live-sync frames the section still does not receive, and any change to WikiLayout's wholesale
-  `selectedEntity` replacement — the panel's other sections depend on it.
 
 - [ ] **(KOL-118) A two-label env host in a Kubernetes import resolves across namespaces**
   `resolveHost` (`server/src/lib/producers/kubernetes.js:710`) accepts a `name.namespace` host whenever the second label
@@ -185,6 +160,31 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-117) A concurrent entity update wipes what you were typing in the open-questions section** (routine 2026-10-26, 33d8f67)
+  `client/src/components/EntityHeader.vue:260` watches `props.entity?.open_questions` and on every fire clears
+  `newQuestion`, `editingId`/`editText`, `confirmingId`, `pendingId` and `addPending`. `WikiLayout.vue:1012` replaces
+  `selectedEntity` wholesale on every `entity:updated` frame, and `PUT /entities/:id` populates `open_questions`
+  (`server/src/routes/entities.js:310`), so any edit to the same entity by another browser, the chat relay or an MCP
+  client re-seeds the section underneath the user: text typed into "Add a question" is discarded, an open inline editor
+  closes mid-sentence, and `pendingId`/`addPending` are cleared while that row's own `PUT`/`POST` is still in flight —
+  the controls re-enable, a second conflicting write becomes possible, and the first write's late response then appends
+  or replaces a row in the freshly re-seeded list. Found by the grader of KOL-104 (low,
+  `client/src/components/EntityHeader.vue:218`).
+  Build: re-seed the rows from the server as it does now, but keep the state that belongs to the user rather than to the
+  server — the add field's text, and the open editor's id and text, dropped only when that row is absent from the
+  incoming list — and leave `pendingId`/`addPending` to the write that set them, which already clears them in its own
+  `finally` (`commitEdit`, same file). `confirmingId` keeps being cleared: a delete confirmation should not survive the
+  row changing underneath it. The component's light tier logs the source of every write already; add one line naming
+  what a re-seed kept and what it dropped, since a re-seed that silently keeps state is exactly what a surprised reader
+  asks about.
+  Files: `client/src/components/EntityHeader.vue`, new `client/src/components/EntityHeader.test.js` — the component has
+  no test today, so this is also the first one for the open-questions UI that KOL-104 and KOL-115 built.
+  Verify: `cd client && yarn test --run` with cases for: a re-seed during typing keeps the add text; a re-seed whose
+  list no longer holds the row being edited closes that editor; a re-seed during an in-flight write leaves that row
+  disabled; and the existing seed-on-open behaviour unchanged. `cd client && yarn build`.
+  Out of scope: conflict resolution between two edits of the same question (last write wins, as everywhere else in this
+  client), the live-sync frames the section still does not receive, and any change to WikiLayout's wholesale
+  `selectedEntity` replacement — the panel's other sections depend on it.
 - [x] **(KOL-116) Open-question writes reach no other tab: `/open-questions` broadcasts nothing** (routine 2026-10-26, 859c779)
   `server/src/routes/openQuestions.js` imports no broadcaster and calls `broadcast()` nowhere, so the three write
   handlers (POST `/` :132, PUT `/:id` :160, DELETE `/:id` :215) are invisible to every other open client. The entity
