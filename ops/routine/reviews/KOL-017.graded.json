@@ -1,0 +1,63 @@
+{
+  "item": "KOL-017",
+  "repo": "kol-emet",
+  "mergeSha": "1e673ed0a7178687b497d6354fc7ba066aba7816",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-27T08:24:17.600Z",
+  "gradedAtUtc": "2026-10-27T09:29:03.233Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff adds a client-side coverage pane and a spec note; it touches no session, role, passkey or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential handling is added — the rendered `source.text` is already redacted server-side for file producers and was already delivered to this client by GET /drafts/:id."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff reads or writes the generator allowance, spend accounting, or any pricing path."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change is read-only presentation plus a new test file; no deletes, migrations, or mutations of stored data."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No new network call is introduced — the component derives coverage from the already-loaded draft, and the only fetch in the diff is a stub inside the test."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, build, deploy or env/config change; the only non-code edit is a Decision Log paragraph in kol_emet_spec.md."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects and no defects were found on independent review (span merging, clamping, exact-cover segmentation, percentage guards and the server-side offset contract all check out, and all 17 new tests pass), so its empty result is correct but contributes no signal; its triage was fully accurate.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.3693670000000002,
+  "numTurns": 16,
+  "durationMs": 189970,
+  "sessionId": "1c9746bb-0ec5-47c0-9899-93cdb87b2382"
+}

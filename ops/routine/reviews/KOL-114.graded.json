@@ -1,0 +1,63 @@
+{
+  "item": "KOL-114",
+  "repo": "kol-emet",
+  "mergeSha": "b4630335de3ce40809813b2b6c1bc666588bd72f",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-27T08:24:17.600Z",
+  "gradedAtUtc": "2026-10-27T09:25:53.228Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The change is squarely an access-control/tenancy fix — `relayDecision()` gates the relay on the caller's `req.workspaceId` matching the connector's `Settings.mcpUserId` workspace to stop a cross-tenant read, so auth is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential is added, read, logged or otherwise handled differently; `MCP_BEARER_TOKEN` is still passed by the untouched `mcpToolDef()` header block, and the new log lines print only workspace ids."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing logic changes — `checkBudget`/`recordSpend` and `tally()` are untouched; only which provider API a turn uses."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations, or data-mutating code; the diff adds a routing decision, fixes a string accumulator, and edits docs."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Correct — the diff changes which outbound provider API is called (Responses vs Chat Completions) and when the `/mcp` relay is handed to the provider; weak line evidence doesn't matter."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, or release artifact — the only non-code edits are docs/api.md and the Decision Log."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects, which matches my own cold read of this small, well-covered change (the tenancy gate fails closed and the tool-call accumulator fix is correct), but it wrongly marked the auth/authorization category as untouched for a change whose entire purpose is cross-tenant access control.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.4595040000000001,
+  "numTurns": 15,
+  "durationMs": 180345,
+  "sessionId": "c6e3118e-b608-4d7d-98f2-5088e4f58f23"
+}
