@@ -1,0 +1,106 @@
+{
+  "item": "KOL-017",
+  "repo": "kol-emet",
+  "mergeSha": "1e673ed0a7178687b497d6354fc7ba066aba7816",
+  "completedAtUtc": "2026-10-24T00:21:51.388Z",
+  "completeRunId": "2026-10-24T00:11:06.124Z",
+  "reviewRunId": "2026-10-27T07:01:09.841Z",
+  "reviewedAtUtc": "2026-10-27T07:22:22.307Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 39942,
+  "contextFiles": 4,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/generator/DraftReview.vue",
+        "client/src/components/generator/SourceCoverage.test.js"
+      ],
+      "part": null,
+      "bytes": 13628,
+      "contextBytes": 1323,
+      "promptTokens": 4765,
+      "completionTokens": 83,
+      "latencyMs": 18155,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/generator/SourceCoverage.vue",
+        "client/src/lib/sourceCoverage.js"
+      ],
+      "part": null,
+      "bytes": 14362,
+      "contextBytes": 0,
+      "promptTokens": 4861,
+      "completionTokens": 93,
+      "latencyMs": 19156,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11952,
+      "contextBytes": 0,
+      "promptTokens": 3334,
+      "completionTokens": 99,
+      "latencyMs": 14436,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. The change adds a new component for source coverage and tests it with various scenarios. However, the implementation details of `coverageOf` are not provided in the diff. · No real defects found in the provided diff. However, additional context is needed to fully understand the implementation and ensure correctness. · No real defects found. Additional context and code from DraftReview.vue and sourceCoverage.js are needed to fully understand the implementation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 25527,
+    "completionTokens": 653
+  },
+  "latencyMs": 107240
+}

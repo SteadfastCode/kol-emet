@@ -1,0 +1,87 @@
+{
+  "item": "KOL-115",
+  "repo": "kol-emet",
+  "mergeSha": "c4a715544f2118dd16d24f877d6433d294a4f2f8",
+  "completedAtUtc": "2026-10-24T00:51:04.984Z",
+  "completeRunId": "2026-10-24T00:11:06.124Z",
+  "reviewRunId": "2026-10-27T07:01:09.841Z",
+  "reviewedAtUtc": "2026-10-27T07:25:46.882Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 28205,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntityDetail.test.js",
+        "client/src/components/EntityHeader.vue"
+      ],
+      "part": null,
+      "bytes": 14717,
+      "contextBytes": 0,
+      "promptTokens": 4429,
+      "completionTokens": 146,
+      "latencyMs": 20131,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 13488,
+      "contextBytes": 0,
+      "promptTokens": 3779,
+      "completionTokens": 64,
+      "latencyMs": 14085,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "client/src/components/EntityHeader.vue:130"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff introduces a confirmation dialog for deleting questions, which is a good practice to prevent accidental deletions. However, the code does not show how `deleteOpenQuestion`, `log`, and `failed` are implemented or used elsewhere in the repository. · No real defects found, but additional context is needed to verify the implementation of removeQuestion.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 16154,
+    "completionTokens": 484
+  },
+  "latencyMs": 70848
+}
