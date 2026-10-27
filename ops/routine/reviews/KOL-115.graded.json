@@ -1,0 +1,63 @@
+{
+  "item": "KOL-115",
+  "repo": "kol-emet",
+  "mergeSha": "c4a715544f2118dd16d24f877d6433d294a4f2f8",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-27T11:36:45.429Z",
+  "gradedAtUtc": "2026-10-27T11:38:13.697Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, role or permission logic changes — `canWrite` is only read as before."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No tokens, credentials or env handling anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or quota code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The whole change is about the unrecoverable `DELETE /open-questions/:id`, so the category is genuinely touched (the cited line number is off, but the call is correct)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Only the app's own REST route is involved, and no new call is added — the existing one is merely gated behind a confirmation."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, build, deploy or config changes; the spec edit is a decision-log paragraph."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects, which matches my own cold read — the confirmation gate is guarded in both template and `removeQuestion`, the ref-callback `if (el)` guard makes the single `confirmButton` handle safe when arming moves between rows, the watch and `startQuestionEdit` both clear the armed state, and all 18 cases in the file pass — and its triage is correct on all six keys.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.7826109999999998,
+  "numTurns": 8,
+  "durationMs": 85011,
+  "sessionId": "66b52c9d-1037-4315-a005-44c99468f1f1"
+}
