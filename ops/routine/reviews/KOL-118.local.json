@@ -1,0 +1,148 @@
+{
+  "item": "KOL-118",
+  "repo": "kol-emet",
+  "mergeSha": "a2d6dabf716a2b18028bdc01d48936e38b822fa3",
+  "completedAtUtc": "2026-10-26T19:45:02.046Z",
+  "completeRunId": "2026-10-26T19:03:45.433Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:34:56.828Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 50075,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 6215,
+      "contextBytes": 6771,
+      "promptTokens": 4213,
+      "completionTokens": 149,
+      "latencyMs": 19569,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 11208,
+      "contextBytes": 0,
+      "promptTokens": 3617,
+      "completionTokens": 154,
+      "latencyMs": 17964,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12253,
+      "contextBytes": 0,
+      "promptTokens": 4123,
+      "completionTokens": 105,
+      "latencyMs": 14959,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10570,
+      "contextBytes": 0,
+      "promptTokens": 3570,
+      "completionTokens": 109,
+      "latencyMs": 15606,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": null,
+      "bytes": 10041,
+      "contextBytes": 0,
+      "promptTokens": 3609,
+      "completionTokens": 171,
+      "latencyMs": 16502,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/src/lib/producers/kubernetes.js:710"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff introduces changes to handle multi-namespace scenarios in Kubernetes host resolution. However, without seeing the implementation details of `resolveHost`, `hostToEntity`, and `workloads`, it's not possible to verify if the changes fully address the described issues. · The diff introduces changes to handle multi-namespace environments in Kubernetes, but it is unclear how these changes interact with existing code. Further investigation into the symbols `resolveHost`, `hostToEntity`, and `workloads` is needed to ensure that the changes do not introduce any defects. · The diff introduces changes to handle multi-namespace scenarios in Kubernetes host resolution. It records each workload's namespace, keys `hostToEntity` by `name.namespace`, and resolves a two-label host only against the workload in that namespace. A bare host that is ambiguous across namespaces resolves to nothing. · The diff introduces changes to handle multi-namespace scenarios in Kubernetes host resolution. It ensures that hosts are resolved based on their namespace, and handles ambiguous cases by reporting them without proposing any edges. · The diff introduces changes to handle multi-namespace scenarios in Kubernetes host resolution. It records each workload's namespace, keys `hostToEntity` by `name.namespace`, and resolves a two-label host only against the workload in that namespace. The tests cover various scenarios including resolving hosts with namespaces, handling ambiguous bare hosts, and ensuring services do not select workloads across namespaces.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 37609,
+    "completionTokens": 1330
+  },
+  "latencyMs": 169100
+}

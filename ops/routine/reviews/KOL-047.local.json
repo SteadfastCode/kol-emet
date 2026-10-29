@@ -1,0 +1,159 @@
+{
+  "item": "KOL-047",
+  "repo": "kol-emet",
+  "mergeSha": "11f5fde585be060479a5ff61f8122d7b333272b3",
+  "completedAtUtc": "2026-10-24T07:24:54.930Z",
+  "completeRunId": "2026-10-24T07:10:10.689Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:23:46.902Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 55816,
+  "contextFiles": 6,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/architecture.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 13678,
+      "contextBytes": 0,
+      "promptTokens": 4144,
+      "completionTokens": 90,
+      "latencyMs": 16397,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/mcpFailure.js"
+      ],
+      "part": null,
+      "bytes": 8583,
+      "contextBytes": 0,
+      "promptTokens": 3175,
+      "completionTokens": 156,
+      "latencyMs": 16550,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/bridge.js"
+      ],
+      "part": null,
+      "bytes": 9269,
+      "contextBytes": 0,
+      "promptTokens": 3299,
+      "completionTokens": 106,
+      "latencyMs": 14392,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/mcp.js"
+      ],
+      "part": null,
+      "bytes": 9663,
+      "contextBytes": 0,
+      "promptTokens": 3423,
+      "completionTokens": 149,
+      "latencyMs": 16900,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/bridge.test.js"
+      ],
+      "part": null,
+      "bytes": 5974,
+      "contextBytes": 8028,
+      "promptTokens": 4731,
+      "completionTokens": 118,
+      "latencyMs": 19754,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/mcp.test.js"
+      ],
+      "part": null,
+      "bytes": 8649,
+      "contextBytes": 0,
+      "promptTokens": 3259,
+      "completionTokens": 76,
+      "latencyMs": 13006,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/lib/mcpFailure.js:103"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/mcp.js:695"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · The diff introduces a new file `mcpFailure.js` with functions for handling and logging MCP request failures. The changes include structured server-side logging, graceful error responses, and retry/reconnect logic. However, the code does not show how these functions are integrated into existing routes or how the logging is implemented. Therefore, additional context from `server/src/routes/bridge.js` and `mcp.js` is needed to ensure that the changes are correctly applied. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `refuseMcp` and `mcpLogRecord` functions. · No real defects found. The diff includes changes for structured server-side logging, graceful error responses, and retry/reconnect functionality. However, the implementation details of `refuseMcp`, `mcpLogRecord`, and `shortSession` are not provided in the diff. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · No real defects found in the provided diff. However, additional information is needed to fully understand and verify the implementation of `captureRouterLog`.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 43276,
+    "completionTokens": 1519
+  },
+  "latencyMs": 197879
+}

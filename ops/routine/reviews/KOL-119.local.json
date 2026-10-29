@@ -1,0 +1,70 @@
+{
+  "item": "KOL-119",
+  "repo": "kol-emet",
+  "mergeSha": "10cbc68ae72b2951f156851cc97106766791dd65",
+  "completedAtUtc": "2026-10-26T19:50:59.313Z",
+  "completeRunId": "2026-10-26T19:03:45.433Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:35:41.243Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 3478,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/generator-v1-plan.md",
+        "docs/roadmap.md",
+        "docs/wishlist.md"
+      ],
+      "part": null,
+      "bytes": 3478,
+      "contextBytes": 9856,
+      "promptTokens": 4842,
+      "completionTokens": 193,
+      "latencyMs": 24009,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the diff. The changes update documentation to mark shipped work items with a ✅ and the date they were shipped. The context provided confirms that the referenced files exist and are related to the updated documentation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 9553,
+    "completionTokens": 319
+  },
+  "latencyMs": 44343
+}

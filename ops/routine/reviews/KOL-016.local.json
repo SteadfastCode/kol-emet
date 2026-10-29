@@ -1,0 +1,167 @@
+{
+  "item": "KOL-016",
+  "repo": "kol-emet",
+  "mergeSha": "d63964d3efdcbf470e9a5e75850d2ff5e3dd3343",
+  "completedAtUtc": "2026-10-24T07:41:55.706Z",
+  "completeRunId": "2026-10-24T07:10:10.689Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:27:06.328Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 64341,
+  "contextFiles": 14,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/generator/DraftItemCard.vue",
+        "client/src/components/generator/GeneratorOverlay.vue",
+        "docs/api.md",
+        "docs/generator-v1-plan.md"
+      ],
+      "part": null,
+      "bytes": 4771,
+      "contextBytes": 9715,
+      "promptTokens": 4474,
+      "completionTokens": 128,
+      "latencyMs": 19343,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 13089,
+      "contextBytes": 0,
+      "promptTokens": 3670,
+      "completionTokens": 127,
+      "latencyMs": 16775,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/scripts/try-generate.js",
+        "server/src/lib/draftApplier.js",
+        "server/src/lib/draftExporter.js",
+        "server/src/lib/draftNormalizer.js"
+      ],
+      "part": null,
+      "bytes": 14140,
+      "contextBytes": 0,
+      "promptTokens": 4344,
+      "completionTokens": 88,
+      "latencyMs": 16966,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/generator.js",
+        "server/src/lib/generatorPrompts.js"
+      ],
+      "part": null,
+      "bytes": 8207,
+      "contextBytes": 0,
+      "promptTokens": 2688,
+      "completionTokens": 105,
+      "latencyMs": 12557,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/openQuestionApply.test.js",
+        "server/tests/unit/draftExporter.test.js",
+        "server/tests/unit/draftNormalizer.test.js"
+      ],
+      "part": null,
+      "bytes": 12302,
+      "contextBytes": 0,
+      "promptTokens": 3906,
+      "completionTokens": 78,
+      "latencyMs": 14785,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/draftOpenQuestions.test.js"
+      ],
+      "part": null,
+      "bytes": 11832,
+      "contextBytes": 0,
+      "promptTokens": 3732,
+      "completionTokens": 135,
+      "latencyMs": 17346,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/tests/unit/draftExporter.test.js:450"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "kol_emet_spec.md:498"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds support for `open_question` items in the generator, but it is unclear if the implementation details are correct. Further investigation into the symbols `openQuestionPrompt` and `applyOpenQuestion` is needed to ensure that they are correctly defined and used. · The diff adds support for emitting `open_question` items from the generator. The changes include updates to the prompt section and a raw open-question schema in the normalizer, along with a fixture-based unit test. However, there are some symbols that need further verification. · No real defects found, but additional context is needed to fully verify the changes. · The diff adds support for generating open questions in the generator process. It includes updates to `generator.js` and `generatorPrompts.js`. The changes are well-documented, but there is a need to verify the implementation of `callWithRepair` to ensure it handles the new prompt correctly. · No real defects found. However, additional information is needed to fully understand the implementation of `applyOpenQuestion` in `draftApplier.js`. · No real defects found. The diff adds a new test file for `normalizeDraft` and related functionality, but it does not include the actual implementation changes in `draftNormalizer.js` or `draftItemSchema.js`. Therefore, I cannot verify if the added tests cover all cases without seeing those files.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 44842,
+    "completionTokens": 1440
+  },
+  "latencyMs": 199179
+}

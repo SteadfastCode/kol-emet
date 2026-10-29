@@ -1,0 +1,162 @@
+{
+  "item": "KOL-116",
+  "repo": "kol-emet",
+  "mergeSha": "859c779ad3f95f4841a14ce7fa172d6d09962b1b",
+  "completedAtUtc": "2026-10-26T19:17:52.208Z",
+  "completeRunId": "2026-10-26T19:03:45.433Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:31:00.043Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 56737,
+  "contextFiles": 9,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 9722,
+      "contextBytes": 0,
+      "promptTokens": 3816,
+      "completionTokens": 100,
+      "latencyMs": 14371,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEvents.js",
+        "client/src/composables/useEvents.test.js"
+      ],
+      "part": null,
+      "bytes": 6778,
+      "contextBytes": 0,
+      "promptTokens": 3092,
+      "completionTokens": 149,
+      "latencyMs": 13224,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 8187,
+      "contextBytes": 0,
+      "promptTokens": 3378,
+      "completionTokens": 108,
+      "latencyMs": 11994,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 10222,
+      "contextBytes": 0,
+      "promptTokens": 3649,
+      "completionTokens": 141,
+      "latencyMs": 14508,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/questionEvents.js",
+        "server/src/routes/mcp.js",
+        "server/src/routes/openQuestions.js"
+      ],
+      "part": null,
+      "bytes": 10437,
+      "contextBytes": 0,
+      "promptTokens": 4030,
+      "completionTokens": 75,
+      "latencyMs": 12518,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/openQuestions.test.js"
+      ],
+      "part": null,
+      "bytes": 11391,
+      "contextBytes": 0,
+      "promptTokens": 4162,
+      "completionTokens": 126,
+      "latencyMs": 15597,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. However, additional context is needed to verify the implementation of `broadcast` and `mcpWriteWorkspaceId`. · The diff adds event handling for open questions in the client-side code. It introduces new handlers and tests for `question:created`, `question:updated`, and `question:deleted` events. However, it does not show any changes to the server-side code that would broadcast these events. Therefore, there is a need to verify the implementation of broadcasting these events on the server side. · The diff introduces broadcasting for open question operations but does not provide the implementation details. The `broadcast` function and `mcpWriteWorkspaceId` method need to be defined or imported. · The change introduces live-sync broadcasting for open questions, but requires additional context to ensure all components are correctly integrated and tested. · No real defects found in the provided diff. However, additional information about the `broadcast` function is needed to ensure that the implementation meets the requirements. · The diff introduces tests for broadcasting frames in open questions, but it does not show the actual implementation of `broadcastQuestion*` functions or how they are integrated into the write handlers. Additionally, it assumes the existence of `addClient` and its usage in the broadcaster module.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 43468,
+    "completionTokens": 1455
+  },
+  "latencyMs": 167434
+}

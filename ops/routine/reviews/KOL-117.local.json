@@ -1,0 +1,86 @@
+{
+  "item": "KOL-117",
+  "repo": "kol-emet",
+  "mergeSha": "33d8f673b0c71ff3dae73deda919754576ddb614",
+  "completedAtUtc": "2026-10-26T19:28:41.519Z",
+  "completeRunId": "2026-10-26T19:03:45.433Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:32:07.618Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 21762,
+  "contextFiles": 2,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntityHeader.test.js"
+      ],
+      "part": null,
+      "bytes": 12887,
+      "contextBytes": 0,
+      "promptTokens": 4529,
+      "completionTokens": 77,
+      "latencyMs": 17061,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityHeader.vue"
+      ],
+      "part": null,
+      "bytes": 8875,
+      "contextBytes": 0,
+      "promptTokens": 3402,
+      "completionTokens": 94,
+      "latencyMs": 14391,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/components/EntityHeader.test.js:103"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional information about `commitEdit` is needed to ensure that all state management logic is correctly implemented. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15600,
+    "completionTokens": 448
+  },
+  "latencyMs": 67513
+}

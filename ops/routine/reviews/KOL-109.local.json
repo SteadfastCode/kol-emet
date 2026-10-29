@@ -1,0 +1,116 @@
+{
+  "item": "KOL-109",
+  "repo": "kol-emet",
+  "mergeSha": "8f8608495b7451bc30ea808bc8cd77941239a065",
+  "completedAtUtc": "2026-10-24T18:22:24.110Z",
+  "completeRunId": "2026-10-24T18:11:06.215Z",
+  "reviewRunId": "2026-10-29T07:01:10.099Z",
+  "reviewedAtUtc": "2026-10-29T07:28:12.412Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 16710,
+  "contextFiles": 0,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1896,
+      "contextBytes": 0,
+      "promptTokens": 1383,
+      "completionTokens": 105,
+      "latencyMs": 8806,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13910,
+      "contextBytes": 0,
+      "promptTokens": 4540,
+      "completionTokens": 81,
+      "latencyMs": 15154,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1168,
+      "contextBytes": 0,
+      "promptTokens": 1161,
+      "completionTokens": 76,
+      "latencyMs": 7072,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds a new backlog audit item to the FEATURES.md file. The description provides detailed instructions for filing new candidates under Proposed, including sources of candidates and verification steps. The PR touches only FEATURES.md and includes a verify command that references `<orchestrator>`, which needs to be defined elsewhere in the repository. · No real defects found in the provided diff. · The diff does not include the actual changes to FEATURES.md, only a description of new items. The verification commands and file paths are provided but not the actual code changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 13775,
+    "completionTokens": 640
+  },
+  "latencyMs": 66028
+}
