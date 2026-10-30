@@ -1,0 +1,348 @@
+{
+  "item": "KOL-121",
+  "repo": "kol-emet",
+  "mergeSha": "71ef0b4272dd20709c58538dacf24e473213461b",
+  "completedAtUtc": "2026-10-26T20:29:16.493Z",
+  "completeRunId": "2026-10-26T19:57:46.163Z",
+  "reviewRunId": "2026-10-30T07:01:47.011Z",
+  "reviewedAtUtc": "2026-10-30T07:10:30.715Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 133616,
+  "contextFiles": 13,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/drafts.js",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/generator/BraindumpInput.test.js"
+      ],
+      "part": null,
+      "bytes": 8907,
+      "contextBytes": 0,
+      "promptTokens": 3511,
+      "completionTokens": 93,
+      "latencyMs": 13491,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/generator/BraindumpInput.vue",
+        "client/src/lib/importFile.js"
+      ],
+      "part": null,
+      "bytes": 8446,
+      "contextBytes": 0,
+      "promptTokens": 3365,
+      "completionTokens": 90,
+      "latencyMs": 10746,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "docs/roadmap.md"
+      ],
+      "part": null,
+      "bytes": 8845,
+      "contextBytes": 0,
+      "promptTokens": 3550,
+      "completionTokens": 99,
+      "latencyMs": 11958,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12500,
+      "contextBytes": 0,
+      "promptTokens": 4046,
+      "completionTokens": 146,
+      "latencyMs": 15902,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 854,
+      "contextBytes": 0,
+      "promptTokens": 1367,
+      "completionTokens": 75,
+      "latencyMs": 5066,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/sqlSchema.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12795,
+      "contextBytes": 0,
+      "promptTokens": 4771,
+      "completionTokens": 112,
+      "latencyMs": 16485,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/sqlSchema.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12810,
+      "contextBytes": 0,
+      "promptTokens": 4941,
+      "completionTokens": 217,
+      "latencyMs": 25440,
+      "findings": 0,
+      "needs": 6,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/sqlSchema.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12682,
+      "contextBytes": 0,
+      "promptTokens": 4490,
+      "completionTokens": 323,
+      "latencyMs": 29316,
+      "findings": 0,
+      "needs": 10,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/Draft.js",
+        "server/src/routes/drafts.js",
+        "server/tests/fixtures/schema.sql"
+      ],
+      "part": null,
+      "bytes": 8028,
+      "contextBytes": 0,
+      "promptTokens": 3315,
+      "completionTokens": 210,
+      "latencyMs": 19560,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/sqlDraft.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12795,
+      "contextBytes": 0,
+      "promptTokens": 4456,
+      "completionTokens": 75,
+      "latencyMs": 14173,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/sqlDraft.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 6638,
+      "contextBytes": 0,
+      "promptTokens": 2910,
+      "completionTokens": 166,
+      "latencyMs": 16308,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/sqlSchema.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12798,
+      "contextBytes": 0,
+      "promptTokens": 4374,
+      "completionTokens": 335,
+      "latencyMs": 27075,
+      "findings": 0,
+      "needs": 9,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/sqlSchema.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12807,
+      "contextBytes": 0,
+      "promptTokens": 4564,
+      "completionTokens": 292,
+      "latencyMs": 28257,
+      "findings": 0,
+      "needs": 10,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/sqlSchema.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 3972,
+      "contextBytes": 6768,
+      "promptTokens": 3783,
+      "completionTokens": 147,
+      "latencyMs": 18316,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/drafts.js:447"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/src/routes/drafts.js:450"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/drafts.js:483"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. The diff adds support for SQL schema drafts, including client-side API calls and tests. However, the symbol `req` is used in the new function `createSqlDraft` but not defined in the provided diff. · The diff adds support for SQL schema files, but the `createSqlDraft` function is not defined in the provided diff. This needs to be checked in the `client/src/api/drafts.js` file. · No real defects found in the provided diff. However, additional context is needed to fully understand the integration and functionality of the new SQL schema producer. · The diff adds a new SQL schema producer that reads `CREATE TABLE` statements from a `.sql` dump and maps them into Data Store entities. The producer is registered through `fileProducerRoute`, which requires understanding of the existing route's implementation and the role-based access control defined in `app.js`. No specific defects are identified, but additional context is needed to ensure proper integration. · The diff does not provide enough context to determine if the client correctly recognizes `.sql` files by extension. Additional code is needed to verify this behavior. · The diff introduces a new SQL schema producer, but it relies on symbols that are not defined in the provided diff. Further investigation is needed to ensure these dependencies exist elsewhere in the codebase. · The diff introduces a new SQL schema parser, but some functions used in the code are not defined within the provided diff. Further inspection of these symbols is required to ensure the correctness and completeness of the implementation. · The diff introduces a new SQL schema producer, but it relies on several functions and symbols that are not defined in the provided diff. These need to be reviewed for their implementation. · The diff introduces a new SQL schema producer, but the actual implementation details are not provided in the given diff. Therefore, I cannot determine if there are any defects without seeing the code for `parseSqlSchema`, `SqlParseError`, and related constants. · No real defects found in the provided diff. However, additional information is needed to fully understand the context and ensure there are no hidden issues. · The diff introduces a new test file for the SQL draft import functionality. It includes tests for successful imports, refusal of invalid files, and handling of character limits. The code seems to be well-structured and follows the existing patterns in the repository. · The diff introduces a new unit test file for the SQL schema producer. The tests cover various aspects of the producer's functionality, including parsing SQL statements, handling different types of relationships, and ensuring determinism in parsing. However, some symbols used in the test file are not defined within the provided diff, so additional context is needed to fully understand their implementation. · No real defects found, but additional context is needed to fully understand the code. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the logic.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 105052,
+    "completionTokens": 4211
+  },
+  "latencyMs": 473630
+}

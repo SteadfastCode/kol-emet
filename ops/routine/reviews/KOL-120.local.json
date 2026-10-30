@@ -1,0 +1,70 @@
+{
+  "item": "KOL-120",
+  "repo": "kol-emet",
+  "mergeSha": "ca06e62dbceb7e6a8f05d8af73dd55693545f3cd",
+  "completedAtUtc": "2026-10-26T20:03:37.735Z",
+  "completeRunId": "2026-10-26T19:57:46.163Z",
+  "reviewRunId": "2026-10-30T07:01:47.011Z",
+  "reviewedAtUtc": "2026-10-30T07:02:36.776Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 5234,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/views/LoginView.test.js",
+        "client/src/views/LoginView.vue",
+        "docs/generator-v1-plan.md"
+      ],
+      "part": null,
+      "bytes": 5234,
+      "contextBytes": 8447,
+      "promptTokens": 4795,
+      "completionTokens": 55,
+      "latencyMs": 30163,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 9459,
+    "completionTokens": 181
+  },
+  "latencyMs": 48566
+}

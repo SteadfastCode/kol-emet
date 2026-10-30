@@ -1,0 +1,116 @@
+{
+  "item": "KOL-122",
+  "repo": "kol-emet",
+  "mergeSha": "6453b769cd00205b37a2b5eaa1307b92b8c47041",
+  "completedAtUtc": "2026-10-26T21:06:16.714Z",
+  "completeRunId": "2026-10-26T20:51:46.920Z",
+  "reviewRunId": "2026-10-30T07:01:47.011Z",
+  "reviewedAtUtc": "2026-10-30T07:11:45.860Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 21615,
+  "contextFiles": 0,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1890,
+      "contextBytes": 0,
+      "promptTokens": 1385,
+      "completionTokens": 80,
+      "latencyMs": 7717,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13862,
+      "contextBytes": 0,
+      "promptTokens": 4503,
+      "completionTokens": 79,
+      "latencyMs": 14808,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 6127,
+      "contextBytes": 0,
+      "promptTokens": 2510,
+      "completionTokens": 122,
+      "latencyMs": 12999,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:218"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds a new backlog audit item to FEATURES.md. The `<orchestrator>` symbol is used in the verify command, but its definition or import is not provided in the diff. · No real defects found in the provided diff. · The diff introduces a new feature proposal and an account deletion issue. The account deletion issue needs further investigation into the behavior of `closeStreamsForUser` and `GET /events` to ensure that connector streams are properly closed when an account is deleted.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 16403,
+    "completionTokens": 669
+  },
+  "latencyMs": 75089
+}
