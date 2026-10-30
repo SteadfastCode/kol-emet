@@ -1,0 +1,72 @@
+{
+  "item": "KOL-117",
+  "repo": "kol-emet",
+  "mergeSha": "33d8f673b0c71ff3dae73deda919754576ddb614",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-29T23:36:04.447Z",
+  "gradedAtUtc": "2026-10-30T00:22:30.705Z",
+  "independent": [
+    {
+      "file": "client/src/components/EntityHeader.vue",
+      "line": 325,
+      "severity": "low",
+      "summary": "`pendingId`/`addPending` are now kept even when the watcher fires for a *different* entity (`sameEntity` false), so a write still in flight against the entity the panel just left silently disarms the new entity's controls: `toggleStatus`, `askDelete`/`removeQuestion` and `commitEdit` all begin `if (pendingId.value) return`, and those rows' buttons are *not* visually disabled (the template compares `pendingId === oq._id`, and the ids differ), so clicking the status badge, pencil or ✕ on the newly opened entity does nothing with no feedback until the old request settles; `addPending` likewise leaves the new entity's Add button reading \"Adding…\" and disabled. The diff's own docstring (line 201-202) promises a different entity \"keeps none of it\", and the test named \"keeps nothing\" (EntityHeader.test.js:242) only asserts the editor and add text, never the pending flags, so the overstated claim goes unchecked."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only the open-questions watcher and `addQuestion`; no session, login, passkey or permission code (`canWrite` is unchanged)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or token-cost code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "`removeQuestion`/`deleteOpenQuestion` are untouched and `confirmingId` is still cleared on every re-seed exactly as before, so no destructive path changes behaviour."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Right call — `addQuestion` reworks the `POST /open-questions` call (captured `entityId`, upsert vs append, seededFor guard) and the new test stubs `fetch` around those routes; the cited line is weak evidence but the category is correct."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, dependency, build config or deploy file in the diff."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model reported nothing and produced no false positives; its triage was fully correct, but it missed the one real regression (pending-write flags surviving an entity switch and silently inerting the new entity's controls).",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.7237844999999998,
+  "numTurns": 5,
+  "durationMs": 113621,
+  "sessionId": "d8f7152f-5eec-404f-a51f-ee386f412da9"
+}

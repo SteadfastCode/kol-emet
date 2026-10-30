@@ -1,0 +1,63 @@
+{
+  "item": "KOL-119",
+  "repo": "kol-emet",
+  "mergeSha": "10cbc68ae72b2951f156851cc97106766791dd65",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-29T23:36:04.447Z",
+  "gradedAtUtc": "2026-10-30T00:14:17.476Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "Documentation-only diff in three markdown files; no auth code, sessions or permissions involved."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing, allowance or billing logic changed — the only money-adjacent prose (allowance question 1) is untouched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Nothing is deleted or migrated; every stale line is kept and annotated, as the item required."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The diff only mentions existing routes/producers in prose; no external calls or clients are added or changed."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, changelog, build or deploy config touched — roadmap/wishlist are backlog docs, not release artifacts."
+    }
+  ],
+  "missed": [],
+  "summary": "Correct and well-calibrated: a pure docs sweep whose three ✅ annotations all check out (files `SourceCoverage.vue`/`sourceCoverage.js`/`SourceCoverage.test.js`, `producers/kubernetes.js` + `POST /drafts/kubernetes`, `routes/import.js` + `graphImporter.js` exist, dates match the ledger merges, only the three named files changed), so reporting zero findings and all-untouched triage was the right call.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.5162595,
+  "numTurns": 9,
+  "durationMs": 47042,
+  "sessionId": "7fb20ab3-dae1-46aa-b1ff-9852a16de0cf"
+}

@@ -1,0 +1,79 @@
+{
+  "item": "KOL-047",
+  "repo": "kol-emet",
+  "mergeSha": "11f5fde585be060479a5ff61f8122d7b333272b3",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-29T23:36:04.447Z",
+  "gradedAtUtc": "2026-10-30T00:39:35.602Z",
+  "independent": [
+    {
+      "file": "server/src/lib/mcpFailure.js",
+      "line": 164,
+      "severity": "low",
+      "summary": "Refusal records interpolate unbounded client-controlled values (`requestId` from `body.id`, `caller.ua`, `caller.client`) with no truncation, and on /mcp and /bridge/mcp they are now emitted at the default `light` tier *before* the bearer gate passes — so an unauthenticated caller can write ~100KB (express' default JSON body limit) of chosen content per request into the deployed log, where the old 401 path printed one fixed short line; `shortSession` truncates the session id but nothing truncates these."
+    },
+    {
+      "file": "server/src/routes/bridge.js",
+      "line": 558,
+      "severity": "low",
+      "summary": "The `bridge_session_header_ignored` / `stateless_server_mismatch` record — the exact diagnosis the item asks for (\"why the session id was rejected — … stateless-server mismatch\") — is logged at the `normal` tier, and the same holds for `mcp_delete_unknown_session` (mcp.js:765), while both routers default to `light` (BRIDGE_LOG_LEVEL/MCP_LOG_LEVEL unset), so in a deployed process a repeat of the incident (a chat still presenting stale session ids) leaves no record at all unless someone has raised the level in advance; docs/architecture.md states refusal records go out at `light` and lists this record in that same paragraph, so the doc overstates what the deployment actually logs."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff rewrites both endpoints' bearer-gate refusals (401/503 bodies, WWW-Authenticate relocation) and the session scope-mismatch 403, so the auth path is genuinely touched."
+    },
+    {
+      "key": "secrets",
+      "correct": false,
+      "reason": "The change adds credential-handling code in logging — `callerView()` reads the Authorization header and classifies it, the rejected-header line is deliberately kept at `verbose`, and the diff ships assertions that \"a record must never carry the token\" — which is secret-handling, not an untouched area."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff touches billing, usage metering, or paid model calls."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "mcp.js:695 is the in-memory session map teardown, whose semantics are unchanged (only a `rememberClosed`/log added) and which destroys no persisted or user data, so no destructive operation is touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP or third-party API call is added or changed; the MCP SDK transport is in-process."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, migration, or release artifact is touched — only server source, tests, and docs."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local review reported nothing on a diff with no high-severity defects, which is a defensible outcome, but it missed two low-severity issues and got two of six triage categories wrong (secrets and destructive).",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 4
+  },
+  "costUsd": 2.0306100000000002,
+  "numTurns": 23,
+  "durationMs": 320444,
+  "sessionId": "6f167e85-e35a-4c32-a33b-2deb501de9d1"
+}

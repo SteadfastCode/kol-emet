@@ -1,0 +1,63 @@
+{
+  "item": "KOL-116",
+  "repo": "kol-emet",
+  "mergeSha": "859c779ad3f95f4841a14ce7fa172d6d09962b1b",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-29T23:36:04.447Z",
+  "gradedAtUtc": "2026-10-30T00:26:21.126Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No authentication, session or permission code changes; the new broadcasts reuse `req.workspaceId` and the existing `broadcast()` scoping rather than adding access-control logic."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The only new configuration is the `OPEN_QUESTION_SSE_LOG_LEVEL` log tier; no credentials, tokens or keys are read, stored or logged."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff calls a paid model, meters usage or touches billing — it is SSE fan-out plumbing only."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The DELETE handler is edited only to emit a frame after the existing `findOneAndDelete`/`$pull`; no new deletion, truncation or overwrite is introduced."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP or third-party service is involved; the MCP change only emits a local in-process broadcast."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, migration or dependency change — just route/composable code, tests and docs."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model found nothing and my own cold review also surfaced no real defects (the broadcasts are workspace-scoped, writer-excluded, emitted only after the write and after back-link sync, the PUT payload is correctly normalised to bare ids, and the client's refetch-on-touch logic plus its tests are sound), so the empty finding list and the all-\"not touched\" triage were both right, if unevidenced.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.8650654999999998,
+  "numTurns": 25,
+  "durationMs": 230374,
+  "sessionId": "67881df7-659b-42fd-a13c-89be6e4ab579"
+}

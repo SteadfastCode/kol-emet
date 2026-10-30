@@ -1,0 +1,63 @@
+{
+  "item": "KOL-109",
+  "repo": "kol-emet",
+  "mergeSha": "8f8608495b7451bc30ea808bc8cd77941239a065",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-29T23:36:04.447Z",
+  "gradedAtUtc": "2026-10-30T00:29:25.834Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff adds only backlog prose to FEATURES.md; no auth code, session, role or credential path is modified (KOL-120 merely describes future signup copy)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No tokens, keys, env files or redaction code are touched — the change is one markdown file of queue items."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing metered or billed changes; the filed items explicitly exclude paid generator runs and pricing decisions."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff is 160 pure insertions with no deletions, no migrations and no data-touching code."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No HTTP client, provider SDK or outbound call is added or altered; proposed producers remain unimplemented prose."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, CI, deploy or packaging file is touched — FEATURES.md is the internal workqueue, not a release artifact."
+    }
+  ],
+  "missed": [],
+  "summary": "Reporting no defects was the right call: the six filed items (KOL-116–121) and the KOL-122 renewal all check out — ids 116+ were free, the renewal's not-before 2026-10-31 is the run date (2026-10-24) plus seven days, the PR touches only FEATURES.md, and every cited file, line, and \"already shipped\" claim (KOL-017/089/077 dates, absent EntityHeader.test.js and sqlSchema.js, non-broadcasting openQuestions.js, resolveHost's two-label branch, the signup disclosure and its pinned test) verifies against the tree at that commit, so nothing shipped was re-proposed; the triage is also fully correct.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.5120409999999997,
+  "numTurns": 34,
+  "durationMs": 184674,
+  "sessionId": "9f445c79-545c-48a5-80c1-b60a8011aef7"
+}

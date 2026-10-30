@@ -1,0 +1,86 @@
+{
+  "item": "KOL-118",
+  "repo": "kol-emet",
+  "mergeSha": "a2d6dabf716a2b18028bdc01d48936e38b822fa3",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-29T23:36:04.447Z",
+  "gradedAtUtc": "2026-10-30T00:20:37.053Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 853,
+      "severity": "low",
+      "summary": "`readIn`'s `perNamespace.size === 1` fallback still resolves a BARE host across a namespace boundary: a pod in `prod` whose env holds `redis://cache:6379` gets a `Calls` edge to a `cache` that lives only in `infra`, which Kubernetes' own search path (`cache.prod.svc.cluster.local`) would never reach. The branch is also inconsistent with the ≥2-candidate case, which refuses and drops, and the justifying comment (\"so a file whose manifests are vague about namespaces still resolves the way it always did\") is inaccurate — a single-namespace file is already satisfied by the preceding `perNamespace.has(readerNamespace)` branch, so the fallback only ever fires when reader and target are in different namespaces."
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 370,
+      "severity": "low",
+      "summary": "`configMaps` is still keyed by bare `metadata.name` with no namespace, so the exact collision the item describes for `hostToEntity` survives one layer upstream: two same-named ConfigMaps in a multi-namespace stream overwrite each other (last document silently wins), and a workload's `envFrom.configMapRef` then reads another namespace's values, producing `Calls`/`Depends on` edges from env that is not in that pod at all."
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 326,
+      "severity": "low",
+      "summary": "The new `name.namespace` title is collapsed by `normalizeTitle` (which strips `.`), so a qualified title shares a dedup key with a hyphenated name: a stream holding `cache` in `prod` and `team-b` plus a separate workload named `cache-prod` normalizes both to `cacheprod`, dropping one as a \"duplicate entity within the same file\" and retargeting its edges onto the other — and against the workspace roster, `cache.prod` can match an unrelated existing `cache-prod` as `exact-normalized-title`, proposing an update to the wrong entity."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only the Kubernetes producer, its tests and docs — no session, passkey, OAuth or workspace-auth code."
+    },
+    {
+      "key": "secrets",
+      "correct": false,
+      "reason": "Nothing about secret handling changed: the `kind: Secret` skip, the upstream `redactSecrets` call and the unfollowed `envFrom.secretRef` are all untouched, and the cited line 710 is ordinary env/host-resolution code."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The producer is deterministic with no model call, so no allowance, metering or billing path is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only computes proposed draft items; no deletes, migrations, rollbacks or overwrites of stored data."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls are made or changed — \"External Dependency\" here is just a proposed entity category, not an API integration."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No deploy, version or release configuration changed (PRODUCER_VERSION and the package/infra files are untouched)."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "The local model reported nothing at all, missing three (admittedly low-severity) residual cross-namespace and title-collision issues, and got the secrets triage wrong with evidence pointing at unrelated code.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.4028014999999994,
+  "numTurns": 22,
+  "durationMs": 379538,
+  "sessionId": "48bc1fb0-b81e-48da-a76f-fee88ae9f3fa"
+}
