@@ -59,8 +59,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-014": {
+    "KOL-123": {
       "order": 4,
+      "title": "A user can create a second workspace, seeded from a template or left empty",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-014": {
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -77,7 +94,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 5,
+      "order": 6,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -94,7 +111,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 6,
+      "order": 7,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -103,23 +120,6 @@
       "dependsOn": [],
       "needsHuman": true,
       "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
-    "KOL-123": {
-      "order": 7,
-      "title": "A user can create a second workspace, seeded from a template or left empty",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": true,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
