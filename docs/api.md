@@ -127,7 +127,7 @@ Mount points and their guards:
 | `/mcp` | self | `editor` to write | MCP HTTP transport; auth handled inside the handler, and every tool scopes its queries to the MCP user's workspace — which is why chat relays here only for a caller already in that workspace (KOL-114). A session opened with `x-kol-emet-mcp-scope: read` (chat's relay) registers the four read tools only |
 | `/` (oauth) | mixed | none | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | none | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
-| `/workspaces` | `requireAuth` | any member | The caller's memberships, and which one this session acts in. Deliberately **no** `resolveWorkspace`: a membership list is not content in one workspace, and the choice must not be gated on the role held in the workspace being left. Mounted ahead of the `/` changelog catch-all, whose `resolveWorkspace` would otherwise 403 a caller with no membership at all |
+| `/workspaces` | `requireAuth` | any member | The caller's memberships, which one this session acts in, and creating another. Deliberately **no** `resolveWorkspace`: a membership list is not content in one workspace, the choice must not be gated on the role held in the workspace being left, and a create happens outside any workspace at all. Mounted ahead of the `/` changelog catch-all, whose `resolveWorkspace` would otherwise 403 a caller with no membership at all |
 | `/events` | `requireAuth` + `resolveWorkspace` | any member | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
 | `/entities` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes use `requireActor` |
@@ -928,12 +928,14 @@ signup form offers the name as an optional field.
 
 ## Workspaces
 
-Which workspace a request acts in, for a user who belongs to more than one (KOL-090).
+Which workspace a request acts in, for a user who belongs to more than one (KOL-090) — and, since
+KOL-123, where a second one comes from.
 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/workspaces` | Every workspace the caller is a member of, each `{ _id, name, role, createdAt }` — the same shape as `GET /workspace` — sorted `createdAt` then `_id`, so oldest first and the order is total. `role` is the caller's own in each. Both auth paths; a session caller with no membership gets `[]`, not 403 |
 | POST | `/workspaces/:id/select` | Make `:id` the workspace this session acts in: checks membership, writes `req.session.workspaceId`, saves the session before answering, and returns the selected workspace in the same shape. **Session only** — a bearer connector has no session to hold a choice in and is 401. 404 `{ error: 'Not found' }` for an id the caller is not a member of, writing nothing (never 403, which would confirm the row exists); 400 `INVALID_ID` for a malformed one |
+| POST | `/workspaces` | Create one, owned by the caller (KOL-123). Body `{ name, template? }`. `name` is the rule `PATCH /workspace` uses — trimmed, 1–80 code points, else 400 `INVALID_WORKSPACE_NAME` — and is not unique. `template` is a key from [`GET /templates`](#templates): absent seeds the default (`worldbuilding`), a key that names none is 400 `Unknown template` (registration's wording), and **`null` seeds nothing**, which is the only kind of workspace [`POST /import`](#import) will write into. 201 with the new workspace in the same `{ _id, name, role, createdAt }` shape, `role: 'owner'`. 409 `{ error: 'WORKSPACE_LIMIT_REACHED', limit }` once the caller already **owns** `WORKSPACE_MAX_PER_OWNER` (default 10), writing nothing. **Session only**, like `/select` and for the same reason. Only `name` and `template` are read from the body. It does **not** select what it creates |
 
 - **The choice is session state**, server-side, not a client preference: the client cannot scope its
   own reads, so a workspace chosen in a client store while the server resolved another is exactly
@@ -947,13 +949,31 @@ Which workspace a request acts in, for a user who belongs to more than one (KOL-
   are a member of. Ownership first because an invitation to someone else's workspace — which, once
   invites land, can arrive unasked — must not become where a user's own writes go. "Owns" is read
   from their own membership role, the same fact every role gate judges, not from `Workspace.ownerId`.
-- The switcher is in the Workspace group in Settings (`client/src/components/WikiLayout.vue`), shown
-  only when there is more than one membership, and the page reloads after a switch: the entity list,
-  the type registry and the `/events` stream are all bound to the workspace being left.
+- The switcher is in the Workspace group in Settings (`client/src/components/WikiLayout.vue`),
+  beside the New workspace form, and the page reloads after a switch: the entity list, the type
+  registry and the `/events` stream are all bound to the workspace being left. It used to hide
+  itself at a single membership, which was every account before `POST /workspaces` existed.
+- **A create is not a selection.** `POST /workspaces` leaves `req.session.workspaceId` alone and
+  the client follows it with `POST /workspaces/:id/select`, so that route stays the only writer of
+  which workspace a session acts in — and the tab has to reload either way. Creating is also the
+  one thing here that is *not* done inside a workspace, which is why this mount carries no
+  `resolveWorkspace`: the caller is not acting in the new one yet.
+- **The create-and-seed pair lives once**, in `createWorkspace()`
+  ([`lib/workspaceSeeder.js`](../server/src/lib/workspaceSeeder.js)), shared with
+  `POST /auth/register`: the `owner` membership, the `template` key stored on the document and the
+  best-effort seed are the same on both paths, and a seeding failure leaves a usable workspace
+  rather than failing the request.
+- **The cap counts ownership, not membership** (`WORKSPACE_MAX_PER_OWNER`, default 10): a
+  membership can arrive unasked once invites land, and being invited into other people's
+  workspaces must not use up a user's own allowance. It is a count read before the write rather
+  than a reservation taken with it, so creates that arrive *together* can overshoot it — bounded by
+  the caller's own concurrency and once only, since every later request sees the higher count.
+  Closing that needs a transaction (single mongod — see [Import](#import)) or a counter on `User`
+  that would be a second source of truth for a number the workspaces already state.
 
-**Not here yet:** inviting or removing members (and the email delivery that needs), creating a
-second workspace from the UI, per-workspace billing, and enforcing `editor`/`viewer` differently
-than [Roles](#roles) already does.
+**Not here yet:** inviting or removing members (and the email delivery that needs), deleting a
+workspace, moving content between workspaces, per-workspace billing or per-plan limits, and
+enforcing `editor`/`viewer` differently than [Roles](#roles) already does.
 
 ## Export
 
@@ -1024,9 +1044,12 @@ multipart upload — and the answer is **201** with what it wrote:
   **409 `WORKSPACE_NOT_EMPTY`** and writes nothing. That refusal is the design and not a gap:
   merging a graph into one that already exists needs an id-collision policy — does a colliding id
   mean "the same thing" or "a different thing"? — and that is a product decision this endpoint
-  deliberately does not make. Registration seeds starter content, so an owner clears a workspace (or
-  uses a new one) before importing. The **type registries are exempt**: a seeded workspace always
-  has types, and a rule that counted them could never import anything.
+  deliberately does not make. Registration seeds starter content, so an owner clears a workspace or
+  uses a new one before importing — and since KOL-123 there is one to use:
+  [`POST /workspaces`](#workspaces) with `template: null` creates a workspace seeded with nothing,
+  which is where an import lands. The **type registries are exempt**: a seeded workspace always has
+  types, and a rule that counted them could never import anything (an *empty* workspace has none,
+  so the import creates them).
 - **Every id is new.** Entity types, relationship types, entities, relationship groups and open
   questions each get a fresh `ObjectId` and every reference is rewritten to it — a group's
   `members[].refId` (with its `refModel` discriminator and its **array order**, which is meaning the

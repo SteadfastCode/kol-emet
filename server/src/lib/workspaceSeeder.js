@@ -1,7 +1,13 @@
 /**
- * Seeds a newly created workspace from a template.
+ * Bringing a workspace into being: the `Workspace` document, and the starting
+ * content it is seeded with.
  *
- * Runs at registration, on a path where partial success is worse than none:
+ * `createWorkspace()` at the foot of this file is the pair both callers use —
+ * `POST /auth/register` and `POST /workspaces` (KOL-123). Everything above it
+ * is the seeding half, which is also run on its own by
+ * `scripts/seed-entity-types.js`.
+ *
+ * Seeding runs at registration, on a path where partial success is worse than none:
  * a workspace with relationship types but no starter entities is a confusing
  * half-state. Each stage is therefore independently guarded and the whole
  * thing is best-effort — a seeding failure must never block account creation,
@@ -9,11 +15,13 @@
  */
 
 import EntityType from '../models/EntityType.js';
+import Workspace from '../models/Workspace.js';
 import RelationshipType from '../models/RelationshipType.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import Entity from '../models/Entity.js';
 import { getTemplate, hasTemplate, DEFAULT_TEMPLATE } from '../config/templates.js';
+import { workspaceLog } from '../middleware/workspace.js';
 
 // off | light | normal — seeding runs unattended at registration, so the
 // default tier records enough to tell a seeded workspace from a bare one.
@@ -158,4 +166,63 @@ export async function seedWorkspace(workspaceId, templateKey = DEFAULT_TEMPLATE)
     log('light', `partial seed for ${workspaceId}: ${JSON.stringify(counts)}`);
     return { ok: false, counts, error: err.message };
   }
+}
+
+/**
+ * Creates a workspace owned by `ownerId` and seeds it — the pair every caller
+ * that brings a workspace into being needs, in one place (KOL-123).
+ *
+ * `POST /auth/register` was the only thing in the product that had ever created
+ * a `Workspace`, so the create-and-seed pair lived inline in that route and
+ * every account had exactly one workspace for life. `POST /workspaces` is the
+ * second caller, and the two must not drift: the stored `template` key has to
+ * be the key that was actually seeded (see resolveTemplateKey above), the
+ * creator has to be an `owner` in `members` — the role every gate in
+ * middleware/workspace.js judges — and a seeding failure has to stay
+ * best-effort on both paths.
+ *
+ * Three rules, all of them load-bearing:
+ *
+ *   - **A create failure throws; a seed failure does not.** The caller decides
+ *     what a workspace that could not be written means — registration deletes
+ *     the user it has just made rather than strand an account with no
+ *     workspace, `POST /workspaces` answers a 500 and has nothing to undo. A
+ *     *seeding* failure is reported in the result and never thrown, because an
+ *     unseeded workspace is usable and losing the account is not.
+ *   - **`template: null` seeds nothing**, and is stored as nothing. This is the
+ *     one shape registration cannot ask for (it refuses a `template` that names
+ *     no template, `null` included — KOL-031): an empty workspace is only
+ *     useful once a user can have a second one, and it is what gives
+ *     `POST /import` somewhere to land, since the one workspace an account used
+ *     to have was seeded at signup and an import refuses a non-empty workspace.
+ *     `undefined` still means the default, as it always has.
+ *   - **It does not touch the session.** Which workspace a session acts in is
+ *     written in exactly one place, `POST /workspaces/:id/select`.
+ *
+ * @param {object} args
+ * @param {string} args.name a name already through `workspaceName()` — this does not validate
+ * @param {string|import('mongoose').Types.ObjectId} args.ownerId
+ * @param {string|null|undefined} args.template a key of TEMPLATES, `undefined` for
+ *   the default, `null` to seed nothing
+ * @param {string} [args.source] what asked for it, for the light-tier log line
+ * @returns {Promise<{ workspace: object, templateKey: string|null, seed: object }>}
+ */
+export async function createWorkspace({ name, ownerId, template, source = 'unspecified caller' }) {
+  // Resolved once and stored, so what the document records is what was seeded.
+  const templateKey = template === null ? null : resolveTemplateKey(template);
+
+  const workspace = await Workspace.create({
+    name,
+    ownerId,
+    members: [{ userId: ownerId, role: 'owner' }],
+    template: templateKey,
+  });
+  workspaceLog('light', `created workspace ${workspace._id} named "${workspace.name}" owned by ${ownerId}, seeding from ${templateKey ? `template "${templateKey}"` : 'nothing — template: null, an empty workspace'} (source: ${source})`);
+
+  const seed = templateKey
+    ? await seedWorkspace(workspace._id, templateKey)
+    : { ok: true, counts: {}, seeded: false };
+  if (!seed.ok) console.error(`[workspaceSeeder] workspace ${workspace._id} seeded partially:`, seed.error);
+
+  return { workspace, templateKey, seed };
 }

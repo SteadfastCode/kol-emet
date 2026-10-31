@@ -95,7 +95,13 @@ vi.mock('../api/export.js', () => ({
 // the rule is not network, and a stub returning undefined would let the form send a password the
 // server would refuse. What api/auth.js itself does with a response is its own concern.
 // The Sign out everywhere row posts through the two below (KOL-076), on the same terms.
-const { changePassword, changePasswordWithPasskey, revokeOtherSessions, revokeOtherSessionsWithPasskey } = vi.hoisted(() => ({
+// The New workspace picker is built from GET /templates (KOL-123), which the layout asks for on
+// the first Settings open — public, code-defined, and the same list the signup form offers.
+const { changePassword, changePasswordWithPasskey, getTemplates, revokeOtherSessions, revokeOtherSessionsWithPasskey } = vi.hoisted(() => ({
+  getTemplates: vi.fn(async () => [
+    { key: 'worldbuilding', name: 'Worldbuilding', description: 'Characters, worlds and so on.' },
+    { key: 'software-architecture', name: 'Software Architecture', description: 'Services and data stores.' },
+  ]),
   changePassword: vi.fn(async () => ({ ok: true })),
   changePasswordWithPasskey: vi.fn(async () => ({ ok: true })),
   revokeOtherSessions: vi.fn(async () => ({ ok: true, revokedAt: '2026-10-15T12:00:00.000Z' })),
@@ -106,7 +112,7 @@ vi.mock('../api/auth.js', () => ({
   revokeOtherSessions, revokeOtherSessionsWithPasskey,
   PASSWORD_MIN_LENGTH: 12,
   passwordTooShort: (value) => [...(value ?? '')].length < 12,
-  login: vi.fn(), register: vi.fn(), logout: vi.fn(), getSession: vi.fn(), getTemplates: vi.fn(),
+  login: vi.fn(), register: vi.fn(), logout: vi.fn(), getSession: vi.fn(), getTemplates,
   registerPasskey: vi.fn(), loginWithPasskey: vi.fn(), passkeysSupported: () => false,
   deleteAccount: vi.fn(), deleteAccountWithPasskey: vi.fn(),
   listPasskeys: vi.fn(async () => ({ passkeys: [], hasPassword: true, userHandle: null, rpId: 'localhost' })),
@@ -116,14 +122,18 @@ vi.mock('../api/auth.js', () => ({
 // nothing in a test should fetch. What the module itself does is its own concern
 // (api/workspace.js).
 // The switcher (KOL-090) reads GET /workspaces on the same open and POSTs the choice.
-const { getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace } = vi.hoisted(() => ({
+// `POST /workspaces` creates a second one (KOL-123); the form sends it and then goes through
+// selectWorkspace, since the server leaves the selection to that one route.
+const { createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace } = vi.hoisted(() => ({
+  createWorkspace: vi.fn(async (name) => ({ _id: 'w9', name, role: 'owner', createdAt: '2026-10-20T00:00:00.000Z' })),
   getWorkspace: vi.fn(async () => ({ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
   listWorkspaces: vi.fn(async () => [{ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' }]),
   renameWorkspace: vi.fn(async (name) => ({ _id: 'w1', name, role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
   selectWorkspace: vi.fn(async (id) => ({ _id: id, name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' })),
 }));
 vi.mock('../api/workspace.js', () => ({
-  getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace, WORKSPACE_NAME_MAX: 80, default: getWorkspace,
+  createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace,
+  WORKSPACE_NAME_MAX: 80, default: getWorkspace,
 }));
 // One Escape case below mounts the generator overlay for real (KOL-084), and the overlay asks for
 // the AI allowance as it opens; nothing in a test should fetch. The rest of the module is mocked
@@ -381,14 +391,19 @@ describe('WikiLayout workspace group', () => {
 
   const SHARED = { _id: 'w2', name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' };
 
+  const CREATED = { _id: 'w9', name: 'A Second Bible', role: 'owner', createdAt: '2026-10-20T00:00:00.000Z' };
+
   beforeEach(() => {
     getWorkspace.mockReset();
     listWorkspaces.mockReset();
     renameWorkspace.mockReset();
     selectWorkspace.mockReset();
+    createWorkspace.mockReset();
     getWorkspace.mockResolvedValue({ ...OWNED });
-    // One membership: the ordinary case, and the one the switcher stays out of.
+    // One membership: the ordinary case, and — since KOL-123 — one the switcher
+    // is shown for anyway, because it is where a created workspace shows up.
     listWorkspaces.mockResolvedValue([{ ...OWNED }]);
+    createWorkspace.mockImplementation(async (name) => ({ ...CREATED, name }));
     renameWorkspace.mockImplementation(async (name) => ({ ...OWNED, name }));
     selectWorkspace.mockImplementation(async (id) => (id === SHARED._id ? { ...SHARED } : { ...OWNED }));
   });
@@ -463,15 +478,28 @@ describe('WikiLayout workspace group', () => {
    * accept is not a switch.
    */
   describe('the switcher', () => {
-    it('is absent for a user with one workspace', async () => {
+    it('is there for a user with one workspace too, since they can create a second', async () => {
       const wrapper = await openSettings();
 
       expect(listWorkspaces).toHaveBeenCalledTimes(1);
       expect(listWorkspaces.mock.calls[0][0]).toMatchObject({ source: expect.stringContaining('Settings') });
-      expect(group(wrapper).find('.workspace-switcher').exists()).toBe(false);
-      expect(group(wrapper).find('select').exists()).toBe(false);
-      // The name itself is still there: hiding the switcher hides nothing else.
+      // It used to hide itself here (KOL-090), on the grounds that there was nothing to choose
+      // between. KOL-123 made a second workspace something a user can have, and this is where
+      // the one they just created appears.
+      const select = group(wrapper).get('.workspace-switcher select');
+      expect(select.findAll('option').map((o) => o.attributes('value'))).toEqual([OWNED._id]);
+      expect(select.element.value).toBe(OWNED._id);
       expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    });
+
+    it('is absent only when the list did not answer at all', async () => {
+      listWorkspaces.mockRejectedValue(new Error('offline'));
+      const wrapper = await openSettings();
+
+      expect(group(wrapper).find('.workspace-switcher').exists()).toBe(false);
+      // And the name above it is untouched: the two are separate requests.
+      expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+      expect(group(wrapper).find('.settings-error').exists()).toBe(false);
     });
 
     it('lists both for a user with two, with the current one selected', async () => {
@@ -525,6 +553,105 @@ describe('WikiLayout workspace group', () => {
 
       expect(group(wrapper).get('.settings-error').text()).toBe('You are no longer a member of that workspace.');
       expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    });
+  });
+
+  /**
+   * The New workspace form (KOL-123). `POST /auth/register` was the only thing in the product
+   * that had ever created a workspace, so the switcher above it had nothing to switch between.
+   *
+   * Three things are pinned here: the name and the chosen template reach the API, "Empty" sends
+   * `template: null` (the only kind of workspace an import will write into), and the create is
+   * followed by the *existing* select call — the server does not select what it creates, and the
+   * client must not pretend otherwise by rendering the new workspace as the current one.
+   */
+  describe('the New workspace form', () => {
+    const form = (wrapper) => group(wrapper).get('form.workspace-create');
+
+    async function fillAndSubmit(wrapper, name, templateKey) {
+      await form(wrapper).get('#new-workspace-name').setValue(name);
+      if (templateKey !== undefined) await form(wrapper).get('#new-workspace-template').setValue(templateKey);
+      await form(wrapper).trigger('submit');
+      await flushPromises();
+    }
+
+    it('offers each template from GET /templates, plus Empty', async () => {
+      const wrapper = await openSettings();
+
+      expect(getTemplates).toHaveBeenCalled();
+      const options = form(wrapper).get('#new-workspace-template').findAll('option');
+      expect(options.map((o) => o.text())).toEqual([
+        'Worldbuilding', 'Software Architecture', 'Empty — nothing to start from',
+      ]);
+      // A template is the default, as it is at signup; Empty is a choice, not what you get
+      // by not choosing.
+      expect(form(wrapper).get('#new-workspace-template').element.value).toBe('worldbuilding');
+    });
+
+    it('sends the trimmed name and the chosen template, then selects what it created', async () => {
+      const wrapper = await openSettings();
+
+      await fillAndSubmit(wrapper, '  A Second Bible  ', 'software-architecture');
+
+      expect(createWorkspace).toHaveBeenCalledTimes(1);
+      expect(createWorkspace.mock.calls[0][0]).toBe('A Second Bible');
+      expect(createWorkspace.mock.calls[0][1]).toMatchObject({
+        template: 'software-architecture',
+        // Every light-tier line names what asked for the change, not just the new value.
+        source: expect.stringContaining('Settings'),
+      });
+      // The switcher's list is refreshed, so the new workspace is in it either way.
+      expect(listWorkspaces).toHaveBeenCalledTimes(2);
+      // And the session moves through the one route that writes it.
+      expect(selectWorkspace).toHaveBeenCalledTimes(1);
+      expect(selectWorkspace.mock.calls[0][0]).toBe(CREATED._id);
+      expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+      // The typed name is cleared, so a second create does not repeat the first by accident.
+      expect(form(wrapper).get('#new-workspace-name').element.value).toBe('');
+    });
+
+    it('sends template: null for Empty — the only workspace an import can land in', async () => {
+      const wrapper = await openSettings();
+
+      await fillAndSubmit(wrapper, 'Somewhere To Land', '');
+
+      expect(createWorkspace.mock.calls[0][0]).toBe('Somewhere To Land');
+      expect(createWorkspace.mock.calls[0][1].template).toBe(null);
+    });
+
+    it('sends nothing without a name, and nothing twice', async () => {
+      const wrapper = await openSettings();
+
+      await fillAndSubmit(wrapper, '   ');
+      expect(createWorkspace).not.toHaveBeenCalled();
+      // The button says so too, rather than only the handler refusing on submit.
+      expect(form(wrapper).get('button[type="submit"]').attributes('disabled')).toBeDefined();
+    });
+
+    it('says what the cap is when the server refuses one, and selects nothing', async () => {
+      createWorkspace.mockRejectedValue(
+        Object.assign(new Error('WORKSPACE_LIMIT_REACHED'), { status: 409, limit: 10 }),
+      );
+      const wrapper = await openSettings();
+
+      await fillAndSubmit(wrapper, 'One Too Many');
+
+      expect(group(wrapper).get('.settings-error').text()).toContain('up to 10 workspaces');
+      expect(selectWorkspace).not.toHaveBeenCalled();
+      // Still where the session was: a refused create changes nothing on screen.
+      expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    });
+
+    it('says a refused name is a refused name', async () => {
+      createWorkspace.mockRejectedValue(
+        Object.assign(new Error('INVALID_WORKSPACE_NAME'), { status: 400 }),
+      );
+      const wrapper = await openSettings();
+
+      await fillAndSubmit(wrapper, 'Whatever The Server Hates');
+
+      expect(group(wrapper).get('.settings-error').text()).toContain('1–80 characters');
+      expect(selectWorkspace).not.toHaveBeenCalled();
     });
   });
 

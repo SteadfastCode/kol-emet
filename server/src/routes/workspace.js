@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import Workspace from '../models/Workspace.js';
 import { objectIdParam } from '../middleware/objectId.js';
+import { hasTemplate } from '../config/templates.js';
+import { createWorkspace } from '../lib/workspaceSeeder.js';
 import {
   WORKSPACE_NAME_MAX,
   defaultWorkspace,
@@ -49,10 +51,16 @@ import {
  *     let alone change it.
  *   - **`POST /workspaces/:id/select`** — makes one of them the workspace this
  *     session acts in, by writing `req.session.workspaceId`.
+ *   - **`POST /workspaces`** (KOL-123) — a second workspace, seeded from a
+ *     template or left empty. Until it existed, `POST /auth/register` was the
+ *     only thing in the product that had ever created one, so the list and the
+ *     choice above were a switcher with nothing to switch between.
  *
  * It deliberately does *not* sit behind `resolveWorkspace`: a membership list is
- * not content inside one workspace, and the choice must not be gated on the role
- * the caller happens to hold in the workspace they are leaving.
+ * not content inside one workspace, the choice must not be gated on the role the
+ * caller happens to hold in the workspace they are leaving, and a create is not
+ * something the caller does *inside* a workspace at all — they are not acting in
+ * the new one yet, and will not be until they select it.
  */
 
 const router = Router();
@@ -202,6 +210,134 @@ workspacesRouter.post('/:id/select', async (req, res, next) => {
     res.json(workspaceBody(workspace, role));
   } catch (err) {
     log('light', `failed to select workspace ${req.params.id} (source: POST /workspaces/:id/select by user ${userId}): ${err.message}`);
+    next(err);
+  }
+});
+
+/**
+ * The ceiling on how many workspaces one account may **own**, overridable per
+ * deployment with `WORKSPACE_MAX_PER_OWNER`.
+ *
+ * `POST /workspaces` is an authenticated create loop on an open-registration
+ * product, and each create writes a `Workspace` plus a whole template seed —
+ * 38 relationship types and starter content (lib/workspaceSeeder.js). The
+ * signup ceiling is the precedent (KOL-050, KOL-081): a refusal with its own
+ * error code is far cheaper to run than a quota somebody has to administer,
+ * and this is a number, not a policy.
+ *
+ * Owned rather than joined, because a membership can arrive unasked once
+ * invites land (KOL-124) and being invited into other people's workspaces must
+ * not be able to use up a user's own allowance. Read per call rather than at
+ * module load, like every log level here, so a test can set it.
+ */
+export const WORKSPACE_MAX_PER_OWNER = 10;
+
+function ownedLimit() {
+  const configured = Number(process.env.WORKSPACE_MAX_PER_OWNER);
+  return Number.isInteger(configured) && configured > 0 ? configured : WORKSPACE_MAX_PER_OWNER;
+}
+
+/** How many workspaces `userId` is an `owner` of — the thing the cap counts. */
+function countOwned(userId) {
+  // $elemMatch, not two dotted paths: `{'members.userId': u, 'members.role':
+  // 'owner'}` matches a document where *some* member is this user and *some*
+  // member is an owner, which is any workspace they are a viewer in.
+  return Workspace.countDocuments({ members: { $elemMatch: { userId, role: 'owner' } } });
+}
+
+/**
+ * POST /workspaces — a second workspace, seeded from a template or left empty.
+ *
+ * Session only, like `/:id/select` above and for the same reason: the bearer
+ * identity `requireAuth` also admits is one shared secret mapped to a single
+ * wiki user (lib/mcpUserStore.js), so a workspace created through it would be
+ * owned by that user rather than by whoever is talking to the connector — and
+ * with no session to hold a selection in, nothing could ever act in it.
+ *
+ * What it reads from the body is `name` and `template`, and nothing else: a
+ * forged `members`, `ownerId`, `aiBudget` or `_id` is ignored, as on
+ * `PATCH /workspace`.
+ *
+ *   - **`name`** goes through `workspaceName()`, the one rule `PATCH /workspace`
+ *     and registration's optional `workspaceName` already share, so the three
+ *     cannot drift apart: trimmed, 1–`WORKSPACE_NAME_MAX` code points, and
+ *     anything else is 400 `INVALID_WORKSPACE_NAME`. Deliberately **not**
+ *     unique: two workspaces of one name are a user's business, and a uniqueness
+ *     rule would be a second thing to explain in a refusal.
+ *   - **`template`** names what it is seeded with. Absent is the default, the
+ *     same as registration; a key that names no template is refused in
+ *     registration's words (`Unknown template`, KOL-031) rather than quietly
+ *     seeding the default into a workspace nobody asked for that; and **`null`
+ *     seeds nothing**, which is the shape registration has no use for — an
+ *     empty workspace is where `POST /import` can land, since it refuses a
+ *     non-empty one (409 `WORKSPACE_NOT_EMPTY`) and the one workspace an
+ *     account used to have was seeded at signup.
+ *   - **The creator is its `owner`** — the role, in `members`, which is what
+ *     every gate judges, not merely `ownerId`.
+ *
+ * **It does not select the new workspace.** The client calls
+ * `POST /workspaces/:id/select` afterwards, so that route stays the only writer
+ * of `req.session.workspaceId` — a create that also selected would be a second
+ * writer of the one piece of state KOL-090 exists to make unambiguous, and the
+ * tab that asked for it has to reload either way.
+ *
+ * **201**, with the new workspace in the `workspaceBody` shape every other
+ * route here answers in, so a client can put it straight into the list it is
+ * holding.
+ */
+workspacesRouter.post('/', async (req, res, next) => {
+  const userId = req.session?.userId;
+  if (!userId) {
+    log('light', `refused POST /workspaces with 401 (source: a caller with no login session; a workspace is created for a person, and the bearer identity is one shared secret mapped to a single user)`);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const name = workspaceName(req.body?.name);
+  if (!name) {
+    log('light', `refused POST /workspaces for user ${userId} and wrote nothing: ${describeName(req.body?.name)} is not a name of 1–${WORKSPACE_NAME_MAX} characters`);
+    return res.status(400).json({ error: 'INVALID_WORKSPACE_NAME' });
+  }
+
+  // `null` is the one non-string this accepts, and it means "seed nothing".
+  const { template } = req.body ?? {};
+  if (template !== undefined && template !== null && !hasTemplate(template)) {
+    log('light', `refused POST /workspaces for user ${userId} and wrote nothing: template ${String(JSON.stringify(template)).slice(0, 80)} names no template`);
+    return res.status(400).json({ error: 'Unknown template' });
+  }
+
+  try {
+    // Before the writes, so a refused create costs no seed — the expensive half.
+    //
+    // Honest limit: this is a count read before the write rather than a
+    // reservation taken atomically with it, so N creates that arrive together
+    // can all read the same count and pass. Unlike the signup window KOL-081
+    // closed, the overshoot here is one-shot and bounded by the caller's own
+    // concurrency: every later request sees the higher count and is refused,
+    // so an account cannot mint another burst per window. Closing it properly
+    // needs either a transaction (the deployment is a single mongod — see
+    // routes/import.js) or an owned-count field on `User` kept in step with
+    // reality by every create, delete and future membership change, which is a
+    // second source of truth for a number the workspaces themselves already
+    // state.
+    const limit = ownedLimit();
+    const owned = await countOwned(userId);
+    if (owned >= limit) {
+      log('light', `refused POST /workspaces for user ${userId} with 409 and wrote nothing: they already own ${owned} workspace(s), at the cap of ${limit} (source: WORKSPACE_MAX_PER_OWNER)`);
+      return res.status(409).json({ error: 'WORKSPACE_LIMIT_REACHED', limit });
+    }
+
+    const { workspace, templateKey, seed } = await createWorkspace({
+      name,
+      ownerId: userId,
+      template,
+      source: `POST /workspaces by user ${userId}`,
+    });
+
+    log('light', `user ${userId} owns ${owned + 1} of ${limit} workspace(s) after creating ${workspace._id} "${workspace.name}" from ${templateKey ? `template "${templateKey}"` : 'no template (empty)'}${seed.ok ? '' : ' — seeding failed, the workspace is usable but bare'}; this session still acts in ${req.session.workspaceId ?? 'the default'}, since only POST /workspaces/:id/select changes that (source: POST /workspaces)`);
+    log('verbose', `seed counts: ${JSON.stringify(seed.counts ?? {})}`);
+    res.status(201).json(workspaceBody(workspace, 'owner'));
+  } catch (err) {
+    log('light', `failed to create workspace "${name}" for user ${userId} (source: POST /workspaces): ${err.message}`);
     next(err);
   }
 });

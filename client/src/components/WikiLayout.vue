@@ -150,10 +150,11 @@
           <p v-else-if="workspace" class="settings-note">
             Only an owner can rename this workspace. Your role here is {{ workspace.role }}.
           </p>
-          <!-- The switcher (KOL-090): which of this user's workspaces the session acts in. Only
-               when there is more than one — with a single membership there is nothing to choose
-               between, which is every account until invites land. -->
-          <div v-if="workspaces.length > 1" class="workspace-switcher">
+          <!-- The switcher (KOL-090): which of this user's workspaces the session acts in. Shown
+               for a single membership too since KOL-123 — it used to hide itself there, on the
+               grounds that there was nothing to choose between, but a user can now create a
+               second workspace in the form below and this is where it appears. -->
+          <div v-if="workspaces.length" class="workspace-switcher">
             <label class="workspace-switcher-label" for="workspace-switcher">Acting in</label>
             <select
               id="workspace-switcher"
@@ -172,6 +173,43 @@
               workspace selected here. Switching reloads the page.
             </p>
           </div>
+          <!-- A second workspace (KOL-123). Beside the switcher because the two are one thought:
+               this is where another workspace comes from, that is where you go to it. "Empty"
+               is a real choice, not an omission — an import only writes into an empty workspace. -->
+          <form class="workspace-create" @submit.prevent="createNewWorkspace">
+            <label class="workspace-switcher-label" for="new-workspace-name">New workspace</label>
+            <input
+              id="new-workspace-name"
+              v-model="newWorkspaceName"
+              class="workspace-input"
+              type="text"
+              name="new-workspace-name"
+              autocomplete="off"
+              placeholder="Name"
+              :maxlength="WORKSPACE_NAME_MAX"
+              :disabled="workspaceCreating"
+            />
+            <label class="workspace-switcher-label" for="new-workspace-template">Start with</label>
+            <select
+              id="new-workspace-template"
+              v-model="newWorkspaceTemplate"
+              class="workspace-input"
+              name="new-workspace-template"
+              :disabled="workspaceCreating"
+            >
+              <option v-for="choice in templates" :key="choice.key" :value="choice.key">
+                {{ choice.name }}
+              </option>
+              <option :value="EMPTY_TEMPLATE">Empty — nothing to start from</option>
+            </select>
+            <button type="submit" class="btn-sm" :disabled="workspaceCreating || !newWorkspaceReady">
+              {{ workspaceCreating ? 'Creating…' : 'Create' }}
+            </button>
+            <p class="settings-note">
+              Creates a workspace you own and switches this tab to it, which reloads the page.
+              Nothing moves across — each workspace has its own entities, types and relationships.
+            </p>
+          </form>
           <p v-if="workspaceError" class="settings-error" role="alert">{{ workspaceError }}</p>
         </div>
         <div class="settings-group">
@@ -410,6 +448,7 @@ import TagSettings from './TagSettings.vue';
 import {
   changePassword,
   changePasswordWithPasskey,
+  getTemplates,
   PASSWORD_MIN_LENGTH,
   passwordTooShort,
   revokeOtherSessions,
@@ -417,7 +456,7 @@ import {
 } from '../api/auth.js';
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport, importWorkspaceFile } from '../api/export.js';
-import { getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
+import { createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -602,9 +641,18 @@ async function loadWorkspace() {
   } catch (err) {
     workspaceError.value = 'Could not load this workspace’s name.';
   }
-  // Its own request, and its own failure: a list that did not answer leaves the
-  // switcher hidden (one choice is the ordinary case anyway) rather than hiding
-  // the name above it.
+  await loadWorkspaceList();
+  loadTemplates();
+}
+
+/**
+ * The memberships behind the switcher. Its own request and its own failure: a
+ * list that did not answer leaves the switcher out rather than hiding the name
+ * above it. Separate from loadWorkspace() because a create refreshes exactly
+ * this — the new workspace is a membership, and the server's list is the one
+ * that decides the order (oldest first).
+ */
+async function loadWorkspaceList() {
   try {
     workspaces.value = await listWorkspaces({ source: 'Settings → Workspace' });
   } catch (err) {
@@ -675,6 +723,94 @@ async function switchWorkspace(id) {
       ? 'You are no longer a member of that workspace.'
       : 'Could not switch workspace.';
     workspaceSwitching.value = false;
+  }
+}
+
+/**
+ * Creating a second workspace (KOL-123).
+ *
+ * `POST /auth/register` was the only thing in the product that had ever created
+ * a workspace, so the switcher above had nothing to switch between. The form is
+ * beside it on purpose: this is where another workspace comes from.
+ *
+ * Two shapes the server distinguishes and so does this:
+ *
+ *   - **a template** seeds the new workspace with entity types, relationship
+ *     types and a little starter content, as signing up does;
+ *   - **Empty** (`template: null`) seeds nothing, which is the only kind of
+ *     workspace `POST /import` will write into — it refuses one that already
+ *     holds content, and before this item every workspace an account had was
+ *     seeded at signup.
+ *
+ * The create does **not** select what it creates — the server leaves
+ * `POST /workspaces/:id/select` as the only writer of which workspace a session
+ * acts in — so this follows it with the switcher's own `switchWorkspace()`,
+ * which selects and then reloads. Creating a workspace you then have to go and
+ * find is not what anyone means by the button.
+ */
+const EMPTY_TEMPLATE = '';          // the "Empty" option's value; sent as template: null
+const templates = ref([]);          // [{ key, name, description }] from GET /templates
+const newWorkspaceName = ref('');
+const newWorkspaceTemplate = ref(EMPTY_TEMPLATE);
+const workspaceCreating = ref(false);
+
+const newWorkspaceReady = computed(() => !!newWorkspaceName.value.trim());
+
+/**
+ * The template list, fetched once per page load on the first Settings open (it
+ * is code-defined and public — `GET /templates`). A failure is not fatal and is
+ * not an error in Settings: with no list the picker offers Empty alone, which
+ * is still a workspace, and the signup form takes the same view.
+ */
+async function loadTemplates() {
+  if (templates.value.length) return;
+  try {
+    const list = await getTemplates();
+    templates.value = Array.isArray(list) ? list : [];
+    // Default to a seeded workspace when there is a template to seed from —
+    // the same default signing up offers — and to Empty when there is not.
+    if (templates.value.length && newWorkspaceTemplate.value === EMPTY_TEMPLATE) {
+      newWorkspaceTemplate.value = templates.value[0].key;
+    }
+  } catch (err) {
+    console.warn('[WikiLayout] GET /templates failed; the New workspace picker offers Empty only:', err.message);
+  }
+}
+
+async function createNewWorkspace() {
+  if (workspaceCreating.value || !newWorkspaceReady.value) return;
+  const name = newWorkspaceName.value.trim();
+  const template = newWorkspaceTemplate.value === EMPTY_TEMPLATE ? null : newWorkspaceTemplate.value;
+  workspaceCreating.value = true;
+  workspaceError.value = '';
+  try {
+    const created = await createWorkspace(name, { template, source: 'Settings → Workspace → New workspace' });
+    newWorkspaceName.value = '';
+    addToast({
+      message: `Created ${created.name}`,
+      actorType: 'system',
+      actorLabel: 'Workspace',
+    });
+    // The switcher's list, so the new workspace is in it whether or not the
+    // switch below gets as far as reloading the page.
+    await loadWorkspaceList();
+    // Deliberately a second request, through the one route that writes the
+    // session's workspace. It reloads the page on success, so nothing after
+    // this runs in the ordinary case.
+    await switchWorkspace(created._id);
+  } catch (err) {
+    workspaceError.value = err.status === 409
+      ? `You can own up to ${err.limit ?? 'a limited number of'} workspaces. Delete one, or ask for more.`
+      : err.status === 400 && err.message === 'INVALID_WORKSPACE_NAME'
+      ? `A workspace name has to be 1–${WORKSPACE_NAME_MAX} characters.`
+      : err.status === 400
+      ? 'That is not a template this server offers. Reload and try again.'
+      : 'Could not create this workspace.';
+  } finally {
+    // Reset even on success, unlike the switcher: switchWorkspace() handles
+    // its own refusal rather than throwing, so a select that failed would
+    // otherwise leave this form disabled for good.
+    workspaceCreating.value = false;
   }
 }
 
@@ -1401,6 +1537,30 @@ provide('openSnapshot', openSnapshot);
 
 .workspace-switcher .workspace-input {
   width: 100%;
+}
+
+/* The New workspace form: stacked, so the name, the picker and the button each
+   get the full width the switcher above them has. */
+.workspace-create {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.workspace-create .workspace-switcher-label {
+  margin-bottom: 0;
+}
+
+.workspace-create .workspace-input {
+  width: 100%;
+}
+
+.workspace-create .btn-sm {
+  margin-top: 6px;
+  align-self: flex-start;
 }
 
 .settings-error {
