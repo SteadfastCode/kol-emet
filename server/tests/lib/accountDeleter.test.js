@@ -44,6 +44,7 @@ import BridgeMessage from '../../src/models/BridgeMessage.js';
 import BridgePresence from '../../src/models/BridgePresence.js';
 import RoutineRepo from '../../src/models/RoutineRepo.js';
 import RoutineItem from '../../src/models/RoutineItem.js';
+import WorkspaceInvite from '../../src/models/WorkspaceInvite.js';
 
 process.env.ACCOUNT_DELETE_LOG_LEVEL ??= 'off';
 
@@ -85,6 +86,11 @@ async function seedTenant(label) {
   await RoutineItem.create({ workspaceId, repo: `${label}-repo`, itemId: 'X-001', title: `${label} item`, state: 'pending', syncedAt: new Date() });
 
   await UserMemory.create({ workspaceId, userId: user._id, fact: `${label} rides the night train` });
+
+  // A collaborator invite this tenant issued (KOL-124), addressed to someone
+  // who is nobody's account here — so it is reachable only through its
+  // workspace, which is the pass that has to sweep it.
+  await WorkspaceInvite.create({ workspaceId, email: `${label}-invitee@example.test`, role: 'editor', invitedBy: user._id });
 
   // The rows that predate the column on their model: a chat from before
   // tenancy, and a memory from before KOL-091 gave UserMemory a workspace.
@@ -196,6 +202,29 @@ test('deletes a solely-owned workspace even when others are members of it', asyn
 
   assert.equal(result.ok, true);
   assert.deepEqual(await snapshot(), without(before, a), 'B keeps their account and workspace');
+});
+
+test('sweeps pending invites addressed to the deleted account, wherever they are', async () => {
+  const a = await seedTenant('a');
+  const b = await seedTenant('b');
+  // B invited A's address into B's workspace (KOL-124). A is not a member of
+  // it, so A's deletion is not refused — and the invite must not survive to be
+  // offered to whoever next registers that address, which would tell a stranger
+  // who had invited it where.
+  await WorkspaceInvite.create({
+    workspaceId: b.workspace._id,
+    email: 'a@example.test',
+    role: 'editor',
+    invitedBy: b.user._id,
+  });
+
+  const result = await deleteAccount(a.user._id);
+
+  assert.equal(result.ok, true);
+  assert.equal(await WorkspaceInvite.countDocuments({ email: 'a@example.test' }), 0, 'an invite to the deleted address survived');
+  assert.equal(result.deleted.WorkspaceInvite, 2, 'the one A issued in its own workspace, and the one addressed to A in B\'s');
+  // B keeps the invite it issued to a third party.
+  assert.equal(await WorkspaceInvite.countDocuments({ workspaceId: b.workspace._id }), 1, "B's own invite was swept with A's");
 });
 
 describe('refusing', () => {
@@ -336,6 +365,7 @@ describe('workspace-scoped writes that race the deletion', () => {
     BridgePresence: (workspaceId) => ({ workspaceId, host: 'late-host', sessions: [] }),
     RoutineRepo: (workspaceId) => ({ workspaceId, repo: 'late-repo', syncedAt: new Date() }),
     RoutineItem: (workspaceId) => ({ workspaceId, repo: 'late-repo', itemId: 'L-001', title: 'late item', state: 'pending', syncedAt: new Date() }),
+    WorkspaceInvite: (workspaceId, writerId) => ({ workspaceId, email: 'late-invitee@example.test', role: 'viewer', invitedBy: writerId }),
   };
 
   function lateDoc(model, a, b) {

@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import Workspace from '../models/Workspace.js';
+import WorkspaceInvite from '../models/WorkspaceInvite.js';
+import User from '../models/User.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { hasTemplate } from '../config/templates.js';
 import { createWorkspace } from '../lib/workspaceSeeder.js';
 import {
   WORKSPACE_NAME_MAX,
   defaultWorkspace,
+  isRole,
+  memberEmail,
   membershipOf,
   requireWorkspaceRole,
   resolveUserId,
@@ -120,6 +124,293 @@ router.patch('/', requireWorkspaceRole('owner'), async (req, res, next) => {
     res.json(workspaceBody({ ...before, name }, req.workspaceRole));
   } catch (err) {
     log('light', `failed to rename workspace ${req.workspaceId} to "${name}" (source: PATCH /workspace by user ${req.actingUserId}): ${err.message}`);
+    next(err);
+  }
+});
+
+/* ─── Collaborators (KOL-124) ───────────────────────────────────────────────
+ *
+ * The routes that can finally produce a member who is not the owner. Roles
+ * have been in the schema since KOL-071 and gated on since KOL-103, but
+ * registration wrote the single owner and nothing added, re-roled or removed a
+ * membership — so `editor` and `viewer` were unreachable outside the tests.
+ *
+ * **An invite names an email address and delivers nothing** (see
+ * models/WorkspaceInvite.js for why, and what follows from it).
+ *
+ *   - `POST   /workspace/invites`             — owner: invite an address
+ *   - `GET    /workspace/invites`             — any member: who is pending
+ *   - `DELETE /workspace/invites/:inviteId`   — owner: withdraw one
+ *   - `GET    /workspace/members`             — any member: who is here
+ *   - `PATCH  /workspace/members/:userId`     — owner: change a role
+ *   - `DELETE /workspace/members/:userId`     — owner: remove a membership
+ *
+ * The two reads are **role-blind on purpose**: knowing who else is in a
+ * workspace, and who has been asked to join it, is part of working in one, and
+ * every read on a content route is already open to a viewer (KOL-103). Every
+ * *write* here is `requireWorkspaceRole('owner')` — on the route rather than at
+ * the mount, because the two reads beside them must stay open.
+ *
+ * **The workspace always keeps one owner.** The last owner cannot be demoted or
+ * removed (409 `LAST_OWNER`) — the mirror of KOL-025's "an account keeps one
+ * way in": a workspace with no owner could never be renamed, invited into or
+ * deleted again, by anyone. `Workspace.ownerId` is kept pointing at a member
+ * who holds the role: when the holder is demoted or removed it moves to another
+ * owner, so `lib/accountDeleter.js` — which reads `ownerId` to decide whether a
+ * workspace is solely owned — cannot be left refusing to delete the account of
+ * someone who is no longer a member at all.
+ *
+ * An invite to someone who is already a member is 409 `ALREADY_A_MEMBER`;
+ * re-inviting an address that is already pending updates that invite's role
+ * rather than leaving two rows that disagree.
+ */
+
+// A malformed id is 400 INVALID_ID before the route runs, as on every other
+// router that takes one (middleware/objectId.js). A *well-formed* id that is
+// not an invite of this workspace, or not a member of it, stays 404 below.
+router.param('inviteId', objectIdParam('inviteId'));
+router.param('userId', objectIdParam('userId'));
+
+/** The response shape for an invite as the *workspace* sees it. */
+const inviteBody = (doc) => ({
+  _id: doc._id,
+  email: doc.email,
+  role: doc.role,
+  invitedBy: doc.invitedBy,
+  createdAt: doc.createdAt,
+});
+
+/** The members array of the resolved workspace, or null if it is gone. */
+async function membersOf(workspaceId) {
+  const workspace = await Workspace.findById(workspaceId).select('_id name ownerId members createdAt').lean();
+  return workspace ?? null;
+}
+
+/** Those members holding `owner` — what the last-owner guard counts. */
+const ownersOf = (workspace) => (workspace.members ?? []).filter(m => m.role === 'owner');
+
+/**
+ * Keeps `Workspace.ownerId` naming a member who holds the owner role.
+ *
+ * `ownerId` is a separate field from the `members` array, and it is what
+ * account deletion judges sole ownership by. Left alone, demoting or removing
+ * the user it names would leave it pointing at a non-owner — or at someone who
+ * is not a member at all, whose own account could then never be deleted
+ * (lib/accountDeleter.js would see a workspace they "own" but do not solely
+ * own, and refuse). So it moves to another owner.
+ *
+ * `members` is the array *after* the change. Returns the id it should hold, or
+ * the current one when that is still an owner.
+ */
+function ownerIdAfter(workspace, members) {
+  const stillAnOwner = members.some(m => m.role === 'owner' && String(m.userId) === String(workspace.ownerId));
+  if (stillAnOwner) return null;
+  const next = members.find(m => m.role === 'owner');
+  return next ? next.userId : null;
+}
+
+// POST /workspace/invites — invite an address to this workspace. Owners only.
+router.post('/invites', requireWorkspaceRole('owner'), async (req, res, next) => {
+  const email = memberEmail(req.body?.email);
+  const role = req.body?.role === undefined ? 'editor' : req.body.role;
+
+  if (!email) {
+    log('light', `refused POST /workspace/invites in workspace ${req.workspaceId} and wrote nothing (source: user ${req.actingUserId}, role ${req.workspaceRole}): email is ${typeof req.body?.email === 'string' ? 'blank' : `a ${req.body?.email === null ? 'null' : typeof req.body?.email}`}, not an address`);
+    return res.status(400).json({ error: 'INVALID_EMAIL' });
+  }
+  if (!isRole(role)) {
+    log('light', `refused POST /workspace/invites in workspace ${req.workspaceId} and wrote nothing (source: user ${req.actingUserId}): role ${JSON.stringify(role)} is not owner, editor or viewer`);
+    return res.status(400).json({ error: 'INVALID_ROLE' });
+  }
+
+  try {
+    const workspace = await membersOf(req.workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Not found' });
+
+    // Already a member? The one thing an invite form *does* reveal about an
+    // address, and only to someone who can read the member list anyway.
+    const member = await User.findOne({ email }).select('_id').lean();
+    if (member && membershipOf(workspace, member._id)) {
+      log('light', `refused POST /workspace/invites in workspace ${req.workspaceId} with 409 and wrote nothing (source: user ${req.actingUserId}): that address is already a ${membershipOf(workspace, member._id).role} here`);
+      return res.status(409).json({ error: 'ALREADY_A_MEMBER' });
+    }
+
+    // Upsert on (workspaceId, email), the pair the unique index covers: a
+    // second invite to the same address is the same invitation with a possibly
+    // different role, not a second row. `invitedBy` moves with it, so the
+    // invitee is told who asked most recently.
+    const before = await WorkspaceInvite.findOneAndUpdate(
+      { workspaceId: req.workspaceId, email },
+      { $set: { role, invitedBy: req.actingUserId } },
+      { new: false, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    ).lean();
+
+    const invite = await WorkspaceInvite.findOne({ workspaceId: req.workspaceId, email }).lean();
+    // Nothing here says whether that address has an account: the body is the
+    // same either way, which is what keeps the form from being a way to ask
+    // who has registered.
+    log('light', `${before ? `re-invited ${email} to workspace ${req.workspaceId} as ${role}, replacing the pending ${before.role} invite` : `invited ${email} to workspace ${req.workspaceId} as ${role}`}; no mail was sent and no link was minted (source: POST /workspace/invites by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    res.status(before ? 200 : 201).json(inviteBody(invite));
+  } catch (err) {
+    log('light', `failed to invite ${email} to workspace ${req.workspaceId} (source: POST /workspace/invites by user ${req.actingUserId}): ${err.message}`);
+    next(err);
+  }
+});
+
+// GET /workspace/invites — the addresses waiting on this workspace. Any member.
+router.get('/invites', async (req, res, next) => {
+  try {
+    const invites = await WorkspaceInvite.find({ workspaceId: req.workspaceId })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean();
+
+    log('normal', `listed ${invites.length} pending invite(s) in workspace ${req.workspaceId} (source: GET /workspace/invites by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    res.json(invites.map(inviteBody));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /workspace/invites/:inviteId — withdraw one. Owners only.
+router.delete('/invites/:inviteId', requireWorkspaceRole('owner'), async (req, res, next) => {
+  try {
+    // Scoped to the resolved workspace, so an invite id from another tenant is
+    // a 404 and this cannot be used to withdraw someone else's invitation.
+    const invite = await WorkspaceInvite.findOneAndDelete({
+      _id: req.params.inviteId,
+      workspaceId: req.workspaceId,
+    }).lean();
+
+    if (!invite) {
+      log('light', `withdrew nothing for invite ${req.params.inviteId}: no such invite in workspace ${req.workspaceId} (source: DELETE /workspace/invites/:inviteId by user ${req.actingUserId})`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    log('light', `withdrew the ${invite.role} invite for ${invite.email} in workspace ${req.workspaceId} (source: DELETE /workspace/invites/:inviteId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /workspace/members — who is in this workspace, and as what. Any member.
+router.get('/members', async (req, res, next) => {
+  try {
+    const workspace = await membersOf(req.workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Not found' });
+
+    // One query for every member's address, rather than one per member.
+    const users = await User.find({ _id: { $in: workspace.members.map(m => m.userId) } })
+      .select('_id email').lean();
+    const emailOf = new Map(users.map(u => [String(u._id), u.email]));
+
+    const body = workspace.members.map(m => ({
+      userId: m.userId,
+      // Null for a member whose account is gone — a row the product should not
+      // be able to produce, reported rather than hidden.
+      email: emailOf.get(String(m.userId)) ?? null,
+      role: m.role ?? null,
+      isOwner: String(m.userId) === String(workspace.ownerId),
+    }));
+
+    log('normal', `listed ${body.length} member(s) of workspace ${req.workspaceId} (source: GET /workspace/members by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    log('verbose', JSON.stringify(body));
+    res.json(body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /workspace/members/:userId — change a member's role. Owners only.
+router.patch('/members/:userId', requireWorkspaceRole('owner'), async (req, res, next) => {
+  const role = req.body?.role;
+  if (!isRole(role)) {
+    log('light', `refused PATCH /workspace/members/${req.params.userId} in workspace ${req.workspaceId} and wrote nothing (source: user ${req.actingUserId}): role ${JSON.stringify(role)} is not owner, editor or viewer`);
+    return res.status(400).json({ error: 'INVALID_ROLE' });
+  }
+
+  try {
+    const workspace = await membersOf(req.workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Not found' });
+
+    const member = membershipOf(workspace, req.params.userId);
+    if (!member) {
+      log('light', `refused PATCH /workspace/members/${req.params.userId} with 404 and wrote nothing: not a member of workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    if (member.role === role) {
+      log('normal', `PATCH /workspace/members/${req.params.userId} changed nothing: already ${role} in workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
+      return res.json({ userId: member.userId, role });
+    }
+
+    // The floor: a workspace keeps at least one owner, or nobody could ever
+    // rename it, invite into it or manage it again.
+    if (member.role === 'owner' && ownersOf(workspace).length <= 1) {
+      log('light', `refused PATCH /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} has one owner, and demoting them to ${role} would leave it with none (source: user ${req.actingUserId})`);
+      return res.status(409).json({ error: 'LAST_OWNER' });
+    }
+
+    const after = workspace.members.map(m => (
+      String(m.userId) === String(req.params.userId) ? { ...m, role } : m
+    ));
+    const nextOwnerId = ownerIdAfter(workspace, after);
+
+    await Workspace.updateOne(
+      { _id: req.workspaceId, 'members.userId': req.params.userId },
+      {
+        $set: {
+          'members.$.role': role,
+          ...(nextOwnerId && { ownerId: nextOwnerId }),
+        },
+      },
+    );
+
+    log('light', `member ${req.params.userId} of workspace ${req.workspaceId} is now ${role}, was ${member.role}${nextOwnerId ? `; ownerId moved to ${nextOwnerId}, the demoted owner no longer holds the role` : ''} (source: PATCH /workspace/members/:userId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    res.json({ userId: member.userId, role });
+  } catch (err) {
+    log('light', `failed to re-role member ${req.params.userId} of workspace ${req.workspaceId} (source: PATCH /workspace/members/:userId by user ${req.actingUserId}): ${err.message}`);
+    next(err);
+  }
+});
+
+// DELETE /workspace/members/:userId — remove a membership. Owners only.
+router.delete('/members/:userId', requireWorkspaceRole('owner'), async (req, res, next) => {
+  try {
+    const workspace = await membersOf(req.workspaceId);
+    if (!workspace) return res.status(404).json({ error: 'Not found' });
+
+    const member = membershipOf(workspace, req.params.userId);
+    if (!member) {
+      log('light', `refused DELETE /workspace/members/${req.params.userId} with 404 and wrote nothing: not a member of workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    if (member.role === 'owner' && ownersOf(workspace).length <= 1) {
+      log('light', `refused DELETE /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} has one owner (source: user ${req.actingUserId})`);
+      return res.status(409).json({ error: 'LAST_OWNER' });
+    }
+
+    const after = workspace.members.filter(m => String(m.userId) !== String(req.params.userId));
+    const nextOwnerId = ownerIdAfter(workspace, after);
+
+    await Workspace.updateOne(
+      { _id: req.workspaceId },
+      {
+        $pull: { members: { userId: req.params.userId } },
+        ...(nextOwnerId && { $set: { ownerId: nextOwnerId } }),
+      },
+    );
+
+    // Nothing is cleared from the removed member's session: resolveWorkspace
+    // re-reads the membership list on every request, so a selection of this
+    // workspace stops resolving on their very next one and falls back to a
+    // workspace they are still in (middleware/workspace.js). Their content
+    // stays — it belongs to the workspace, not to them.
+    log('light', `removed member ${req.params.userId} (${member.role}) from workspace ${req.workspaceId}${nextOwnerId ? `; ownerId moved to ${nextOwnerId}` : ''}; their next request resolves elsewhere (source: DELETE /workspace/members/:userId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    res.status(204).end();
+  } catch (err) {
+    log('light', `failed to remove member ${req.params.userId} from workspace ${req.workspaceId} (source: DELETE /workspace/members/:userId by user ${req.actingUserId}): ${err.message}`);
     next(err);
   }
 });
@@ -338,6 +629,173 @@ workspacesRouter.post('/', async (req, res, next) => {
     res.status(201).json(workspaceBody(workspace, 'owner'));
   } catch (err) {
     log('light', `failed to create workspace "${name}" for user ${userId} (source: POST /workspaces): ${err.message}`);
+    next(err);
+  }
+});
+
+/**
+ * `/invites` — the invitee's side (KOL-124).
+ *
+ * Its own router, mounted at `/invites` with `requireAuth` and **no**
+ * `resolveWorkspace`, for the reason `/workspaces` is mounted that way: an
+ * invitation is not content inside the workspace the caller is acting in — it
+ * is about one they are *not yet a member of*, so there is no role in it to
+ * gate on and nothing to scope to.
+ *
+ *   - `GET  /invites`             — the caller's own pending invites
+ *   - `POST /invites/:id/accept`  — writes the membership, drops the invite
+ *   - `POST /invites/:id/decline` — drops the invite
+ *
+ * **An invite is matched to the caller by the address their account is keyed
+ * by**, lowercased on both sides (`User.email`'s schema and
+ * models/WorkspaceInvite.js), so there is no token to hold and no id to guess:
+ * an invite addressed to someone else is a **404** on both verbs — never a 403,
+ * which would confirm it exists — and nothing is written.
+ *
+ * `GET` resolves the caller through `resolveUserId`, like `GET /workspaces`, so
+ * the bearer identity can read. The two writes are **session only**: accepting
+ * an invitation is a person's decision about their own account, and the bearer
+ * identity is one shared secret mapped to a single wiki user
+ * (lib/mcpUserStore.js) — a connector accepting on that user's behalf would
+ * join a workspace nobody asked to join.
+ *
+ * Accept does **not** select the new workspace: `POST /workspaces/:id/select`
+ * stays the only writer of which workspace a session acts in (KOL-090).
+ */
+export const invitesRouter = Router();
+
+invitesRouter.param('id', objectIdParam('id'));
+
+/** The caller's own email, as invites are keyed by it, or null. */
+async function callerEmail(userId) {
+  const user = await User.findById(userId).select('email').lean();
+  return user?.email ?? null;
+}
+
+/** The response shape for an invite as its *invitee* sees it. */
+const myInviteBody = (invite, workspace, inviterEmail) => ({
+  _id: invite._id,
+  workspaceId: invite.workspaceId,
+  // The name is the only thing that makes an invitation legible, and it is
+  // already being offered to this address — so it comes with the invite rather
+  // than needing a read of a workspace they are not in yet.
+  workspaceName: workspace?.name ?? null,
+  role: invite.role,
+  // Who asked. Their own address, which they disclosed by inviting.
+  invitedByEmail: inviterEmail ?? null,
+  createdAt: invite.createdAt,
+});
+
+// GET /invites — every workspace waiting for this account to join it.
+invitesRouter.get('/', async (req, res, next) => {
+  try {
+    const userId = await resolveUserId(req);
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const email = await callerEmail(userId);
+    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+
+    const invites = await WorkspaceInvite.find({ email }).sort({ createdAt: 1, _id: 1 }).lean();
+    const workspaces = await Workspace.find({ _id: { $in: invites.map(i => i.workspaceId) } })
+      .select('_id name').lean();
+    const inviters = await User.find({ _id: { $in: invites.map(i => i.invitedBy) } })
+      .select('_id email').lean();
+    const nameOf = new Map(workspaces.map(w => [String(w._id), w]));
+    const emailOf = new Map(inviters.map(u => [String(u._id), u.email]));
+
+    const body = invites.map(invite => myInviteBody(
+      invite,
+      nameOf.get(String(invite.workspaceId)),
+      emailOf.get(String(invite.invitedBy)),
+    ));
+
+    log('normal', `listed ${body.length} invite(s) for user ${userId} (source: GET /invites, matched on their account address)`);
+    log('verbose', JSON.stringify(body));
+    res.json(body);
+  } catch (err) {
+    log('light', `failed to list invites (source: GET /invites): ${err.message}`);
+    next(err);
+  }
+});
+
+/**
+ * The invite `:id` if it is addressed to this session's own account, else null.
+ * One query, so the ownership test *is* the lookup: an id belonging to someone
+ * else cannot be read, let alone acted on.
+ */
+async function ownInvite(req) {
+  const email = await callerEmail(req.session.userId);
+  if (!email) return null;
+  return await WorkspaceInvite.findOne({ _id: req.params.id, email }).lean();
+}
+
+// POST /invites/:id/accept — join the workspace, as the role the invite names.
+invitesRouter.post('/:id/accept', async (req, res, next) => {
+  const userId = req.session?.userId;
+  if (!userId) {
+    log('light', `refused POST /invites/${req.params.id}/accept with 401 (source: a caller with no login session; joining a workspace is a person's decision, and the bearer identity is one shared secret)`);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const invite = await ownInvite(req);
+    if (!invite) {
+      log('light', `refused POST /invites/${req.params.id}/accept with 404 and wrote nothing (source: user ${userId}; no invite with that id is addressed to their account)`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    // The membership first, the invite second: a crash between the two leaves a
+    // stale invite whose accept is idempotent (below), never a dropped invite
+    // with no membership to show for it.
+    const joined = await Workspace.findOneAndUpdate(
+      { _id: invite.workspaceId, 'members.userId': { $ne: userId } },
+      { $push: { members: { userId, role: invite.role } } },
+      { new: true },
+    ).select('_id name members createdAt').lean();
+
+    const workspace = joined ?? await Workspace.findById(invite.workspaceId)
+      .select('_id name members createdAt').lean();
+
+    if (!workspace) {
+      // The workspace was deleted while the invite waited. Drop the invite:
+      // there is nothing left to join, and it would otherwise be a permanent
+      // offer of a workspace that no longer exists.
+      await WorkspaceInvite.deleteOne({ _id: invite._id });
+      log('light', `dropped invite ${invite._id} on accept: workspace ${invite.workspaceId} no longer exists (source: POST /invites/:id/accept by user ${userId})`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    await WorkspaceInvite.deleteOne({ _id: invite._id });
+
+    const role = membershipOf(workspace, userId)?.role ?? null;
+    log('light', `user ${userId} ${joined ? `joined workspace ${workspace._id} "${workspace.name}" as ${invite.role}` : `was already a ${role} of workspace ${workspace._id} "${workspace.name}", so the invite was dropped and no membership written`}; this session still acts where it did, since only POST /workspaces/:id/select changes that (source: POST /invites/:id/accept, invite ${invite._id} from user ${invite.invitedBy})`);
+    res.json(workspaceBody(workspace, role));
+  } catch (err) {
+    log('light', `failed to accept invite ${req.params.id} for user ${userId} (source: POST /invites/:id/accept): ${err.message}`);
+    next(err);
+  }
+});
+
+// POST /invites/:id/decline — drop it. Nothing tells the inviter.
+invitesRouter.post('/:id/decline', async (req, res, next) => {
+  const userId = req.session?.userId;
+  if (!userId) {
+    log('light', `refused POST /invites/${req.params.id}/decline with 401 (source: a caller with no login session)`);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const invite = await ownInvite(req);
+    if (!invite) {
+      log('light', `refused POST /invites/${req.params.id}/decline with 404 and wrote nothing (source: user ${userId}; no invite with that id is addressed to their account)`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    await WorkspaceInvite.deleteOne({ _id: invite._id });
+    log('light', `user ${userId} declined the ${invite.role} invite to workspace ${invite.workspaceId} from user ${invite.invitedBy}; the invite is gone and the inviter is not told (source: POST /invites/:id/decline)`);
+    res.status(204).end();
+  } catch (err) {
+    log('light', `failed to decline invite ${req.params.id} for user ${userId} (source: POST /invites/:id/decline): ${err.message}`);
     next(err);
   }
 });

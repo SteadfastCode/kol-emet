@@ -212,6 +212,90 @@
           </form>
           <p v-if="workspaceError" class="settings-error" role="alert">{{ workspaceError }}</p>
         </div>
+        <!-- Invitations waiting for this account (KOL-124). Above the collaborator list because
+             it is about a workspace you are not in yet — and because nothing delivers an invite,
+             this is the only place one is ever seen. Hidden when there are none. -->
+        <div v-if="myInvites.length" class="settings-group">
+          <div class="settings-group-title">Invitations for you</div>
+          <div v-for="invite in myInvites" :key="invite._id" class="invite-row">
+            <span class="invite-label">
+              {{ invite.workspaceName ?? 'A workspace' }} — {{ invite.role }}
+              <span class="invite-from">from {{ invite.invitedByEmail ?? 'someone here' }}</span>
+            </span>
+            <button class="btn-sm" :disabled="inviteBusy" @click="acceptMyInvite(invite)">Accept</button>
+            <button class="btn-sm" :disabled="inviteBusy" @click="declineMyInvite(invite)">Decline</button>
+          </div>
+          <p class="settings-note">
+            Accepting adds the workspace to “Acting in” above; this tab stays where it is until you
+            switch to it. Declining removes the invitation and does not tell whoever sent it.
+          </p>
+        </div>
+        <!-- Collaborators (KOL-124): who is in this workspace, and the owner's invite form. The
+             list is shown to every member — working together means knowing who with — while every
+             control on it is an owner's. -->
+        <div class="settings-group">
+          <div class="settings-group-title">Collaborators</div>
+          <div v-for="member in members" :key="member.userId" class="member-row">
+            <span class="member-email">{{ member.email ?? 'an account that no longer exists' }}</span>
+            <template v-if="workspace?.role === 'owner'">
+              <select
+                class="workspace-input member-role"
+                :aria-label="`Role of ${member.email ?? member.userId}`"
+                :value="member.role"
+                :disabled="memberBusy"
+                @change="changeMemberRole(member, $event.target.value)"
+              >
+                <option v-for="role in ROLES" :key="role" :value="role">{{ role }}</option>
+              </select>
+              <button class="btn-sm" :disabled="memberBusy" @click="dropMember(member)">Remove</button>
+            </template>
+            <span v-else class="member-role-label">{{ member.role }}</span>
+          </div>
+          <form v-if="workspace?.role === 'owner'" class="invite-form" @submit.prevent="sendInvite">
+            <label class="workspace-switcher-label" for="invite-email">Invite by email</label>
+            <input
+              id="invite-email"
+              v-model="inviteEmail"
+              class="workspace-input"
+              type="email"
+              name="invite-email"
+              autocomplete="off"
+              placeholder="name@example.com"
+              :disabled="inviting"
+            />
+            <label class="workspace-switcher-label" for="invite-role">As</label>
+            <select
+              id="invite-role"
+              v-model="inviteRole"
+              class="workspace-input"
+              name="invite-role"
+              :disabled="inviting"
+            >
+              <option v-for="role in ROLES" :key="role" :value="role">{{ role }}</option>
+            </select>
+            <button type="submit" class="btn-sm" :disabled="inviting || !inviteReady">
+              {{ inviting ? 'Inviting…' : 'Invite' }}
+            </button>
+            <p class="settings-note">
+              No email is sent and no link is made — tell them yourself. They see the invitation in
+              their own Settings once they sign in to an account with that address, and nothing here
+              says whether that address has one yet. An editor may write; a viewer may only read.
+            </p>
+          </form>
+          <div v-if="pendingInvites.length" class="pending-invites">
+            <p class="settings-note">Invited, waiting to accept:</p>
+            <div v-for="invite in pendingInvites" :key="invite._id" class="invite-row">
+              <span class="invite-label">{{ invite.email }} — {{ invite.role }}</span>
+              <button
+                v-if="workspace?.role === 'owner'"
+                class="btn-sm"
+                :disabled="inviting"
+                @click="withdraw(invite)"
+              >Withdraw</button>
+            </div>
+          </div>
+          <p v-if="collabError" class="settings-error" role="alert">{{ collabError }}</p>
+        </div>
         <div class="settings-group">
           <div class="settings-group-title">Account</div>
           <button class="settings-row danger" @click="$emit('logout')">Log Out</button>
@@ -456,7 +540,11 @@ import {
 } from '../api/auth.js';
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport, importWorkspaceFile } from '../api/export.js';
-import { createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace, WORKSPACE_NAME_MAX } from '../api/workspace.js';
+import {
+  acceptInvite, createWorkspace, declineInvite, getWorkspace, inviteCollaborator, listMembers,
+  listMyInvites, listWorkspaces, listWorkspaceInvites, removeMember, renameWorkspace,
+  selectWorkspace, setMemberRole, withdrawInvite, WORKSPACE_NAME_MAX,
+} from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
 import { useFilters } from '../composables/useFilters.js';
 import { useNavigation } from '../composables/useNavigation.js';
@@ -643,6 +731,8 @@ async function loadWorkspace() {
   }
   await loadWorkspaceList();
   loadTemplates();
+  loadCollaborators();
+  loadMyInvites();
 }
 
 /**
@@ -811,6 +901,193 @@ async function createNewWorkspace() {
     // its own refusal rather than throwing, so a select that failed would
     // otherwise leave this form disabled for good.
     workspaceCreating.value = false;
+  }
+}
+
+/**
+ * Collaborators (KOL-124): who is in this workspace, who has been asked, and
+ * the invitations waiting for this account.
+ *
+ * Roles have been enforced on every content write since KOL-103 and said out
+ * loud in this very group ("Your role here is …") since KOL-071, while nothing
+ * in the product could produce a member who was not the owner. This is where
+ * one comes from.
+ *
+ * **An invite names an email address and delivers nothing.** No mail is sent
+ * and no link is minted, so the form says so: the inviter passes the word on
+ * themselves, and the invitee finds the invitation here. The note also stays
+ * silent about whether the address has an account, because the server
+ * deliberately does not say — an invite form must not be a way to ask who has
+ * registered.
+ *
+ * Each list is its own request with its own failure, like the switcher above: a
+ * member list that did not answer leaves that part out rather than taking the
+ * workspace name with it. The owner's controls are hidden for a non-owner
+ * rather than decided here — the server refuses them either way with
+ * `403 NOT_WORKSPACE_OWNER`.
+ *
+ * Accepting does not move this tab: the server leaves which workspace a session
+ * acts in to `POST /workspaces/:id/select`, so a new membership appears in the
+ * switcher and going there stays one deliberate choice.
+ */
+const ROLES = ['owner', 'editor', 'viewer'];
+
+const members = ref([]);            // [{ userId, email, role, isOwner }] from GET /workspace/members
+const pendingInvites = ref([]);     // the addresses waiting on this workspace
+const myInvites = ref([]);          // the invitations waiting for this account
+const inviteEmail = ref('');
+const inviteRole = ref('editor');
+const inviting = ref(false);
+const memberBusy = ref(false);
+const inviteBusy = ref(false);
+const collabError = ref('');
+
+const inviteReady = computed(() => !!inviteEmail.value.trim());
+
+/** The member list and the pending invites, both open to every member. */
+async function loadCollaborators() {
+  try {
+    members.value = await listMembers({ source: 'Settings → Collaborators' });
+  } catch (err) {
+    members.value = [];
+  }
+  try {
+    pendingInvites.value = await listWorkspaceInvites({ source: 'Settings → Collaborators' });
+  } catch (err) {
+    pendingInvites.value = [];
+  }
+}
+
+/** This account's own invitations — about workspaces it is not a member of yet. */
+async function loadMyInvites() {
+  try {
+    myInvites.value = await listMyInvites({ source: 'Settings → Invitations for you' });
+  } catch (err) {
+    myInvites.value = [];
+  }
+}
+
+/** What a refusal from one of these routes says to the person who caused it. */
+function collaboratorMessage(err, fallback) {
+  if (err.message === 'ALREADY_A_MEMBER') return 'That address is already a member of this workspace.';
+  if (err.message === 'LAST_OWNER') return 'A workspace has to keep at least one owner.';
+  if (err.message === 'INVALID_EMAIL') return 'That is not an email address.';
+  if (err.message === 'INVALID_ROLE') return 'Pick owner, editor or viewer.';
+  if (err.status === 403) return 'Only an owner can manage collaborators here.';
+  if (err.status === 404) return 'That is no longer there — reopening Settings will refresh it.';
+  return fallback;
+}
+
+async function sendInvite() {
+  if (inviting.value || !inviteReady.value) return;
+  const email = inviteEmail.value.trim();
+  inviting.value = true;
+  collabError.value = '';
+  try {
+    const invite = await inviteCollaborator(email, { role: inviteRole.value, source: 'Settings → Collaborators → Invite' });
+    inviteEmail.value = '';
+    addToast({
+      message: `${invite.email} is invited as ${invite.role}. Tell them — no email is sent.`,
+      actorLabel: 'Workspace',
+    });
+    await loadCollaborators();
+  } catch (err) {
+    collabError.value = collaboratorMessage(err, 'Could not send that invitation.');
+  } finally {
+    inviting.value = false;
+  }
+}
+
+async function withdraw(invite) {
+  if (inviting.value) return;
+  inviting.value = true;
+  collabError.value = '';
+  try {
+    await withdrawInvite(invite._id, { email: invite.email, source: 'Settings → Collaborators → Withdraw' });
+    await loadCollaborators();
+  } catch (err) {
+    collabError.value = collaboratorMessage(err, 'Could not withdraw that invitation.');
+  } finally {
+    inviting.value = false;
+  }
+}
+
+async function changeMemberRole(member, role) {
+  if (memberBusy.value || !role || role === member.role) return;
+  memberBusy.value = true;
+  collabError.value = '';
+  try {
+    await setMemberRole(member.userId, role, {
+      from: member.role,
+      email: member.email,
+      source: 'Settings → Collaborators → role',
+    });
+    addToast({ message: `${member.email ?? 'That member'} is now ${role}`, actorLabel: 'Workspace' });
+  } catch (err) {
+    collabError.value = collaboratorMessage(err, 'Could not change that role.');
+  } finally {
+    // Re-read either way: a refusal must leave the select showing the role the
+    // server still holds, not the one that was clicked.
+    await loadCollaborators();
+    memberBusy.value = false;
+  }
+}
+
+
+async function dropMember(member) {
+  if (memberBusy.value) return;
+  memberBusy.value = true;
+  collabError.value = '';
+  try {
+    await removeMember(member.userId, {
+      email: member.email,
+      role: member.role,
+      source: 'Settings → Collaborators → Remove',
+    });
+    addToast({
+      message: `${member.email ?? 'That member'} no longer has access. Their content stays here.`,
+      actorLabel: 'Workspace',
+    });
+  } catch (err) {
+    collabError.value = collaboratorMessage(err, 'Could not remove that member.');
+  } finally {
+    await loadCollaborators();
+    memberBusy.value = false;
+  }
+}
+
+async function acceptMyInvite(invite) {
+  if (inviteBusy.value) return;
+  inviteBusy.value = true;
+  collabError.value = '';
+  try {
+    const joined = await acceptInvite(invite._id, { source: 'Settings → Invitations for you → Accept' });
+    addToast({
+      message: `Joined ${joined.name} as ${joined.role}. Switch to it in “Acting in” above.`,
+      actorLabel: 'Workspace',
+    });
+    // The switcher's list, because the new membership belongs in it; this tab
+    // stays where it is until the switcher is used.
+    await loadWorkspaceList();
+  } catch (err) {
+    collabError.value = collaboratorMessage(err, 'Could not accept that invitation.');
+  } finally {
+    await loadMyInvites();
+    inviteBusy.value = false;
+  }
+}
+
+async function declineMyInvite(invite) {
+  if (inviteBusy.value) return;
+  inviteBusy.value = true;
+  collabError.value = '';
+  try {
+    await declineInvite(invite._id, { workspaceName: invite.workspaceName, source: 'Settings → Invitations for you → Decline' });
+  } catch (err) {
+    collabError.value = collaboratorMessage(err, 'Could not decline that invitation.');
+  } finally {
+    await loadMyInvites();
+    inviteBusy.value = false;
   }
 }
 
@@ -1521,6 +1798,35 @@ provide('openSnapshot', openSnapshot);
 
 .workspace-input:focus { outline: none; border-color: #555; }
 .workspace-input:disabled { opacity: 0.5; }
+
+/* Collaborators (KOL-124): one row per member or invite — the address on the left, its
+   controls on the right, wrapping on a phone rather than overflowing. */
+.member-row,
+.invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+}
+.member-email,
+.invite-label {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #ddd;
+}
+.invite-from { color: #888; }
+.member-role-label { color: #888; text-transform: capitalize; }
+.member-role { flex: 0 0 auto; width: auto; padding: 0.25rem 0.4rem; }
+.invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.pending-invites { margin-top: 0.6rem; }
 
 .workspace-switcher {
   margin-top: 10px;

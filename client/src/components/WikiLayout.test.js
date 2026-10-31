@@ -124,6 +124,25 @@ vi.mock('../api/auth.js', () => ({
 // The switcher (KOL-090) reads GET /workspaces on the same open and POSTs the choice.
 // `POST /workspaces` creates a second one (KOL-123); the form sends it and then goes through
 // selectWorkspace, since the server leaves the selection to that one route.
+// Collaborators (KOL-124): the member list, the pending invites and this account's own
+// invitations are three more reads on each Settings open, and the invite form writes.
+const {
+  acceptInvite, declineInvite, inviteCollaborator, listMembers, listMyInvites,
+  listWorkspaceInvites, removeMember, setMemberRole, withdrawInvite,
+} = vi.hoisted(() => ({
+  acceptInvite: vi.fn(async () => ({ _id: 'w2', name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' })),
+  declineInvite: vi.fn(async () => undefined),
+  inviteCollaborator: vi.fn(async (email, { role } = {}) => ({ _id: 'i9', email, role: role ?? 'editor', invitedBy: 'u1', createdAt: '2026-10-30T00:00:00.000Z' })),
+  listMembers: vi.fn(async () => [
+    { userId: 'u1', email: 'alice@example.test', role: 'owner', isOwner: true },
+    { userId: 'u2', email: 'bob@example.test', role: 'editor', isOwner: false },
+  ]),
+  listMyInvites: vi.fn(async () => []),
+  listWorkspaceInvites: vi.fn(async () => []),
+  removeMember: vi.fn(async () => undefined),
+  setMemberRole: vi.fn(async (userId, role) => ({ userId, role })),
+  withdrawInvite: vi.fn(async () => undefined),
+}));
 const { createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace } = vi.hoisted(() => ({
   createWorkspace: vi.fn(async (name) => ({ _id: 'w9', name, role: 'owner', createdAt: '2026-10-20T00:00:00.000Z' })),
   getWorkspace: vi.fn(async () => ({ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
@@ -133,6 +152,8 @@ const { createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWo
 }));
 vi.mock('../api/workspace.js', () => ({
   createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace,
+  acceptInvite, declineInvite, inviteCollaborator, listMembers, listMyInvites,
+  listWorkspaceInvites, removeMember, setMemberRole, withdrawInvite,
   WORKSPACE_NAME_MAX: 80, default: getWorkspace,
 }));
 // One Escape case below mounts the generator overlay for real (KOL-084), and the overlay asks for
@@ -207,14 +228,16 @@ describe('WikiLayout entity types', () => {
 });
 
 describe('WikiLayout settings', () => {
-  it('opens with Workspace, then Account, then Password beside Passkeys, and Delete account last', () => {
+  it('opens with Workspace, then Collaborators, then Account, then Password beside Passkeys, and Delete account last', () => {
     const wrapper = shallowMount(WikiLayout);
 
     const titles = wrapper.findAll('.mobile-settings-panel .settings-group-title').map((t) => t.text());
     // Import sits directly under Export: they are the two halves of one file format (KOL-077).
+    // Collaborators follows Workspace, because it is about the same workspace (KOL-124).
+    // "Invitations for you" would sit between them, and is absent here: this account has none.
     expect(titles).toEqual([
-      'Workspace', 'Account', 'Password', 'Passkeys', 'Recently deleted', 'Export workspace',
-      'Import workspace', 'Tags', 'Delete account',
+      'Workspace', 'Collaborators', 'Account', 'Password', 'Passkeys', 'Recently deleted',
+      'Export workspace', 'Import workspace', 'Tags', 'Delete account',
     ]);
   });
 
@@ -666,6 +689,192 @@ describe('WikiLayout workspace group', () => {
     expect(group(wrapper).get('.settings-error').text()).toBe('Only an owner can rename this workspace.');
     // The name on screen is still the stored one, not the refused edit.
     expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+  });
+});
+
+/**
+ * Collaborators (KOL-124): the first thing in the product that can produce a member who is not
+ * the owner, and the one place an invitation is ever seen — nothing is delivered, so an invite
+ * that the UI did not show would be an invite nobody could accept.
+ *
+ * What these pin: the member list and both invite lists are read when Settings opens; the owner's
+ * controls are rendered for an owner and absent for anyone else (the server refuses them either
+ * way, so this is about not offering what will be refused); the form's address and role reach the
+ * API; a refusal is said in words next to the control that caused it, with the list re-read so the
+ * screen shows the server's state and not the click; and Accept/Decline reach the API and refresh
+ * the switcher's list, because a joined workspace belongs in it.
+ *
+ * Goes red if the group stops reading any of the three lists, if an owner-only control is rendered
+ * for an editor, if the "no email is sent" note is dropped, or if a refusal is swallowed.
+ */
+describe('WikiLayout collaborators', () => {
+  const OWNED = { _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' };
+  const MEMBERS = [
+    { userId: 'u1', email: 'alice@example.test', role: 'owner', isOwner: true },
+    { userId: 'u2', email: 'bob@example.test', role: 'editor', isOwner: false },
+  ];
+  const INVITATION = {
+    _id: 'i1',
+    workspaceId: 'w2',
+    workspaceName: 'The Shared Compendium',
+    role: 'editor',
+    invitedByEmail: 'carol@example.test',
+    createdAt: '2026-10-30T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    for (const mock of [
+      getWorkspace, listWorkspaces, listMembers, listWorkspaceInvites, listMyInvites,
+      inviteCollaborator, withdrawInvite, setMemberRole, removeMember, acceptInvite, declineInvite,
+    ]) mock.mockReset();
+    getWorkspace.mockResolvedValue({ ...OWNED });
+    listWorkspaces.mockResolvedValue([{ ...OWNED }]);
+    listMembers.mockResolvedValue(MEMBERS.map((m) => ({ ...m })));
+    listWorkspaceInvites.mockResolvedValue([]);
+    listMyInvites.mockResolvedValue([]);
+    inviteCollaborator.mockImplementation(async (email, { role } = {}) => ({ _id: 'i9', email, role: role ?? 'editor' }));
+    setMemberRole.mockImplementation(async (userId, role) => ({ userId, role }));
+    acceptInvite.mockResolvedValue({ _id: 'w2', name: INVITATION.workspaceName, role: 'editor', createdAt: INVITATION.createdAt });
+  });
+
+  const groupNamed = (wrapper, title) =>
+    wrapper.findAll('.mobile-settings-panel .settings-group')
+      .find((g) => g.get('.settings-group-title').text() === title);
+
+  async function openSettings() {
+    const wrapper = shallowMount(WikiLayout);
+    expect(listMembers).not.toHaveBeenCalled();   // nothing is fetched on page load
+    await settingsTab(wrapper).trigger('click');
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('reads the members and both invite lists when Settings opens, and names what asked', async () => {
+    const wrapper = await openSettings();
+
+    for (const mock of [listMembers, listWorkspaceInvites, listMyInvites]) {
+      expect(mock).toHaveBeenCalledTimes(1);
+      expect(mock.mock.calls[0][0]).toMatchObject({ source: expect.stringContaining('Settings') });
+    }
+    const rows = groupNamed(wrapper, 'Collaborators').findAll('.member-row');
+    expect(rows.map((r) => r.get('.member-email').text())).toEqual(['alice@example.test', 'bob@example.test']);
+  });
+
+  it('an owner gets a role select and a Remove for each member, plus the invite form', async () => {
+    const wrapper = await openSettings();
+    const group = groupNamed(wrapper, 'Collaborators');
+
+    const roles = group.findAll('.member-row select');
+    expect(roles.length).toBe(2);
+    expect(roles[1].element.value).toBe('editor');
+    expect(group.findAll('.member-row button').map((b) => b.text())).toEqual(['Remove', 'Remove']);
+    expect(group.find('form.invite-form').exists()).toBe(true);
+    // The honest part: nothing is delivered, so the form has to say so.
+    expect(group.get('form.invite-form .settings-note').text()).toContain('No email is sent');
+  });
+
+  it('a member who is not the owner reads the list and is offered no control on it', async () => {
+    getWorkspace.mockResolvedValue({ ...OWNED, role: 'editor' });
+    const wrapper = await openSettings();
+    const group = groupNamed(wrapper, 'Collaborators');
+
+    expect(group.findAll('.member-row select').length).toBe(0);
+    expect(group.findAll('.member-row button').length).toBe(0);
+    expect(group.find('form.invite-form').exists()).toBe(false);
+    expect(group.findAll('.member-role-label').map((r) => r.text())).toEqual(['owner', 'editor']);
+  });
+
+  it('the invite form sends the typed address and the chosen role, then clears and re-reads', async () => {
+    const wrapper = await openSettings();
+    const group = groupNamed(wrapper, 'Collaborators');
+
+    await group.get('#invite-email').setValue('  New.Person@Example.test  ');
+    await group.get('#invite-role').setValue('viewer');
+    await group.get('form.invite-form').trigger('submit');
+    await flushPromises();
+
+    expect(inviteCollaborator).toHaveBeenCalledTimes(1);
+    expect(inviteCollaborator.mock.calls[0][0]).toBe('New.Person@Example.test');
+    expect(inviteCollaborator.mock.calls[0][1]).toMatchObject({ role: 'viewer', source: expect.stringContaining('Settings') });
+    expect(group.get('#invite-email').element.value).toBe('');
+    expect(listWorkspaceInvites).toHaveBeenCalledTimes(2);   // the pending list, refreshed
+    expect(group.find('.settings-error').exists()).toBe(false);
+  });
+
+  it('says what a refused invite or role change was refused for, and keeps the server\'s state on screen', async () => {
+    inviteCollaborator.mockRejectedValue(Object.assign(new Error('ALREADY_A_MEMBER'), { status: 409 }));
+    setMemberRole.mockRejectedValue(Object.assign(new Error('LAST_OWNER'), { status: 409 }));
+    const wrapper = await openSettings();
+    const group = groupNamed(wrapper, 'Collaborators');
+
+    await group.get('#invite-email').setValue('bob@example.test');
+    await group.get('form.invite-form').trigger('submit');
+    await flushPromises();
+    expect(group.get('.settings-error').text()).toContain('already a member');
+
+    await group.findAll('.member-row select')[0].setValue('editor');
+    await flushPromises();
+    expect(group.get('.settings-error').text()).toBe('A workspace has to keep at least one owner.');
+    // Re-read after the refusal, so the select shows the role the server still holds.
+    expect(listMembers).toHaveBeenCalledTimes(2);
+    expect(group.findAll('.member-row select')[0].element.value).toBe('owner');
+  });
+
+  it('withdraws a pending invite and removes a member through the API', async () => {
+    listWorkspaceInvites.mockResolvedValue([{ _id: 'i7', email: 'waiting@example.test', role: 'editor' }]);
+    const wrapper = await openSettings();
+    const group = groupNamed(wrapper, 'Collaborators');
+
+    expect(group.get('.pending-invites .invite-label').text()).toContain('waiting@example.test');
+    await group.get('.pending-invites .invite-row button').trigger('click');
+    await flushPromises();
+    expect(withdrawInvite).toHaveBeenCalledWith('i7', expect.objectContaining({ email: 'waiting@example.test' }));
+
+    await group.findAll('.member-row button')[1].trigger('click');
+    await flushPromises();
+    expect(removeMember).toHaveBeenCalledWith('u2', expect.objectContaining({ email: 'bob@example.test', role: 'editor' }));
+  });
+
+  describe('invitations for this account', () => {
+    beforeEach(() => { listMyInvites.mockResolvedValue([{ ...INVITATION }]); });
+
+    it('names the workspace, the role and who asked', async () => {
+      const wrapper = await openSettings();
+      const group = groupNamed(wrapper, 'Invitations for you');
+
+      expect(group.get('.invite-label').text()).toContain('The Shared Compendium');
+      expect(group.get('.invite-label').text()).toContain('editor');
+      expect(group.get('.invite-from').text()).toContain('carol@example.test');
+    });
+
+    it('accepting reaches the API and refreshes the switcher, without moving this tab', async () => {
+      const wrapper = await openSettings();
+      const buttons = groupNamed(wrapper, 'Invitations for you').findAll('button');
+      expect(buttons.map((b) => b.text())).toEqual(['Accept', 'Decline']);
+
+      await buttons[0].trigger('click');
+      await flushPromises();
+
+      expect(acceptInvite).toHaveBeenCalledWith('i1', expect.objectContaining({ source: expect.stringContaining('Settings') }));
+      expect(listWorkspaces).toHaveBeenCalledTimes(2);   // the new membership belongs in the switcher
+      expect(selectWorkspace).not.toHaveBeenCalled();    // accepting is not selecting (KOL-090)
+      expect(listMyInvites).toHaveBeenCalledTimes(2);
+    });
+
+    it('declining reaches the API and the invitation goes', async () => {
+      const wrapper = await openSettings();
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[1].trigger('click');
+      listMyInvites.mockResolvedValue([]);
+      await flushPromises();
+
+      expect(declineInvite).toHaveBeenCalledWith('i1', expect.objectContaining({ workspaceName: 'The Shared Compendium' }));
+    });
+
+    it('is absent for an account with none', async () => {
+      listMyInvites.mockResolvedValue([]);
+      const wrapper = await openSettings();
+      expect(groupNamed(wrapper, 'Invitations for you')).toBeUndefined();
+    });
   });
 });
 

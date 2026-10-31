@@ -19,6 +19,11 @@
  *     model carried a workspace (chats before tenancy, memories before
  *     KOL-091) that still hold workspaceId: null;
  *   - Settings.mcpUserId, if the MCP connector was authorized as this user;
+ *   - every pending collaborator invite addressed to the account's own email
+ *     (KOL-124), which the workspace pass cannot reach: such a row lives in
+ *     *someone else's* workspace, and an invite is keyed by address rather than
+ *     by user id, so one left behind would be offered to whoever next
+ *     registered that address — telling a stranger who had invited it where;
  *   - the User, last.
  *
  * What refuses: membership of any workspace the user does not solely own, as
@@ -72,6 +77,7 @@ import BridgeMessage from '../models/BridgeMessage.js';
 import BridgePresence from '../models/BridgePresence.js';
 import RoutineRepo from '../models/RoutineRepo.js';
 import RoutineItem from '../models/RoutineItem.js';
+import WorkspaceInvite from '../models/WorkspaceInvite.js';
 
 /**
  * Every model whose documents carry workspaceId. A new one must be added here,
@@ -94,6 +100,10 @@ export const WORKSPACE_SCOPED_MODELS = [
   BridgePresence,
   RoutineRepo,
   RoutineItem,
+  // A pending collaborator invite belongs to the workspace that issued it
+  // (KOL-124), so it goes when that workspace does. Invites addressed *to* the
+  // deleted account, in workspaces it does not own, are swept by address below.
+  WorkspaceInvite,
 ];
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
@@ -142,7 +152,12 @@ export async function deleteAccount(userId, { source = 'unspecified caller' } = 
   const id = String(userId);
   log('light', `deleteAccount(${id}) requested by ${source}`);
 
-  if (!mongoose.isValidObjectId(id) || !(await User.exists({ _id: id }))) {
+  // The address is read here, while the account exists, because the invite
+  // sweep below is keyed by it and not by this id.
+  const account = mongoose.isValidObjectId(id)
+    ? await User.findById(id).select('_id email').lean()
+    : null;
+  if (!account) {
     log('light', `deleteAccount(${id}) refused: user-not-found; nothing deleted (source: ${source})`);
     return { ok: false, reason: 'user-not-found' };
   }
@@ -174,6 +189,14 @@ export async function deleteAccount(userId, { source = 'unspecified caller' } = 
   // adds the ones reachable only by user.
   deleted.UserMemory += (await UserMemory.deleteMany({ userId: id })).deletedCount;
   deleted.Conversation += (await Conversation.deleteMany({ userId: id })).deletedCount;
+  // Invites *to* this address, wherever they are: an invite is keyed by email,
+  // so one in a workspace this account does not own survives every pass above.
+  // `+=` because the workspace passes already counted the ones it issued.
+  if (account.email) {
+    const orphaned = (await WorkspaceInvite.deleteMany({ email: account.email })).deletedCount;
+    deleted.WorkspaceInvite += orphaned;
+    if (orphaned) log('light', `deleteAccount(${id}): dropped ${orphaned} pending invite(s) addressed to this account in workspaces it does not own (source: ${source})`);
+  }
   const mcpUserCleared = (
     await Settings.updateOne({ _id: 'global', mcpUserId: id }, { $set: { mcpUserId: null } })
   ).modifiedCount > 0;

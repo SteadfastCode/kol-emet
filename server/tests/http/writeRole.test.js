@@ -225,6 +225,7 @@ const ids = {
   draftId: null,
   logId: null,
   itemId: null,
+  inviteId: null,
 };
 
 const TAG = 'swept-tag';
@@ -312,6 +313,13 @@ async function seedGraph() {
   });
   ids.draftId = String(draft._id);
   ids.itemId = String(draft.items[0]._id);
+
+  // A pending collaborator invite (KOL-124), so the derived
+  // `DELETE /workspace/invites/:inviteId` has one to aim at. Created as the
+  // owner, through the real route, which is the only thing that creates one.
+  const invited = await owner.agent.post('/workspace/invites').send({ email: 'swept-invitee@example.test', role: 'viewer' });
+  assert.equal(invited.status, 201, `POST /workspace/invites failed: ${invited.status} ${JSON.stringify(invited.body)}`);
+  ids.inviteId = String(invited.body._id);
 
   // A rollback needs an entry that *carries* a snapshot, and only an update
   // writes one (a create logs the event, not a prior state) — so edit the
@@ -447,6 +455,10 @@ function fillPath(mount, path) {
         return id();
       }
       case 'logId': return ids.logId;
+      // The membership routes (KOL-124). A real member, so the sweep's refusal
+      // is the role gate's and not a 404 the gate never got to.
+      case 'userId': return editor.userId;
+      case 'inviteId': return ids.inviteId;
       case 'entityId': return ids.otherEntityId;
       case 'subGroupId': return ids.subGroupId;
       case 'itemId': return ids.itemId;

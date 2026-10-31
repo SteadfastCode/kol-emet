@@ -182,4 +182,155 @@ export async function createWorkspace(name, { template, source } = {}) {
   }
 }
 
+/**
+ * Collaborators (KOL-124): the invite, the membership, and the invitee's side.
+ *
+ * An invite names an **email address** and delivers nothing — no mail is sent
+ * and no link is minted (see server/src/models/WorkspaceInvite.js). So the
+ * client's job is to be honest about that: the form below tells the inviter to
+ * pass the word on themselves, and says nothing about whether the address has
+ * an account here, because the server deliberately does not say.
+ *
+ *   - `listMembers` / `listWorkspaceInvites` — who is in this workspace, and
+ *     who has been asked. Both are open to every member, like every other read.
+ *   - `inviteCollaborator` / `withdrawInvite` / `setMemberRole` /
+ *     `removeMember` — the owner's writes. A non-owner gets
+ *     `403 NOT_WORKSPACE_OWNER`, which Settings hides the controls for rather
+ *     than deciding for itself who an owner is.
+ *   - `listMyInvites` / `acceptInvite` / `declineInvite` — the caller's own
+ *     invitations, matched by the server on their account address.
+ *
+ * Accepting does **not** switch this tab to the new workspace: the server
+ * leaves that to `POST /workspaces/:id/select`, so the caller follows it with
+ * `selectWorkspace()` if they want to go there — the same shape `createWorkspace`
+ * above has.
+ *
+ * Refusals keep the server's code and status, because Settings says something
+ * different for each: 400 `INVALID_EMAIL`, 400 `INVALID_ROLE`,
+ * 409 `ALREADY_A_MEMBER`, 409 `LAST_OWNER`, 403 `NOT_WORKSPACE_OWNER`.
+ */
+
+/** `[{ userId, email, role, isOwner }]` for the workspace this session acts in. */
+export async function listMembers({ source } = {}) {
+  const members = await req('/workspace/members');
+  log('normal', `listed ${members.length} member(s) (source: ${source ?? 'GET /workspace/members'})`);
+  log('verbose', JSON.stringify(members));
+  return members;
+}
+
+/** `[{ _id, email, role, invitedBy, createdAt }]` — the invites waiting on this workspace. */
+export async function listWorkspaceInvites({ source } = {}) {
+  const invites = await req('/workspace/invites');
+  log('normal', `listed ${invites.length} pending invite(s) (source: ${source ?? 'GET /workspace/invites'})`);
+  log('verbose', JSON.stringify(invites));
+  return invites;
+}
+
+/**
+ * Invites `email` to this workspace at `role`. Owners only.
+ *
+ * Nothing is delivered, and the answer is the same whether or not that address
+ * has an account — which is the privacy answer as well as the product one.
+ *
+ * @param {string} email
+ * @param {object} [options]
+ * @param {'owner'|'editor'|'viewer'} [options.role] defaults to the server's `editor`
+ * @param {string} [options.source] what asked for it, for the log line
+ */
+export async function inviteCollaborator(email, { role, source } = {}) {
+  try {
+    const invite = await req('/workspace/invites', {
+      method: 'POST',
+      body: JSON.stringify({ email, ...(role !== undefined && { role }) }),
+    });
+    log('light', `invited ${invite.email} as ${invite.role}; no mail was sent, so the inviter has to pass the word on (source: ${source ?? 'POST /workspace/invites'})`);
+    log('verbose', JSON.stringify(invite));
+    return invite;
+  } catch (err) {
+    log('light', `invite of ${email}${role ? ` as ${role}` : ''} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'POST /workspace/invites'})`);
+    throw err;
+  }
+}
+
+/** Withdraws a pending invite. Owners only. */
+export async function withdrawInvite(inviteId, { email, source } = {}) {
+  try {
+    await req(`/workspace/invites/${inviteId}`, { method: 'DELETE' });
+    log('light', `withdrew the invite for ${email ?? inviteId} (source: ${source ?? 'DELETE /workspace/invites/:inviteId'})`);
+  } catch (err) {
+    log('light', `withdrawal of invite ${inviteId} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'DELETE /workspace/invites/:inviteId'})`);
+    throw err;
+  }
+}
+
+/**
+ * Changes a member's role. Owners only, and the workspace keeps at least one
+ * owner: demoting the last one is `409 LAST_OWNER`.
+ */
+export async function setMemberRole(userId, role, { from, email, source } = {}) {
+  try {
+    const member = await req(`/workspace/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) });
+    log('light', `${email ?? userId} is now ${member.role}, was ${from ?? 'unknown'} (source: ${source ?? 'PATCH /workspace/members/:userId'})`);
+    return member;
+  } catch (err) {
+    log('light', `role change of ${email ?? userId} to ${role} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'PATCH /workspace/members/:userId'}, replacing ${from ?? 'unknown'})`);
+    throw err;
+  }
+}
+
+/** Removes a membership. Owners only; the last owner is `409 LAST_OWNER`. */
+export async function removeMember(userId, { email, role, source } = {}) {
+  try {
+    await req(`/workspace/members/${userId}`, { method: 'DELETE' });
+    log('light', `removed ${email ?? userId} (${role ?? 'unknown role'}); their content stays with the workspace (source: ${source ?? 'DELETE /workspace/members/:userId'})`);
+  } catch (err) {
+    log('light', `removal of ${email ?? userId} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'DELETE /workspace/members/:userId'})`);
+    throw err;
+  }
+}
+
+/**
+ * The caller's own pending invitations, each
+ * `{ _id, workspaceId, workspaceName, role, invitedByEmail, createdAt }`.
+ *
+ * Matched by the server against the address this account is keyed by, so there
+ * is nothing for the client to hold onto and nothing to paste.
+ */
+export async function listMyInvites({ source } = {}) {
+  const invites = await req('/invites');
+  log('normal', `listed ${invites.length} invitation(s) for this account (source: ${source ?? 'GET /invites'})`);
+  log('verbose', JSON.stringify(invites));
+  return invites;
+}
+
+/**
+ * Accepts an invitation, answering the workspace just joined in the
+ * `{ _id, name, role, createdAt }` shape.
+ *
+ * It is **not** the workspace this session acts in afterwards — call
+ * `selectWorkspace()` for that, as `createWorkspace()` requires.
+ */
+export async function acceptInvite(inviteId, { source } = {}) {
+  try {
+    const workspace = await req(`/invites/${inviteId}/accept`, { method: 'POST' });
+    log('light', `joined "${workspace.name}" (${workspace._id}) as ${workspace.role}; this session still acts where it did (source: ${source ?? 'POST /invites/:id/accept'})`);
+    log('verbose', JSON.stringify(workspace));
+    return workspace;
+  } catch (err) {
+    log('light', `accept of invite ${inviteId} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'POST /invites/:id/accept'})`);
+    throw err;
+  }
+}
+
+/** Declines an invitation. The inviter is not told. */
+export async function declineInvite(inviteId, { workspaceName, source } = {}) {
+  try {
+    await req(`/invites/${inviteId}/decline`, { method: 'POST' });
+    log('light', `declined the invitation to ${workspaceName ?? inviteId}; the inviter is not told (source: ${source ?? 'POST /invites/:id/decline'})`);
+  } catch (err) {
+    log('light', `decline of invite ${inviteId} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'POST /invites/:id/decline'})`);
+    throw err;
+  }
+}
+
 export default getWorkspace;
