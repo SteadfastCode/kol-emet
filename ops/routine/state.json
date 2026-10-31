@@ -62,7 +62,7 @@
     "KOL-124": {
       "order": 4,
       "title": "Invite a collaborator: the role system is enforced, but nothing can create a non-owner member",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-124",

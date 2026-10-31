@@ -51,37 +51,6 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [x] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member**
-  `Workspace.members` has carried a `role` of `owner | editor | viewer` since KOL-071
-  (`server/src/models/Workspace.js:14`), `requireWorkspaceRole`/`requireWriteRole` gate every content write on it
-  (`server/src/middleware/workspace.js:245,290`, KOL-103), and Settings already tells a caller "Only an owner can rename
-  this workspace. Your role here is …" (`client/src/components/WikiLayout.vue:151`). Nothing can produce such a member:
-  registration writes the single owner (`server/src/routes/auth.js:220`) and no route adds, re-roles or removes a
-  membership, so `editor` and `viewer` are unreachable on a real deployment and the write floor is exercised only by
-  tests. "Invite collaborators to a workspace" is the Phase 8 line in `docs/roadmap.md:106` and in `docs/wishlist.md`.
-  The narrow reading, which is the decision this item makes: an invite names an **email address**, and delivers nothing.
-  `POST /workspace/invites { email, role }` (owner only) stores a pending invite; the invitee sees it on `GET /invites`,
-  matched case-insensitively against their own account email — the identifier registration already keeps unique — and
-  `POST /invites/:id/accept` writes the membership while `/decline` drops it. No mail is sent (an outbound mail
-  credential is out of scope) and no invite link or token is minted. An invite to an address with no account simply
-  waits, and nothing tells the inviter whether that address is registered, which is also the privacy answer.
-  Build: a `WorkspaceInvite` model (workspaceId, lowercased email, role, invitedBy, createdAt), the three routes above,
-  `PATCH /workspace/members/:userId { role }` and `DELETE /workspace/members/:userId` for an owner, and the two guards
-  the data model implies: a workspace always keeps at least one owner (the last one cannot be demoted or removed — the
-  mirror of KOL-025's "an account keeps one way in"), and an invite to someone already a member is a 409.
-  `lib/accountDeleter.js:154` refuses to delete an account holding a workspace it does not solely own; that refusal
-  becomes reachable for the first time here, so it needs a test that proves it still fires.
-  Files: new `server/src/models/WorkspaceInvite.js`, `server/src/routes/workspace.js`, `server/src/app.js` (the
-  `/invites` mount is not workspace-scoped, like `/workspaces`), `server/src/lib/accountDeleter.js` (invites are
-  workspace-scoped data to sweep), `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, `docs/api.md`,
-  `docs/data-model.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: an owner may invite and an editor or viewer may not; an invitee who
-  accepts can then do exactly what their role allows, driven through a real content route rather than read off the
-  membership row; one user cannot accept another's invite; the last owner cannot be demoted or removed; a removed member
-  loses access on their next request; and account deletion sweeps invites and still refuses a shared workspace.
-  `cd client && yarn test --run`; `cd client && yarn build`.
-  Out of scope: email delivery and invite links, seat billing, per-entity or per-category permissions, transferring
-  ownership outright, and per-user MCP identity (KOL-014) — a shared workspace makes that sharper but does not change it.
 
 ## Proposed
 
@@ -246,6 +215,37 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member** (routine 2026-10-31, 2f79338)
+  `Workspace.members` has carried a `role` of `owner | editor | viewer` since KOL-071
+  (`server/src/models/Workspace.js:14`), `requireWorkspaceRole`/`requireWriteRole` gate every content write on it
+  (`server/src/middleware/workspace.js:245,290`, KOL-103), and Settings already tells a caller "Only an owner can rename
+  this workspace. Your role here is …" (`client/src/components/WikiLayout.vue:151`). Nothing can produce such a member:
+  registration writes the single owner (`server/src/routes/auth.js:220`) and no route adds, re-roles or removes a
+  membership, so `editor` and `viewer` are unreachable on a real deployment and the write floor is exercised only by
+  tests. "Invite collaborators to a workspace" is the Phase 8 line in `docs/roadmap.md:106` and in `docs/wishlist.md`.
+  The narrow reading, which is the decision this item makes: an invite names an **email address**, and delivers nothing.
+  `POST /workspace/invites { email, role }` (owner only) stores a pending invite; the invitee sees it on `GET /invites`,
+  matched case-insensitively against their own account email — the identifier registration already keeps unique — and
+  `POST /invites/:id/accept` writes the membership while `/decline` drops it. No mail is sent (an outbound mail
+  credential is out of scope) and no invite link or token is minted. An invite to an address with no account simply
+  waits, and nothing tells the inviter whether that address is registered, which is also the privacy answer.
+  Build: a `WorkspaceInvite` model (workspaceId, lowercased email, role, invitedBy, createdAt), the three routes above,
+  `PATCH /workspace/members/:userId { role }` and `DELETE /workspace/members/:userId` for an owner, and the two guards
+  the data model implies: a workspace always keeps at least one owner (the last one cannot be demoted or removed — the
+  mirror of KOL-025's "an account keeps one way in"), and an invite to someone already a member is a 409.
+  `lib/accountDeleter.js:154` refuses to delete an account holding a workspace it does not solely own; that refusal
+  becomes reachable for the first time here, so it needs a test that proves it still fires.
+  Files: new `server/src/models/WorkspaceInvite.js`, `server/src/routes/workspace.js`, `server/src/app.js` (the
+  `/invites` mount is not workspace-scoped, like `/workspaces`), `server/src/lib/accountDeleter.js` (invites are
+  workspace-scoped data to sweep), `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, `docs/api.md`,
+  `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: an owner may invite and an editor or viewer may not; an invitee who
+  accepts can then do exactly what their role allows, driven through a real content route rather than read off the
+  membership row; one user cannot accept another's invite; the last owner cannot be demoted or removed; a removed member
+  loses access on their next request; and account deletion sweeps invites and still refuses a shared workspace.
+  `cd client && yarn test --run`; `cd client && yarn build`.
+  Out of scope: email delivery and invite links, seat billing, per-entity or per-category permissions, transferring
+  ownership outright, and per-user MCP identity (KOL-014) — a shared workspace makes that sharper but does not change it.
 - [x] **(KOL-123) A user can create a second workspace, seeded from a template or left empty** (routine 2026-10-31, bac6083)
   `POST /auth/register` (`server/src/routes/auth.js:218`) is the only thing in the product that has ever created a
   `Workspace`, so every account has exactly one for life. Everything around that hole is already built: `GET /workspaces`
