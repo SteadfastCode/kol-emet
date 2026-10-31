@@ -50,36 +50,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-123) A user can create a second workspace, seeded from a template or left empty**
-  `POST /auth/register` (`server/src/routes/auth.js:218`) is the only thing in the product that has ever created a
-  `Workspace`, so every account has exactly one for life. Everything around that hole is already built: `GET /workspaces`
-  lists the memberships and `POST /workspaces/:id/select` makes one the session's (`server/src/routes/workspace.js:135,158`),
-  the switcher in Settings renders only `v-if="workspaces.length > 1"` and its own comment says that is "every account
-  until invites land" (`client/src/components/WikiLayout.vue:153-156`), and `seedWorkspace(workspaceId, templateKey)`
-  plus the public `GET /templates` are what registration itself calls. A second workspace is also the only thing that
-  makes `POST /import` usable: it refuses a non-empty workspace with 409 `WORKSPACE_NOT_EMPTY`
-  (`server/src/routes/import.js:61`), and the one workspace an account has was seeded at signup.
-  Build: `POST /workspaces` on `workspacesRouter` — `{ name, template }`, `requireAuth` and deliberately no
-  `resolveWorkspace` (the caller is not acting in the new workspace yet), owner membership for the creator, `template`
-  resolved through `resolveTemplateKey` (`server/src/lib/workspaceSeeder.js:39`) and an unknown one refused as
-  registration refuses it (KOL-031), plus `template: null` meaning **seed nothing**, so an import has somewhere to land.
-  Name validated by the rule `PATCH /workspace` already uses (`WORKSPACE_NAME_MAX`, 1–80). A cap on how many workspaces
-  one account may own, because this is an authenticated create loop on an open-registration product — the signup
-  ceiling (KOL-050, KOL-081) is the precedent, and a refusal with its own error code is cheaper than a quota to
-  administer. It does NOT select the new workspace: the client calls the existing select route afterwards, so one path
-  stays the only writer of that session field. Client: a "New workspace" form in the Settings → Workspace group beside
-  the switcher, and the switcher stops hiding itself at a single membership.
-  Files: `server/src/routes/workspace.js`, `server/src/routes/auth.js` (extract the create-and-seed pair both callers
-  now need), `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, a new
-  `server/tests/http/workspaceCreate.test.js`, `client/src/components/WikiLayout.test.js`, `docs/api.md`,
-  `docs/data-model.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a create seeds the named template and the creator is its owner;
-  `template: null` leaves it empty and `POST /import` then accepts it; an unknown template is 400; the cap refuses the
-  n+1-th; another user's workspaces stay invisible to `GET /workspaces`; and the new workspace is not the session's
-  until selected. `cd client && yarn test --run`; `cd client && yarn build`; `cd server && node --check src/index.js`.
-  Out of scope: deleting a workspace (its own item — it would reuse the cascade in `lib/accountDeleter.js` and needs a
-  confirmation flow), billing or per-plan limits, invites and membership management (KOL-124), and moving content
-  between workspaces.
 
 - [ ] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member**
   `Workspace.members` has carried a `role` of `owner | editor | viewer` since KOL-071
@@ -276,6 +246,36 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-123) A user can create a second workspace, seeded from a template or left empty** (routine 2026-10-31, bac6083)
+  `POST /auth/register` (`server/src/routes/auth.js:218`) is the only thing in the product that has ever created a
+  `Workspace`, so every account has exactly one for life. Everything around that hole is already built: `GET /workspaces`
+  lists the memberships and `POST /workspaces/:id/select` makes one the session's (`server/src/routes/workspace.js:135,158`),
+  the switcher in Settings renders only `v-if="workspaces.length > 1"` and its own comment says that is "every account
+  until invites land" (`client/src/components/WikiLayout.vue:153-156`), and `seedWorkspace(workspaceId, templateKey)`
+  plus the public `GET /templates` are what registration itself calls. A second workspace is also the only thing that
+  makes `POST /import` usable: it refuses a non-empty workspace with 409 `WORKSPACE_NOT_EMPTY`
+  (`server/src/routes/import.js:61`), and the one workspace an account has was seeded at signup.
+  Build: `POST /workspaces` on `workspacesRouter` — `{ name, template }`, `requireAuth` and deliberately no
+  `resolveWorkspace` (the caller is not acting in the new workspace yet), owner membership for the creator, `template`
+  resolved through `resolveTemplateKey` (`server/src/lib/workspaceSeeder.js:39`) and an unknown one refused as
+  registration refuses it (KOL-031), plus `template: null` meaning **seed nothing**, so an import has somewhere to land.
+  Name validated by the rule `PATCH /workspace` already uses (`WORKSPACE_NAME_MAX`, 1–80). A cap on how many workspaces
+  one account may own, because this is an authenticated create loop on an open-registration product — the signup
+  ceiling (KOL-050, KOL-081) is the precedent, and a refusal with its own error code is cheaper than a quota to
+  administer. It does NOT select the new workspace: the client calls the existing select route afterwards, so one path
+  stays the only writer of that session field. Client: a "New workspace" form in the Settings → Workspace group beside
+  the switcher, and the switcher stops hiding itself at a single membership.
+  Files: `server/src/routes/workspace.js`, `server/src/routes/auth.js` (extract the create-and-seed pair both callers
+  now need), `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, a new
+  `server/tests/http/workspaceCreate.test.js`, `client/src/components/WikiLayout.test.js`, `docs/api.md`,
+  `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a create seeds the named template and the creator is its owner;
+  `template: null` leaves it empty and `POST /import` then accepts it; an unknown template is 400; the cap refuses the
+  n+1-th; another user's workspaces stay invisible to `GET /workspaces`; and the new workspace is not the session's
+  until selected. `cd client && yarn test --run`; `cd client && yarn build`; `cd server && node --check src/index.js`.
+  Out of scope: deleting a workspace (its own item — it would reuse the cascade in `lib/accountDeleter.js` and needs a
+  confirmation flow), billing or per-plan limits, invites and membership management (KOL-124), and moving content
+  between workspaces.
 - [x] **(KOL-122) Backlog audit: file new candidates under Proposed** (routine 2026-10-26, 6453b76)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
