@@ -1,0 +1,79 @@
+{
+  "item": "KOL-016",
+  "repo": "kol-emet",
+  "mergeSha": "d63964d3efdcbf470e9a5e75850d2ff5e3dd3343",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-31T05:18:50.818Z",
+  "gradedAtUtc": "2026-10-31T05:31:45.592Z",
+  "independent": [
+    {
+      "file": "server/src/lib/draftNormalizer.js",
+      "line": 43,
+      "severity": "low",
+      "summary": "`rawOpenQuestionSchema.entities` only coerces a bare string; if the model returns `entities: [{name: 'Mira'}]` — the exact shape pass 2's own prompt teaches it for relationship members — `z.array(z.string())` fails and the ENTIRE question is dropped with a validation reason, rather than the links being dropped and the question kept. That contradicts the module's own rule (a question with no resolvable link is still worth keeping, and a name that matches nothing only costs a `link_dropped` flag), and on a weak model it can silently zero out the whole paid pass-3 yield."
+    },
+    {
+      "file": "server/src/lib/draftApplier.js",
+      "line": 361,
+      "severity": "low",
+      "summary": "The light-tier line that exists to name where a foreign `entry_id` came from labels it from `item.accepted ? 'edited' : 'proposed'`, but `accepted` is copied verbatim from `proposed` on a PLAIN accept (Draft.js item schema comment, and the fixture in openQuestionApply.test.js does exactly that), so every accepted item is reported as an 'edited' payload. An operator chasing a cross-tenant id is told a human edited it when nobody did; the field that distinguishes the two is `item.decision === 'edited'`."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The diff adds a workspaceId-scoped `Entity.find` in `applyOpenQuestion` specifically to stop a hand-edited `entry_ids` from linking a question to another tenant's entity, with a dedicated cross-workspace test — a tenant-isolation/authorization change, not nothing."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The exporter change alters what the pseudonymizer (keyed by the export secret) covers — a localKey is now emitted literally as `local:e1` instead of pseudonymised — and the cited line sits inside the new test that exercises that path."
+    },
+    {
+      "key": "money",
+      "correct": false,
+      "reason": "Pass 3 is one extra provider call per run, charged via `recordSpend` against the workspace's AI allowance (and the item is tagged precisely because final verification is a paid run), so the change plainly touches cost."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "Nothing in the change deletes or overwrites existing data — the applier only creates an OpenQuestion and omits ids it cannot scope; the cited `kol_emet_spec.md` line is the decision-log prose next to an unrelated earlier delete entry, not a destructive operation in this diff."
+    },
+    {
+      "key": "externalApi",
+      "correct": false,
+      "reason": "`runGeneration` adds a third `callWithRepair` → `client.chat.completions.create` round-trip to the external AI provider plus a new system prompt for it, so the external-API surface is directly touched."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only `PROMPT_VERSION` (a corpus tag) and docs moved; no build, deploy, migration, or package version changed."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local review found nothing in a change that is largely sound, so its empty finding list is nearly defensible, but its triage is weak — it missed the two dimensions this item is most obviously about (an extra paid model call and a new external-provider call) and invented a destructive-change hit from adjacent decision-log prose.</br>",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 2
+  },
+  "costUsd": 2.2102835000000005,
+  "numTurns": 23,
+  "durationMs": 280218,
+  "sessionId": "717c72b7-9641-41c1-ba72-b221a508979a"
+}

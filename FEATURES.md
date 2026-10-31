@@ -115,6 +115,25 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-130) A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.**
+  Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:269). A column
+  whose unquoted name is in TABLE_CONSTRAINTS is silently discarded. `looksLikeTableConstraint`
+  (:341) returns true for any bare word in that set, and `readTableConstraint` then returns null
+  for PERIOD/EXCLUDE/FULLTEXT/SPATIAL, so the `if (!constraint) continue` at :571 drops the
+  definition with no drop reason. `CREATE TABLE budgets (id int PRIMARY KEY, period date NOT NULL,
+  amount numeric);` proposes a Data Store with only `id` and `amount` — `period` vanishes and the
+  reviewer is never told. `KEY`/`INDEX` got a TYPE_WORDS guard for exactly this collision; these
+  keywords (none of them reserved in Postgres) did not.
+- [ ] **(KOL-131) readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…**
+  Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:459).
+  `readAlterTableForeignKeys` mines a trailing ALTER only for `FOREIGN KEY`, but a real `pg_dump
+  --schema-only` emits PRIMARY KEY and UNIQUE the same way (`ALTER TABLE ONLY x ADD CONSTRAINT
+  x_pkey PRIMARY KEY (id);`) and never inline — so against the headline input no column ever
+  carries a `PRIMARY KEY` or `UNIQUE` marker, contradicting docs/api.md ("valued with its type
+  plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared"). The gap is hidden by the fixture:
+  `server/tests/fixtures/schema.sql` is headed "Taken with: pg_dump --schema-only" yet writes its
+  keys as inline `CONSTRAINT … PRIMARY KEY (id)` / `UNIQUE (email)`, a form pg_dump does not
+  produce, so no test covers the shape the producer is sold on.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

@@ -1,0 +1,63 @@
+{
+  "item": "KOL-120",
+  "repo": "kol-emet",
+  "mergeSha": "ca06e62dbceb7e6a8f05d8af73dd55693545f3cd",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-31T05:18:50.818Z",
+  "gradedAtUtc": "2026-10-31T05:27:05.316Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The only code touched is static disclosure copy in the register-mode branch of LoginView.vue plus its text assertion — no credential, session, registration-payload or permission logic changes."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No tokens, keys, hashes or env handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The copy mentions the free tier having no opt-out but no billing, pricing or cost-bearing code is added or changed."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The account-deletion sentence is only re-wrapped in a <p>; no deletion or data-mutating code is touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP, provider SDK or third-party call is involved — template and test edits only."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, version or config files changed; the only non-client file is a markdown plan tick."
+    }
+  ],
+  "missed": [],
+  "summary": "Reporting no defects was the right call on this copy-plus-test-plus-doc change, and all six triage answers are right, so the local review is correct though it establishes little beyond that.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.784574,
+  "numTurns": 12,
+  "durationMs": 88287,
+  "sessionId": "b911751d-5b30-4ff2-9064-0cb5caa0d152"
+}

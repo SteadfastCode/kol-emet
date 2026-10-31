@@ -1,0 +1,63 @@
+{
+  "item": "KOL-122",
+  "repo": "kol-emet",
+  "mergeSha": "6453b769cd00205b37a2b5eaa1307b92b8c47041",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-31T05:18:50.818Z",
+  "gradedAtUtc": "2026-10-31T05:20:20.081Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The diff modifies only FEATURES.md; `server/src/routes/auth.js:218` appears merely as a prose reference inside a proposed backlog item, so no auth code or flow is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential, key or env handling is changed — env names like OLLAMA_BASE_URL only appear in backlog prose."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing or metering code changes; `config/pricing.js` is only named as a future file in KOL-125's text."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only appends markdown; nothing deletes data or alters deletion paths."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No HTTP client, provider registry or outbound call is modified by this docs-only diff."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, build, CI or deploy configuration is touched."
+    }
+  ],
+  "missed": [],
+  "summary": "Correctly reported no defects on a docs-only backlog filing (ids 123–129 are free and non-reused, the six items are accurately grounded in unbuilt code paths, and the renewal carries the right +7-day date from the 2026-10-26 run), but its triage wrongly marked auth as touched on the strength of a file path quoted in the backlog prose.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 0.7322660000000001,
+  "numTurns": 11,
+  "durationMs": 85782,
+  "sessionId": "900fa22b-f5f8-4151-8ece-f0a043810fc3"
+}

@@ -1,0 +1,93 @@
+{
+  "item": "KOL-121",
+  "repo": "kol-emet",
+  "mergeSha": "71ef0b4272dd20709c58538dacf24e473213461b",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-10-31T05:18:50.818Z",
+  "gradedAtUtc": "2026-10-31T05:25:36.997Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/sqlSchema.js",
+      "line": 269,
+      "severity": "medium",
+      "summary": "A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded. `looksLikeTableConstraint` (:341) returns true for any bare word in that set, and `readTableConstraint` then returns null for PERIOD/EXCLUDE/FULLTEXT/SPATIAL, so the `if (!constraint) continue` at :571 drops the definition with no drop reason. `CREATE TABLE budgets (id int PRIMARY KEY, period date NOT NULL, amount numeric);` proposes a Data Store with only `id` and `amount` — `period` vanishes and the reviewer is never told. `KEY`/`INDEX` got a TYPE_WORDS guard for exactly this collision; these keywords (none of them reserved in Postgres) did not."
+    },
+    {
+      "file": "server/src/lib/producers/sqlSchema.js",
+      "line": 459,
+      "severity": "medium",
+      "summary": "`readAlterTableForeignKeys` mines a trailing ALTER only for `FOREIGN KEY`, but a real `pg_dump --schema-only` emits PRIMARY KEY and UNIQUE the same way (`ALTER TABLE ONLY x ADD CONSTRAINT x_pkey PRIMARY KEY (id);`) and never inline — so against the headline input no column ever carries a `PRIMARY KEY` or `UNIQUE` marker, contradicting docs/api.md (\"valued with its type plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared\"). The gap is hidden by the fixture: `server/tests/fixtures/schema.sql` is headed \"Taken with: pg_dump --schema-only\" yet writes its keys as inline `CONSTRAINT … PRIMARY KEY (id)` / `UNIQUE (email)`, a form pg_dump does not produce, so no test covers the shape the producer is sold on."
+    },
+    {
+      "file": "server/src/lib/producers/sqlSchema.js",
+      "line": 231,
+      "severity": "low",
+      "summary": "An unclosed `(` makes `statements()` merge the whole rest of the file into one statement, because depth never returns to 0 so no later `;` splits. `CREATE TABLE a (id int;` followed by twenty valid `CREATE TABLE`s yields exactly one drop reason — `CREATE TABLE \"a\" … its column list is not closed` — and every subsequent table is lost with nothing said, where the header promises an unreadable construct is \"reported rather than silently reading half a schema\"."
+    },
+    {
+      "file": "server/src/lib/producers/sqlSchema.js",
+      "line": 126,
+      "severity": "low",
+      "summary": "`#` is treated as a line comment unconditionally, but it is an operator character in Postgres. A generated column or CHECK using a jsonb path operator — `payload jsonb, name text GENERATED ALWAYS AS (payload #>> '{name}') STORED` — has everything from `#` to end of line dropped by the lexer, which loses the closing parens and commas of that line; the column list then fails to balance and the whole table is dropped (or, per the finding above, every table after it)."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds a new authenticated, per-workspace write endpoint (`POST /drafts/sql` under requireAuth/resolveWorkspace/requireWriteRole) and the http suite exercises its 401 and cross-tenant isolation."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The dump is run through `redactSecrets` before being hashed/stored, and the fixture plus http test assert a connection string and a column DEFAULT token never reach the draft or DB."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Right — the producer is deterministic with no model call, and the test asserts the allowance quota is unchanged across an import; nothing billing-related is modified."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "Wrong — nothing in the diff deletes, overwrites or migrates data; the new route only inserts Draft documents, and the apply/rollback machinery is untouched (the cited line 483 is the pre-existing Kubernetes registration)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Right — the producer makes no network or provider call; the only new I/O is the local Mongo reads the shared `fileProducerRoute` already did."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Right — no version bump, CI, deploy or packaging change; the roadmap/spec edits are prose, not release machinery."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "summary": "The local review reported nothing and missed four real issues — two of them (silent column loss on keyword-named columns, and no PRIMARY KEY/UNIQUE reading from the trailing ALTERs a real pg_dump emits, masked by a mislabelled fixture) material — while its triage was right on five of six categories and wrongly flagged `destructive`.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 4,
+    "independent": 4,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 2.2744465000000003,
+  "numTurns": 14,
+  "durationMs": 316864,
+  "sessionId": "2cb6b496-bba6-4c90-886c-7ec87a406a2c"
+}
