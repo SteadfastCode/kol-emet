@@ -50,7 +50,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-123) A user can create a second workspace, seeded from a template or left empty**
+- [x] **(KOL-123) A user can create a second workspace, seeded from a template or left empty**
   `POST /auth/register` (`server/src/routes/auth.js:218`) is the only thing in the product that has ever created a
   `Workspace`, so every account has exactly one for life. Everything around that hole is already built: `GET /workspaces`
   lists the memberships and `POST /workspaces/:id/select` makes one the session's (`server/src/routes/workspace.js:135,158`),

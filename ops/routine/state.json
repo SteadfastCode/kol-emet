@@ -62,18 +62,18 @@
     "KOL-123": {
       "order": 4,
       "title": "A user can create a second workspace, seeded from a template or left empty",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-123",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-10-31T22:07:19.999Z",
+      "runId": "2026-10-31T22:06:28.705Z",
       "lastFail": null
     },
     "KOL-124": {
