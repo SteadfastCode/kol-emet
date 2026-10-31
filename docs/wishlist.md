@@ -35,7 +35,9 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 
 ## Productization
 - Multi-tenant workspace management and billing
-- Invite collaborators to a workspace
+- ✅ Invite collaborators to a workspace — shipped 2026-10-31 (KOL-124): an invite names an email
+  address and delivers nothing (no mail, no link); the invitee accepts it from their own
+  Settings, and an owner re-roles or removes a member. Seat billing is still open
 - Separate product name and brand under Steadfast Code
 - Public template gallery (pre-seeded wiki structures)
 - Local AI support via Ollama (MCP layer already model-agnostic)

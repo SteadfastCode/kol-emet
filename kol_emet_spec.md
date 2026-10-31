@@ -511,3 +511,43 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   - **The switcher stops hiding itself at one membership.** It was hidden there on the grounds that a select with one option is a control that only looks like a choice; it is now the place the workspace you just created appears, and hiding it would have hidden the destination of the form beside it. The New workspace form sits in the same Settings group, with the template picker the signup form already offers plus an explicit **Empty** option, and a successful create toasts, refreshes the list and then switches — so "create" lands you in the thing you created.
   
   **Out of scope, deliberately:** deleting a workspace (it needs the cascade in `lib/accountDeleter.js` and a confirmation flow), invites and membership management (KOL-124), moving content between workspaces, and per-plan limits or billing.
+
+- **Collaborator invites name an address and deliver nothing (KOL-124)** — `Workspace.members[].role`
+  has carried `owner | editor | viewer` since KOL-071 and every content write has been gated on it
+  since KOL-103, while nothing in the product could *produce* a non-owner member: registration wrote
+  the single owner and no route added, re-roled or removed a membership. So the write floor existed
+  only for tests and Settings could tell a caller "your role here is editor" about a role nobody
+  could hold. The narrow reading shipped: `POST /workspace/invites { email, role }` (owner only)
+  stores a pending `WorkspaceInvite`, the invitee sees it on `GET /invites` matched against their own
+  account address, and `POST /invites/:id/accept` writes the membership while `/decline` drops it.
+  `PATCH`/`DELETE /workspace/members/:userId` re-role and remove.
+  - **No mail and no invite link.** An outbound mail credential is out of scope, and a token nobody
+    could receive would be a secret with no delivery channel plus a second way into a workspace to
+    secure. The inviter passes the word on; the invitee finds the invitation in their own Settings.
+    So the invite is keyed by **email** — the identifier registration already keeps unique — stored
+    lowercased and trimmed exactly as `User.email` is, which makes the match an equality test
+    between two stored primitives rather than a regex assembled from a request.
+  - **An address with no account simply waits, and the inviter is never told whether it has one.**
+    The status and the body are identical either way: an invite form must not be a way to ask who
+    has registered here. The cost is that a typo waits forever rather than being refused, which is
+    why an owner can withdraw a pending invite.
+  - **A workspace always keeps one owner** — the last cannot be demoted or removed (409
+    `LAST_OWNER`), the mirror of KOL-025's "an account keeps one way in". `Workspace.ownerId` moves
+    with the role when its holder steps down, because `lib/accountDeleter.js` judges *sole*
+    ownership by that field: left pointing at someone who is no longer a member, it would refuse
+    that person's own account deletion forever.
+  - **Inviting a co-owner is allowed**, which is what makes the last-owner rule a floor rather than
+    a wall — without it, no workspace could ever change hands even a little. Transferring ownership
+    outright is still out of scope, as is seat billing and per-entity permission.
+  - **Reads are role-blind, writes are the owner's.** The member list and the pending-invite list
+    are open to every member — working together means knowing who with — which also keeps them
+    inside the rule `tests/http/writeRole.test.js` derives over every content mount, rather than
+    forcing a per-route exemption into it.
+  - **A removed member loses access on their next request** and nothing clears their session:
+    `resolveWorkspace` re-reads the membership list every time, so the selection falls back to a
+    workspace they are still in (KOL-090) instead of locking them out of their own. Their content
+    stays with the workspace.
+
+  **Out of scope, deliberately:** email delivery and invite links, seat billing, per-entity or
+  per-category permissions, transferring ownership outright, deleting a workspace, and per-user MCP
+  identity (KOL-014) — a shared workspace makes that sharper but does not change it.

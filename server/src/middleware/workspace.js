@@ -59,8 +59,38 @@ export function workspaceName(value) {
   return name;
 }
 
+/**
+ * The address a membership is invited by (KOL-124), normalized the way it is
+ * stored — trimmed and lowercased, exactly what `User.email`'s schema does to
+ * a registration.
+ *
+ * So the match between an invite and an account is an equality test on two
+ * stored primitives, never a case-insensitive regex assembled from a request:
+ * an `email` of `{"$regex": "."}` would otherwise let a caller claim every
+ * invite in the deployment. A non-string, or a string that is only whitespace,
+ * is not an address.
+ *
+ * The rule is deliberately no stricter than registration's, which accepts any
+ * non-empty string: an invite to an address that could never register would be
+ * refused here while the same address *is* an account over there, and the two
+ * disagreeing about what an address is would make a real membership
+ * un-inviteable. A typo therefore waits forever instead of being refused —
+ * which is why an owner can withdraw an invite.
+ *
+ * @param {unknown} value
+ * @returns {string|null} the address as it should be stored, or null
+ */
+export function memberEmail(value) {
+  if (typeof value !== 'string') return null;
+  const email = value.trim().toLowerCase();
+  return email || null;
+}
+
 /** Roles, weakest first: a gate asking for one accepts everything above it. */
 export const ROLE_RANK = Object.freeze({ viewer: 1, editor: 2, owner: 3 });
+
+/** Whether `value` names one of the three roles a membership can hold. */
+export const isRole = (value) => typeof value === 'string' && Object.hasOwn(ROLE_RANK, value);
 
 /**
  * Resolves the acting user id from either auth path.

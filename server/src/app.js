@@ -33,7 +33,7 @@ import chatRouter from './routes/chat.js';
 import conversationsRouter from './routes/conversations.js';
 import exportRouter from './routes/export.js';
 import importRouter, { importJsonBody } from './routes/import.js';
-import workspaceRouter, { workspacesRouter } from './routes/workspace.js';
+import workspaceRouter, { invitesRouter, workspacesRouter } from './routes/workspace.js';
 import healthRouter from './routes/health.js';
 import './models/User.js';
 import './models/Conversation.js';
@@ -152,6 +152,13 @@ export function createApp({ sessionStore, authLimits } = {}) {
   // to hold in the workspace they are leaving. Distinct from the `/workspace`
   // mount below, which is the resolved one as a resource.
   app.use('/workspaces', requireAuth, workspacesRouter);
+  // The invitee's side of a collaborator invite (KOL-124). Mounted like
+  // `/workspaces` above and ahead of the `/` catch-all for the same reasons: an
+  // invitation is about a workspace the caller is *not* a member of, so there is
+  // no role in it to gate on and resolveWorkspace has nothing to resolve. The
+  // owner's side — who is pending, who is a member — is on the `/workspace`
+  // mount below, where there is a role.
+  app.use('/invites', requireAuth, invitesRouter);
   // resolveWorkspace sits behind requireAuth on every route that touches tenant
   // content: it sets req.workspaceId, which those routes filter every query on.
   // requireWriteRole follows it on every router that writes the graph (KOL-103):

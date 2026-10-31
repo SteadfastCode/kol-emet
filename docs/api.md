@@ -76,7 +76,7 @@ than per route, so a route added to one of them later inherits the gate; the one
 changelog router, which is mounted at `/` (a gate there would judge every request on its way to a
 later mount), so its single write carries the gate on the route itself.
 
-Two routes ask for `owner` instead and answer **403 `NOT_WORKSPACE_OWNER`**: `PATCH /workspace` and
+The membership writes of [Collaborators](#collaborators) ask for `owner` too, and so do `PATCH /workspace` and
 `POST /import`. Three content routes deliberately have no write gate — `GET /export` (a read),
 `/chat` and `/conversations` (asking the assistant a question reads the graph and writes nothing to
 it, and a saved conversation is the asker's own row). A floor on who may *spend* the workspace's AI
@@ -128,6 +128,7 @@ Mount points and their guards:
 | `/` (oauth) | mixed | none | OAuth discovery/authorize/token for the MCP connector. Discovery, the approval page and the token exchange are public; `POST /authorize` — which *binds* the MCP identity — takes a live login session (`requireLoginSession`) |
 | `/bridge/mcp`, `/bridge/*`, `/.well-known/*bridge*` | self | none | The Steadfast bridge: its own MCP transport behind `BRIDGE_TOKEN` (503 when unset), plus its own OAuth issuer and RFC 9728 resource metadata. Scoped to the MCP user's workspace. See architecture.md |
 | `/workspaces` | `requireAuth` | any member | The caller's memberships, which one this session acts in, and creating another. Deliberately **no** `resolveWorkspace`: a membership list is not content in one workspace, the choice must not be gated on the role held in the workspace being left, and a create happens outside any workspace at all. Mounted ahead of the `/` changelog catch-all, whose `resolveWorkspace` would otherwise 403 a caller with no membership at all |
+| `/invites` | `requireAuth` | the invitee themselves | The invitee's side of a collaborator invite (KOL-124): their own pending invitations, and accepting or declining one. No `resolveWorkspace`, for the same reasons as `/workspaces` — an invitation is about a workspace the caller is **not** a member of, so there is no role in it to gate on. An invite is matched to the caller by the address their account is keyed by |
 | `/events` | `requireAuth` + `resolveWorkspace` | any member | Server-Sent Events stream; broadcasts reach only the connection's workspace. Re-checked after connect: the stream closes when its session leaves the store, and one user holds at most `EVENTS_MAX_STREAMS_PER_USER` |
 | `/entities` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes additionally use `requireActor` |
 | `/relationship-groups` | `requireAuth` + `resolveWorkspace` | `editor` to write | Writes use `requireActor` |
@@ -903,6 +904,12 @@ record is worse than a failure. The bulk equivalent is
 |--------|-------|-------------|
 | GET | `/workspace` | The caller's workspace: `{ _id, name, role, createdAt }`. `role` is the caller's own membership role (`owner` \| `editor` \| `viewer`), read from the `members` array by `resolveWorkspace` and never from a request, so a client can hide what an editor or a viewer may not do |
 | PATCH | `/workspace` | Rename it. Body `{ name }`, trimmed, 1–80 characters. **Owners only**: 403 `{ error: 'NOT_WORKSPACE_OWNER' }` for any other role. 400 `{ error: 'INVALID_WORKSPACE_NAME' }` for an empty, whitespace-only, over-long or non-string name, changing nothing. Answers the same shape as `GET` |
+| GET | `/workspace/members` | Who is in it: `[{ userId, email, role, isOwner }]` in `members` order. **Any member** — see [Collaborators](#collaborators). `email` is `null` for a member whose account is gone; `isOwner` marks the one `Workspace.ownerId` names |
+| POST | `/workspace/invites` | Invite an address (KOL-124). Body `{ email, role? }`; `role` defaults to `editor`. **Owners only.** 201 with `{ _id, email, role, invitedBy, createdAt }`; **200** with the same row when that address was already invited (the role is updated rather than a second invite written). 400 `INVALID_EMAIL` / `INVALID_ROLE`, 409 `ALREADY_A_MEMBER`. **No mail is sent and no link is minted**, and the answer says nothing about whether the address has an account |
+| GET | `/workspace/invites` | The addresses waiting on this workspace, oldest first, each `{ _id, email, role, invitedBy, createdAt }`. **Any member** |
+| DELETE | `/workspace/invites/:inviteId` | Withdraw one. **Owners only.** 204; 404 for an id that is not an invite of *this* workspace (never 403); 400 `INVALID_ID` |
+| PATCH | `/workspace/members/:userId` | Change a member's role. Body `{ role }`. **Owners only.** 200 `{ userId, role }`; 400 `INVALID_ROLE`; 404 for a user who is not a member; **409 `LAST_OWNER`** when it would demote the workspace's only owner, writing nothing |
+| DELETE | `/workspace/members/:userId` | Remove a membership. **Owners only.** 204; 404 for a non-member; **409 `LAST_OWNER`** for the only owner. Their content stays — it belongs to the workspace — and they lose access on their next request |
 
 Registration has created a workspace since tenancy landed, and until KOL-071 nothing read its name
 back — every tenant's workspace was "My Workspace" and indistinguishable from every other. So
@@ -971,9 +978,62 @@ KOL-123, where a second one comes from.
   Closing that needs a transaction (single mongod — see [Import](#import)) or a counter on `User`
   that would be a second source of truth for a number the workspaces already state.
 
-**Not here yet:** inviting or removing members (and the email delivery that needs), deleting a
-workspace, moving content between workspaces, per-workspace billing or per-plan limits, and
-enforcing `editor`/`viewer` differently than [Roles](#roles) already does.
+**Not here yet:** deleting a workspace, moving content between workspaces, per-workspace billing or
+per-plan limits, and enforcing `editor`/`viewer` differently than [Roles](#roles) already does.
+
+## Collaborators
+
+How a workspace gets a member who is not its owner (KOL-124). `Workspace.members[].role` has
+carried `owner | editor | viewer` since KOL-071 and every content write has been gated on it since
+KOL-103 — but registration wrote the single owner and no route added, re-roled or removed a
+membership, so `editor` and `viewer` were unreachable on a real deployment and the write floor was
+exercised only by tests. The routes are split across two mounts: the owner's half is on
+[`/workspace`](#workspace) (there is a role there to gate on), the invitee's half is `/invites`.
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/invites` | The caller's own pending invitations, oldest first, each `{ _id, workspaceId, workspaceName, role, invitedByEmail, createdAt }`. Matched on the address their account is keyed by. Both auth paths; no invitations is `[]` |
+| POST | `/invites/:id/accept` | Join the workspace, as the role the invite names. 200 with `{ _id, name, role, createdAt }` — the `GET /workspace` shape. **Session only.** 404 for an id not addressed to this account (never 403), and for one whose workspace has since been deleted, which also drops the invite. The invite is spent; a second accept is 404 and the membership is never duplicated |
+| POST | `/invites/:id/decline` | Drop it. 204. **Session only.** 404 for an id not addressed to this account. The inviter is not told |
+
+- **An invite names an email address and delivers nothing.** No mail is sent and no invite link or
+  token is minted: an outbound mail credential is out of scope, so a link nobody could receive
+  would be a secret with no delivery channel and a second way into a workspace to secure. The
+  inviter passes the word on themselves; the invitee finds the invitation in their own Settings.
+- **The address is the identifier registration already keeps unique.** `User.email` and
+  `WorkspaceInvite.email` are both stored trimmed and lowercased, so the match is an equality test
+  between two stored primitives — never a case-insensitive regex built from a request, which an
+  `email` of `{"$regex": "."}` would turn into a way to claim every invite in the deployment.
+- **An address with no account simply waits**, and **nothing tells the inviter whether it is
+  registered** — the status and the body are the same either way, which is the privacy answer as
+  well as the product one: an invite form must not be a way to ask who has an account here. A typo
+  therefore waits rather than being refused, which is why an owner can withdraw an invite.
+- **The two reads are role-blind**, like every read on a content route: knowing who else is in a
+  workspace, and who has been asked to join it, is part of working in one. Every *write* is
+  `requireWorkspaceRole('owner')`, on the route rather than at the mount, so those reads stay open.
+- **A workspace always keeps at least one owner.** The last one cannot be demoted or removed (409
+  `LAST_OWNER`) — the mirror of KOL-025's "an account keeps one way in": a workspace with no owner
+  could never be renamed, invited into or managed again by anyone. `Workspace.ownerId` is kept
+  naming a member who holds the role, so when that member is demoted or removed it moves to another
+  owner; otherwise [account deletion](#auth) — which reads `ownerId` to decide sole ownership —
+  would refuse forever for someone who is no longer a member at all.
+- **A removed member loses access on their next request.** Nothing is cleared from their session:
+  `resolveWorkspace` re-reads the membership list every time, so their selection of that workspace
+  stops resolving and falls back to one they are still in (see [Workspaces](#workspaces)). Their
+  content stays — it belongs to the workspace.
+- **Accepting is not selecting.** `POST /workspaces/:id/select` stays the only writer of which
+  workspace a session acts in, so an accepted workspace appears in the switcher and going there is
+  a second, deliberate step.
+- **A shared workspace blocks account deletion**, and always has:
+  [`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js) refuses while the account is a
+  member of a workspace it does not solely own, reporting those memberships (409). This item makes
+  that refusal reachable for the first time. A *pending invite* is not a membership and does not
+  block a deletion — it is swept with the account, wherever it is, so it cannot be offered to
+  whoever next registers that address.
+- **Out of scope here:** email delivery and invite links, seat billing, per-entity or per-category
+  permissions, transferring ownership outright (inviting a co-owner is how a workspace gets a
+  second one), and per-user MCP identity (KOL-014) — a shared workspace makes that sharper but does
+  not change it: the connector still acts as one `Settings.mcpUserId`.
 
 ## Export
 

@@ -490,6 +490,18 @@ one.
 Members are modelled from the start rather than a bare `ownerId`, so shared workspaces don't require
 reshaping the schema later. Registration creates a personal workspace with the new user as sole owner.
 
+**A workspace can have other members (KOL-124).** `members[].role` has carried
+`owner | editor | viewer` since KOL-071 and every content write has been gated on it since KOL-103,
+but nothing could produce a non-owner member until [`WorkspaceInvite`](#workspaceinvite) and the
+routes in [Collaborators](api.md#collaborators). Two invariants come with them:
+
+- **A workspace always keeps at least one `owner`.** The last one cannot be demoted or removed (409
+  `LAST_OWNER`): with none, nobody could rename it, invite into it or manage it again.
+- **`ownerId` always names a member who holds the `owner` role.** It is a separate field from the
+  array, and it is what account deletion judges *sole* ownership by — so demoting or removing the
+  user it names moves it to another owner. Left alone, it would point at someone who is not a
+  member, and that person's own account could then never be deleted.
+
 **A user may have more than one (KOL-123).** `POST /auth/register` was the only thing that had ever
 created a `Workspace`, so every account had exactly one for life;
 [`POST /workspaces`](api.md#workspaces) is the second caller and both go through
@@ -509,8 +521,12 @@ that.
 every workspace they *solely* own (they are `ownerId` and no other member holds `owner`), every
 document in those workspaces across every model carrying `workspaceId` — `UserMemory` and
 `Conversation` among them since KOL-091 — and then those two again by `userId`, which is the only
-pass that reaches a `workspaceId: null` row or an editor's chat in someone else's workspace. It refuses, deleting nothing, while the user belongs to any workspace they
-don't solely own, whether as editor, viewer or co-owner. A write that races the deletion cannot
+pass that reaches a `workspaceId: null` row or an editor's chat in someone else's workspace. Since
+KOL-124 it also drops every [`WorkspaceInvite`](#workspaceinvite) addressed to the account's own
+email, wherever it is: an invite is keyed by address rather than by user id, so one left behind in a
+workspace the account does not own would be offered to whoever next registered that address. It refuses, deleting nothing, while the user belongs to any workspace they
+don't solely own, whether as editor, viewer or co-owner — the refusal collaborator invites make
+reachable for the first time. A *pending* invite is not a membership and does not block a deletion. A write that races the deletion cannot
 leave a row behind. Every model carrying `workspaceId` looks up its workspace after each insert, and
 `UserMemory` and `Conversation` look up their user. A row whose owner is gone deletes itself
 ([`lib/ownerGuard.js`](../server/src/lib/ownerGuard.js)), and the deleter sweeps again after
@@ -556,6 +572,48 @@ it costs nothing here and stays free.
 
 `generatingSince` is a lock, not a timestamp for display. Cost is unknown until a run finishes, so
 simultaneous runs would each pass the same budget check; this caps the overshoot at one run.
+
+---
+
+## WorkspaceInvite
+
+```js
+{
+  _id:         ObjectId,
+  workspaceId: ObjectId,  // required, ref Workspace — the workspace being joined
+  email:       String,    // required, lowercased, trimmed — the invited address
+  role:        String,    // 'owner' | 'editor' | 'viewer', default 'editor'
+  invitedBy:   ObjectId,  // required, ref User — who asked, for the invitee to read
+  createdAt:   Date,
+  updatedAt:   Date
+}
+```
+
+A pending invitation to join a workspace (KOL-124) — the row that makes `editor` and `viewer`
+reachable on a real deployment. See [Collaborators](api.md#collaborators) for the routes.
+
+**An invite names an email address and delivers nothing.** There is no token, no link and no mail:
+an outbound mail credential is out of scope, so minting a link nobody could receive would be a
+secret with no delivery channel and a second way into a workspace to secure. The invitee sees it
+when they ask for their own (`GET /invites`), matched on `email` — the identifier registration
+already keeps unique, stored here exactly as `User.email` is stored, so the match is an equality
+test between two stored primitives rather than a regex built from a request.
+
+- **One pending invite per address per workspace**, a unique index on `{ workspaceId, email }`.
+  Re-inviting an address updates the waiting invite's `role` and `invitedBy` instead of writing a
+  second row that disagrees with it.
+- **An address with no account simply waits.** The row is valid, nothing resolves it, and it becomes
+  visible the moment someone registers that address. There is **no expiry**: a pending invite is not
+  a credential, so time does not make it dangerous — and an owner can withdraw one.
+- **Accepting is the only thing that writes a membership**, and it spends the invite. The membership
+  is pushed first and the invite deleted second, so a crash between them leaves a stale invite whose
+  accept is idempotent rather than a spent invite with no membership.
+- **Workspace-scoped data**, so it is in `WORKSPACE_SCOPED_MODELS` and carries
+  [`ownerGuard`](../server/src/lib/ownerGuard.js) on `workspaceId`: invites go when their workspace
+  does, and one written after that deletes itself. Invites addressed *to* a deleted account are
+  swept by address — see [Workspace](#workspace).
+- `invitedBy` is deliberately not required to still exist: an invite whose inviter deleted their
+  account is stale, not invalid, and the workspace it points at is the authority.
 
 ---
 

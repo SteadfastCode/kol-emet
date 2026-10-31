@@ -102,7 +102,13 @@ a *pull request against the graph*. Build order:
   gap, unscoped `populate()` of `open_questions` and `entry_ids`, was closed 2026-09-17 (KOL-032):
   both are populated with `match: { workspaceId }` and neither accepts a foreign id on write — see
   [data-model.md](data-model.md#workspace).
-- Workspace management, collaborator invites, billing
+- **Workspace management, collaborator invites, billing** — invites **shipped 2026-10-31**
+  (KOL-124): a `WorkspaceInvite` keyed by email address, accepted by the invitee from their own
+  Settings, plus role changes and member removal for an owner, with the floor that a workspace
+  always keeps one owner. No mail is sent and no invite link is minted — an outbound mail
+  credential is out of scope — so the inviter passes the word on themselves. See
+  [api.md](api.md#collaborators). Workspace *creation* and the switcher shipped with KOL-090 and
+  KOL-123; deleting a workspace, seat billing and per-plan limits are still open
 - Separate product name and branding under Steadfast Code
 - Public-facing marketing site
 - Local AI support via Ollama (MCP/chat layer already provider-agnostic)
