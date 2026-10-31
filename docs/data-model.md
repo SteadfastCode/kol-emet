@@ -490,6 +490,19 @@ one.
 Members are modelled from the start rather than a bare `ownerId`, so shared workspaces don't require
 reshaping the schema later. Registration creates a personal workspace with the new user as sole owner.
 
+**A user may have more than one (KOL-123).** `POST /auth/register` was the only thing that had ever
+created a `Workspace`, so every account had exactly one for life;
+[`POST /workspaces`](api.md#workspaces) is the second caller and both go through
+`createWorkspace()` in [`lib/workspaceSeeder.js`](../server/src/lib/workspaceSeeder.js), so the
+`members` entry (`role: 'owner'` — the role every gate judges, not merely `ownerId`) and the
+`template` key stored on the document cannot drift between the two paths. Two differences from
+registration: `template: null` is accepted and stored as `null`, meaning **seeded with nothing** —
+an empty workspace, the only kind [`POST /import`](api.md#import) will write into — and the number
+one account may *own* is capped (`WORKSPACE_MAX_PER_OWNER`, default 10), counted on the `owner`
+role so a membership somebody else owns never uses up a user's own allowance. Creating one does not
+change which workspace a session acts in; `POST /workspaces/:id/select` remains the only writer of
+that.
+
 **Account deletion** is a hard delete, drafts included
 ([`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js), behind
 [`DELETE /auth/account`](api.md#auth)). It removes the user,
@@ -511,6 +524,14 @@ inserted under a `workspaceId` that has no workspace behind it.
   name:    String,
   ownerId: ObjectId,   // ref → User (indexed)
   members: [{ userId: ObjectId, role: 'owner' | 'editor' | 'viewer' }],
+
+  // Which template seeded it (KOL-105), read by the assistant's system prompt —
+  // the template's one-line description is the only sentence anywhere that says
+  // what a workspace is about. `null` = unknown (a workspace created before the
+  // key was recorded) or, since KOL-123, deliberately seeded with nothing. Not
+  // an enum: a retired key must read as unknown, not make the document
+  // unsaveable. No backfill.
+  template: String | null,
 
   // AI allowance in MICRO-DOLLARS (1_000_000 = $1.00). Integers, because this
   // is compared and decremented on every AI call and float cents drift.

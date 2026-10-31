@@ -7,7 +7,6 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 import User from '../models/User.js';
-import Workspace from '../models/Workspace.js';
 import { logSessions, requireAuth, requireActor, stampSession } from '../middleware/auth.js';
 import {
   DEFAULT_WORKSPACE_NAME,
@@ -15,7 +14,7 @@ import {
   workspaceLog,
   workspaceName,
 } from '../middleware/workspace.js';
-import { resolveTemplateKey, seedWorkspace } from '../lib/workspaceSeeder.js';
+import { createWorkspace } from '../lib/workspaceSeeder.js';
 import { hasTemplate } from '../config/templates.js';
 import { deleteAccount } from '../lib/accountDeleter.js';
 import { createAuthLimiter } from '../lib/attemptLimiter.js';
@@ -212,32 +211,28 @@ router.post('/register', async (req, res) => {
 
   // Every user needs a workspace immediately — resolveWorkspace fails closed
   // without one, so a user created here but left workspace-less could not read
-  // or write anything.
-  let workspace;
+  // or write anything. The create, the template key stored on the document
+  // (KOL-105) and the seed are one call since KOL-123, shared with
+  // `POST /workspaces`: see lib/workspaceSeeder.js. Only a failure to *create*
+  // throws — a partial seed is reported there and leaves a usable workspace.
+  //
+  // `template` is passed through as the request sent it, and is never `null`
+  // here: a `template` naming no template is already a 400 above, so this is
+  // either a key or `undefined` (the default). The empty workspace `null` asks
+  // for is `POST /workspaces` only.
   try {
-    workspace = await Workspace.create({
-      name:    newWorkspaceName,
-      ownerId: user._id,
-      members: [{ userId: user._id, role: 'owner' }],
-      // Which template seeded it (KOL-105), kept rather than discarded once
-      // seedWorkspace below has used it: the template's one-line description
-      // is what tells the assistant what this workspace is about. Written
-      // here rather than by the seeder because seeding is best-effort — a
-      // workspace that seeded only partly was still asked for this template.
-      template: resolveTemplateKey(template),
+    await createWorkspace({
+      name:     newWorkspaceName,
+      ownerId:  user._id,
+      template,
+      source:   `${SIGNUP_SOURCE}, ${requestedName === undefined ? 'no workspaceName in the request → the default' : 'workspaceName from the request'}`,
     });
-    workspaceLog('light', `created workspace ${workspace._id} named "${workspace.name}" for user ${user._id} (source: POST /auth/register, ${requestedName === undefined ? `no workspaceName in the request → the default` : `workspaceName from the request`})`);
   } catch (err) {
     // Don't strand a user with an account but no workspace.
+    workspaceLog('light', `failed to create a workspace for user ${user._id}, deleting the account rather than stranding it (source: ${SIGNUP_SOURCE}): ${err.message}`);
     await User.deleteOne({ _id: user._id });
     return res.status(500).json({ error: 'Could not create workspace' });
   }
-
-  // Seed starting content so the new workspace isn't an empty shell. Awaited
-  // so the first page load sees it, but never fatal — seedWorkspace reports
-  // failure rather than throwing, and an unseeded workspace still works.
-  const seed = await seedWorkspace(workspace._id, template);
-  if (!seed.ok) console.error(`[auth] workspace ${workspace._id} seeded partially:`, seed.error);
 
   startSession(req, res, user, { status: 201, source: SIGNUP_SOURCE });
 });

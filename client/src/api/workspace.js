@@ -17,6 +17,11 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '';
  * cannot scope its own reads, so a workspace "chosen" in a store here while the
  * server resolved another is the split KOL-090 exists to remove.
  *
+ * `POST /workspaces` creates a second one (KOL-123) — seeded from a template,
+ * or empty. It deliberately does not select what it creates, so the caller
+ * follows it with `selectWorkspace()`: that route stays the only writer of
+ * which workspace a session acts in.
+ *
  * A refusal keeps the server's code on the error (`NOT_WORKSPACE_OWNER`,
  * `INVALID_WORKSPACE_NAME`) plus its status, because Settings says something
  * different for each.
@@ -25,8 +30,9 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '';
  * off | light | normal | verbose (default light). The server logs the same
  * operations on its own WORKSPACE_LOG_LEVEL.
  *   light   — every rename sent from here and how it ended, naming what asked
- *             for it and the name it replaced, and every workspace switch,
- *             naming the one it replaced
+ *             for it and the name it replaced, every workspace switch, naming
+ *             the one it replaced, and every create, naming what it was seeded
+ *             from — a template key, or nothing
  *   normal  — light, plus each read and the role it came back with
  *   verbose — normal, plus the whole response body
  */
@@ -51,7 +57,10 @@ async function req(path, options = {}) {
   });
   const body = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
-    throw Object.assign(new Error(body?.error ?? `${res.status}`), { status: res.status });
+    // `limit` comes off `409 WORKSPACE_LIMIT_REACHED` only, and is carried
+    // rather than dropped so the message can name the number instead of
+    // telling a user they have hit a cap nobody will say the size of.
+    throw Object.assign(new Error(body?.error ?? `${res.status}`), { status: res.status, limit: body?.limit });
   }
   return body;
 }
@@ -90,8 +99,10 @@ export async function renameWorkspace(name, { source, from } = {}) {
  * Every workspace the signed-in user is a member of, oldest first, each
  * `{ _id, name, role, createdAt }` — the same shape as `getWorkspace()`.
  *
- * What the switcher in Settings is built from. One entry is the ordinary case
- * and the switcher is hidden for it; there is nothing to choose between.
+ * What the switcher in Settings is built from. Since a user can create a second
+ * workspace (KOL-123) the switcher is shown for a single membership too — it is
+ * where the one just created appears, and hiding it would have hidden the place
+ * the New workspace form beside it puts things.
  *
  * @param {object} [options]
  * @param {string} [options.source] what asked for it, for the log line
@@ -126,6 +137,47 @@ export async function selectWorkspace(id, { source, from } = {}) {
     return workspace;
   } catch (err) {
     log('light', `switch to workspace ${id} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'POST /workspaces/:id/select'}, leaving ${from ?? 'the default'})`);
+    throw err;
+  }
+}
+
+/**
+ * Creates a workspace owned by the signed-in user and answers it in the same
+ * `{ _id, name, role, createdAt }` shape, with `role: 'owner'`.
+ *
+ * **It is not the workspace this session acts in afterwards.** The server does
+ * not select what it creates — `POST /workspaces/:id/select` stays the only
+ * writer of that — so a caller that wants to land in the new workspace calls
+ * `selectWorkspace()` next; see the New workspace form in WikiLayout.vue.
+ *
+ * `template` is a key from `getTemplates()` (api/auth.js), `undefined` for the
+ * server's default, or **`null` to seed nothing** — an empty workspace, which
+ * is the only kind `POST /import` will write into. It is omitted from the body
+ * when `undefined`, so "say nothing" and "say nothing on purpose" stay
+ * different requests.
+ *
+ * Refusals keep the server's code and status, because the form says something
+ * different for each: 400 `INVALID_WORKSPACE_NAME`, 400 `Unknown template`,
+ * 409 `WORKSPACE_LIMIT_REACHED` (whose `limit` is carried on the error).
+ *
+ * @param {string} name 1–80 characters once trimmed
+ * @param {object} [options]
+ * @param {string|null} [options.template] a template key, or null for an empty workspace
+ * @param {string} [options.source] what asked for it, for the log line
+ * @returns {Promise<{ _id: string, name: string, role: string, createdAt: string }>}
+ */
+export async function createWorkspace(name, { template, source } = {}) {
+  const seededFrom = template === null ? 'nothing (an empty workspace)' : template ?? 'the server default template';
+  try {
+    const workspace = await req('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name, ...(template !== undefined && { template }) }),
+    });
+    log('light', `created "${workspace.name}" (${workspace._id}) as ${workspace.role}, seeded from ${seededFrom}; this session still acts in whatever it did before (source: ${source ?? 'POST /workspaces'})`);
+    log('verbose', JSON.stringify(workspace));
+    return workspace;
+  } catch (err) {
+    log('light', `create of "${name}" from ${seededFrom} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'POST /workspaces'})`);
     throw err;
   }
 }
