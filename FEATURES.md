@@ -51,7 +51,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member**
+- [x] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member**
   `Workspace.members` has carried a `role` of `owner | editor | viewer` since KOL-071
   (`server/src/models/Workspace.js:14`), `requireWorkspaceRole`/`requireWriteRole` gate every content write on it
   (`server/src/middleware/workspace.js:245,290`, KOL-103), and Settings already tells a caller "Only an owner can rename
