@@ -54,7 +54,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-130) A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.**
+- [x] **(KOL-130) A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.**
   Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:269). A column
   whose unquoted name is in TABLE_CONSTRAINTS is silently discarded. `looksLikeTableConstraint`
   (:341) returns true for any bare word in that set, and `readTableConstraint` then returns null

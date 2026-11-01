@@ -59,42 +59,25 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-124": {
+    "KOL-130": {
       "order": 4,
-      "title": "Invite a collaborator: the role system is enforced, but nothing can create a non-owner member",
-      "status": "done",
+      "title": "A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-124",
+      "branch": "routine/item/KOL-130",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-10-31T22:27:46.312Z",
-      "runId": "2026-10-31T22:06:28.705Z",
-      "lastFail": null
-    },
-    "KOL-130": {
-      "order": 5,
-      "title": "A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-01T10:25:21.983Z",
+      "runId": "2026-11-01T10:24:46.140Z",
       "lastFail": null
     },
     "KOL-131": {
-      "order": 6,
+      "order": 5,
       "title": "readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…",
       "status": "pending",
       "attempts": 0,
@@ -111,7 +94,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -128,7 +111,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -145,7 +128,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -162,7 +145,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 10,
+      "order": 9,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -179,7 +162,7 @@
       "lastFail": null
     },
     "KOL-126": {
-      "order": 11,
+      "order": 10,
       "title": "Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft",
       "status": "pending",
       "attempts": 0,
@@ -196,7 +179,7 @@
       "lastFail": null
     },
     "KOL-127": {
-      "order": 12,
+      "order": 11,
       "title": "A generated update stacks a block the entity already has, and an item proposing nothing is still a decision",
       "status": "pending",
       "attempts": 0,
@@ -213,7 +196,7 @@
       "lastFail": null
     },
     "KOL-128": {
-      "order": 13,
+      "order": 12,
       "title": "An account deletion cannot reach a connector's stream, and three places say it can",
       "status": "pending",
       "attempts": 0,
@@ -227,6 +210,23 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-124": {
+      "order": null,
+      "title": "Invite a collaborator: the role system is enforced, but nothing can create a non-owner member",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-124",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-10-31T22:27:46.312Z",
+      "runId": "2026-10-31T22:06:28.705Z",
       "lastFail": null
     },
     "KOL-123": {
