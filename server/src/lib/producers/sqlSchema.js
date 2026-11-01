@@ -265,13 +265,23 @@ const COLUMN_CONSTRAINTS = new Set([
   'ON', 'AS', 'STORAGE', 'DEFERRABLE', 'VISIBLE', 'INVISIBLE', 'ENFORCED', 'ENCODE',
 ]);
 
-/** Words that open a table-level constraint rather than a column. */
+/**
+ * Words that open a table-level constraint rather than a column.
+ *
+ * Postgres and MySQL both reserve CONSTRAINT, PRIMARY, UNIQUE, FOREIGN, CHECK
+ * and LIKE, so an unquoted one of those cannot be a column's name and the bare
+ * word is enough to read it as a constraint. EXCLUDE, FULLTEXT, SPATIAL and
+ * PERIOD are reserved in neither, so a bare word there is just as likely a
+ * column called `period` or `exclude` — those go through CONSTRAINT_SHAPES,
+ * which wants the constraint's own shape before it claims the definition.
+ */
 const TABLE_CONSTRAINTS = new Set(['CONSTRAINT', 'PRIMARY', 'UNIQUE', 'FOREIGN', 'CHECK', 'EXCLUDE', 'FULLTEXT', 'SPATIAL', 'PERIOD', 'LIKE']);
 
 /**
- * Type words, used for one thing only: telling MySQL's inline index
- * (`KEY idx_user (user_id)`) from a column that happens to be called `key` or
- * `index` (`key VARCHAR(50)`). Both are a word, a word and a `(`.
+ * Type words, used for one thing only: telling an index declaration
+ * (`KEY idx_user (user_id)`, `FULLTEXT KEY ft_body (body)`) from a column that
+ * happens to be called `key`, `index`, `fulltext` or `spatial`
+ * (`key VARCHAR(50)`). Both are a word, a word and a `(`.
  */
 const TYPE_WORDS = new Set([
   'VARCHAR', 'VARCHAR2', 'NVARCHAR', 'CHAR', 'NCHAR', 'CHARACTER', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT',
@@ -337,19 +347,52 @@ function readColumnList(tokens, i, to) {
   return names;
 }
 
+/** Whether `t` is a type word rather than a name — the VARCHAR of `key VARCHAR(50)`. */
+const isTypeWord = t => Boolean(t) && t.type === 'word' && TYPE_WORDS.has(t.upper);
+
+/**
+ * An inline index declaration at `from`: a keyword, an optional `KEY`/`INDEX`,
+ * an optional index name and then the `(` of its column list — `KEY (col)`,
+ * `KEY idx_user (user_id)`, `FULLTEXT KEY ft_body (body)`, `SPATIAL (geom)`.
+ *
+ * The index name must not be a type word, because that is the only thing
+ * telling `KEY idx_user (user_id)` from a column called `key VARCHAR(50)`:
+ * both are a word, a word and a `(`.
+ */
+function looksLikeIndex(tokens, from, to) {
+  let i = from + 1;
+  if (isWord(tokens[i], 'KEY') || isWord(tokens[i], 'INDEX')) i++;
+  if (isPunct(tokens[i], '(') && i < to) return true;
+  if (!isName(tokens[i]) || isTypeWord(tokens[i])) return false;
+  return isPunct(tokens[i + 1], '(') && i + 1 < to;
+}
+
+/**
+ * What a table-level constraint looks like, for the keywords no dialect here
+ * reserves — so a bare one of them could equally be a column's name. Without
+ * this a column called `period`, `exclude`, `fulltext`, `spatial`, `key` or
+ * `index` is taken for a constraint and then vanishes, because
+ * readTableConstraint has no reading for any of these to return.
+ */
+const CONSTRAINT_SHAPES = new Map([
+  // MariaDB/SQL:2011 periods: `PERIOD FOR SYSTEM_TIME (start, end)`.
+  ['PERIOD', (tokens, from) => isWord(tokens[from + 1], 'FOR')],
+  // Postgres: `EXCLUDE (c WITH =)`, or `EXCLUDE USING gist (c WITH &&)`.
+  ['EXCLUDE', (tokens, from) => isPunct(tokens[from + 1], '(') || isWord(tokens[from + 1], 'USING')],
+  // MySQL's index forms, each of them a word, an optional name and a `(`.
+  ['FULLTEXT', looksLikeIndex],
+  ['SPATIAL', looksLikeIndex],
+  ['KEY', looksLikeIndex],
+  ['INDEX', looksLikeIndex],
+]);
+
 /** Whether `[from, to)` is a table-level constraint rather than a column definition. */
 function looksLikeTableConstraint(tokens, from, to) {
   const t = tokens[from];
   if (!t || t.type !== 'word') return false;          // a quoted name is always a column
-  if (TABLE_CONSTRAINTS.has(t.upper)) return true;
-  if (t.upper === 'KEY' || t.upper === 'INDEX') {
-    // MySQL's inline index: `KEY (col)`, or `KEY name (col)` where `name` is
-    // not a type — which is what tells it from a column called `key`.
-    if (isPunct(tokens[from + 1], '(')) return true;
-    const next = tokens[from + 1];
-    return isName(next) && !(next.type === 'word' && TYPE_WORDS.has(next.upper)) && isPunct(tokens[from + 2], '(') && to > from + 2;
-  }
-  return false;
+  const shape = CONSTRAINT_SHAPES.get(t.upper);
+  if (shape) return shape(tokens, from, to);          // not reserved: it has to look like one
+  return TABLE_CONSTRAINTS.has(t.upper);
 }
 
 /**

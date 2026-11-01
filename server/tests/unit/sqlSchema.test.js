@@ -42,6 +42,8 @@
  *     preference removed              -> `REFERENCES customers(id)` inside
  *                                        `public.orders` goes ambiguous
  *   - existingByKey lookup removed    -> the re-import test fails
+ *   - CONSTRAINT_SHAPES bypassed      -> a column called `period` or `exclude`
+ *                                        vanishes from its table, silently
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_SQL_SCHEMA_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -351,6 +353,115 @@ describe('MySQL and SQL Server spellings', () => {
     const { items: sqlServer } = parse(sql, {}, 'a SQL Server script');
     assert.deepEqual(entities(sqlServer).map(i => i.proposed.title), ['Customers', 'Sessions']);
     assert.deepEqual(edges(sqlServer), ['Dependent:Sessions → Dependency:Customers']);
+  });
+});
+
+describe('a column named after a constraint keyword', () => {
+  // The collision KEY and INDEX were already guarded against, for the keywords
+  // that have the same shape problem: EXCLUDE, PERIOD, FULLTEXT and SPATIAL are
+  // reserved in neither Postgres nor MySQL, so `period date NOT NULL` is a
+  // perfectly ordinary column — and the bare word was enough to take it for a
+  // table-level constraint, which readTableConstraint then had no reading for,
+  // so the column was dropped without even a drop reason to show the reviewer.
+
+  test('a column called `period`, `exclude`, `fulltext` or `spatial` is a column', () => {
+    const sql = [
+      'CREATE TABLE budgets (',
+      '  id int PRIMARY KEY,',
+      '  period date NOT NULL,',
+      '  exclude boolean,',
+      '  fulltext text,',
+      '  spatial geometry,',
+      '  amount numeric',
+      ');',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'columns named after constraint keywords');
+    assert.deepEqual(columns(entityNamed(items, 'budgets')), [
+      'id = int PRIMARY KEY',
+      'period = date NOT NULL',
+      'exclude = boolean',
+      'fulltext = text',
+      'spatial = geometry',
+      'amount = numeric',
+    ]);
+    // A column silently discarded is worse than a column dropped loudly: there
+    // is nothing in the draft to tell the reviewer the table is incomplete.
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('a composite key over such a column still lands on it', () => {
+    // The marker is applied through byLowerName, so a column the reader never
+    // produced cannot be marked — which is how the drop stayed invisible.
+    const sql = 'CREATE TABLE rates (period date, tenant_id int, rate numeric, PRIMARY KEY (period, tenant_id));';
+    const { items } = parse(sql, {}, 'a composite key over a `period` column');
+    assert.deepEqual(columns(entityNamed(items, 'rates')), [
+      'period = date PRIMARY KEY (composite)',
+      'tenant_id = int PRIMARY KEY (composite)',
+      'rate = numeric',
+    ]);
+  });
+
+  test('a foreign key declared on such a column is still a Depends on link', () => {
+    // An inline REFERENCES is collected off the column, so losing the column
+    // lost the edge with it — one table less connected, for a naming choice.
+    const sql = [
+      'CREATE TABLE periods (id int PRIMARY KEY);',
+      'CREATE TABLE budgets (id int PRIMARY KEY, period int REFERENCES periods(id));',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'a foreign key on a `period` column');
+    assert.deepEqual(edges(items), ['Dependent:budgets → Dependency:periods']);
+  });
+
+  test('the real constraints those words open are still constraints, not invented columns', () => {
+    const sql = [
+      'CREATE TABLE reservations (',
+      '  id int PRIMARY KEY,',
+      '  during tsrange NOT NULL,',
+      '  valid_from date,',
+      '  valid_to date,',
+      '  body text,',
+      '  geom geometry,',
+      '  PERIOD FOR application_time (valid_from, valid_to),',
+      '  EXCLUDE USING gist (during WITH &&),',
+      '  FULLTEXT KEY ft_body (body),',
+      '  SPATIAL INDEX sp_geom (geom)',
+      ');',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'the constraint forms of the same words');
+    // Each has no reading in this vocabulary, and is passed over in silence as
+    // a CHECK is — but none of them may become a column of its own.
+    assert.deepEqual(columns(entityNamed(items, 'reservations')), [
+      'id = int PRIMARY KEY',
+      'during = tsrange NOT NULL',
+      'valid_from = date',
+      'valid_to = date',
+      'body = text',
+      'geom = geometry',
+    ]);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('a reserved keyword is a constraint on the bare word, and quoted is a column', () => {
+    // CONSTRAINT, PRIMARY, UNIQUE, FOREIGN, CHECK and LIKE are reserved in both
+    // Postgres and MySQL, so unquoted they cannot be a column name and need no
+    // shape of their own — and quoted they are a name like any other.
+    const sql = [
+      'CREATE TABLE audits (',
+      '  id int PRIMARY KEY,',
+      '  "check" boolean NOT NULL,',
+      '  `unique` text,',
+      '  amount numeric,',
+      '  CHECK (amount > 0)',
+      ');',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'quoted reserved words beside a CHECK');
+    assert.deepEqual(columns(entityNamed(items, 'audits')), [
+      'id = int PRIMARY KEY',
+      'check = boolean NOT NULL',
+      'unique = text',
+      'amount = numeric',
+    ]);
+    assert.deepEqual(dropReasons, []);
   });
 });
 
