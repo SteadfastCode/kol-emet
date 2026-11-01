@@ -54,15 +54,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-130) A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.**
-  Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:269). A column
-  whose unquoted name is in TABLE_CONSTRAINTS is silently discarded. `looksLikeTableConstraint`
-  (:341) returns true for any bare word in that set, and `readTableConstraint` then returns null
-  for PERIOD/EXCLUDE/FULLTEXT/SPATIAL, so the `if (!constraint) continue` at :571 drops the
-  definition with no drop reason. `CREATE TABLE budgets (id int PRIMARY KEY, period date NOT NULL,
-  amount numeric);` proposes a Data Store with only `id` and `amount` — `period` vanishes and the
-  reviewer is never told. `KEY`/`INDEX` got a TYPE_WORDS guard for exactly this collision; these
-  keywords (none of them reserved in Postgres) did not.
 - [ ] **(KOL-131) readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…**
   Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:459).
   `readAlterTableForeignKeys` mines a trailing ALTER only for `FOREIGN KEY`, but a real `pg_dump
@@ -215,6 +206,15 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-130) A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.** (routine 2026-11-01, da11145)
+  Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:269). A column
+  whose unquoted name is in TABLE_CONSTRAINTS is silently discarded. `looksLikeTableConstraint`
+  (:341) returns true for any bare word in that set, and `readTableConstraint` then returns null
+  for PERIOD/EXCLUDE/FULLTEXT/SPATIAL, so the `if (!constraint) continue` at :571 drops the
+  definition with no drop reason. `CREATE TABLE budgets (id int PRIMARY KEY, period date NOT NULL,
+  amount numeric);` proposes a Data Store with only `id` and `amount` — `period` vanishes and the
+  reviewer is never told. `KEY`/`INDEX` got a TYPE_WORDS guard for exactly this collision; these
+  keywords (none of them reserved in Postgres) did not.
 - [x] **(KOL-124) Invite a collaborator: the role system is enforced, but nothing can create a non-owner member** (routine 2026-10-31, 2f79338)
   `Workspace.members` has carried a `role` of `owner | editor | viewer` since KOL-071
   (`server/src/models/Workspace.js:14`), `requireWorkspaceRole`/`requireWriteRole` gate every content write on it

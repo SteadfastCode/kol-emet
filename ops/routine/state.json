@@ -62,7 +62,7 @@
     "KOL-130": {
       "order": 4,
       "title": "A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-130",
