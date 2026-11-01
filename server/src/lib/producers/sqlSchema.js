@@ -26,15 +26,21 @@
  *                                       actually emits, so a dump whose foreign
  *                                       keys are all in trailing ALTERs still
  *                                       maps its edges
+ *   ALTER TABLE … ADD CONSTRAINT …
+ *     PRIMARY KEY / UNIQUE           -> the marker on each column it names, as
+ *                                       the inline form gets; pg_dump emits
+ *                                       these as trailing ALTERs too, and
+ *                                       nothing else in a dump declares them
  *
  * A statement this file cannot read — an unclosed column list, a `CREATE TABLE
  * … AS SELECT` that declares no columns — is a **drop reason** surfaced in the
  * review UI, not a refusal of the file, exactly as an unreadable `kind` is in
  * the manifest producer. A file with no readable `CREATE TABLE` at all is the
  * refusal: there is nothing in it this producer can map. Everything that is
- * neither a CREATE TABLE nor a foreign-key ALTER is passed over silently — a
- * dump is mostly `SET`, `CREATE INDEX`, `COMMENT ON` and (with data) thousands
- * of INSERTs, and a drop reason each would bury the ones that matter.
+ * neither a CREATE TABLE nor an ALTER TABLE … ADD CONSTRAINT is passed over in
+ * silence — a dump is mostly `SET`, `CREATE INDEX`, `COMMENT ON` and (with
+ * data) thousands of INSERTs, and a drop reason each would bury the ones that
+ * matter.
  *
  * Why a tokenizer and not a regex: the things that make a real dump hard are
  * all lexical. A `--` or `#` comment, or a `/* … *\/` one, can hold the word
@@ -492,27 +498,45 @@ function readCreateTable(stmt) {
 }
 
 /**
- * `ALTER TABLE [ONLY] [IF EXISTS] name … FOREIGN KEY (…) REFERENCES t (…)`.
+ * `ALTER TABLE [ONLY] [IF EXISTS] name ADD [CONSTRAINT c] …`, as
+ * `{ parts, refs, keys }`: the foreign keys it adds, and the primary-key and
+ * unique constraints it adds.
  *
  * This is the shape that matters most in practice: `pg_dump` writes no inline
- * foreign key at all, it writes every one of them as a trailing ALTER. The
- * whole statement is scanned, so a MySQL `ALTER TABLE x ADD CONSTRAINT … , ADD
- * CONSTRAINT …` with several keys in one statement yields all of them.
+ * key of any kind. Every foreign key, every primary key and every unique
+ * constraint it emits is a trailing ALTER against the table — `ALTER TABLE ONLY
+ * public.customers ADD CONSTRAINT customers_pkey PRIMARY KEY (id);` — so a
+ * reading that mined these for FOREIGN KEY alone proposed every column of a
+ * Postgres dump unmarked, with no `PRIMARY KEY` or `UNIQUE` on any of them.
+ *
+ * The statement is cut into its actions on top-level commas, so a MySQL `ALTER
+ * TABLE x ADD CONSTRAINT … , ADD CONSTRAINT …` with several constraints in one
+ * statement yields all of them, and each action is read from its first `ADD`
+ * — which is what lets SQL Server's `ALTER TABLE x WITH CHECK ADD CONSTRAINT
+ * …` read, and what keeps `ADD COLUMN flag boolean PRIMARY KEY` (a column, not
+ * a table constraint) and `ALTER COLUMN id SET NOT NULL` from being mined for
+ * keys at all.
  */
-function readAlterTableForeignKeys(stmt) {
+function readAlterTableConstraints(stmt) {
   if (!isWord(stmt[0], 'ALTER') || !isWord(stmt[1], 'TABLE')) return null;
   let i = 2;
   while (isWord(stmt[i], 'ONLY') || isWord(stmt[i], 'IF') || isWord(stmt[i], 'EXISTS')) i++;
   const { parts, next } = readName(stmt, i);
   if (!parts.length) return null;
   const refs = [];
-  for (let k = next; k < stmt.length; k++) {
-    if (isWord(stmt[k], 'FOREIGN') && isWord(stmt[k + 1], 'KEY')) {
-      const constraint = readTableConstraint(stmt, k, stmt.length);
+  const keys = [];
+  for (const [from, to] of splitTop(stmt, next, stmt.length)) {
+    for (let k = from, depth = 0; k < to; k++) {
+      if (isPunct(stmt[k], '(')) { depth++; continue; }
+      if (isPunct(stmt[k], ')')) { depth--; continue; }
+      if (depth !== 0 || !isWord(stmt[k], 'ADD')) continue;
+      const constraint = readTableConstraint(stmt, k + 1, to);
       if (constraint?.kind === 'foreign') refs.push(constraint);
+      else if (constraint) keys.push(constraint);
+      break;                                         // one constraint per action
     }
   }
-  return { parts, refs };
+  return { parts, refs, keys };
 }
 
 // ─── parse ───────────────────────────────────────────────────────────────────
@@ -572,8 +596,9 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
   }
 
   // ── pass 1: read every statement ───────────────────────────────────────────
-  const tables = [];        // { schema, name, columns, offset, title }
+  const tables = [];        // { schema, name, columns, byLowerName, offset, title }
   const rawEdges = [];      // { from: {schema,name}, ref: {schema,name}, offset }
+  const rawKeys = [];       // { from: {schema,name}, kind: 'primary'|'unique', columns }
 
   for (const stmt of statements(tokens)) {
     const created = readCreateTable(stmt);
@@ -621,15 +646,18 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
         if (column.ref) foreignKeys.push({ ref: column.ref, offset: column.ref.offset });
       }
 
-      tables.push({ schema, name, columns, offset: created.offset });
+      tables.push({ schema, name, columns, byLowerName, offset: created.offset });
       for (const fk of foreignKeys) rawEdges.push({ from: { schema, name }, ref: fk.ref, offset: fk.offset });
       continue;
     }
 
-    const altered = readAlterTableForeignKeys(stmt);
+    const altered = readAlterTableConstraints(stmt);
     if (altered) {
       const from = qualify(altered.parts);
       for (const fk of altered.refs) rawEdges.push({ from, ref: fk.ref, offset: fk.offset });
+      // Not applied here: an ALTER names a table the file may not have read
+      // yet, so the keys wait until every CREATE TABLE is in.
+      for (const key of altered.keys) rawKeys.push({ from, kind: key.kind, columns: key.columns });
     }
     // Anything else — SET, CREATE INDEX, CREATE FUNCTION, COMMENT ON, INSERT —
     // is passed over in silence. See the header.
@@ -692,7 +720,29 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
   };
   const schemasOf = list => [...new Set(list.map(t => t.schema ?? '(no schema)'))].sort();
 
-  // ── pass 2: edges ──────────────────────────────────────────────────────────
+  // ── pass 2: the keys a trailing ALTER declares ─────────────────────────────
+  // Marked exactly as the inline table-level form is, by the same rule: a
+  // column that is one of two in a key is marked as being PART of one. Done
+  // after pass 1 rather than in it, because pg_dump emits every one of these
+  // after the whole file's CREATE TABLEs — statement order cannot matter.
+  //
+  // A constraint naming a table this file does not declare, or a column that
+  // table does not have, is passed over in silence: there is no proposal for
+  // it to mark, so a drop reason would name something the draft never had.
+  for (const raw of rawKeys) {
+    const table = resolveTable(raw.from, raw.from.schema).table;
+    if (!table) continue;
+    const kind = raw.columns.length > 1 ? 'composite' : 'single';
+    for (const columnName of raw.columns) {
+      const column = table.byLowerName.get(columnName);
+      if (!column) continue;
+      // An inline declaration wins: it was read first, and says the same thing.
+      if (raw.kind === 'primary') column.primaryKind ??= kind;
+      else column.uniqueKind ??= kind;
+    }
+  }
+
+  // ── pass 3: edges ──────────────────────────────────────────────────────────
   const edges = [];
   const edgeKeys = new Set();
   const DEPENDS = ['Dependent', 'Dependency'];

@@ -826,15 +826,25 @@ identifier's quotes are not part of its name.
 
 | SQL | Proposed |
 |-----|----------|
-| `CREATE TABLE` (ANSI, plus `IF NOT EXISTS`, `TEMPORARY`/`UNLOGGED`, and the Postgres, MySQL and SQL Server identifier quotings) | One **Data Store** titled the table's name — or `<schema>.<name>` when the file declares the same bare name under more than one schema, so a multi-schema dump proposes both rather than the second being dropped as a duplicate. An `attribute` block for a declared schema (*Schema*) and one per column, labelled with the column's name and valued with its type plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared; tag `sql-schema`. Capped at 80 columns, the rest a drop reason. |
+| `CREATE TABLE` (ANSI, plus `IF NOT EXISTS`, `TEMPORARY`/`UNLOGGED`, and the Postgres, MySQL and SQL Server identifier quotings) | One **Data Store** titled the table's name — or `<schema>.<name>` when the file declares the same bare name under more than one schema, so a multi-schema dump proposes both rather than the second being dropped as a duplicate. An `attribute` block for a declared schema (*Schema*) and one per column, labelled with the column's name and valued with its type plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared — inline, as a table-level constraint, or in a trailing `ALTER TABLE`; tag `sql-schema`. Capped at 80 columns, the rest a drop reason. |
 | A column's inline `REFERENCES`, a table-level `FOREIGN KEY (…) REFERENCES …`, and `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY` — the form **pg_dump** emits for every key it writes | `Depends on` group — Dependent, Dependency. One link per pair of tables however many keys join them, and however many columns a key spans. A key a table has on itself proposes none. |
+| `ALTER TABLE … ADD CONSTRAINT … PRIMARY KEY (…)` / `… UNIQUE (…)` — again the form **pg_dump** emits, and the only place a Postgres dump declares either | The `PRIMARY KEY` / `UNIQUE` marker on each column the constraint names, exactly as the inline form puts it there. Applied once every `CREATE TABLE` in the file has been read, so a statement order that puts the ALTER first reads the same. |
 
 A column's `DEFAULT` is deliberately not carried into its attribute: it is where a dump keeps a
-credential, and `redactSecrets` has already taken that out. A table-level `PRIMARY KEY (a, b)` or
-`UNIQUE (a, b)` marks each of its columns `PRIMARY KEY (composite)` / `UNIQUE (composite)`, because a
-column that is one of two in a key is not a key on its own. MySQL's inline `KEY`/`UNIQUE KEY` indexes
-are read as constraints, not columns — and a column *called* `key` is still a column. Indexes, views,
-triggers, grants and `ALTER TABLE … ADD COLUMN` are not read.
+credential, and `redactSecrets` has already taken that out. A `PRIMARY KEY (a, b)` or `UNIQUE (a, b)`
+over several columns, inline or in an ALTER, marks each of them `PRIMARY KEY (composite)` /
+`UNIQUE (composite)`, because a column that is one of two in a key is not a key on its own. MySQL's
+inline `KEY`/`UNIQUE KEY` indexes are read as constraints, not columns — and a column *called* `key`
+is still a column.
+
+An `ALTER TABLE` is read for the constraints it **adds**, one per comma-separated action, each from
+that action's `ADD` — so a MySQL `ALTER TABLE x ADD PRIMARY KEY (…), ADD CONSTRAINT …` yields all of
+them and a SQL Server `ALTER TABLE x WITH CHECK ADD CONSTRAINT …` is read, while `ADD COLUMN flag
+boolean PRIMARY KEY` (a column, not a table constraint), `ALTER COLUMN … SET NOT NULL` and `DROP
+CONSTRAINT` are not mined for keys at all. A constraint naming a table the file does not declare, or
+a column that table does not have, is passed over in silence rather than as a drop reason: there is
+no proposal for it to mark. Indexes, views, triggers, grants and `ALTER TABLE … ADD COLUMN` are not
+read.
 
 A foreign key's target resolves as ambiguously as SQL resolves it: the exact `schema.name`; failing
 that the referencing table's **own** schema, where the search path looks first; failing that the one
@@ -846,8 +856,8 @@ so.
 A statement with no reading — `CREATE TABLE … AS SELECT` (no column list), an unclosed column list, a
 quote or comment that runs off the end of the file — is a **drop reason**, not a refusal: refusing a
 2,000-line dump over one materialised view would cost the reviewer every table in it. Everything that
-is neither a `CREATE TABLE` nor a foreign-key `ALTER TABLE` is passed over in silence, because a dump
-is mostly `SET`, `CREATE INDEX`, `COMMENT ON` and, with data, thousands of INSERTs.
+is neither a `CREATE TABLE` nor an `ALTER TABLE … ADD CONSTRAINT` is passed over in silence, because a
+dump is mostly `SET`, `CREATE INDEX`, `COMMENT ON` and, with data, thousands of INSERTs.
 
 Titles and groups are deduplicated against the workspace exactly as the other three producers' are
 (`matchedBy: 'exact-normalized-title'` / `'same-members-and-label'`), so re-importing an unchanged
