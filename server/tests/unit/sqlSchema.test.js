@@ -17,10 +17,13 @@
  * function body delimited by `$$`, which a split on `;` would tear apart.
  *
  * Fixture: tests/fixtures/schema.sql — a pg_dump-shaped schema: four tables
- * across two schemas (two of them sharing a name), an inline foreign key, a
- * table-level one, a composite primary key, a dollar-quoted function body, a
- * `CREATE TABLE … AS SELECT` with no column list, and a trailing `ALTER TABLE …
- * ADD CONSTRAINT … FOREIGN KEY` naming a table the dump does not declare.
+ * across two schemas (two of them sharing a name), a dollar-quoted function
+ * body, a `CREATE TABLE … AS SELECT` with no column list, and — because this is
+ * the only way pg_dump writes a key — a trailing `ALTER TABLE … ADD CONSTRAINT`
+ * for each of its primary keys (one of them composite), its unique constraint
+ * and two of its foreign keys, one naming a table the dump does not declare.
+ * `public.orders` keeps the inline spellings a GUI export or a hand-written
+ * migration uses, so the one file holds both readings.
  *
  * Falsification checks, run red by hand against a deliberately broken producer:
  *   - comments not skipped            -> the "REFERENCES customers" in a comment
@@ -29,7 +32,15 @@
  *                                        statement apart
  *   - `$$` bodies not one token       -> everything after the function vanishes
  *   - quoted identifiers not unquoted -> `"display name"` keeps its quotes
- *   - the ALTER TABLE reading removed -> a pg_dump's foreign keys all vanish
+ *   - the ALTER TABLE reading removed -> a pg_dump's keys all vanish: no edges,
+ *                                        and no column marked PRIMARY KEY or
+ *                                        UNIQUE anywhere in the dump
+ *   - only FOREIGN KEY mined from an
+ *     ALTER                           -> the fixture's customers and
+ *                                        order_items lose every key marker
+ *   - an ADD COLUMN or ALTER COLUMN
+ *     action mined for keys too       -> `ADD COLUMN flag boolean PRIMARY KEY`
+ *                                        marks a column of the CREATE TABLE
  *   - the no-column-list drop turned
  *     into a throw                    -> `CREATE TABLE … AS SELECT` refuses the
  *                                        file
@@ -147,6 +158,9 @@ describe('schema.sql fixture', () => {
   });
 
   test('each column is an attribute block carrying its type and key markers', () => {
+    // Neither marker here is declared in the CREATE TABLE: pg_dump writes the
+    // primary key and the unique constraint as trailing ALTERs, and nothing
+    // else in a dump declares them.
     assert.deepEqual(columns(entityNamed(items, 'public.customers')), [
       'id = bigint PRIMARY KEY NOT NULL',
       'email = character varying(255) NOT NULL UNIQUE',
@@ -163,7 +177,8 @@ describe('schema.sql fixture', () => {
 
   test('a composite primary key says so on each of its columns', () => {
     // A column that is one of two in a key is not a key on its own, and a
-    // reviewer who cannot tell those apart is reading the wrong schema.
+    // reviewer who cannot tell those apart is reading the wrong schema. This
+    // one is declared where pg_dump declares it: a trailing ALTER.
     assert.deepEqual(columns(entityNamed(items, 'order_items')), [
       'order_id = integer PRIMARY KEY (composite) NOT NULL',
       'sku = text PRIMARY KEY (composite) NOT NULL',
@@ -171,11 +186,13 @@ describe('schema.sql fixture', () => {
     ]);
   });
 
-  test('an inline REFERENCES and a table-level FOREIGN KEY are both Depends on links', () => {
+  test('an inline REFERENCES and a trailing ALTER are both Depends on links', () => {
     assert.deepEqual(edges(items), [
+      // From a trailing `ALTER TABLE ONLY public.order_items ADD CONSTRAINT …
+      // FOREIGN KEY`, which is the only way pg_dump writes one.
+      'Dependent:order_items → Dependency:orders',
       // Inline, from a column definition. `REFERENCES customers(id)` is read in
       // the referencing table's own schema, which is where SQL looks first.
-      'Dependent:order_items → Dependency:orders',
       'Dependent:orders → Dependency:public.customers',
     ]);
     for (const r of relationships(items)) {
@@ -461,6 +478,143 @@ describe('a column named after a constraint keyword', () => {
       'unique = text',
       'amount = numeric',
     ]);
+    assert.deepEqual(dropReasons, []);
+  });
+});
+
+describe('keys a trailing ALTER TABLE declares', () => {
+  // pg_dump declares no key inline. A CREATE TABLE it writes carries types,
+  // NOT NULLs and DEFAULTs only, and every primary key, unique constraint and
+  // foreign key arrives afterwards as its own `ALTER TABLE ONLY x ADD
+  // CONSTRAINT …`. So a reading that mined those statements for FOREIGN KEY
+  // alone proposed every column of a Postgres dump — the headline input this
+  // producer is sold on — with no PRIMARY KEY or UNIQUE marker on any of them.
+
+  test("a PRIMARY KEY and a UNIQUE in their own statements still mark their columns", () => {
+    const sql = [
+      'CREATE TABLE public.customers (',
+      '    id bigint NOT NULL,',
+      '    email character varying(255) NOT NULL,',
+      '    nickname text',
+      ');',
+      '',
+      'ALTER TABLE ONLY public.customers',
+      '    ADD CONSTRAINT customers_pkey PRIMARY KEY (id);',
+      '',
+      'ALTER TABLE ONLY public.customers',
+      '    ADD CONSTRAINT customers_email_key UNIQUE (email);',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, "pg_dump's own spelling for a key");
+    assert.deepEqual(columns(entityNamed(items, 'customers')), [
+      'id = bigint PRIMARY KEY NOT NULL',
+      'email = character varying(255) NOT NULL UNIQUE',
+      'nickname = text',
+    ]);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('a composite key declared that way says so on each of its columns', () => {
+    const sql = [
+      'CREATE TABLE order_items (order_id integer NOT NULL, sku text NOT NULL, quantity integer);',
+      'ALTER TABLE ONLY order_items ADD CONSTRAINT order_items_pkey PRIMARY KEY (order_id, sku);',
+      'ALTER TABLE ONLY order_items ADD CONSTRAINT order_items_sku_key UNIQUE (sku, quantity);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'a composite key through an ALTER');
+    assert.deepEqual(columns(entityNamed(items, 'order_items')), [
+      'order_id = integer PRIMARY KEY (composite) NOT NULL',
+      'sku = text PRIMARY KEY (composite) NOT NULL UNIQUE (composite)',
+      'quantity = integer UNIQUE (composite)',
+    ]);
+  });
+
+  test('several constraints in one ALTER are all read', () => {
+    // MySQL's spelling: one statement, an action per comma.
+    const sql = [
+      'CREATE TABLE `teams` (`id` int NOT NULL, PRIMARY KEY (`id`));',
+      'CREATE TABLE `users` (`id` int NOT NULL, `email` varchar(191) NOT NULL, `team_id` int NOT NULL);',
+      'ALTER TABLE `users`',
+      '  ADD PRIMARY KEY (`id`),',
+      '  ADD UNIQUE KEY `uq_email` (`email`),',
+      '  ADD CONSTRAINT `fk_team` FOREIGN KEY (`team_id`) REFERENCES `teams` (`id`);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'one ALTER adding three constraints');
+    assert.deepEqual(columns(entityNamed(items, 'users')), [
+      'id = int PRIMARY KEY NOT NULL',
+      'email = varchar(191) NOT NULL UNIQUE',
+      'team_id = int NOT NULL',
+    ]);
+    assert.deepEqual(edges(items), ['Dependent:users → Dependency:teams']);
+  });
+
+  test('an ADD COLUMN, an ALTER COLUMN and a DROP CONSTRAINT mark nothing', () => {
+    // Only an ADD action is read, and only the constraint right after it: an
+    // `ADD COLUMN flag boolean PRIMARY KEY` declares a column, not a table
+    // constraint, and this producer reads a dump's CREATE TABLEs rather than a
+    // migration's column additions. Scanning the statement for the keyword
+    // instead would mark `flag` off a statement that marks nothing.
+    const sql = [
+      'CREATE TABLE ledger (id bigint NOT NULL, flag boolean, amount numeric NOT NULL);',
+      'ALTER TABLE ledger ADD COLUMN flag boolean PRIMARY KEY;',
+      'ALTER TABLE ledger ALTER COLUMN amount SET NOT NULL;',
+      'ALTER TABLE ledger DROP CONSTRAINT ledger_pkey;',
+      'ALTER TABLE ledger ADD CONSTRAINT ledger_id_key UNIQUE (id);',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'ALTER actions that are not constraint adds');
+    assert.deepEqual(columns(entityNamed(items, 'ledger')), [
+      'id = bigint NOT NULL UNIQUE',
+      'flag = boolean',
+      'amount = numeric NOT NULL',
+    ]);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test("SQL Server's WITH CHECK ADD CONSTRAINT is read, key and reference both", () => {
+    // The action is read from its first ADD rather than its first token, which
+    // is what lets a word between the table name and the ADD through.
+    const sql = [
+      'CREATE TABLE [dbo].[Customers] ([Id] int NOT NULL);',
+      'CREATE TABLE [dbo].[Sessions] ([Id] int NOT NULL, [CustomerId] int NOT NULL);',
+      'ALTER TABLE [dbo].[Customers] ADD CONSTRAINT [PK_Customers] PRIMARY KEY ([Id]);',
+      'ALTER TABLE [dbo].[Sessions] WITH CHECK ADD CONSTRAINT [FK_Sessions_Customers]',
+      '    FOREIGN KEY([CustomerId]) REFERENCES [dbo].[Customers] ([Id]);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'a SQL Server script with trailing constraints');
+    assert.deepEqual(columns(entityNamed(items, 'Customers')), ['Id = int PRIMARY KEY NOT NULL']);
+    assert.deepEqual(edges(items), ['Dependent:Sessions → Dependency:Customers']);
+  });
+
+  test('an ALTER ahead of the CREATE TABLE it names still marks it', () => {
+    // The keys are applied once every table has been read, not as they arrive,
+    // so a concatenated migration directory may put them in either order.
+    const sql = [
+      'ALTER TABLE ONLY public.late ADD CONSTRAINT late_pkey PRIMARY KEY (id);',
+      'CREATE TABLE public.late (id int NOT NULL, note text);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'an ALTER ahead of its table');
+    assert.deepEqual(columns(entityNamed(items, 'late')), ['id = int PRIMARY KEY NOT NULL', 'note = text']);
+  });
+
+  test('a qualified ALTER marks that schema\'s table, not its namesake in another', () => {
+    const sql = [
+      'CREATE TABLE public.customers (id bigint NOT NULL, email text);',
+      'CREATE TABLE audit.customers (id bigint NOT NULL, email text);',
+      'ALTER TABLE ONLY audit.customers ADD CONSTRAINT audit_customers_pkey PRIMARY KEY (id);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'two tables of one name, a key on one of them');
+    assert.deepEqual(columns(entityNamed(items, 'public.customers')), ['id = bigint NOT NULL', 'email = text']);
+    assert.deepEqual(columns(entityNamed(items, 'audit.customers')), ['id = bigint PRIMARY KEY NOT NULL', 'email = text']);
+  });
+
+  test('a key with nothing in the draft to mark is passed over in silence', () => {
+    // A drop reason here would name a table the draft never had, or a column
+    // the dump never declared — noise in the one place a reviewer reads.
+    const sql = [
+      'CREATE TABLE present (id int NOT NULL);',
+      'ALTER TABLE ONLY public.absent ADD CONSTRAINT absent_pkey PRIMARY KEY (id);',
+      'ALTER TABLE ONLY present ADD CONSTRAINT present_gone_key UNIQUE (dropped_column);',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'keys on a table and a column that are not there');
+    assert.deepEqual(columns(entityNamed(items, 'present')), ['id = int NOT NULL']);
     assert.deepEqual(dropReasons, []);
   });
 });
