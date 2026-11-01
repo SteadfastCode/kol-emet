@@ -1,0 +1,223 @@
+{
+  "item": "KOL-123",
+  "repo": "kol-emet",
+  "mergeSha": "bac6083fdd51508030de3a357dc2b7c74a3ea5c4",
+  "completedAtUtc": "2026-10-31T22:26:34.682Z",
+  "completeRunId": "2026-10-31T22:06:28.705Z",
+  "reviewRunId": "2026-11-01T08:01:36.953Z",
+  "reviewedAtUtc": "2026-11-01T08:24:52.488Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 89691,
+  "contextFiles": 10,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/workspace.js"
+      ],
+      "part": null,
+      "bytes": 5372,
+      "contextBytes": 6786,
+      "promptTokens": 4384,
+      "completionTokens": 100,
+      "latencyMs": 17692,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 11970,
+      "contextBytes": 0,
+      "promptTokens": 4385,
+      "completionTokens": 101,
+      "latencyMs": 15055,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 10362,
+      "contextBytes": 0,
+      "promptTokens": 3784,
+      "completionTokens": 117,
+      "latencyMs": 13857,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 11696,
+      "contextBytes": 0,
+      "promptTokens": 4230,
+      "completionTokens": 72,
+      "latencyMs": 13063,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/.env.example"
+      ],
+      "part": null,
+      "bytes": 8033,
+      "contextBytes": 4253,
+      "promptTokens": 4230,
+      "completionTokens": 71,
+      "latencyMs": 13070,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/workspaceSeeder.js",
+        "server/src/routes/auth.js"
+      ],
+      "part": null,
+      "bytes": 8969,
+      "contextBytes": 0,
+      "promptTokens": 3500,
+      "completionTokens": 70,
+      "latencyMs": 10699,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/workspace.js"
+      ],
+      "part": null,
+      "bytes": 8996,
+      "contextBytes": 0,
+      "promptTokens": 3601,
+      "completionTokens": 95,
+      "latencyMs": 12096,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/workspaceCreate.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12288,
+      "contextBytes": 0,
+      "promptTokens": 4364,
+      "completionTokens": 90,
+      "latencyMs": 14329,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/workspaceCreate.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12229,
+      "contextBytes": 0,
+      "promptTokens": 4475,
+      "completionTokens": 347,
+      "latencyMs": 27803,
+      "findings": 0,
+      "needs": 13,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:218"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/.env.example:157"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/auth.js:218"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional information is needed to verify the implementation of `requireAuth` and `resolveTemplateKey`. · No real defects found in the provided diff. However, additional information is needed to fully verify the implementation of `createWorkspace` and `resolveTemplateKey`. · No real defects found. The diff adds a new workspace creation form and associated logic, but it relies on the existence of `createWorkspace` and `getTemplates` functions in `client/src/api/workspace.js`, which are not provided in the diff. · No real defects found in the provided diff. However, additional information is needed to fully understand the implementation details of `createWorkspace`. · No real defects found in the provided diff. However, additional information is needed to fully understand the implementation of `createWorkspace`. · No real defects found. However, the symbol `resolveTemplateKey` is used but not defined in the provided diff. · No real defects found. However, additional context is needed to fully understand the implementation of `workspaceName` and `describeName` functions. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · No real defects found, but additional context is needed to fully understand the code.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 72727,
+    "completionTokens": 2226
+  },
+  "latencyMs": 286647
+}
