@@ -62,7 +62,7 @@
     "KOL-131": {
       "order": 4,
       "title": "readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-131",

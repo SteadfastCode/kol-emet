@@ -54,16 +54,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-131) readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…**
-  Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:459).
-  `readAlterTableForeignKeys` mines a trailing ALTER only for `FOREIGN KEY`, but a real `pg_dump
-  --schema-only` emits PRIMARY KEY and UNIQUE the same way (`ALTER TABLE ONLY x ADD CONSTRAINT
-  x_pkey PRIMARY KEY (id);`) and never inline — so against the headline input no column ever
-  carries a `PRIMARY KEY` or `UNIQUE` marker, contradicting docs/api.md ("valued with its type
-  plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared"). The gap is hidden by the fixture:
-  `server/tests/fixtures/schema.sql` is headed "Taken with: pg_dump --schema-only" yet writes its
-  keys as inline `CONSTRAINT … PRIMARY KEY (id)` / `UNIQUE (email)`, a form pg_dump does not
-  produce, so no test covers the shape the producer is sold on.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
@@ -206,6 +196,16 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-131) readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…** (routine 2026-11-01, c1bcb83)
+  Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:459).
+  `readAlterTableForeignKeys` mines a trailing ALTER only for `FOREIGN KEY`, but a real `pg_dump
+  --schema-only` emits PRIMARY KEY and UNIQUE the same way (`ALTER TABLE ONLY x ADD CONSTRAINT
+  x_pkey PRIMARY KEY (id);`) and never inline — so against the headline input no column ever
+  carries a `PRIMARY KEY` or `UNIQUE` marker, contradicting docs/api.md ("valued with its type
+  plus `PRIMARY KEY`, `NOT NULL` and `UNIQUE` as declared"). The gap is hidden by the fixture:
+  `server/tests/fixtures/schema.sql` is headed "Taken with: pg_dump --schema-only" yet writes its
+  keys as inline `CONSTRAINT … PRIMARY KEY (id)` / `UNIQUE (email)`, a form pg_dump does not
+  produce, so no test covers the shape the producer is sold on.
 - [x] **(KOL-130) A column whose unquoted name is in TABLE_CONSTRAINTS is silently discarded.** (routine 2026-11-01, da11145)
   Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:269). A column
   whose unquoted name is in TABLE_CONSTRAINTS is silently discarded. `looksLikeTableConstraint`
