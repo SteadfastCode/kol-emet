@@ -54,7 +54,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-131) readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…**
+- [x] **(KOL-131) readAlterTableForeignKeys mines a trailing ALTER only for FOREIGN KEY, but a real pg_dump --schem…**
   Found by the grader of KOL-121 (medium, server/src/lib/producers/sqlSchema.js:459).
   `readAlterTableForeignKeys` mines a trailing ALTER only for `FOREIGN KEY`, but a real `pg_dump
   --schema-only` emits PRIMARY KEY and UNIQUE the same way (`ALTER TABLE ONLY x ADD CONSTRAINT
