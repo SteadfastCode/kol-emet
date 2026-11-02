@@ -50,7 +50,99 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft**
+  `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
+  docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);
+  `server/src/lib/producers/` holds exactly those four. "Point it at your repo" needs a Git credential, which an
+  unattended item may not take, so the narrow reading is the part of a repo a person can hand over as a file: its
+  **dependency manifest**.
+  Build: `server/src/lib/producers/packageManifest.js` and `POST /drafts/manifest`, plugged into `fileProducerRoute`
+  (`server/src/routes/drafts.js:330`) exactly as the other four are (:452-517), so the redaction seam, the source hash,
+  the re-import block pruning, the entity-type check, the draft row and the log tiers are inherited rather than copied.
+  It reads one manifest, choosing the format from the file's own content the way the OpenAPI producer chooses its
+  dialect: `package.json`, `pyproject.toml`, `go.mod` or `Cargo.toml`. Output in the Software Architecture template's
+  vocabulary (`server/src/config/templates.js:48-52`): one **Service** for the module itself (name, version and runtime
+  as attribute blocks, the manifest's own description as a text block), one **External Dependency** per direct runtime
+  dependency with its version constraint as an attribute, and a `Depends on` group per edge. Direct dependencies only —
+  a lockfile's transitive closure is hundreds of entities and would spend `MAX_ITEMS` (60,
+  `lib/draftNormalizer.js:21`) on noise — and dev or test dependencies are dropped with a drop reason rather than
+  silently.
+  Files: new `server/src/lib/producers/packageManifest.js`, `server/src/routes/drafts.js`,
+  `server/src/models/Draft.js:117` (the `source.producer` enum), `client/src/components/generator/BraindumpInput.vue`
+  (the upload control's accepted kinds), `client/src/api/drafts.js`, a new
+  `server/tests/unit/packageManifest.test.js`, the drafts HTTP tests, `docs/roadmap.md`, `docs/api.md`, the Decision Log.
+  Verify: `cd server && yarn test` with fixture cases per format: the module becomes one Service; direct dependencies
+  become External Dependencies with `Depends on` groups; dev dependencies are dropped with a reason; a manifest that
+  parses but names no dependencies is a one-item draft rather than a refusal; an unreadable file is 400 with a line
+  number; a re-import of an unchanged manifest proposes no new blocks; and the item cap holds on a manifest with 500
+  dependencies. `cd client && yarn test --run`; `cd client && yarn build`.
+  Out of scope: anything that reads a Git remote or a checkout (credential), lockfiles and transitive trees, monorepo
+  workspace globs, parsing source for call graphs, and license or vulnerability data.
 
+- [ ] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision**
+  The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
+  already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,
+  `POST /drafts/*` loads `blocks` for the matched targets alone and runs `pruneKnownBlocks`
+  (`server/src/routes/drafts.js:374-379`, `lib/producers/dockerCompose.js:66-94`). **The braindump path has no such
+  pass.** `lib/generator.js:177` builds its roster as `.select('_id title updatedAt')`, `normalizeDraft` turns the
+  model's body into one text block and marks the item `op: 'update'` on an exact normalized-title match
+  (`lib/draftNormalizer.js:324-339`), and nothing compares it with what the entity holds — so generating twice over the
+  same notes, or over a superset of them (add a paragraph, re-generate — the workflow the overlay invites), appends a
+  byte-identical text block to every entity it matched.
+  The second half is true of both paths and is what makes the first worth fixing properly: after pruning an item can be
+  left proposing **nothing** — no blocks, no tag the entity lacks, and a summary the applier will not write over
+  (`draftApplier.js:122-124,147`) — and it is still queued as a decision, unflagged, so `POST /drafts/:id/decide-clean`
+  accepts it (`routes/drafts.js:662`) and `applyEntityUpdate` writes a `ChangeLog` row whose `changes` diff is empty
+  (`lib/changeLogger.js:68-81`). The review queue and the `Draft` corpus — which the Decision Log calls the training
+  corpus, not a work queue — fill with examples where accept and reject mean the same thing.
+  Build: one shared place for the create / update / nothing-left decision, used by the normalizer and the four
+  producers, which repeat it five times today (`draftNormalizer.js:289,329-339`, `dockerCompose.js:243,416-423`,
+  `openApi.js:484,515-522`, `kubernetes.js:602,634-641`, `sqlSchema.js:678,719-726`). Give the braindump path the same
+  enriched-target pass the route already has, move `withoutKnownBlocks` out of `producers/dockerCompose.js` (where its
+  three siblings import it from) into `lib/`, and **drop** an update item left proposing nothing, counted in
+  `diagnostics.dropReasons` as already in the graph and unchanged. Dropping rather than flagging: a flag makes
+  `decide-clean` skip it, which leaves the reviewer the same list to read.
+  Files: `server/src/lib/generator.js`, `server/src/lib/draftNormalizer.js`, `server/src/lib/producers/*.js`,
+  `server/src/routes/drafts.js`, the draft normalizer and four producer test files,
+  `server/tests/lib/draftApplier.test.js`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a braindump item whose text block the target already holds proposes
+  no blocks; an update left with nothing is absent from `items` and named in `dropReasons`; an update still carrying one
+  new tag or one new block survives; a dropped item does not blank the source span it was located in
+  (`client/src/lib/sourceCoverage.js` derives coverage from the items, so the located quote has to survive the drop);
+  and the four producers' existing fixtures unchanged. `cd client && yarn test --run`.
+  Out of scope: overwriting or diffing a human's prose (the append-only rule stands), an update op for open questions
+  (named as still open in KOL-016), re-generating a draft in place, and drift detection against a connected source.
+
+- [ ] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can**
+  `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
+  (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same
+  `bySession` flag — both or neither (`server/src/routes/events.js:22-27`). A `BEARER_TOKEN` stream therefore carries
+  `userId: null` and is never matched at all. Three places say otherwise: the docstring at `broadcaster.js:226-228` ("A
+  client with no session id — the `BEARER_TOKEN` path — is never the spared one: `null` matching `null` would silently
+  keep a connector's stream open on an account deletion"), the Decision Log's KOL-112 entry, which repeats the
+  sentence, and the test `a stream with no session id is closed, spared session or not`
+  (`server/tests/unit/broadcaster.test.js:744-757`), which connects `{ userId: 'u1', sessionId: null }` — a combination
+  no production path can create — and presents it as covering the connector path. Found by the grader of KOL-112 (low,
+  `server/tests/unit/broadcaster.test.js:745`).
+  The guard itself is right and stays: `null` must never read as "this is the session that asked". What is wrong is the
+  claim, and behind it a small real gap — nothing ends a connector's stream when the account whose workspace it watches
+  is deleted. Being workspace-scoped it receives nothing afterwards, but it holds a socket and one of that tenant's
+  capped stream slots (KOL-062) until the client hangs up.
+  Build, in this order: give the test a fixture the code can actually see (a session-authenticated stream that is not
+  the spared one) and a rationale that matches it; correct the docstring and the Decision Log sentence to say what is
+  true — a bearer stream is not matched by the user-keyed closer at all; then either record a resolved `userId` on a
+  bearer stream in `routes/events.js` so the existing closer reaches it (the comment there explains why `sessionId` must
+  stay null, since the keep-alive sweep would drop the stream as "session gone"; `userId` carries no such problem), or
+  say in the same docstring that nothing closes it and why that is acceptable. The first is a few lines and leaves the
+  three corrected sentences describing a path that exists, so prefer it and record the choice.
+  Files: `server/src/lib/broadcaster.js`, `server/src/routes/events.js`, `server/tests/unit/broadcaster.test.js`,
+  `server/tests/http/sessionRevocation.test.js`, `kol_emet_spec.md` (the KOL-112 entry).
+  Verify: `cd server && yarn test` — the corrected sparing case runs red against a `closeStreamsForUser` that reads
+  `null` as the spared session, and a new case pins what happens to a bearer-authenticated stream on an account
+  deletion. `cd server && node --check src/index.js`.
+  Out of scope: closing a bearer stream on `POST /auth/sessions/revoke-all` (that route is about sessions, and a
+  connector holds none), the session-store limit the Decision Log already records, and any change to the
+  `session-ended` contract.
 
 ## Proposed
 
@@ -97,100 +189,6 @@ registration, or removes a feature.
   `cd client && yarn build`.
   Out of scope: shipping, packaging or pulling models for Ollama; a per-workspace default provider (it is per request
   today); the Responses-API/MCP relay path (Ollama advertises no `responsesApi`); and any change to what `steadfast` is.
-
-- [ ] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft** [proposed]
-  `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
-  docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);
-  `server/src/lib/producers/` holds exactly those four. "Point it at your repo" needs a Git credential, which an
-  unattended item may not take, so the narrow reading is the part of a repo a person can hand over as a file: its
-  **dependency manifest**.
-  Build: `server/src/lib/producers/packageManifest.js` and `POST /drafts/manifest`, plugged into `fileProducerRoute`
-  (`server/src/routes/drafts.js:330`) exactly as the other four are (:452-517), so the redaction seam, the source hash,
-  the re-import block pruning, the entity-type check, the draft row and the log tiers are inherited rather than copied.
-  It reads one manifest, choosing the format from the file's own content the way the OpenAPI producer chooses its
-  dialect: `package.json`, `pyproject.toml`, `go.mod` or `Cargo.toml`. Output in the Software Architecture template's
-  vocabulary (`server/src/config/templates.js:48-52`): one **Service** for the module itself (name, version and runtime
-  as attribute blocks, the manifest's own description as a text block), one **External Dependency** per direct runtime
-  dependency with its version constraint as an attribute, and a `Depends on` group per edge. Direct dependencies only —
-  a lockfile's transitive closure is hundreds of entities and would spend `MAX_ITEMS` (60,
-  `lib/draftNormalizer.js:21`) on noise — and dev or test dependencies are dropped with a drop reason rather than
-  silently.
-  Files: new `server/src/lib/producers/packageManifest.js`, `server/src/routes/drafts.js`,
-  `server/src/models/Draft.js:117` (the `source.producer` enum), `client/src/components/generator/BraindumpInput.vue`
-  (the upload control's accepted kinds), `client/src/api/drafts.js`, a new
-  `server/tests/unit/packageManifest.test.js`, the drafts HTTP tests, `docs/roadmap.md`, `docs/api.md`, the Decision Log.
-  Verify: `cd server && yarn test` with fixture cases per format: the module becomes one Service; direct dependencies
-  become External Dependencies with `Depends on` groups; dev dependencies are dropped with a reason; a manifest that
-  parses but names no dependencies is a one-item draft rather than a refusal; an unreadable file is 400 with a line
-  number; a re-import of an unchanged manifest proposes no new blocks; and the item cap holds on a manifest with 500
-  dependencies. `cd client && yarn test --run`; `cd client && yarn build`.
-  Out of scope: anything that reads a Git remote or a checkout (credential), lockfiles and transitive trees, monorepo
-  workspace globs, parsing source for call graphs, and license or vulnerability data.
-
-- [ ] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision** [proposed]
-  The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
-  already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,
-  `POST /drafts/*` loads `blocks` for the matched targets alone and runs `pruneKnownBlocks`
-  (`server/src/routes/drafts.js:374-379`, `lib/producers/dockerCompose.js:66-94`). **The braindump path has no such
-  pass.** `lib/generator.js:177` builds its roster as `.select('_id title updatedAt')`, `normalizeDraft` turns the
-  model's body into one text block and marks the item `op: 'update'` on an exact normalized-title match
-  (`lib/draftNormalizer.js:324-339`), and nothing compares it with what the entity holds — so generating twice over the
-  same notes, or over a superset of them (add a paragraph, re-generate — the workflow the overlay invites), appends a
-  byte-identical text block to every entity it matched.
-  The second half is true of both paths and is what makes the first worth fixing properly: after pruning an item can be
-  left proposing **nothing** — no blocks, no tag the entity lacks, and a summary the applier will not write over
-  (`draftApplier.js:122-124,147`) — and it is still queued as a decision, unflagged, so `POST /drafts/:id/decide-clean`
-  accepts it (`routes/drafts.js:662`) and `applyEntityUpdate` writes a `ChangeLog` row whose `changes` diff is empty
-  (`lib/changeLogger.js:68-81`). The review queue and the `Draft` corpus — which the Decision Log calls the training
-  corpus, not a work queue — fill with examples where accept and reject mean the same thing.
-  Build: one shared place for the create / update / nothing-left decision, used by the normalizer and the four
-  producers, which repeat it five times today (`draftNormalizer.js:289,329-339`, `dockerCompose.js:243,416-423`,
-  `openApi.js:484,515-522`, `kubernetes.js:602,634-641`, `sqlSchema.js:678,719-726`). Give the braindump path the same
-  enriched-target pass the route already has, move `withoutKnownBlocks` out of `producers/dockerCompose.js` (where its
-  three siblings import it from) into `lib/`, and **drop** an update item left proposing nothing, counted in
-  `diagnostics.dropReasons` as already in the graph and unchanged. Dropping rather than flagging: a flag makes
-  `decide-clean` skip it, which leaves the reviewer the same list to read.
-  Files: `server/src/lib/generator.js`, `server/src/lib/draftNormalizer.js`, `server/src/lib/producers/*.js`,
-  `server/src/routes/drafts.js`, the draft normalizer and four producer test files,
-  `server/tests/lib/draftApplier.test.js`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a braindump item whose text block the target already holds proposes
-  no blocks; an update left with nothing is absent from `items` and named in `dropReasons`; an update still carrying one
-  new tag or one new block survives; a dropped item does not blank the source span it was located in
-  (`client/src/lib/sourceCoverage.js` derives coverage from the items, so the located quote has to survive the drop);
-  and the four producers' existing fixtures unchanged. `cd client && yarn test --run`.
-  Out of scope: overwriting or diffing a human's prose (the append-only rule stands), an update op for open questions
-  (named as still open in KOL-016), re-generating a draft in place, and drift detection against a connected source.
-
-- [ ] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can** [proposed]
-  `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
-  (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same
-  `bySession` flag — both or neither (`server/src/routes/events.js:22-27`). A `BEARER_TOKEN` stream therefore carries
-  `userId: null` and is never matched at all. Three places say otherwise: the docstring at `broadcaster.js:226-228` ("A
-  client with no session id — the `BEARER_TOKEN` path — is never the spared one: `null` matching `null` would silently
-  keep a connector's stream open on an account deletion"), the Decision Log's KOL-112 entry, which repeats the
-  sentence, and the test `a stream with no session id is closed, spared session or not`
-  (`server/tests/unit/broadcaster.test.js:744-757`), which connects `{ userId: 'u1', sessionId: null }` — a combination
-  no production path can create — and presents it as covering the connector path. Found by the grader of KOL-112 (low,
-  `server/tests/unit/broadcaster.test.js:745`).
-  The guard itself is right and stays: `null` must never read as "this is the session that asked". What is wrong is the
-  claim, and behind it a small real gap — nothing ends a connector's stream when the account whose workspace it watches
-  is deleted. Being workspace-scoped it receives nothing afterwards, but it holds a socket and one of that tenant's
-  capped stream slots (KOL-062) until the client hangs up.
-  Build, in this order: give the test a fixture the code can actually see (a session-authenticated stream that is not
-  the spared one) and a rationale that matches it; correct the docstring and the Decision Log sentence to say what is
-  true — a bearer stream is not matched by the user-keyed closer at all; then either record a resolved `userId` on a
-  bearer stream in `routes/events.js` so the existing closer reaches it (the comment there explains why `sessionId` must
-  stay null, since the keep-alive sweep would drop the stream as "session gone"; `userId` carries no such problem), or
-  say in the same docstring that nothing closes it and why that is acceptable. The first is a few lines and leaves the
-  three corrected sentences describing a path that exists, so prefer it and record the choice.
-  Files: `server/src/lib/broadcaster.js`, `server/src/routes/events.js`, `server/tests/unit/broadcaster.test.js`,
-  `server/tests/http/sessionRevocation.test.js`, `kol_emet_spec.md` (the KOL-112 entry).
-  Verify: `cd server && yarn test` — the corrected sparing case runs red against a `closeStreamsForUser` that reads
-  `null` as the spared session, and a new case pins what happens to a bearer-authenticated stream on an account
-  deletion. `cd server && node --check src/index.js`.
-  Out of scope: closing a bearer stream on `POST /auth/sessions/revoke-all` (that route is about sessions, and a
-  connector holds none), the session-store limit the Decision Log already records, and any change to the
-  `session-ended` contract.
 
 ## Blocked Items
 
