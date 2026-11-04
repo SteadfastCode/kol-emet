@@ -35,7 +35,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft**
+- [x] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft**
   `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
   docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);
   `server/src/lib/producers/` holds exactly those four. "Point it at your repo" needs a Git credential, which an
