@@ -644,3 +644,5 @@
 {"event":"review-grade","item":"KOL-123","grader":"claude-opus-5","grades":{"findings":0,"confirmed":0,"falsePositive":0,"duplicate":0,"unverifiable":0,"missed":2,"independent":2,"triageChecked":6,"triageCorrect":4},"localPromptVersion":"v6","localModel":"qwen2.5-coder:14b","mergeSha":"bac6083fdd51508030de3a357dc2b7c74a3ea5c4","runId":"2026-11-04T00:47:53.773Z","costUsd":1.8739865,"atUtc":"2026-11-04T01:25:17.423Z"}
 {"event":"ack","items":["KOL-123"],"by":"routine","source":"auto","atUtc":"2026-11-04T02:08:05.182Z"}
 {"event":"ack","items":["KOL-124"],"by":"routine","source":"auto","atUtc":"2026-11-04T02:08:05.182Z"}
+{"event":"ack","items":["KOL-130"],"by":"routine","source":"auto","atUtc":"2026-11-04T09:34:13.351Z"}
+{"event":"ack","items":["KOL-131"],"by":"routine","source":"auto","atUtc":"2026-11-04T09:34:13.352Z"}
