@@ -1,0 +1,79 @@
+{
+  "item": "KOL-123",
+  "repo": "kol-emet",
+  "mergeSha": "bac6083fdd51508030de3a357dc2b7c74a3ea5c4",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-04T00:47:53.773Z",
+  "gradedAtUtc": "2026-11-04T01:25:17.170Z",
+  "independent": [
+    {
+      "file": "server/src/lib/workspaceSeeder.js",
+      "line": 214,
+      "severity": "medium",
+      "summary": "Every created workspace gets a fresh full AI allowance: `Workspace.create` sets no `aiBudget`, so the schema default `grantedMicros = AI_TRIAL_GRANT_MICROS` ($3.50) applies and `usageMeter.js` meters per workspaceId. Before this change only `POST /auth/register` (IP-capped by KOL-050/081) could mint a grant; now any logged-in user can mint up to `WORKSPACE_MAX_PER_OWNER` (10) of them with cheap `template: null` creates — ~10x the intended paid-provider spend per account. The cap's rationale in the route and the Decision Log weighs only the DB cost of a seed, and neither the route nor `createWorkspace()` zeroes or shares the grant."
+    },
+    {
+      "file": "client/src/components/WikiLayout.test.js",
+      "line": 645,
+      "severity": "low",
+      "summary": "The test titled 'sends nothing without a name, and nothing twice' only exercises the empty-name case and the disabled button; it never submits twice, so the `workspaceCreating` double-submit guard in `createNewWorkspace` is unasserted despite the title claiming it."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff edits `POST /auth/register` and adds a session-only, `requireAuth`-gated create route that writes an owner membership, so auth is squarely touched."
+    },
+    {
+      "key": "secrets",
+      "correct": false,
+      "reason": "The only `.env.example` additions are a numeric cap (`WORKSPACE_MAX_PER_OWNER`) and a log level; no credential, token or key handling is touched anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": false,
+      "reason": "Each create writes a `Workspace` carrying a micro-dollar AI allowance (the new test even asserts a forged `aiBudget` is ignored), so the change does touch the spending-allowance surface — see independent finding 1."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff rewrites registration's rollback block that does `User.deleteOne(...)` (adding a log line to it), so irreversible-delete code is in the change."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls are added — templates and seeding are local code and MongoDB only."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, migration or deploy config change; the new env var has an in-code default so no release step is required."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local model reported nothing at all, so it produced no false positives but also missed both real issues — notably that each new workspace mints a fresh AI spending allowance — and two of its six triage answers (secrets, money) are wrong.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 4
+  },
+  "costUsd": 1.8739865,
+  "numTurns": 20,
+  "durationMs": 246459,
+  "sessionId": "d45449db-29ad-4529-a5dc-5e75f0b496f1"
+}

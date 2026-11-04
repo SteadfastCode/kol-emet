@@ -1,0 +1,72 @@
+{
+  "item": "KOL-130",
+  "repo": "kol-emet",
+  "mergeSha": "da1114554d7b7b0a5c1ad34e35489184ab40a9e5",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-04T00:47:53.773Z",
+  "gradedAtUtc": "2026-11-04T01:16:45.112Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/sqlSchema.js",
+      "line": 372,
+      "severity": "low",
+      "summary": "Routing FULLTEXT/SPATIAL through looksLikeIndex makes an index whose unquoted name is a TYPE_WORD invent a bogus column: `CREATE TABLE t (body text, FULLTEXT KEY text (body));` fails the isTypeWord test at :372, the shape returns false, the fallback to TABLE_CONSTRAINTS is skipped, and readColumn produces an attribute `FULLTEXT = KEY text (body)` (before the change the definition was merely skipped). Narrow in practice — mysqldump backtick-quotes index names, and the ident token bypasses isTypeWord — but hand-written DDL hits it."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only touches the SQL DDL tokenizer/grammar helpers and their unit tests; no session, login, or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env handling appear anywhere in the change."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing, billing, or currency arithmetic — `amount numeric` only appears as test fixture SQL text."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations, or data-mutating operations; the parser only produces draft items in memory."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Pure local string/token parsing — no HTTP, MCP, or third-party calls touched."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "PRODUCER_VERSION, package files, and deploy config are untouched; only parser internals and tests changed."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review produced no findings on a change that is essentially correct and well-tested, so it has no false positives and its triage is entirely right, but it also missed the one narrow regression the new TYPE_WORD guard introduces for FULLTEXT/SPATIAL index declarations.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.219311,
+  "numTurns": 14,
+  "durationMs": 166726,
+  "sessionId": "57a4d9f0-5da6-48e6-aa04-f646851ce2a3"
+}

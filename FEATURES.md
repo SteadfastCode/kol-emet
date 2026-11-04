@@ -146,6 +146,15 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-132) Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…**
+  Found by the grader of KOL-123 (medium, server/src/lib/workspaceSeeder.js:214). Every created
+  workspace gets a fresh full AI allowance: `Workspace.create` sets no `aiBudget`, so the schema
+  default `grantedMicros = AI_TRIAL_GRANT_MICROS` ($3.50) applies and `usageMeter.js` meters per
+  workspaceId. Before this change only `POST /auth/register` (IP-capped by KOL-050/081) could mint
+  a grant; now any logged-in user can mint up to `WORKSPACE_MAX_PER_OWNER` (10) of them with cheap
+  `template: null` creates — ~10x the intended paid-provider spend per account. The cap's
+  rationale in the route and the Decision Log weighs only the DB cost of a seed, and neither the
+  route nor `createWorkspace()` zeroes or shares the grant.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

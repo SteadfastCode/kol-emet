@@ -1,0 +1,72 @@
+{
+  "item": "KOL-131",
+  "repo": "kol-emet",
+  "mergeSha": "c1bcb83b9e9eafe0f1a8de6c9349f49da5522cbf",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-04T00:47:53.773Z",
+  "gradedAtUtc": "2026-11-04T01:13:58.352Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/sqlSchema.js",
+      "line": 733,
+      "severity": "low",
+      "summary": "Pass 2 resolves the ALTER's own table through resolveTable, which falls back to a same-named table in a different schema: `CREATE TABLE public.users (id …)` plus `ALTER TABLE ONLY archive.users ADD CONSTRAINT users_pkey PRIMARY KEY (id)` (verified by running the parser) marks public.users.id as PRIMARY KEY, a key the file never declares on that table — contradicting the docs/api.md and pass-2 comments added in this same change (\"A constraint naming a table the file does not declare … is passed over in silence\"), and the new test only covers the case where both namesakes exist. SQL has no such leniency for the target of an ALTER, unlike a foreign key's referenced name, which is what resolveTable was written for."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change touches only the SQL-schema producer, its fixture and docs — no authentication or session code."
+    },
+    {
+      "key": "secrets",
+      "correct": false,
+      "reason": "No secret or secret handling is added or changed; the cited schema.sql:4 is an unchanged `--` comment line, and the fake pg_dump credential on line 3 predates this diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or token-cost code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Parser-only change — no deletes, migrations or overwrites of stored data."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP, MCP or third-party service call is added or modified."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, dependency, deploy config or package manifest is touched (PRODUCER_VERSION is unchanged metadata only)."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model found nothing (the one real residual defect is a narrow cross-schema resolution leak) but asserted a secrets touch that the diff does not make, citing an unchanged comment line as evidence.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.6503175,
+  "numTurns": 16,
+  "durationMs": 217110,
+  "sessionId": "a44979f3-1ad8-4c4c-8496-ea4dfb0afaff"
+}
