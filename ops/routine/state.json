@@ -47,7 +47,7 @@
     "KOL-126": {
       "order": 3,
       "title": "Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-126",

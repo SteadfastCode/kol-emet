@@ -35,34 +35,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft**
-  `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
-  docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);
-  `server/src/lib/producers/` holds exactly those four. "Point it at your repo" needs a Git credential, which an
-  unattended item may not take, so the narrow reading is the part of a repo a person can hand over as a file: its
-  **dependency manifest**.
-  Build: `server/src/lib/producers/packageManifest.js` and `POST /drafts/manifest`, plugged into `fileProducerRoute`
-  (`server/src/routes/drafts.js:330`) exactly as the other four are (:452-517), so the redaction seam, the source hash,
-  the re-import block pruning, the entity-type check, the draft row and the log tiers are inherited rather than copied.
-  It reads one manifest, choosing the format from the file's own content the way the OpenAPI producer chooses its
-  dialect: `package.json`, `pyproject.toml`, `go.mod` or `Cargo.toml`. Output in the Software Architecture template's
-  vocabulary (`server/src/config/templates.js:48-52`): one **Service** for the module itself (name, version and runtime
-  as attribute blocks, the manifest's own description as a text block), one **External Dependency** per direct runtime
-  dependency with its version constraint as an attribute, and a `Depends on` group per edge. Direct dependencies only —
-  a lockfile's transitive closure is hundreds of entities and would spend `MAX_ITEMS` (60,
-  `lib/draftNormalizer.js:21`) on noise — and dev or test dependencies are dropped with a drop reason rather than
-  silently.
-  Files: new `server/src/lib/producers/packageManifest.js`, `server/src/routes/drafts.js`,
-  `server/src/models/Draft.js:117` (the `source.producer` enum), `client/src/components/generator/BraindumpInput.vue`
-  (the upload control's accepted kinds), `client/src/api/drafts.js`, a new
-  `server/tests/unit/packageManifest.test.js`, the drafts HTTP tests, `docs/roadmap.md`, `docs/api.md`, the Decision Log.
-  Verify: `cd server && yarn test` with fixture cases per format: the module becomes one Service; direct dependencies
-  become External Dependencies with `Depends on` groups; dev dependencies are dropped with a reason; a manifest that
-  parses but names no dependencies is a one-item draft rather than a refusal; an unreadable file is 400 with a line
-  number; a re-import of an unchanged manifest proposes no new blocks; and the item cap holds on a manifest with 500
-  dependencies. `cd client && yarn test --run`; `cd client && yarn build`.
-  Out of scope: anything that reads a Git remote or a checkout (credential), lockfiles and transitive trees, monorepo
-  workspace globs, parsing source for call graphs, and license or vulnerability data.
 
 - [ ] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision**
   The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
@@ -366,6 +338,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft** (routine 2026-11-04, 8dcdfd8)
+  `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
+  docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);
+  `server/src/lib/producers/` holds exactly those four. "Point it at your repo" needs a Git credential, which an
+  unattended item may not take, so the narrow reading is the part of a repo a person can hand over as a file: its
+  **dependency manifest**.
+  Build: `server/src/lib/producers/packageManifest.js` and `POST /drafts/manifest`, plugged into `fileProducerRoute`
+  (`server/src/routes/drafts.js:330`) exactly as the other four are (:452-517), so the redaction seam, the source hash,
+  the re-import block pruning, the entity-type check, the draft row and the log tiers are inherited rather than copied.
+  It reads one manifest, choosing the format from the file's own content the way the OpenAPI producer chooses its
+  dialect: `package.json`, `pyproject.toml`, `go.mod` or `Cargo.toml`. Output in the Software Architecture template's
+  vocabulary (`server/src/config/templates.js:48-52`): one **Service** for the module itself (name, version and runtime
+  as attribute blocks, the manifest's own description as a text block), one **External Dependency** per direct runtime
+  dependency with its version constraint as an attribute, and a `Depends on` group per edge. Direct dependencies only —
+  a lockfile's transitive closure is hundreds of entities and would spend `MAX_ITEMS` (60,
+  `lib/draftNormalizer.js:21`) on noise — and dev or test dependencies are dropped with a drop reason rather than
+  silently.
+  Files: new `server/src/lib/producers/packageManifest.js`, `server/src/routes/drafts.js`,
+  `server/src/models/Draft.js:117` (the `source.producer` enum), `client/src/components/generator/BraindumpInput.vue`
+  (the upload control's accepted kinds), `client/src/api/drafts.js`, a new
+  `server/tests/unit/packageManifest.test.js`, the drafts HTTP tests, `docs/roadmap.md`, `docs/api.md`, the Decision Log.
+  Verify: `cd server && yarn test` with fixture cases per format: the module becomes one Service; direct dependencies
+  become External Dependencies with `Depends on` groups; dev dependencies are dropped with a reason; a manifest that
+  parses but names no dependencies is a one-item draft rather than a refusal; an unreadable file is 400 with a line
+  number; a re-import of an unchanged manifest proposes no new blocks; and the item cap holds on a manifest with 500
+  dependencies. `cd client && yarn test --run`; `cd client && yarn build`.
+  Out of scope: anything that reads a Git remote or a checkout (credential), lockfiles and transitive trees, monorepo
+  workspace globs, parsing source for call graphs, and license or vulnerability data.
 - [x] **(KOL-129) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-02] (routine 2026-11-04, 3a184c2)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
