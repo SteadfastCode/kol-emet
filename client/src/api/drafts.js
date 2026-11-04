@@ -79,6 +79,17 @@ export const createSqlDraft = ({ text, filename }) =>
   req('/drafts/sql', { method: 'POST', body: JSON.stringify({ text, filename }) });
 
 /**
+ * The same, for one dependency manifest — a `package.json`, a `pyproject.toml`,
+ * a `go.mod` or a `Cargo.toml`: the module it declares becomes a Service and
+ * each DIRECT RUNTIME dependency an External Dependency joined by a Depends on
+ * link. A dev, test, extra or transitive dependency is a drop reason on an
+ * otherwise ready draft; a file that is none of the four formats is a 400, and
+ * one that does not parse is a 400 naming the line.
+ */
+export const createManifestDraft = ({ text, filename }) =>
+  req('/drafts/manifest', { method: 'POST', body: JSON.stringify({ text, filename }) });
+
+/**
  * Start a generation, yielding progress events:
  *   { type: 'created', draftId }
  *   { type: 'stage',   stage, chunk?, of? }

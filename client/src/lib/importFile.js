@@ -13,17 +13,19 @@
 
 const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.text', '.rtf'];
 const DOCX_EXTENSIONS = ['.docx'];
-// A docker-compose file, an OpenAPI document, a Kubernetes manifest and a SQL
-// schema dump are not notes: each goes to its own producer (POST
-// /drafts/compose, /drafts/openapi, /drafts/kubernetes, /drafts/sql), which
-// reads the structure rather than a model. `.json` is here for an OpenAPI
-// document saved as JSON, which is how most tools emit one.
-const PRODUCER_EXTENSIONS = ['.yml', '.yaml', '.json', '.sql'];
+// A docker-compose file, an OpenAPI document, a Kubernetes manifest, a SQL
+// schema dump and a package manifest are not notes: each goes to its own
+// producer (POST /drafts/compose, /drafts/openapi, /drafts/kubernetes,
+// /drafts/sql, /drafts/manifest), which reads the structure rather than a
+// model. `.json` is here for an OpenAPI document saved as JSON, which is how
+// most tools emit one, and for npm's `package.json`; `.toml` is a
+// pyproject.toml or a Cargo.toml, and `.mod` is a go.mod.
+const PRODUCER_EXTENSIONS = ['.yml', '.yaml', '.json', '.sql', '.toml', '.mod'];
 
 export const ACCEPT_ATTR = [...TEXT_EXTENSIONS, ...DOCX_EXTENSIONS, ...PRODUCER_EXTENSIONS].join(',');
 export const SUPPORTED_LABEL =
-  'Text, Markdown, Word, docker-compose, OpenAPI, Kubernetes manifests or SQL schemas ' +
-  '(.txt, .md, .docx, .yml, .json, .sql)';
+  'Text, Markdown, Word, docker-compose, OpenAPI, Kubernetes manifests, SQL schemas or ' +
+  'package manifests (.txt, .md, .docx, .yml, .json, .sql, .toml, .mod)';
 
 const extOf = name => {
   const i = String(name).lastIndexOf('.');
@@ -69,34 +71,44 @@ function topLevelKeys(text) {
 /**
  * Which producer a structured file goes to.
  *
- * `.sql` is decided by the EXTENSION, and it is the only one that is: a schema
- * dump has no top-level key to read, and nothing else in this list arrives
- * under that name. It is therefore checked first, before the text is scanned
- * for keys it does not have.
+ * Three readings are decided by the NAME, and they are the only ones that are,
+ * because none of the three has a top-level key to tell it apart: a `.sql`
+ * schema dump, a `.toml` package manifest (which is a pyproject or a Cargo one,
+ * and the server reads which from the tables it declares) and a `.mod`, which
+ * is a go.mod. npm's `package.json` is named here too — it is JSON whose keys a
+ * scan could read, but its name is the stronger signal and it costs nothing to
+ * take it. They are checked first, before the text is scanned for keys it does
+ * not have.
  *
  * The rest are decided by their CONTENT rather than their extension: a
- * manifest, an OpenAPI document and a docker-compose file all arrive as
- * `.yaml`, so the extension cannot choose between them.
+ * Kubernetes manifest, an OpenAPI document and a docker-compose file all arrive
+ * as `.yaml`, so the extension cannot choose between them.
  *
  * Their order is the specificity order, for files that could be read two ways.
  * `openapi:`/`swagger:` wins first, because a spec that happens to name a
  * `services` tag is still a spec. `apiVersion` + `kind` together come next, and
  * both are required: `kind` alone is a word a CI config or a JSON schema uses,
  * while the pair is how Kubernetes itself identifies an object. `services:`
- * last, which is the compose file's one distinguishing key.
+ * next, which is the compose file's one distinguishing key. A `dependencies` or
+ * `devDependencies` key last, which is what a package.json saved under another
+ * name still has.
  *
  * @param {string} text
- * @param {string} [name]  the file's name, for the `.sql` reading
- * @returns {'sql'|'openapi'|'kubernetes'|'compose'|null} null when it is none
- *   of them, which is the client's own refusal — there is nothing to send and
- *   no producer to send it to
+ * @param {string} [name]  the file's name, for the readings that need it
+ * @returns {'sql'|'manifest'|'openapi'|'kubernetes'|'compose'|null} null when it
+ *   is none of them, which is the client's own refusal — there is nothing to
+ *   send and no producer to send it to
  */
 export function producerFor(text, name = '') {
-  if (extOf(name) === '.sql') return 'sql';
+  const ext = extOf(name);
+  if (ext === '.sql') return 'sql';
+  if (ext === '.toml' || ext === '.mod') return 'manifest';
+  if (String(name).toLowerCase().split(/[\\/]/).pop() === 'package.json') return 'manifest';
   const keys = topLevelKeys(text);
   if (keys.includes('openapi') || keys.includes('swagger')) return 'openapi';
   if (keys.includes('apiVersion') && keys.includes('kind')) return 'kubernetes';
   if (keys.includes('services')) return 'compose';
+  if (keys.includes('dependencies') || keys.includes('devDependencies')) return 'manifest';
   return null;
 }
 

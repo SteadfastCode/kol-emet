@@ -1,0 +1,27 @@
+# A PEP 621 pyproject, with the shapes a real one has: a multi-line
+# dependency array with a comment and a trailing comma in it, an extra, a
+# requirement carrying extras and one carrying an environment marker.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "billing-reports"
+version = "2.0.0"
+description = """
+Monthly statements,
+rendered from the ledger."""
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.31",            # the only http client we ship
+  "httpx[http2]~=0.27",
+  "SQLAlchemy>=2,<3 ; python_version > '3.10'",
+  "jinja2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+docs = ["mkdocs"]
+
+[tool.ruff]
+line-length = 110

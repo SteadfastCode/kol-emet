@@ -30,6 +30,10 @@ import {
   parseSqlSchema, SqlParseError, PRODUCER as SQL_PRODUCER,
   PRODUCER_VERSION as SQL_PRODUCER_VERSION, MAX_SQL_CHARS,
 } from '../lib/producers/sqlSchema.js';
+import {
+  parseManifest, ManifestParseError, PRODUCER as MANIFEST_PRODUCER,
+  PRODUCER_VERSION as MANIFEST_PRODUCER_VERSION, MAX_MANIFEST_CHARS,
+} from '../lib/producers/packageManifest.js';
 import { redactSecrets } from '../lib/producers/redactSecrets.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { errorLog } from '../middleware/errorHandler.js';
@@ -55,7 +59,8 @@ const MIN_RUN_MICROS = Number(process.env.GENERATOR_MIN_RUN_MICROS ?? 15_000); /
 // those out, which costs no cron.
 const STALE_GENERATING_MS = 10 * 60 * 1000;
 
-// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL / KUBERNETES_LOG_LEVEL / SQL_SCHEMA_LOG_LEVEL
+// COMPOSE_LOG_LEVEL / OPENAPI_LOG_LEVEL / KUBERNETES_LOG_LEVEL / SQL_SCHEMA_LOG_LEVEL /
+// MANIFEST_LOG_LEVEL
 //   = off | light | normal | verbose (default light)
 //   light   — one line per draft created, naming the request, file and workspace
 //   normal  — light, plus every refused request and every drop reason
@@ -412,7 +417,8 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
         diagnostics: {
           // What read the file. The three YAML producers share one reader —
           // JSON is YAML, which is what lets one path give both line numbers —
-          // and the SQL one lexes the dump itself, so each producer names its own.
+          // the SQL one lexes the dump itself, and the manifest one reads four
+          // formats through two of its own, so each producer names its own.
           parsedVia: [parsedVia],
           dropReasons,
           passes: 1,
@@ -518,6 +524,29 @@ router.post('/sql', fileProducerRoute({
   needs: 'a SQL schema import',
   parsedVia: 'sql',
   log: producerLogger('SQL_SCHEMA_LOG_LEVEL', 'drafts:sql'),
+}));
+
+/**
+ * POST /drafts/manifest — one dependency manifest becomes a reviewable draft:
+ * a Service for the module the manifest declares (its name, version and runtime
+ * as attributes, its own description as a text block) and an External
+ * Dependency plus a `Depends on` group per DIRECT RUNTIME dependency. The
+ * format — package.json, pyproject.toml, go.mod or Cargo.toml — is read off the
+ * file's content, as the OpenAPI producer reads its dialect. A dev, test,
+ * optional-extra or transitive dependency is a drop reason on an otherwise
+ * ready draft; a file that is none of the four formats is the refusal.
+ */
+router.post('/manifest', fileProducerRoute({
+  route: '/drafts/manifest',
+  producer: MANIFEST_PRODUCER,
+  producerVersion: MANIFEST_PRODUCER_VERSION,
+  parse: parseManifest,
+  ParseError: ManifestParseError,
+  maxChars: MAX_MANIFEST_CHARS,
+  defaultTitle: 'package-manifest',
+  needs: 'a package manifest import',
+  parsedVia: 'manifest',
+  log: producerLogger('MANIFEST_LOG_LEVEL', 'drafts:manifest'),
 }));
 
 // ─── Decision routes ─────────────────────────────────────────────────────────

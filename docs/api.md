@@ -606,6 +606,7 @@ the graph. Nothing here writes to `entities` or `relationshipgroups` except `POS
 | POST | `/drafts/openapi` | Build a draft from an OpenAPI 3.x or Swagger 2.0 document (JSON or YAML) — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | POST | `/drafts/kubernetes` | Build a draft from a `---` stream of Kubernetes manifests — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | POST | `/drafts/sql` | Build a draft from a SQL schema dump — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
+| POST | `/drafts/manifest` | Build a draft from one dependency manifest — `package.json`, `pyproject.toml`, `go.mod` or `Cargo.toml`, the format read from the content — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | GET | `/drafts/:id` | Full draft including `items` and the source text. |
 | PATCH | `/drafts/:id/items/:itemId` | Record one decision. Body: `{ decision: 'accepted' \| 'edited' \| 'rejected', payload?, note? }`. `payload` is required for `edited` and is validated against the same schema `POST /entities` accepts. |
 | POST | `/drafts/:id/items/:itemId/retarget` | Resolve a duplicate: `{ targetEntityId }` turns a create into an update against that entity; `null` reverts it to a create. Entity items only. |
@@ -878,6 +879,72 @@ dump has no top-level key to read and nothing else arrives under that name
 
 **Out of scope:** Helm charts and kustomize overlays (templated input, and their own problem), reading
 a live cluster or any kubeconfig, and drift detection.
+
+### `POST /drafts/manifest`
+
+The fifth and last vertical-ingestion producer
+([`server/src/lib/producers/packageManifest.js`](../server/src/lib/producers/packageManifest.js)),
+and the same route as the other four with a different parse: one request in, the finished draft out,
+no SSE, no allowance check, no generation lock, and the same decision and apply routes afterwards.
+Recorded on the draft: `source.producer: 'package-manifest'`,
+`source.producerVersion: 'package-manifest@1'`, the same `source.textHash`, `grounding.categories`,
+`route.strategy: 'deterministic'`, and `diagnostics.parsedVia: ['manifest']`. **Credentials are
+stripped before the manifest is stored**, by the same `redactSecrets` pass: a manifest carries a
+token in a `repository` URL and in a publish script.
+
+The input is **one dependency manifest**, and the format is read off the file's own content the way
+the OpenAPI producer reads its dialect — a JSON object is npm's, a `module` directive at column zero
+is Go's, and a `.toml` is a pyproject or a Cargo manifest by the tables it declares:
+
+| Manifest | Read as |
+|----------|---------|
+| `package.json` | npm. `name`, `version`, `description`, `engines.node`; `dependencies`, `optionalDependencies`, `peerDependencies` |
+| `pyproject.toml` | PyPI, in both spellings: PEP 621 (`[project]`, an array of PEP 508 requirement strings, `requires-python`) and Poetry (`[tool.poetry]`, `[tool.poetry.dependencies]`, where `python` is the runtime) |
+| `go.mod` | Go. `module`, `go`, and every `require` — in a parenthesised block or on its own line |
+| `Cargo.toml` | crates.io. `[package]` (with `rust-version`, else `edition`), `[dependencies]` in the string, inline-table, `[dependencies.<name>]`, `git` and `path` spellings |
+
+| Manifest declares | Proposed |
+|-------------------|----------|
+| the module itself | One **Service** titled its declared name — a go.mod's last path segment, with the whole path as its *Module* attribute. `attribute` blocks: *Package*/*Module*, *Version*, *Runtime* (`Node.js >=20.11`, `Python >=3.11`, `Go 1.22`, `Rust 1.75`) and *Manifest*; the manifest's own `description` as a `text` block; tag `package-manifest`. |
+| a direct runtime dependency | One **External Dependency** titled the package's name, with its *Version constraint* (`(any version)` when it declares none, `git <url>` or `path <dir>` for those spellings) and *Ecosystem* (`npm`, `PyPI`, `Go`, `crates.io`) as attributes, plus *Dependency kind* when it is an npm `optional` or `peer` one. |
+| each of those | `Depends on` group — Dependent, Dependency. One link per package however many groups list it; a module that depends on itself proposes none. |
+
+**Direct runtime dependencies only, and everything else is dropped with a reason.** A lockfile's
+transitive closure would spend the whole 60-item cap on packages nobody chose, and a dev or test
+dependency is not part of what the module *runs*. So `devDependencies`, Cargo's `[dev-dependencies]`,
+`[build-dependencies]` and `[target.*]` tables, PEP 621's extras, Poetry's groups and optional
+dependencies, and go.mod's `// indirect` requires each become **one drop reason naming the group and
+its packages** — one line for the twenty of them, rather than twenty lines each saying the same
+thing, while `counts.dropped` still counts every package. An optional or a peer npm dependency IS
+proposed: `npm install --omit=dev` installs the first, and the second is a runtime requirement the
+host satisfies.
+
+A manifest that parses but names **no** dependencies is a one-item draft, not a refusal: the module
+is a leaf service, and its place in the graph is what the import is for. A manifest that declares no
+name is refused — the Service would have no title.
+
+Titles and groups are deduplicated against the workspace exactly as the other four producers' are
+(`matchedBy: 'exact-normalized-title'` / `'same-members-and-label'`), so re-importing an unchanged
+manifest proposes updates rather than a second copy of everything, and leaves out the attribute
+blocks its targets already carry — a version bump is the one block it proposes. A near-miss is
+flagged `duplicate_candidate`, never merged.
+
+| Status | Meaning |
+|--------|---------|
+| 201 | The draft, `status: 'ready'` |
+| 400 | `text` missing or longer than 60,000 characters; a file that is none of the four formats, or a TOML that is neither manifest; a manifest that does not parse (`{ error, line }` — the line in the file as sent); a manifest that declares no name; or the workspace lacks the `Service` or `External Dependency` entity type (`{ error, missingCategories }`) — no draft is created |
+
+`MANIFEST_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers and a
+separate setting again.
+
+The client sends `.toml`, `.mod` and a file named `package.json` here on their **names**, as it does
+`.sql` — none of them has a top-level key to read — and a `.json` carrying `dependencies` or
+`devDependencies` as a fallback, which is a package.json saved under another name
+([`client/src/lib/importFile.js`](../client/src/lib/importFile.js)).
+
+**Out of scope:** anything that reads a Git remote or a checkout (that needs a credential, which is
+the whole reason this route takes a file), lockfiles and transitive trees, monorepo workspace globs,
+parsing source for call graphs, and license or vulnerability data.
 
 ### Decisions vs. apply
 
