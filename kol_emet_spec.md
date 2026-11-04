@@ -551,3 +551,56 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   **Out of scope, deliberately:** email delivery and invite links, seat billing, per-entity or
   per-category permissions, transferring ownership outright, deleting a workspace, and per-user MCP
   identity (KOL-014) — a shared workspace makes that sharper but does not change it.
+
+- **The fifth producer reads a manifest, because "point it at your repo" needs a credential a file
+  does not (decided 2026-11-04, KOL-126)** — Phase 7's vertical ingestion names five sources, and the
+  repo one was the last unbuilt after KOL-033, KOL-051, KOL-089 and KOL-121. Reading a repo means a
+  Git credential and a checkout; the part of a repo a person can hand over **as a file** is its
+  dependency manifest, so that is what shipped. `lib/producers/packageManifest.js` is the fifth, on
+  the same `fileProducerRoute` contract (`POST /drafts/manifest`) and with the same properties:
+  deterministic, no model call, no allowance, no generation lock, `source.producer:
+  'package-manifest'`. The module the manifest declares → one **Service** (name, version and runtime
+  as attributes, the manifest's own description as a text block); each direct runtime dependency →
+  an **External Dependency** carrying its version constraint and ecosystem, joined by a **Depends
+  on** group (Dependent, Dependency).
+  - **Four formats, chosen from the content, not the filename** — `package.json`, `pyproject.toml`
+    (PEP 621 *and* Poetry), `go.mod` and `Cargo.toml`, the way the OpenAPI producer chooses between
+    3.x and Swagger 2.0. The producer is handed text and nothing else; the route reads a filename
+    only for the draft's title. A `.toml` is a pyproject or a Cargo manifest by the tables it
+    declares.
+  - **Direct runtime dependencies only.** A lockfile's transitive closure is hundreds of entities
+    and would spend the whole `MAX_ITEMS` budget of 60 on packages nobody chose, and a dev or test
+    dependency is not part of what the module *runs* — it is not an edge in an architecture graph.
+    An npm `optional` or `peer` dependency IS proposed, with a *Dependency kind* attribute saying
+    which: `--omit=dev` installs the first and the host satisfies the second, so dropping them would
+    lose real edges.
+  - **One drop reason per GROUP, not per package.** A typical package.json has twenty
+    `devDependencies`, and twenty lines each saying "not a runtime dependency" would bury the drop
+    that matters. So each dropped group — devDependencies, Cargo's dev/build/`[target.*]` tables,
+    PEP 621 extras, Poetry groups, `// indirect` requires — is one reason naming the group and its
+    packages, while `counts.dropped` still counts every package. This is the first producer whose
+    reasons and drops are not one-to-one, which is why it counts what went unlisted rather than
+    deriving it from `dropped - dropReasons.length`.
+  - **A manifest with no dependencies is a one-item draft, not a refusal** — a leaf service's place
+    in the graph is exactly what the import is for. The refusals are: a file that is none of the four
+    formats, a manifest that does not parse (400 with the line), and one that declares no name,
+    which would leave the Service with no title.
+  - **TOML is read by hand**, in the subset a manifest uses (table headers, dotted and quoted keys,
+    all four string forms, multi-line arrays with comments and trailing commas, inline tables):
+    there is no TOML parser among the server's dependencies, and adding one for four manifest shapes
+    is a larger commitment than ~180 lines that also yields the per-key offsets the evidence quotes
+    need. `package.json` is read with the `yaml` package rather than `JSON.parse`, as the OpenAPI
+    producer already reads a `.json` document, because that is the only one-pass way to get both the
+    parse error's line and every key's offset.
+  - **The client recognises `.toml`, `.mod` and `package.json` by NAME**, as it does `.sql`: none has
+    a top-level key to read. A `.json` carrying `dependencies` or `devDependencies` and nothing an
+    earlier reading claims falls through to this producer, which is a package.json saved under
+    another name. Covered by `server/tests/unit/packageManifest.test.js` (40 cases: all four formats,
+    the drop groups, the refusals, the item cap at 500 dependencies, and a re-import) and
+    `server/tests/http/manifestDraft.test.js` (the draft, redaction, apply, re-import, each format,
+    tenancy and every refusal).
+
+  **Out of scope, deliberately:** anything that reads a Git remote or a checkout — which is the
+  credential this item exists to avoid and the open half of "point it at your repo" — lockfiles and
+  transitive trees, monorepo workspace globs, parsing source for call graphs, and license or
+  vulnerability data.

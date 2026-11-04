@@ -70,13 +70,18 @@
   the agent proposes entities + relationships → the user reviews and accepts. **Never silent bulk
   writes** — always a reviewable diff (see approval model below). **Shipped 2026-09-06 as Generator
   v1**; design and remaining stretch items in [generator-v1-plan.md](generator-v1-plan.md).
-- **Vertical ingestion** — for architecture: repo / OpenAPI / docker-compose / k8s / DB-schema →
-  proposed system graph. ("Point it at your repo and watch it map your services.") Four producers
-  are built — docker-compose (**shipped 2026-09-17**, KOL-033), OpenAPI (**shipped 2026-10-06**,
-  KOL-051), k8s (**shipped 2026-10-21**, KOL-089 — `server/src/lib/producers/kubernetes.js`,
-  `POST /drafts/kubernetes`) and DB-schema (✅ **shipped 2026-10-26**, KOL-121 —
-  `server/src/lib/producers/sqlSchema.js`, `POST /drafts/sql`, the one producer that needs no
-  credential); the repo one is **next**.
+- ✅ **Vertical ingestion** — for architecture: repo / OpenAPI / docker-compose / k8s / DB-schema →
+  proposed system graph. ("Point it at your repo and watch it map your services.") All five
+  producers are built — docker-compose (**shipped 2026-09-17**, KOL-033), OpenAPI (**shipped
+  2026-10-06**, KOL-051), k8s (**shipped 2026-10-21**, KOL-089 —
+  `server/src/lib/producers/kubernetes.js`, `POST /drafts/kubernetes`), DB-schema (**shipped
+  2026-10-26**, KOL-121 — `server/src/lib/producers/sqlSchema.js`, `POST /drafts/sql`) and the repo
+  one (✅ **shipped 2026-11-04**, KOL-126 — `server/src/lib/producers/packageManifest.js`,
+  `POST /drafts/manifest`). The last two need no credential at all: a schema dump and a dependency
+  manifest are files the customer already has. The repo producer reads the part of a repo that can
+  be handed over as a file — its **manifest**, in any of `package.json`, `pyproject.toml`, `go.mod`
+  or `Cargo.toml` — which leaves **pointing at a live repo or cluster** (a Git credential, a
+  kubeconfig, a database URL) as the open half of this promise, alongside drift detection below.
 - **Continuous sync / drift detection** — the graph is derived from connected sources; when a source
   changes, the system finds the delta and *proposes* an update. The promise: **the model never goes
   stale.** This is the generator pointed at *changes* rather than a one-time import. Not built;

@@ -1,22 +1,26 @@
 /**
  * The braindump input's import routing. Notes (.txt/.md/.docx) are appended to
  * the textarea for editing before a generation; a docker-compose file, an
- * OpenAPI document, a Kubernetes manifest and a SQL schema are not notes, so
- * each skips the textarea and goes to its own producer (POST /drafts/compose,
- * /drafts/openapi, /drafts/kubernetes, /drafts/sql), and the finished draft is
- * handed up (`drafted`) for the overlay's review stage.
+ * OpenAPI document, a Kubernetes manifest, a SQL schema and a package manifest
+ * are not notes, so each skips the textarea and goes to its own producer (POST
+ * /drafts/compose, /drafts/openapi, /drafts/kubernetes, /drafts/sql,
+ * /drafts/manifest), and the finished draft is handed up (`drafted`) for the
+ * overlay's review stage.
  *
  * These pin that split, and the thing that decides it: the producer is chosen
  * by the file's CONTENT, not its extension — the three YAML kinds all arrive as
- * `.yaml` — except `.sql`, which is chosen by its name because a schema dump
- * has no top-level key to read. The file is sent verbatim with its filename, a
- * refusal is shown rather than swallowed, and a producer file mixed into a
- * multi-file import is refused before anything is sent.
+ * `.yaml` — except the files with no top-level key to read, which are chosen by
+ * their names: `.sql`, `.toml`, `.mod` and `package.json`. The file is sent
+ * verbatim with its filename, a refusal is shown rather than swallowed, and a
+ * producer file mixed into a multi-file import is refused before anything is
+ * sent.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import BraindumpInput from './BraindumpInput.vue';
-import { createComposeDraft, createOpenApiDraft, createKubernetesDraft, createSqlDraft } from '../../api/drafts.js';
+import {
+  createComposeDraft, createOpenApiDraft, createKubernetesDraft, createSqlDraft, createManifestDraft,
+} from '../../api/drafts.js';
 import { isProducerFile, producerFor, ACCEPT_ATTR } from '../../lib/importFile.js';
 
 vi.mock('../../api/drafts.js', () => ({
@@ -24,6 +28,7 @@ vi.mock('../../api/drafts.js', () => ({
   createOpenApiDraft: vi.fn(),
   createKubernetesDraft: vi.fn(),
   createSqlDraft: vi.fn(),
+  createManifestDraft: vi.fn(),
 }));
 
 beforeEach(() => { vi.clearAllMocks(); });
@@ -56,6 +61,18 @@ const MANIFEST = [
   'metadata:',
   '  name: web',
 ].join('\n');
+const PACKAGE_JSON = JSON.stringify({
+  name: '@acme/billing',
+  version: '1.4.2',
+  dependencies: { express: '^4.18.2' },
+  devDependencies: { jest: '^29.7.0' },
+}, null, 2);
+const PYPROJECT = [
+  '[project]',
+  'name = "billing-reports"',
+  'dependencies = ["requests>=2.31"]',
+].join('\n');
+const GOMOD = 'module github.com/acme/ledger-feed\n\ngo 1.22\n\nrequire github.com/gin-gonic/gin v1.9.1\n';
 
 async function drop(wrapper, files) {
   await wrapper.get('.drop').trigger('drop', { dataTransfer: { files } });
@@ -63,12 +80,16 @@ async function drop(wrapper, files) {
 }
 
 describe('BraindumpInput import routing', () => {
-  it('accepts .yml, .yaml, .json and .sql, and recognises them as producer files', () => {
-    expect(ACCEPT_ATTR.split(',')).toEqual(expect.arrayContaining(['.yml', '.yaml', '.json', '.sql', '.md', '.docx']));
+  it('accepts .yml, .yaml, .json, .sql, .toml and .mod, and recognises them as producer files', () => {
+    expect(ACCEPT_ATTR.split(',')).toEqual(expect.arrayContaining(
+      ['.yml', '.yaml', '.json', '.sql', '.toml', '.mod', '.md', '.docx'],
+    ));
     expect(isProducerFile({ name: 'docker-compose.YML' })).toBe(true);
     expect(isProducerFile({ name: 'compose.yaml' })).toBe(true);
     expect(isProducerFile({ name: 'openapi.json' })).toBe(true);
     expect(isProducerFile({ name: 'schema.SQL' })).toBe(true);
+    expect(isProducerFile({ name: 'pyproject.toml' })).toBe(true);
+    expect(isProducerFile({ name: 'go.mod' })).toBe(true);
     expect(isProducerFile({ name: 'notes.md' })).toBe(false);
   });
 
@@ -86,6 +107,25 @@ describe('BraindumpInput import routing', () => {
     // a Kubernetes object.
     expect(producerFor('kind: Deployment\nmetadata: {}\n')).toBe(null);
     expect(producerFor('$schema: http://json-schema.org/schema\nkind: object\n')).toBe(null);
+  });
+
+  it('chooses the manifest producer by name for the formats with no top-level key', () => {
+    // A `.toml` is a pyproject or a Cargo manifest — the server reads which
+    // from the tables it declares — and a `.mod` is a go.mod. Neither has a
+    // key a scan could recognise, and `package.json`'s name is a stronger
+    // signal than its keys.
+    expect(producerFor(PYPROJECT, 'pyproject.toml')).toBe('manifest');
+    expect(producerFor('[package]\nname = "x"\n', 'Cargo.TOML')).toBe('manifest');
+    expect(producerFor(GOMOD, 'go.mod')).toBe('manifest');
+    expect(producerFor(PACKAGE_JSON, 'package.json')).toBe('manifest');
+    expect(producerFor(PACKAGE_JSON, 'client/package.json')).toBe('manifest');
+    // And a package.json saved under another name is still recognised, by the
+    // keys only a manifest has.
+    expect(producerFor(PACKAGE_JSON, 'billing.json')).toBe('manifest');
+    // A compose file is still a compose file, keys first.
+    expect(producerFor(COMPOSE, 'docker-compose.yml')).toBe('compose');
+    // And a go.mod with nothing to go on by name is refused, as the others are.
+    expect(producerFor(GOMOD)).toBe(null);
   });
 
   it('chooses the SQL producer from the .sql name, which is the one extension reading', () => {
@@ -168,6 +208,34 @@ describe('BraindumpInput import routing', () => {
     expect(wrapper.get('textarea').element.value).toBe('');   // the DDL does not land in the notes
   });
 
+  it('sends a package.json to the manifest producer', async () => {
+    const draft = { _id: 'd6', status: 'ready', counts: { proposed: 3 } };
+    createManifestDraft.mockResolvedValue(draft);
+    const wrapper = mount(BraindumpInput);
+
+    await drop(wrapper, [fakeFile('package.json', PACKAGE_JSON)]);
+
+    expect(createManifestDraft).toHaveBeenCalledWith({ text: PACKAGE_JSON, filename: 'package.json' });
+    expect(createComposeDraft).not.toHaveBeenCalled();
+    expect(createOpenApiDraft).not.toHaveBeenCalled();
+    expect(wrapper.emitted('drafted')).toEqual([[draft]]);
+    expect(wrapper.get('textarea').element.value).toBe('');   // the manifest does not land in the notes
+  });
+
+  it('sends a pyproject.toml and a go.mod to the same producer', async () => {
+    const draft = { _id: 'd7', status: 'ready', counts: { proposed: 2 } };
+    createManifestDraft.mockResolvedValue(draft);
+
+    const toml = mount(BraindumpInput);
+    await drop(toml, [fakeFile('pyproject.toml', PYPROJECT)]);
+    expect(createManifestDraft).toHaveBeenCalledWith({ text: PYPROJECT, filename: 'pyproject.toml' });
+
+    const mod = mount(BraindumpInput);
+    await drop(mod, [fakeFile('go.mod', GOMOD)]);
+    expect(createManifestDraft).toHaveBeenCalledWith({ text: GOMOD, filename: 'go.mod' });
+    expect(createSqlDraft).not.toHaveBeenCalled();
+  });
+
   it('refuses a structured file that is none of them, without sending anything', async () => {
     const wrapper = mount(BraindumpInput);
 
@@ -177,6 +245,7 @@ describe('BraindumpInput import routing', () => {
     expect(createOpenApiDraft).not.toHaveBeenCalled();
     expect(createKubernetesDraft).not.toHaveBeenCalled();
     expect(createSqlDraft).not.toHaveBeenCalled();
+    expect(createManifestDraft).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('doesn\'t look like an OpenAPI document, a Kubernetes manifest or a docker-compose file');
     expect(wrapper.emitted('drafted')).toBeUndefined();
   });
@@ -198,7 +267,7 @@ describe('BraindumpInput import routing', () => {
 
     expect(createComposeDraft).not.toHaveBeenCalled();
     expect(createOpenApiDraft).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Import a docker-compose, OpenAPI, Kubernetes or .sql file on its own');
+    expect(wrapper.text()).toContain('Import a docker-compose, OpenAPI, Kubernetes, .sql or package manifest file on its own');
     expect(wrapper.get('textarea').element.value).toBe('');
   });
 
