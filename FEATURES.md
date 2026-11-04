@@ -144,6 +144,22 @@ registration, or removes a feature.
   connector holds none), the session-store limit the Decision Log already records, and any change to the
   `session-ended` contract.
 
+- [ ] **(KOL-138) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-11]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 ## Proposed
 
 - [ ] **(KOL-132) Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…**
@@ -198,6 +214,168 @@ registration, or removes a feature.
   `cd client && yarn build`.
   Out of scope: shipping, packaging or pulling models for Ollama; a per-workspace default provider (it is per request
   today); the Responses-API/MCP relay path (Ollama advertises no `responsesApi`); and any change to what `steadfast` is.
+
+- [ ] **(KOL-133) Delete a workspace: the one tenancy verb the product has never had** (needs KOL-132) [proposed]
+  `docs/roadmap.md:111` names it among what is still open after invites — "deleting a workspace, seat billing and
+  per-plan limits" — and it is the only one of the three that needs neither a credential nor a price.
+  `workspacesRouter` has `GET /workspaces` (`server/src/routes/workspace.js:436`), `POST /workspaces/:id/select`
+  (:474) and `POST /workspaces` (:579), and no delete — so a workspace made by a mis-click, the wrong template or an
+  abandoned import is permanent: it counts against `WORKSPACE_MAX_PER_OWNER` forever and nothing can remove what is
+  inside it short of deleting the whole account.
+  Build: `DELETE /workspaces/:id`, owner-only and hard, reusing the deletion machinery rather than copying it.
+  `WORKSPACE_SCOPED_MODELS` (`server/src/lib/accountDeleter.js:86`) is already every collection carrying a
+  `workspaceId` and is already asserted complete by `accountDeleter.test.js`, so the sweep is that list plus the
+  `Workspace` row: lift `deleteScopedContent` (`accountDeleter.js:128`) to an exported helper both callers share and
+  leave `deleteAccount`'s two-pass shape alone. Three refusals, each with its own code, in the style of `LAST_OWNER`:
+  a member who is not an owner **of that workspace** (the role comes from the named workspace's own `members` array,
+  not from `resolveWorkspace`, since the id is a parameter here); a well-formed id the caller is not a member of →
+  404 and never 403, the rule `POST /:id/select` already follows (:466-470) so the API cannot be used to learn that
+  another tenant's workspace exists; and the caller's last one → 409 `LAST_WORKSPACE`, because `resolveWorkspace`
+  answers 403 "No workspace for this user" to an account with no membership
+  (`server/src/middleware/workspace.js:238-240`) and deleting the last one would lock its owner out of the product.
+  Two things only the deletion can do: close the SSE streams watching that workspace — `broadcaster.js` has
+  `closeStreamsForSession` and `closeStreamsForUser` (:196,236) and nothing keyed by workspace, while every client row
+  already stores one (:136) — and leave `session.workspaceId` untouched, because `resolveWorkspace` documents the
+  fallback for exactly this case ("revoked, or the workspace deleted", `middleware/workspace.js:203-209`) and
+  `POST /:id/select` is its one writer.
+  One decision to make and record: `docs/generator-v1-plan.md` says hard deletion of a `Draft` "belongs only to an
+  account-deletion path", and the Decision Log settled that account deletion hard-deletes them. This is a third path
+  over the same rows. Read it as the same promise — an owner removing their own data — and write that sentence into
+  the Decision Log rather than leaving the two documents to disagree.
+  Files: `server/src/routes/workspace.js`, `server/src/lib/accountDeleter.js`, `server/src/lib/broadcaster.js`,
+  `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, a new
+  `server/tests/http/workspaceDelete.test.js`, `server/tests/lib/accountDeleter.test.js`,
+  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/data-model.md`, `docs/roadmap.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: an owner deleting a second workspace takes its entities, drafts,
+  changelog rows and pending invites with it and leaves the first untouched; an editor is refused and the workspace
+  survives; a well-formed id in another tenant is 404 and writes nothing; the caller's only workspace is 409
+  `LAST_WORKSPACE`; a collaborator's membership goes with the workspace while their own workspaces stay; an open
+  `/events` stream on the deleted workspace is closed with a named reason; and a session whose selection was the
+  deleted workspace resolves the fallback on its next request instead of 403. `cd client && yarn test --run`;
+  `cd client && yarn build`.
+  Out of scope: soft delete or an undo window (the `ChangeLog` TTL cannot carry one — KOL-019), transferring a
+  workspace to another owner, a member leaving one of their own accord, seat billing and per-plan limits, and any
+  change to `DELETE /auth/account`. It waits on KOL-132 because delete-then-create resets a workspace's AI
+  allowance, and until the grant question is settled `WORKSPACE_MAX_PER_OWNER` is the only thing bounding how many
+  grants one account can mint — a delete route turns that ceiling into a loop.
+
+- [ ] **(KOL-134) Two owners, two demotions, zero owners: the last-owner floor is read-then-write** [proposed]
+  Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:348`).
+  `PATCH /workspace/members/:userId` reads the members array with `membersOf()` (:330), counts owners with
+  `ownersOf()` (:349), and then writes with a separate `Workspace.updateOne` (:359). With two owners, two concurrent
+  demotions each read two owners, each pass `ownersOf(workspace).length <= 1`, and both writes land — leaving a
+  workspace with no owner at all. `DELETE /workspace/members/:userId` has the same three steps (:378,389,397). The
+  resulting state is permanent: a role change and an invite are both `requireWorkspaceRole('owner')`, so nothing in
+  the product can create an owner in a workspace that has none, and that workspace can never again be renamed,
+  invited into or managed. The floor's own comment (:347-348) says why it exists; it just is not where the write is.
+  Build: make the invariant part of the write instead of a check in front of it. The `updateOne` filter re-asserts
+  what the read asserted — that this workspace still holds an owner who is not this member — with `$expr` over a
+  `$filter`/`$size` of `members`, so a `matchedCount` of 0 **is** the 409 `LAST_OWNER` and the second of two racing
+  demotions is the one refused. Same filter for the removal path. `ownerIdAfter` (:205) may keep reading the
+  pre-write array, since the write can no longer be the one that empties the role, but a run that leaves `ownerId`
+  pointing at a demoted owner must be asserted against rather than assumed away.
+  Files: `server/src/routes/workspace.js`, `server/tests/http/workspace.test.js` (or `invites.test.js`, wherever the
+  existing `LAST_OWNER` cases live), `docs/api.md` if the refusal's wording moves.
+  Verify: `cd server && yarn test` — a test that performs both reads before either write, then runs the two guarded
+  updates in order, and asserts the first matched one document, the second matched none, and the workspace still has
+  exactly one owner. No sleeps and no real concurrency: both reads happening before both writes *is* the race, and
+  that is expressible directly. Plus the existing single-owner refusals, the ordinary two-owner demotion, and the
+  same pair of cases for removal. `cd server && node --check src/index.js`.
+  Out of scope: a transaction or a replica-set session — `MongoMemoryServer.create()` runs standalone in these tests
+  (`server/tests/helpers/db.js:58`), so a fix that needs one cannot be verified here; the owner count on
+  `POST /auth/register` and `POST /workspaces`, which each write their single owner in one insert; and any change to
+  what `LAST_OWNER` means to a client.
+
+- [ ] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see** [proposed]
+  Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:241`).
+  `ownerGuard` hooks `post('save')` and `post('insertMany')` and nothing else
+  (`server/src/lib/ownerGuard.js:107-117`), on a documented argument that covers every other write: "An update to an
+  existing document cannot bring back one that was deleted" (:35-38). But `POST /workspace/invites` creates with
+  `findOneAndUpdate({ upsert: true })` (`routes/workspace.js:242-247`) — deliberately, so a re-invite is one row and
+  not two — and an upsert is precisely the update that can bring one back. So the write-then-check promise that
+  `models/WorkspaceInvite.js:70-73` and `docs/data-model.md` both make for `WorkspaceInvite` holds for no production
+  write at all, and the race test passes anyway because it drives `create` and `insertMany`
+  (`server/tests/lib/accountDeleter.test.js:368,388-390`), the two shapes no route uses. An invite upserted between
+  `deleteAccount`'s content pass and its final sweep therefore survives, pointing at a deleted workspace, and
+  `GET /invites` shows it to the invitee with a null workspace name until an accept 404s and drops it.
+  Build: give the plugin the hook rather than the route a workaround — it is a schema plugin exactly because "it only
+  works if the check runs on every insert, whichever code path does it" (`ownerGuard.js:31-33`). In
+  `post('findOneAndUpdate')` the query is `this`, so `this.getOptions().upsert` says whether an insert was possible;
+  the route passes `new: false`, so the hook cannot read the row from the result and must resolve it itself
+  (`this.model.findOne(this.getFilter())`) before handing it to the existing `discardIfOwnerGone` unchanged. A
+  non-upsert `findOneAndUpdate` must stay unchecked, or every update in the codebase grows an owner lookup. Then make
+  the late-write race test drive each model's real write shape, so a guard the production path bypasses fails.
+  Files: `server/src/lib/ownerGuard.js`, `server/src/models/WorkspaceInvite.js` (the comment that claims the guard),
+  `server/tests/lib/accountDeleter.test.js`, a new `server/tests/unit/ownerGuard.test.js` (there is none today),
+  `docs/data-model.md`.
+  Verify: `cd server && yarn test` with cases for: an invite upserted after its workspace is deleted deleting itself
+  and rejecting with `OwnerGoneError`; a re-invite in a live workspace still answering 200 with one row; a plain
+  non-upsert `findOneAndUpdate` on an existing row running no owner lookup; a doc with a null `workspaceId` still
+  passing unchecked; and every existing `create`/`insertMany` case unchanged. `cd server && node --check src/index.js`.
+  Out of scope: `updateMany` and `bulkWrite` upserts — no route uses one, so say so in the comment instead of
+  guarding a path that does not exist; the two-pass ordering in `accountDeleter` itself; and invite expiry, which
+  `models/WorkspaceInvite.js` argues against on purpose.
+
+- [ ] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not** [proposed]
+  Both found by the graders of the sql-schema items, and both reproduced against the current tree by running
+  `parseSqlSchema` directly.
+  First, an index whose unquoted name is a type word invents a column (`server/src/lib/producers/sqlSchema.js:366-373`,
+  grader of KOL-130). `CONSTRAINT_SHAPES` (:384-397) routes `FULLTEXT`, `SPATIAL`, `KEY` and `INDEX` through
+  `looksLikeIndex`, which refuses a name `isTypeWord` matches — the only thing telling `KEY idx_user (user_id)` from a
+  column called `key VARCHAR(50)`. For `CREATE TABLE t (body text, FULLTEXT KEY text (body));` the index name *is* a
+  type word, the shape returns false, the fallback to the table-constraint reading never runs, and `readColumn`
+  proposes the attribute `FULLTEXT` = `KEY text (body)` on the Data Store — a column the table does not have. Narrow
+  in practice (mysqldump backtick-quotes index names, and a quoted ident bypasses `isTypeWord`) but hand-written DDL
+  hits it, and before the type-word guard the declaration was merely skipped rather than misread.
+  Second, a trailing ALTER marks a key on a table in another schema (:733, grader of KOL-131). Pass 2 resolves the
+  ALTER's *own* table with `resolveTable`, whose second reading — "a reference with a schema the file does not
+  declare, falling back to the one table of that name there is" (:698-706) — was written for a foreign key's
+  *referenced* name, where SQL is that lenient. It is not lenient about the target of an ALTER. So
+  `CREATE TABLE public.users (id integer NOT NULL, email text);` plus
+  `ALTER TABLE ONLY archive.users ADD CONSTRAINT users_pkey PRIMARY KEY (id);` marks `public.users.id` as
+  `PRIMARY KEY` — a key the file never declares on that table, and the opposite of what the pass-2 comment
+  (:728-731) and `docs/api.md` both promise, that a constraint naming an undeclared table is passed over in silence.
+  The existing test covers only the case where both namesakes exist.
+  Build: for the first, fall through to the table-constraint reading instead of returning false when the keyword is
+  `FULLTEXT` or `SPATIAL` — both are reserved index keywords in every dialect read here and can never be a column
+  name, unlike bare `KEY` and `INDEX`, which is what the guard was written for. For the second, resolve an ALTER's own
+  table exactly: `schema.name` when the file declares it, a bare name when it is unique in the file, nothing
+  otherwise — the lenient fallback stays on the referenced side of a foreign key, where it belongs.
+  Files: `server/src/lib/producers/sqlSchema.js`, `server/tests/unit/sqlSchema.test.js`,
+  `server/tests/fixtures/schema.sql` only if a case needs it, `docs/api.md`.
+  Verify: `cd server && yarn test` with cases for: `FULLTEXT KEY text (body)` and `SPATIAL KEY geom (geom)` producing
+  no attribute for the index and leaving the real columns intact; a column genuinely named `key` or `index` still
+  read as a column (the regression the type-word guard exists to prevent); an ALTER naming `archive.users` where only
+  `public.users` is declared marking nothing; the same ALTER unqualified still resolving to the one `users` there is;
+  a foreign key's referenced name keeping the lenient fallback; and the committed fixture's output unchanged.
+  `cd server && node --check src/index.js`.
+  Out of scope: new dialects, index entities of their own, `CREATE INDEX` statements outside a table body, and a
+  `PRODUCER_VERSION` bump — decide whether a parse fix that moves output is one and say which in the PR, rather than
+  bumping it silently.
+
+- [ ] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises** [proposed]
+  Two client findings from the graders of KOL-124 and KOL-123, in the same component and its test file.
+  `acceptMyInvite` and `declineMyInvite` write their refusal into `collabError`
+  (`client/src/components/WikiLayout.vue:1073,1087`), which is rendered in exactly one place: inside the Collaborators
+  group (:297). The buttons that produce it are in "Invitations for you" (:218-226), the group above, which has no
+  error line of its own — and both handlers reload in `finally` (:1076,1090), so a failed Accept (a 404 because the
+  workspace was deleted meanwhile) prints its message in a different group further down the panel while the row it
+  was about vanishes, since the group is `v-if="myInvites.length"`. Every other group in that panel says its refusal
+  next to the control that caused it, which is the stated contract.
+  `WikiLayout.test.js:644-651`, titled "sends nothing without a name, and nothing twice", submits once: it asserts the
+  blank-name refusal and the disabled button and never submits twice, so the `workspaceCreating` re-entry guard
+  (`WikiLayout.vue:871,874`) is unasserted under a title that claims it (grader of KOL-123, low).
+  Build: an `inviteError` ref beside `collabError`, rendered inside the invitations group, written by the two
+  handlers that live there and cleared on success — and the group kept mounted while it has a message to show, so a
+  reload that empties `myInvites` cannot take the explanation with it. Then give the test the second submit it
+  claims: fire submit twice without awaiting the first and assert `createWorkspace` was called once.
+  Files: `client/src/components/WikiLayout.vue`, `client/src/components/WikiLayout.test.js`.
+  Verify: `cd client && yarn test --run` with cases for: a rejected `acceptInvite` rendering its message inside the
+  invitations group and not in the Collaborators group; the same for `declineInvite`; the message surviving a reload
+  that returns no invites; a successful accept clearing it and leaving no empty group behind; and the double submit
+  calling `createWorkspace` exactly once. `cd client && yarn build`.
+  Out of scope: the server's refusal codes and `collaboratorMessage`'s copy, the toast a successful accept raises,
+  and any rework of the settings panel's layout.
 
 ## Blocked Items
 
