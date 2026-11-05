@@ -1,0 +1,347 @@
+{
+  "item": "KOL-126",
+  "repo": "kol-emet",
+  "mergeSha": "8dcdfd898a3256a0576e6184797e4f0b935fee62",
+  "completedAtUtc": "2026-11-04T23:08:38.465Z",
+  "completeRunId": "2026-11-04T22:30:43.131Z",
+  "reviewRunId": "2026-11-05T08:02:11.046Z",
+  "reviewedAtUtc": "2026-11-05T08:12:18.212Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 145574,
+  "contextFiles": 16,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/drafts.js",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/generator/BraindumpInput.test.js"
+      ],
+      "part": null,
+      "bytes": 10535,
+      "contextBytes": 0,
+      "promptTokens": 4034,
+      "completionTokens": 104,
+      "latencyMs": 15312,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/generator/BraindumpInput.vue",
+        "client/src/lib/importFile.js"
+      ],
+      "part": null,
+      "bytes": 9981,
+      "contextBytes": 0,
+      "promptTokens": 3844,
+      "completionTokens": 122,
+      "latencyMs": 14228,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "docs/roadmap.md"
+      ],
+      "part": null,
+      "bytes": 9929,
+      "contextBytes": 0,
+      "promptTokens": 3932,
+      "completionTokens": 104,
+      "latencyMs": 13381,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 5047,
+      "contextBytes": 0,
+      "promptTokens": 2481,
+      "completionTokens": 76,
+      "latencyMs": 7931,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/packageManifest.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 4,
+        "oversized": false
+      },
+      "bytes": 12620,
+      "contextBytes": 0,
+      "promptTokens": 4558,
+      "completionTokens": 172,
+      "latencyMs": 18921,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/packageManifest.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 4,
+        "oversized": false
+      },
+      "bytes": 12594,
+      "contextBytes": 0,
+      "promptTokens": 4628,
+      "completionTokens": 274,
+      "latencyMs": 27281,
+      "findings": 0,
+      "needs": 6,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/packageManifest.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 4,
+        "oversized": false
+      },
+      "bytes": 12613,
+      "contextBytes": 0,
+      "promptTokens": 4872,
+      "completionTokens": 150,
+      "latencyMs": 22102,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/packageManifest.js"
+      ],
+      "part": {
+        "index": 4,
+        "total": 4,
+        "oversized": false
+      },
+      "bytes": 9326,
+      "contextBytes": 0,
+      "promptTokens": 3720,
+      "completionTokens": 160,
+      "latencyMs": 18687,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/Draft.js",
+        "server/src/routes/drafts.js",
+        "server/tests/fixtures/manifest-Cargo.toml",
+        "server/tests/fixtures/manifest-go.mod",
+        "server/tests/fixtures/manifest-package.json",
+        "server/tests/fixtures/manifest-pyproject.toml"
+      ],
+      "part": null,
+      "bytes": 7557,
+      "contextBytes": 5089,
+      "promptTokens": 4806,
+      "completionTokens": 201,
+      "latencyMs": 21843,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/manifestDraft.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12547,
+      "contextBytes": 0,
+      "promptTokens": 4412,
+      "completionTokens": 89,
+      "latencyMs": 17396,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/manifestDraft.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10176,
+      "contextBytes": 0,
+      "promptTokens": 3944,
+      "completionTokens": 272,
+      "latencyMs": 22369,
+      "findings": 0,
+      "needs": 9,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/packageManifest.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12601,
+      "contextBytes": 0,
+      "promptTokens": 4418,
+      "completionTokens": 179,
+      "latencyMs": 19460,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/packageManifest.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 12592,
+      "contextBytes": 0,
+      "promptTokens": 4526,
+      "completionTokens": 296,
+      "latencyMs": 28301,
+      "findings": 0,
+      "needs": 8,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/packageManifest.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 8811,
+      "contextBytes": 0,
+      "promptTokens": 3488,
+      "completionTokens": 427,
+      "latencyMs": 30947,
+      "findings": 0,
+      "needs": 14,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/lib/producers/packageManifest.js:1"
+    },
+    "secrets": {
+      "touched": true,
+      "evidence": "server/src/lib/producers/packageManifest.js:10"
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional context is needed to fully verify the implementation of `createManifestDraft` and `producerFor` functions. · The diff adds support for package manifests in the client and server code. However, it does not provide the implementation details for `createManifestDraft` or the producer logic in `packageManifest.js`. These need to be reviewed to ensure they handle the parsing and processing of package manifests correctly. · No real defects found. However, additional context is needed to verify the implementation of `redactSecrets` and `matchedBy` functions. · No real defects found in the provided diff. The change introduces a new producer for reading package manifests and updating related files, but no critical issues were identified. · The diff introduces a new file `packageManifest.js` for parsing package manifests. The code includes functions to detect the manifest family, parse the manifest, and generate draft items based on the parsed data. However, some helper functions (`readPackageJson`, `readGoMod`, `readToml`) are referenced but not defined in the provided diff. · The diff introduces a new file `packageManifest.js` for handling package manifests in various formats. The code reads and processes `package.json`, `pyproject.toml`, `go.mod`, and `Cargo.toml` files, extracting module information and dependencies. It then creates entities and relationships based on this data, ensuring that the number of items does not exceed a specified cap (`MAX_ITEMS`). The diff also includes helper functions for reading different manifest formats and handling errors. · The diff introduces a new file `packageManifest.js` for handling package manifests in Go, Python, and Rust. The code includes functions to parse TOML files and extract dependencies. However, some symbols used in the code are not defined within the provided diff. · The diff introduces a new file `packageManifest.js` for reading package manifests in various formats. The code includes functions to read `pyproject.toml` and `Cargo.toml` files, parse requirements, and handle dependencies. However, some symbols used in the code are not defined within the provided diff. · The diff adds a new route for handling package manifests and updates the Draft model to include 'package-manifest' as a producer. The context provides additional information about the changes, but no specific defects are identified. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the implementation. · No real defects found, but additional context is needed to fully understand the code. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the functionality of the code. · The diff introduces a new test file for the package manifest producer, covering various scenarios including different manifest formats (package.json, pyproject.toml, go.mod, Cargo.toml), handling of dev dependencies, and refusal cases. The tests ensure that the producer correctly parses manifests, handles errors, and adheres to the specified rules for dependency inclusion and exclusion. · The diff introduces a new test file for the package manifest producer, covering various scenarios such as handling manifests with no dependencies, empty files, item caps, and re-imports. The tests assume the existence of several symbols and functions that are not defined in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 113492,
+    "completionTokens": 4438
+  },
+  "latencyMs": 514220
+}

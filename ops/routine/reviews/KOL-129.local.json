@@ -1,0 +1,116 @@
+{
+  "item": "KOL-129",
+  "repo": "kol-emet",
+  "mergeSha": "3a184c22304cfb596ad26d35acc6fe2f7070f665",
+  "completedAtUtc": "2026-11-04T22:43:32.812Z",
+  "completeRunId": "2026-11-04T22:30:43.131Z",
+  "reviewRunId": "2026-11-05T08:02:11.046Z",
+  "reviewedAtUtc": "2026-11-05T08:03:43.674Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 18870,
+  "contextFiles": 0,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 2018,
+      "contextBytes": 0,
+      "promptTokens": 1406,
+      "completionTokens": 74,
+      "latencyMs": 27568,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13837,
+      "contextBytes": 0,
+      "promptTokens": 4554,
+      "completionTokens": 95,
+      "latencyMs": 14587,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 3280,
+      "contextBytes": 0,
+      "promptTokens": 1715,
+      "completionTokens": 224,
+      "latencyMs": 14422,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/workspace.js:436"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds a new workqueue item for backlog auditing. It needs to verify that the `<orchestrator>` path is correctly specified in the runbook. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · The diff introduces a new feature proposal for handling refused Accept reports and testing related guards. The proposed changes involve modifying `WikiLayout.vue` to include an `inviteError` ref, which is rendered inside the invitations group and written by the two handlers that live there. Additionally, the test file `WikiLayout.test.js` needs to be updated to assert the new behavior.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 14957,
+    "completionTokens": 781
+  },
+  "latencyMs": 91313
+}
