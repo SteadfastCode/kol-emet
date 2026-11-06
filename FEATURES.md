@@ -119,6 +119,16 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-139) A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…**
+  Found by the grader of KOL-126 (medium, server/src/lib/producers/packageManifest.js:223). A
+  go.mod's Service title is the last path segment with no handling of Go's semantic import
+  versioning: `module github.com/acme/ledger-feed/v2` (the normal spelling for any Go module at
+  major version ≥ 2, and the very form the fixture's own dependencies use — `pgx/v5`,
+  `go-redis/v9`) is titled "v2". Worse, titles are the dedup key: importing two different v2+ Go
+  modules into one workspace makes the second an `exact-normalized-title` update of the first,
+  merging two unrelated services into one entity. Only the module itself is affected —
+  dependencies keep their full path as the title — and the unit/HTTP fixtures use a v1 path, so no
+  test covers it.
 - [ ] **(KOL-132) Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…**
   Found by the grader of KOL-123 (medium, server/src/lib/workspaceSeeder.js:214). Every created
   workspace gets a fresh full AI allowance: `Workspace.create` sets no `aiBudget`, so the schema

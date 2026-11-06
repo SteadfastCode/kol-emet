@@ -1,0 +1,63 @@
+{
+  "item": "KOL-129",
+  "repo": "kol-emet",
+  "mergeSha": "3a184c22304cfb596ad26d35acc6fe2f7070f665",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-06T07:45:52.442Z",
+  "gradedAtUtc": "2026-11-06T07:56:19.283Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff is FEATURES.md prose only; no auth code, session, role or registration behavior changes."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear in the change."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Billing/allowance code is only described in proposed-item prose (KOL-133 referencing KOL-132); no metering or budget code is modified."
+    },
+    {
+      "key": "destructive",
+      "correct": false,
+      "reason": "The change adds only backlog text to FEATURES.md and modifies no code at all; server/src/routes/workspace.js:436 is merely quoted inside a proposed item's description and is not in the diff."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No network calls, provider clients or external endpoints are added or altered."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, dependency, build or deploy configuration is touched."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model was right that this documentation-only backlog-audit change (5 well-researched, correctly-ID'd, correctly-tagged proposed items plus a properly dated KOL-138 renewal, all claims verified against the tree as not-yet-built) contains no defects, but it wrongly marked the destructive category as touched on evidence from a file the diff never changes.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 0.8625155,
+  "numTurns": 14,
+  "durationMs": 105286,
+  "sessionId": "7aca98ad-dfdd-44b5-8258-55fad4f41487"
+}

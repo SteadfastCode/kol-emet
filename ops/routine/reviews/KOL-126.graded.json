@@ -1,0 +1,86 @@
+{
+  "item": "KOL-126",
+  "repo": "kol-emet",
+  "mergeSha": "8dcdfd898a3256a0576e6184797e4f0b935fee62",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-06T07:45:52.442Z",
+  "gradedAtUtc": "2026-11-06T07:54:33.964Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/packageManifest.js",
+      "line": 223,
+      "severity": "medium",
+      "summary": "A go.mod's Service title is the last path segment with no handling of Go's semantic import versioning: `module github.com/acme/ledger-feed/v2` (the normal spelling for any Go module at major version ≥ 2, and the very form the fixture's own dependencies use — `pgx/v5`, `go-redis/v9`) is titled \"v2\". Worse, titles are the dedup key: importing two different v2+ Go modules into one workspace makes the second an `exact-normalized-title` update of the first, merging two unrelated services into one entity. Only the module itself is affected — dependencies keep their full path as the title — and the unit/HTTP fixtures use a v1 path, so no test covers it."
+    },
+    {
+      "file": "server/src/lib/producers/packageManifest.js",
+      "line": 681,
+      "severity": "low",
+      "summary": "The hand-written TOML `readValue` recurses per nested array/inline table with no depth bound, so a 60,000-character file such as `[package]\\nname=\"x\"\\nx = [[[[[…` (accepted by `detectFamily` as TOML) overflows the stack. The resulting RangeError is not a ManifestParseError, so the route's catch falls through to `next(err)` and the caller gets a 500 instead of the 400-with-a-line the producer promises for an unreadable file."
+    },
+    {
+      "file": "server/src/lib/producers/packageManifest.js",
+      "line": 919,
+      "severity": "low",
+      "summary": "PEP 621 build requirements (`[build-system].requires`) are dropped with no drop reason and are not added to `counts.dropped`, while the exactly analogous Cargo `[build-dependencies]` table is reported and counted. The producer's own rule is \"dropped with a REASON rather than silently, so a reviewer who expected to see `jest` can find out where it went\"; a reviewer importing the suite's own pyproject fixture gets three drop reasons and no mention of `hatchling` at all."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "No authentication or authorization logic is added or changed — the new route inherits the existing `requireWriteRole` mount and `resolveWorkspace`; the cited evidence is just the producer file's header comment."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "Right call despite the arbitrary line reference: the change adds a new credential-bearing ingestion path (documented as redacted before storage) plus fixtures containing fake tokens and tests asserting they never reach the draft or the database."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, quota or allowance logic is modified — the producer is deterministic, makes no model call, and the quota test only asserts the allowance is left untouched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change only creates draft rows; it deletes nothing, runs no migration, and the enum addition to `Draft.source.producer` is purely additive."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls are added — reading a Git remote or any provider API is explicitly out of scope, and parsing is entirely local."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No CI, deploy, packaging or infrastructure configuration is touched; the only non-code changes are docs and the decision log."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "The local review found nothing at all in a 1,000-line hand-written parser — missing the go.mod `/vN` titling bug, the unbounded TOML recursion that turns a malformed file into a 500, and an asymmetric silent drop — and its only two positive triage calls were a wrong \"auth: touched\" and a right \"secrets: touched\" backed by a meaningless line reference.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 3.8979994999999996,
+  "numTurns": 28,
+  "durationMs": 517027,
+  "sessionId": "0ac07f5c-55c5-4327-895a-e820c295c33f"
+}

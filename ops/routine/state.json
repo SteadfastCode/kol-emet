@@ -44,26 +44,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-126": {
-      "order": 3,
-      "title": "Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-126",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-11-04T22:45:32.185Z",
-      "runId": "2026-11-04T22:30:43.131Z",
-      "lastFail": null
-    },
     "KOL-127": {
-      "order": 4,
+      "order": 3,
       "title": "A generated update stacks a block the entity already has, and an item proposing nothing is still a decision",
       "status": "pending",
       "attempts": 0,
@@ -81,7 +63,7 @@
       "lastFail": null
     },
     "KOL-128": {
-      "order": 5,
+      "order": 4,
       "title": "An account deletion cannot reach a connector's stream, and three places say it can",
       "status": "pending",
       "attempts": 0,
@@ -99,7 +81,7 @@
       "lastFail": null
     },
     "KOL-138": {
-      "order": 6,
+      "order": 5,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -112,6 +94,24 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": "2026-11-11",
+      "claimedAtUtc": null,
+      "runId": null,
+      "lastFail": null
+    },
+    "KOL-139": {
+      "order": 6,
+      "title": "A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…",
+      "status": "pending",
+      "attempts": 0,
+      "cluster": null,
+      "branch": null,
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
@@ -296,6 +296,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-126": {
+      "order": null,
+      "title": "Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-126",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-04T22:45:32.185Z",
+      "runId": "2026-11-04T22:30:43.131Z",
       "lastFail": null
     },
     "KOL-129": {
