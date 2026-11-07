@@ -1,0 +1,247 @@
+{
+  "item": "KOL-127",
+  "repo": "kol-emet",
+  "mergeSha": "f114b5111f64629ef7cf25affb84a7081ec6d012",
+  "completedAtUtc": "2026-11-07T03:58:02.122Z",
+  "completeRunId": "2026-11-07T03:38:43.116Z",
+  "reviewRunId": "2026-11-07T08:01:11.193Z",
+  "reviewedAtUtc": "2026-11-07T08:10:10.411Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 81359,
+  "contextFiles": 17,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/lib/draftNormalizer.js"
+      ],
+      "part": null,
+      "bytes": 7177,
+      "contextBytes": 4736,
+      "promptTokens": 4389,
+      "completionTokens": 69,
+      "latencyMs": 15986,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/draftTarget.js"
+      ],
+      "part": null,
+      "bytes": 10468,
+      "contextBytes": 0,
+      "promptTokens": 4125,
+      "completionTokens": 93,
+      "latencyMs": 13558,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/generator.js",
+        "server/src/lib/producers/dockerCompose.js",
+        "server/src/lib/producers/kubernetes.js",
+        "server/src/lib/producers/openApi.js",
+        "server/src/lib/producers/packageManifest.js"
+      ],
+      "part": null,
+      "bytes": 11300,
+      "contextBytes": 0,
+      "promptTokens": 4337,
+      "completionTokens": 137,
+      "latencyMs": 16524,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/sqlSchema.js",
+        "server/src/routes/drafts.js",
+        "server/tests/http/composeDraft.test.js"
+      ],
+      "part": null,
+      "bytes": 10059,
+      "contextBytes": 0,
+      "promptTokens": 3929,
+      "completionTokens": 86,
+      "latencyMs": 12472,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/kubernetesDraft.test.js",
+        "server/tests/http/manifestDraft.test.js"
+      ],
+      "part": null,
+      "bytes": 8236,
+      "contextBytes": 0,
+      "promptTokens": 3390,
+      "completionTokens": 109,
+      "latencyMs": 11825,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/openApiDraft.test.js",
+        "server/tests/http/sqlDraft.test.js"
+      ],
+      "part": null,
+      "bytes": 9441,
+      "contextBytes": 0,
+      "promptTokens": 3726,
+      "completionTokens": 112,
+      "latencyMs": 13053,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/draftApplier.test.js"
+      ],
+      "part": null,
+      "bytes": 5276,
+      "contextBytes": 6611,
+      "promptTokens": 4338,
+      "completionTokens": 96,
+      "latencyMs": 14264,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/dockerCompose.test.js"
+      ],
+      "part": null,
+      "bytes": 6877,
+      "contextBytes": 0,
+      "promptTokens": 3228,
+      "completionTokens": 75,
+      "latencyMs": 9782,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/draftTarget.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11946,
+      "contextBytes": 0,
+      "promptTokens": 4606,
+      "completionTokens": 122,
+      "latencyMs": 16486,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/draftTarget.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 790,
+      "contextBytes": 3927,
+      "promptTokens": 2618,
+      "completionTokens": 134,
+      "latencyMs": 10863,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/lib/draftNormalizer.js:329"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. However, additional information is needed to fully understand the changes and ensure they meet all requirements. · No real defects found. However, additional context is needed to fully understand the impact of the changes. · The diff introduces a new function `pruneAgainstTargets` in `draftTarget.js`, which is used to prune known blocks from the normalized items. The producers (`dockerCompose.js`, `kubernetes.js`, `openApi.js`, and `packageManifest.js`) now use this shared decision-making logic instead of their own implementations. The generator (`generator.js`) also uses this function to ensure that proposed blocks are not duplicated in the target entities. · No real defects found. The change appears to address the issue of duplicate blocks and unnecessary update items by introducing a shared decision-making function in `lib/draftTarget.js` and updating the producers accordingly. · The change introduces a new behavior where importing the same stream again proposes nothing for entities that are already created, and updates to groups they created. The tests have been updated accordingly. · The change introduces a new behavior where importing the same document again proposes nothing for entities that are already created, and updates to groups it created. The tests have been updated to reflect this behavior. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · No real defects found in the provided diff. However, additional information about `pruneAgainstTargets` is needed to ensure complete understanding. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · The diff introduces a new test file `draftTarget.test.js` with tests for the behavior of the draft generation process. The context provided includes existing tests that cover various scenarios related to draft generation and item processing. The needs list includes symbols from the test file that are used but not defined in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 76062,
+    "completionTokens": 2378
+  },
+  "latencyMs": 282983
+}
