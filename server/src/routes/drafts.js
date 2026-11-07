@@ -14,8 +14,9 @@ import { broadcast } from '../lib/broadcaster.js';
 import Entity from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { getCategories } from '../config/categories.js';
+import { pruneAgainstTargets } from '../lib/draftTarget.js';
 import {
-  parseCompose, pruneKnownBlocks, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
+  parseCompose, ComposeParseError, PRODUCER as COMPOSE_PRODUCER,
   PRODUCER_VERSION as COMPOSE_PRODUCER_VERSION, MAX_COMPOSE_CHARS,
 } from '../lib/producers/dockerCompose.js';
 import {
@@ -367,7 +368,10 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
       const groups = await RelationshipGroup.find({ workspaceId: req.workspaceId })
         .select('_id label members.refId members.refModel members.label').lean();
 
-      const { items, dropReasons, dropped } = parse(source, { existingEntities: roster, existingGroups: groups, lineOffset });
+      const parsed = parse(source, { existingEntities: roster, existingGroups: groups, lineOffset });
+      let { items } = parsed;
+      const { dropReasons } = parsed;
+      let { dropped } = parsed;
 
       // Updates append blocks, so a re-import must see which attributes its
       // targets already carry. Fetched for the matched entities alone rather than
@@ -376,11 +380,19 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
       // which doubled the cost of every re-import — the parse and the
       // near-miss scan over the whole workspace roster included — for a pass that
       // only ever changes the `blocks` of items already identified as updates.
+      // The same pass also drops an update left writing nothing — see
+      // lib/draftTarget.js — which is why it asks for tags and summary too.
       const targetIds = items.filter(i => i.targetEntityId).map(i => i.targetEntityId);
       if (targetIds.length) {
-        const withBlocks = await Entity.find({ _id: { $in: targetIds }, workspaceId: req.workspaceId })
-          .select('_id blocks').lean();
-        pruneKnownBlocks(items, new Map(withBlocks.map(e => [String(e._id), e.blocks])));
+        const targets = await Entity.find({ _id: { $in: targetIds }, workspaceId: req.workspaceId })
+          .select('_id blocks tags summary').lean();
+        const pruned = pruneAgainstTargets(items, new Map(targets.map(e => [String(e._id), e])), { log });
+        items = pruned.items;
+        // Appended rather than merged into the parse's own list: these drops
+        // happened after it, and `dropped` is the whole count while the reasons
+        // the parse listed are capped (MAX_DROP_REASONS).
+        dropReasons.push(...pruned.dropReasons);
+        dropped += pruned.dropReasons.length;
       }
 
       // Checked here rather than left to apply, where every entity would fail

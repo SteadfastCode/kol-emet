@@ -604,3 +604,51 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   credential this item exists to avoid and the open half of "point it at your repo" — lockfiles and
   transitive trees, monorepo workspace globs, parsing source for call graphs, and license or
   vulnerability data.
+
+- **An item that proposes nothing is not a decision, so it is dropped — and the braindump path gets
+  the pruning pass the producers already had (decided 2026-11-07, KOL-127)** — `applyEntityUpdate`
+  appends and never overwrites, which is the rule that keeps an apply from destroying a person's
+  prose and is not up for revision. The consequence is that a proposed block the target entity
+  already carries lands as a **second copy of it**, so whoever proposes the block has to be the one
+  to notice. The file producers had noticed since the compose one shipped: `POST /drafts/*` loads
+  `blocks` for the matched targets alone and prunes the items it already parsed. **The braindump path
+  had no such pass at all** — `normalizeDraft` turns the model's body into one text block and marks
+  the item `op: 'update'` on an exact normalized-title match — so generating twice over the same
+  notes, or over a superset of them (add a paragraph, re-generate, which is the workflow the overlay
+  invites), appended a byte-identical paragraph to every entity it matched. It now runs the same
+  enriched-target pass: the roster stays `_id title updatedAt`, because a workspace of thousands of
+  entities is a roster and not a corpus, and the entities a run actually matched are fetched by id
+  afterwards. **The second half is what made the first worth fixing properly.** Once the known
+  blocks come off, an item can be left proposing *nothing*: no block, no tag the entity lacks, and a
+  summary the applier will not write over. Such an item was still queued as a decision, unflagged,
+  so `decide-clean` accepted it and the apply wrote a `ChangeLog` row whose diff is empty — accept
+  and reject leave the identical graph. Those items are **dropped**, counted in
+  `diagnostics.dropReasons` as already in this workspace and unchanged. *Dropped rather than
+  flagged*: a flag only makes `decide-clean` skip it, which leaves the reviewer the same list to
+  read; and `Draft` is the training corpus (Decision Log, 2026-09-03), where a pile of
+  empty-diff accepts teaches that an empty change is worth proposing. **One shared place**
+  (`server/src/lib/draftTarget.js`), because the create/update decision was written out six times —
+  once in the normalizer and once per producer — and `withoutKnownBlocks` lived in
+  `producers/dockerCompose.js` with its four siblings importing it from there. `entityTarget()` is
+  the decision; `pruneAgainstTargets()` is the pass, used by `generator.js` and by the producer
+  route. The drop is in the pass and not in the decision because deciding it needs the target's
+  blocks, tags *and* summary, and `writesNothing()` mirrors `applyEntityUpdate` field for field
+  (including its exact `!target.summary && p.summary` test) so an item is never dropped by a rule
+  stricter than the write it stands in for. **Dropping an item is the part with teeth.** A
+  relationship member and an open question's `entry_ids` can name the dropped item by `localKey`;
+  left dangling, the apply would *block* those items, and the evidence line each was located in
+  would go with them — source coverage is derived from the items
+  (`client/src/lib/sourceCoverage.js`), so a drop that took its dependents down would report the
+  passage as text the generator never read. So the pass re-points them at the live entity's id, the
+  shape every already-existing link already has, prunes the key out of `dependsOn`, and closes up
+  `seq`. The visible change for a re-import of an unchanged file is that its entity items are now
+  absent rather than queued: the five producer HTTP suites assert exactly that, and the relationship
+  updates (whose roles a re-import *is* allowed to re-assert) are the whole draft. **Out of scope,
+  deliberately:** overwriting or diffing a human's prose — the append-only rule stands — an update op
+  for open questions (still open, named in KOL-016), a relationship update left re-asserting roles
+  nothing changed, re-generating a draft in place, and drift detection against a connected source.
+  Covered by `server/tests/unit/draftTarget.test.js` (14 cases over the braindump path, 7 of which
+  fail against the pre-fix path), the `pruneAgainstTargets` group in
+  `server/tests/unit/dockerCompose.test.js`, two cases in `server/tests/lib/draftApplier.test.js`
+  pinning the two applier behaviours this exists to work around, and the five producers' re-import
+  cases.

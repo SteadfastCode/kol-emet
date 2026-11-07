@@ -13,6 +13,7 @@
 
 import { z } from 'zod';
 import { normalizeTitle, similarity } from './similarity.js';
+import { entityTarget } from './draftTarget.js';
 // The per-run question cap is declared beside the prompt that asks for it, so
 // the number the model is given and the number enforced here cannot drift.
 import { MAX_QUESTIONS } from './generatorPrompts.js';
@@ -329,14 +330,15 @@ export function normalizeDraft(rawEntities, rawRelationships, rawOpenQuestions, 
     const existing = existingByKey.get(key);
 
     // Exact normalized-title match becomes an update against the live entity
-    // rather than a second copy of it.
-    let op = 'create', targetEntityId = null, baseUpdatedAt = null, matchedBy = 'none';
-    if (existing) {
-      op = 'update';
-      targetEntityId = existing._id;
-      baseUpdatedAt = existing.updatedAt ?? null;
-      matchedBy = 'exact-normalized-title';
-    }
+    // rather than a second copy of it — the same decision the five file
+    // producers make, in the one place that makes it (lib/draftTarget.js).
+    // `blocks` comes back without the ones the target already carries, so a
+    // caller that matched against an enriched roster appends nothing twice; a
+    // caller holding the usual `_id title updatedAt` roster — which is what
+    // generateDraft passes — gets them pruned by `pruneAgainstTargets` once it
+    // has fetched the matched targets.
+    const { op, targetEntityId, baseUpdatedAt, matchedBy, blocks: proposedBlocks } =
+      entityTarget(existing, blocks);
 
     // Fuzzy near-miss: flagged for the human, never auto-merged.
     // Compared on NORMALIZED titles: on raw ones a leading article alone sinks
@@ -373,7 +375,7 @@ export function normalizeDraft(rawEntities, rawRelationships, rawOpenQuestions, 
         normalizedCategory: category,
         summary: (v.summary || '').trim(),
         tags: v.tags.map(t => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 12),
-        blocks,
+        blocks: proposedBlocks,
       },
       targetEntityId,
       baseUpdatedAt,

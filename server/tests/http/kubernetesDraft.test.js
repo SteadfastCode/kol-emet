@@ -22,8 +22,8 @@
  *   - decide-clean + apply writes the workloads, the claim, the APIs and the
  *     external hosts with those categories, and the Exposes / Calls / Depends
  *     on groups between them;
- *   - importing the same stream again proposes updates to what the first
- *     import created rather than a second copy;
+ *   - importing the same stream again proposes nothing for the entities it
+ *     already created, and updates to the groups it created;
  *   - a body over the character cap is refused with the size it was;
  *   - a file that is not a manifest is a 400, a workspace without the types is
  *     a 400 naming them, and no workspace but the caller's own can be named —
@@ -269,24 +269,39 @@ describe('POST /drafts/kubernetes', () => {
     assert.equal(web.relationships.length, 4, 'back-references are written on the members');
   });
 
-  test('importing the same stream again proposes updates to what the first import created', async () => {
+  test('importing the same stream again proposes nothing for the entities it already created', async () => {
     const res = await postManifest(architect, { text: FIXTURE });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.equal(res.body.title, 'kubernetes', 'no filename, so a generic title');
 
-    const idByTitle = new Map(applied.map(e => [e.title, String(e._id)]));
-    const entities = res.body.items.filter(i => i.kind === 'entity');
-    assert.equal(entities.length, 7);
-    for (const item of entities) {
-      assert.equal(item.op, 'update', `${item.proposed.title} should be an update`);
-      assert.equal(item.matchedBy, 'exact-normalized-title');
-      assert.equal(String(item.targetEntityId), idByTitle.get(item.proposed.title));
-      assert.deepEqual(item.proposed.blocks, [],
-        `${item.proposed.title} already has every block this stream gives it`);
+    // Every entity matched the one the first import created and gives it no
+    // block, tag or summary it does not already have, so applying it would write
+    // a ChangeLog row with an empty diff. Each is dropped instead of queued as a
+    // decision where accept and reject mean the same thing (lib/draftTarget.js).
+    assert.deepEqual(res.body.items.filter(i => i.kind === 'entity'), []);
+    const reasons = res.body.diagnostics.dropReasons;
+    for (const entity of applied) {
+      assert.ok(reasons.includes(`entity ${JSON.stringify(entity.title)} is already in this workspace and unchanged`),
+        `${entity.title} should be named as a drop; the reasons were ${JSON.stringify(reasons)}`);
     }
+    assert.equal(reasons.filter(r => / is already in this workspace and unchanged$/.test(r)).length, applied.length,
+      'one drop per entity the first import created, and no more');
+    // `dropped` is the whole count while the listed reasons are capped, and a
+    // producer may report several drops as one reason, so it is only ever at
+    // least the number of items this pass took out.
+    assert.ok(res.body.counts.dropped >= applied.length, JSON.stringify(res.body.counts));
+
+    // The edges are a separate question: a group update re-asserts the roles the
+    // file names, and every member points at the entity it matched by id now
+    // that the items naming it are gone.
     for (const item of res.body.items.filter(i => i.kind === 'relationship')) {
       assert.equal(item.op, 'update', `${item.proposed.label} should target the group it created`);
       assert.equal(item.matchedBy, 'same-members-and-label');
+      assert.deepEqual(item.dependsOn, [], 'nothing depends on an item that was dropped');
+      for (const m of item.proposed.members) {
+        assert.equal(m.localKey, null, `${m.name} must not name a dropped item`);
+        assert.ok(m.refId, `${m.name} carries the id of the entity in the graph`);
+      }
     }
   });
 

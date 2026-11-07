@@ -64,7 +64,8 @@
 import { parseDocument, isMap, isScalar } from 'yaml';
 import { normalizeTitle, nearestTitle } from '../similarity.js';
 import { DUPLICATE_THRESHOLD, MAX_ITEMS, relationshipGroupMatcher, relationshipTarget } from '../draftNormalizer.js';
-import { MAX_COMPOSE_CHARS, MAX_DROP_REASONS, withoutKnownBlocks } from './dockerCompose.js';
+import { MAX_COMPOSE_CHARS, MAX_DROP_REASONS } from './dockerCompose.js';
+import { entityTarget } from '../draftTarget.js';
 
 export const PRODUCER = 'package-manifest';
 export const PRODUCER_VERSION = 'package-manifest@1';
@@ -315,15 +316,8 @@ export function parseManifest(text, { existingEntities = [], existingGroups = []
 
     const localKey = `e${++e}`;
     const existing = existingByKey.get(key);
-    let op = 'create', targetEntityId = null, baseUpdatedAt = null, matchedBy = 'none';
-    let blocks = ent.blocks;
-    if (existing) {
-      op = 'update';
-      targetEntityId = existing._id;
-      baseUpdatedAt = existing.updatedAt ?? null;
-      matchedBy = 'exact-normalized-title';
-      if (Array.isArray(existing.blocks)) blocks = withoutKnownBlocks(blocks, existing.blocks);
-    }
+    // The shared decision every producer makes — see lib/draftTarget.js.
+    const { op, targetEntityId, baseUpdatedAt, matchedBy, blocks } = entityTarget(existing, ent.blocks);
 
     const flags = [];
     let duplicateOf = null, duplicateScore = null;

@@ -39,10 +39,11 @@ import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 
 import {
-  parseCompose, pruneKnownBlocks, ComposeParseError, imageName, isDataStoreImage,
+  parseCompose, ComposeParseError, imageName, isDataStoreImage,
   PRODUCER, PRODUCER_VERSION, MAX_DROP_REASONS,
 } from '../../src/lib/producers/dockerCompose.js';
 import { MAX_ITEMS } from '../../src/lib/draftNormalizer.js';
+import { pruneAgainstTargets } from '../../src/lib/draftTarget.js';
 import { relationshipPayloadSchema } from '../../src/lib/draftItemSchema.js';
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
@@ -468,8 +469,11 @@ describe('bounds', () => {
   });
 });
 
-describe('pruneKnownBlocks', () => {
+describe('pruneAgainstTargets, over a compose draft', () => {
   const FIRST_BLOCK = { type: 'attribute', order: 0, data: { label: 'Image', value: 'postgres:16-alpine' } };
+  // The tag every item of this producer carries, held by the target so the
+  // pruned item is judged on its blocks alone.
+  const target = (blocks) => ({ blocks, tags: [PRODUCER], summary: 'A fixture of its own' });
 
   test('produces exactly what a second parse with the blocks filled in would have', () => {
     // The route parses once against a roster it fetched without blocks, then
@@ -477,9 +481,9 @@ describe('pruneKnownBlocks', () => {
     // roster. This pins the two as interchangeable.
     const existing = { _id: new mongoose.Types.ObjectId(), title: 'POSTGRES', updatedAt: new Date('2026-09-01T00:00:00Z') };
 
-    const pruned = pruneKnownBlocks(
+    const { items: pruned } = pruneAgainstTargets(
       parse(FIXTURE, { existingEntities: [existing] }, 'fixture (parse once, then prune)').items,
-      new Map([[String(existing._id), [FIRST_BLOCK]]]),
+      new Map([[String(existing._id), target([FIRST_BLOCK])]]),
     );
     const reparsed = parse(FIXTURE, { existingEntities: [{ ...existing, blocks: [FIRST_BLOCK] }] }, 'fixture (second parse)').items;
 
@@ -492,6 +496,74 @@ describe('pruneKnownBlocks', () => {
   test('leaves creates, relationships and unlisted targets alone', () => {
     const { items } = parse(FIXTURE, {}, 'fixture (all creates)');
     const before = JSON.parse(JSON.stringify(items));
-    assert.deepEqual(pruneKnownBlocks(items, new Map([['deadbeef', [FIRST_BLOCK]]])), before);
+    const { items: after, dropReasons } = pruneAgainstTargets(items, new Map([['deadbeef', target([FIRST_BLOCK])]]));
+    assert.deepEqual(after, before);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('a service whose every block and tag the target already holds is dropped, and the edges it carried survive', () => {
+    // The ordinary re-import: the same file against the graph it already built.
+    // The postgres service is proposed with its Image and Ports attributes and
+    // the producer's tag, all of which the entity now carries — so the item
+    // would write nothing, and is dropped rather than queued as a decision
+    // where accept and reject mean the same thing.
+    const existing = { _id: new mongoose.Types.ObjectId(), title: 'postgres', updatedAt: new Date('2026-09-01T00:00:00Z') };
+    const { items } = parse(FIXTURE, { existingEntities: [existing] }, 'fixture (postgres already in the graph)');
+    const proposedBlocks = entityNamed(items, 'postgres').proposed.blocks;
+    assert.ok(proposedBlocks.length >= 2, 'fixture must propose the blocks the target is about to hold');
+
+    const edgesBefore = items.filter(i => i.kind === 'relationship'
+      && (i.proposed.members ?? []).some(m => m.name === 'postgres')).length;
+    assert.ok(edgesBefore >= 1, 'fixture must carry an edge that names the service being dropped');
+
+    const { items: after, dropReasons } = pruneAgainstTargets(
+      items, new Map([[String(existing._id), target(proposedBlocks)]]),
+    );
+
+    assert.equal(after.filter(i => i.kind === 'entity' && i.proposed.title === 'postgres').length, 0,
+      'the item is absent from the draft');
+    assert.deepEqual(dropReasons, ['entity "postgres" is already in this workspace and unchanged']);
+    assert.deepEqual(after.map(i => i.seq), after.map((_, i) => i), 'seq is closed up');
+
+    // Every edge that named it is still proposed, now pointing at the entity by
+    // id: a dropped entity must not take its links — or their evidence lines,
+    // which is what source coverage is derived from — down with it.
+    const edges = after.filter(i => i.kind === 'relationship'
+      && (i.proposed.members ?? []).some(m => m.name === 'postgres'));
+    assert.equal(edges.length, edgesBefore);
+    for (const edge of edges) {
+      const m = edge.proposed.members.find(x => x.name === 'postgres');
+      assert.equal(m.localKey, null);
+      assert.equal(String(m.refId), String(existing._id));
+      assert.ok(edge.input.evidence.charStart !== null, 'the edge keeps the line it was located in');
+      assert.deepEqual(edge.dependsOn.filter(k => k.startsWith('e')).map(k => after.some(i => i.localKey === k)).filter(v => !v), [],
+        'nothing is left depending on an item that is gone');
+    }
+  });
+
+  test('a service the target holds only part of still proposes the rest', () => {
+    const existing = { _id: new mongoose.Types.ObjectId(), title: 'postgres', updatedAt: new Date('2026-09-01T00:00:00Z') };
+    const { items } = parse(FIXTURE, { existingEntities: [existing] }, 'fixture (postgres partly known)');
+    const { items: after, dropReasons } = pruneAgainstTargets(
+      items, new Map([[String(existing._id), target([FIRST_BLOCK])]]),
+    );
+    assert.deepEqual(dropReasons, []);
+    assert.deepEqual(entityNamed(after, 'postgres').proposed.blocks, [
+      { type: 'attribute', order: 0, data: { label: 'Ports', value: '5432:5432' } },
+    ]);
+  });
+
+  test('a service whose blocks the target holds but whose tag it lacks survives', () => {
+    // One tag is a write, so the item is still a decision worth making.
+    const existing = { _id: new mongoose.Types.ObjectId(), title: 'postgres', updatedAt: new Date('2026-09-01T00:00:00Z') };
+    const { items } = parse(FIXTURE, { existingEntities: [existing] }, 'fixture (postgres untagged)');
+    const blocks = entityNamed(items, 'postgres').proposed.blocks;
+    const { items: after, dropReasons } = pruneAgainstTargets(
+      items, new Map([[String(existing._id), { blocks, tags: [], summary: 'Its own' }]]),
+    );
+    assert.deepEqual(dropReasons, []);
+    const item = entityNamed(after, 'postgres');
+    assert.deepEqual(item.proposed.blocks, []);
+    assert.deepEqual(item.proposed.tags, [PRODUCER]);
   });
 });

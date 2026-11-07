@@ -23,6 +23,14 @@
  * asserted after every apply: no entity may reference a group that does not
  * list it.
  *
+ * The second suite (KOL-127) pins the two applier behaviours that make an
+ * update proposing nothing worth dropping before it reaches the review queue:
+ * an update APPENDS a proposed block whether or not the target already carries
+ * it, and an update that writes nothing at all still records a `ChangeLog` row.
+ * Neither is a bug to fix here — the append-only rule is what keeps an apply
+ * from destroying a person's prose — which is exactly why the comparison
+ * belongs upstream, in `lib/draftTarget.js`.
+ *
  * Falsification check: this suite was run against the pre-fix applier (the
  * id-targeted path trusting `targetGroupId` as found). Both 'moved target'
  * tests fail there, each on the first of the three things that path loses —
@@ -43,6 +51,7 @@ import Draft from '../../src/models/Draft.js';
 import Entity from '../../src/models/Entity.js';
 import EntityType from '../../src/models/EntityType.js';
 import RelationshipGroup from '../../src/models/RelationshipGroup.js';
+import ChangeLog from '../../src/models/ChangeLog.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
 
@@ -259,5 +268,83 @@ describe('applyDraft: a relationship whose recorded target group has moved', () 
     assert.deepEqual([...draft.items[0].flags], []);
 
     await assertBackRefsSound();
+  });
+});
+
+/** A one-item, already-reviewed draft holding an entity update. */
+function entityUpdateDraft(target, proposed) {
+  return Draft.create({
+    workspaceId: ws._id,
+    createdBy: actor.userId,
+    title: 'applier fixture',
+    status: 'ready',
+    source: { producer: 'braindump', text: 'fixture' },
+    items: [{
+      localKey: 'e1',
+      seq: 0,
+      kind: 'entity',
+      op: 'update',
+      matchedBy: 'exact-normalized-title',
+      targetEntityId: target._id,
+      baseUpdatedAt: target.updatedAt,
+      proposed,
+      accepted: proposed,
+      decision: 'accepted',
+    }],
+  });
+}
+
+describe('applyDraft: what an entity update does, and does not, compare', () => {
+  const BODY = 'Mira keeps the gate, and has since the second age.';
+  const textBlock = () => ({ type: 'text', order: 0, data: { markdown: BODY } });
+
+  const miraWith = (fields) => Entity.create({
+    title: 'Mira', category: 'Characters', workspaceId: ws._id, ...fields,
+  });
+
+  test('a proposed block the target already holds lands as a second copy of it', async () => {
+    const mira = await miraWith({ summary: 'Written by hand', tags: ['keeper'], blocks: [textBlock()] });
+    const draft = await entityUpdateDraft(mira, {
+      title: 'Mira', category: 'Characters', normalizedCategory: 'Characters',
+      summary: 'The keeper of the gate.', tags: ['keeper'], blocks: [textBlock()],
+    });
+
+    assert.deepEqual(await applyDraft(draft, { workspaceId: ws._id, actor }), { applied: 1, failed: 0, blocked: 0, skipped: 0 });
+
+    // Appended, not reconciled — and it must stay that way: nothing here may
+    // decide that a block resembling a person's prose replaces it. So the graph
+    // now shows the same paragraph twice, which is the damage lib/draftTarget.js
+    // prevents by never letting the item be proposed.
+    const after = await Entity.findById(mira._id).lean();
+    assert.deepEqual(after.blocks.map(b => b.data.markdown), [BODY, BODY]);
+    // And the summary a person wrote is untouched, which is the other half of
+    // why such an item can be left writing nothing at all.
+    assert.equal(after.summary, 'Written by hand');
+  });
+
+  test('an update that writes nothing is still recorded as a change, with an empty diff', async () => {
+    const mira = await miraWith({ summary: 'Written by hand', tags: ['keeper'], blocks: [textBlock()] });
+    const draft = await entityUpdateDraft(mira, {
+      title: 'Mira', category: 'Characters', normalizedCategory: 'Characters',
+      // What an item looks like once the known block has been pruned off and the
+      // tag it carries is one the entity already has.
+      summary: 'The keeper of the gate.', tags: ['keeper'], blocks: [],
+    });
+
+    assert.deepEqual(await applyDraft(draft, { workspaceId: ws._id, actor }), { applied: 1, failed: 0, blocked: 0, skipped: 0 });
+
+    const after = await Entity.findById(mira._id).lean();
+    assert.deepEqual(after.blocks.map(b => b.data.markdown), [BODY]);
+    assert.deepEqual([...after.tags], ['keeper']);
+    assert.equal(after.summary, 'Written by hand');
+
+    // Accepting it and rejecting it leave the graph in the same state; what
+    // accepting adds is a history row that says nothing happened.
+    const rows = await ChangeLog.find({ entityId: mira._id, changeType: 'updated' }).lean();
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].changes.fieldsChanged, []);
+    assert.deepEqual(rows[0].changes.blocksAdded, []);
+    assert.deepEqual(rows[0].changes.blocksUpdated, []);
+    assert.deepEqual(rows[0].changes.blocksDeleted, []);
   });
 });

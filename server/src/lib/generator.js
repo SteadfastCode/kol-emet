@@ -17,6 +17,7 @@ import {
   PROMPT_VERSION, ROLE_STYLES, DEFAULT_ROLE_STYLE,
 } from './generatorPrompts.js';
 import { normalizeDraft } from './draftNormalizer.js';
+import { pruneAgainstTargets } from './draftTarget.js';
 import { getCategories } from '../config/categories.js';
 import { publicFailure } from './failureNote.js';
 import Entity from '../models/Entity.js';
@@ -247,9 +248,29 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
   // Same reason for questions: there is no 'update' op for one, so a question
   // the workspace already holds is dropped rather than asked twice.
   const existingQuestions = await OpenQuestion.find({ workspaceId }).select('_id question').lean();
-  const { items, dropReasons } = normalizeDraft(rawEntities, rawRelationships, rawOpenQuestions, {
+  const { items: normalized, dropReasons } = normalizeDraft(rawEntities, rawRelationships, rawOpenQuestions, {
     categories, sourceText: source, existingEntities, existingGroups, existingQuestions,
   });
+
+  // The enriched-target pass, the same one POST /drafts/compose and its four
+  // siblings run (routes/drafts.js). The roster above carries no blocks on
+  // purpose — a workspace of thousands of entities is a roster, not a corpus —
+  // so the entities this run matched are fetched now, by id, and the items
+  // already normalized are pruned against them: a proposed block the entity
+  // already holds comes off, because an apply appends and never overwrites, and
+  // an update left writing nothing at all is dropped. Without it, generating
+  // twice over the same notes appended a byte-identical text block to every
+  // entity it matched.
+  const targetIds = normalized.filter(i => i.targetEntityId).map(i => i.targetEntityId);
+  let items = normalized;
+  if (targetIds.length) {
+    const targets = await Entity.find({ _id: { $in: targetIds }, workspaceId })
+      .select('_id blocks tags summary').lean();
+    const pruned = pruneAgainstTargets(normalized, new Map(targets.map(t => [String(t._id), t])), { log });
+    items = pruned.items;
+    dropReasons.push(...pruned.dropReasons);
+  }
+
   diag.dropReasons = dropReasons;
   diag.generationMs = Date.now() - started;
 
