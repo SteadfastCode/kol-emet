@@ -37,36 +37,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can**
-  `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
-  (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same
-  `bySession` flag — both or neither (`server/src/routes/events.js:22-27`). A `BEARER_TOKEN` stream therefore carries
-  `userId: null` and is never matched at all. Three places say otherwise: the docstring at `broadcaster.js:226-228` ("A
-  client with no session id — the `BEARER_TOKEN` path — is never the spared one: `null` matching `null` would silently
-  keep a connector's stream open on an account deletion"), the Decision Log's KOL-112 entry, which repeats the
-  sentence, and the test `a stream with no session id is closed, spared session or not`
-  (`server/tests/unit/broadcaster.test.js:744-757`), which connects `{ userId: 'u1', sessionId: null }` — a combination
-  no production path can create — and presents it as covering the connector path. Found by the grader of KOL-112 (low,
-  `server/tests/unit/broadcaster.test.js:745`).
-  The guard itself is right and stays: `null` must never read as "this is the session that asked". What is wrong is the
-  claim, and behind it a small real gap — nothing ends a connector's stream when the account whose workspace it watches
-  is deleted. Being workspace-scoped it receives nothing afterwards, but it holds a socket and one of that tenant's
-  capped stream slots (KOL-062) until the client hangs up.
-  Build, in this order: give the test a fixture the code can actually see (a session-authenticated stream that is not
-  the spared one) and a rationale that matches it; correct the docstring and the Decision Log sentence to say what is
-  true — a bearer stream is not matched by the user-keyed closer at all; then either record a resolved `userId` on a
-  bearer stream in `routes/events.js` so the existing closer reaches it (the comment there explains why `sessionId` must
-  stay null, since the keep-alive sweep would drop the stream as "session gone"; `userId` carries no such problem), or
-  say in the same docstring that nothing closes it and why that is acceptable. The first is a few lines and leaves the
-  three corrected sentences describing a path that exists, so prefer it and record the choice.
-  Files: `server/src/lib/broadcaster.js`, `server/src/routes/events.js`, `server/tests/unit/broadcaster.test.js`,
-  `server/tests/http/sessionRevocation.test.js`, `kol_emet_spec.md` (the KOL-112 entry).
-  Verify: `cd server && yarn test` — the corrected sparing case runs red against a `closeStreamsForUser` that reads
-  `null` as the spared session, and a new case pins what happens to a bearer-authenticated stream on an account
-  deletion. `cd server && node --check src/index.js`.
-  Out of scope: closing a bearer stream on `POST /auth/sessions/revoke-all` (that route is about sessions, and a
-  connector holds none), the session-store limit the Decision Log already records, and any change to the
-  `session-ended` contract.
 
 - [ ] **(KOL-138) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-11]
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
@@ -325,6 +295,36 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can** (routine 2026-11-07, 780fc1a)
+  `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
+  (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same
+  `bySession` flag — both or neither (`server/src/routes/events.js:22-27`). A `BEARER_TOKEN` stream therefore carries
+  `userId: null` and is never matched at all. Three places say otherwise: the docstring at `broadcaster.js:226-228` ("A
+  client with no session id — the `BEARER_TOKEN` path — is never the spared one: `null` matching `null` would silently
+  keep a connector's stream open on an account deletion"), the Decision Log's KOL-112 entry, which repeats the
+  sentence, and the test `a stream with no session id is closed, spared session or not`
+  (`server/tests/unit/broadcaster.test.js:744-757`), which connects `{ userId: 'u1', sessionId: null }` — a combination
+  no production path can create — and presents it as covering the connector path. Found by the grader of KOL-112 (low,
+  `server/tests/unit/broadcaster.test.js:745`).
+  The guard itself is right and stays: `null` must never read as "this is the session that asked". What is wrong is the
+  claim, and behind it a small real gap — nothing ends a connector's stream when the account whose workspace it watches
+  is deleted. Being workspace-scoped it receives nothing afterwards, but it holds a socket and one of that tenant's
+  capped stream slots (KOL-062) until the client hangs up.
+  Build, in this order: give the test a fixture the code can actually see (a session-authenticated stream that is not
+  the spared one) and a rationale that matches it; correct the docstring and the Decision Log sentence to say what is
+  true — a bearer stream is not matched by the user-keyed closer at all; then either record a resolved `userId` on a
+  bearer stream in `routes/events.js` so the existing closer reaches it (the comment there explains why `sessionId` must
+  stay null, since the keep-alive sweep would drop the stream as "session gone"; `userId` carries no such problem), or
+  say in the same docstring that nothing closes it and why that is acceptable. The first is a few lines and leaves the
+  three corrected sentences describing a path that exists, so prefer it and record the choice.
+  Files: `server/src/lib/broadcaster.js`, `server/src/routes/events.js`, `server/tests/unit/broadcaster.test.js`,
+  `server/tests/http/sessionRevocation.test.js`, `kol_emet_spec.md` (the KOL-112 entry).
+  Verify: `cd server && yarn test` — the corrected sparing case runs red against a `closeStreamsForUser` that reads
+  `null` as the spared session, and a new case pins what happens to a bearer-authenticated stream on an account
+  deletion. `cd server && node --check src/index.js`.
+  Out of scope: closing a bearer stream on `POST /auth/sessions/revoke-all` (that route is about sessions, and a
+  connector holds none), the session-store limit the Decision Log already records, and any change to the
+  `session-ended` contract.
 - [x] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision** (routine 2026-11-06, f114b51)
   The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
   already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,

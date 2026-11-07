@@ -47,7 +47,7 @@
     "KOL-128": {
       "order": 3,
       "title": "An account deletion cannot reach a connector's stream, and three places say it can",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-128",
