@@ -285,9 +285,10 @@ const TABLE_CONSTRAINTS = new Set(['CONSTRAINT', 'PRIMARY', 'UNIQUE', 'FOREIGN',
 
 /**
  * Type words, used for one thing only: telling an index declaration
- * (`KEY idx_user (user_id)`, `FULLTEXT KEY ft_body (body)`) from a column that
+ * (`KEY idx_user (user_id)`, `FULLTEXT ft_body (body)`) from a column that
  * happens to be called `key`, `index`, `fulltext` or `spatial`
- * (`key VARCHAR(50)`). Both are a word, a word and a `(`.
+ * (`key VARCHAR(50)`). Both are a word, a word and a `(`. An index that spells
+ * its `KEY`/`INDEX` keyword out needs none of this — see looksLikeIndex.
  */
 const TYPE_WORDS = new Set([
   'VARCHAR', 'VARCHAR2', 'NVARCHAR', 'CHAR', 'NCHAR', 'CHARACTER', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT',
@@ -364,12 +365,23 @@ const isTypeWord = t => Boolean(t) && t.type === 'word' && TYPE_WORDS.has(t.uppe
  * The index name must not be a type word, because that is the only thing
  * telling `KEY idx_user (user_id)` from a column called `key VARCHAR(50)`:
  * both are a word, a word and a `(`.
+ *
+ * Except after a `KEY` or `INDEX` keyword of its own, which is proof of the
+ * index reading on its own: no dialect read here spells a type `KEY` or
+ * `INDEX`, so `FULLTEXT KEY text (body)` cannot be a column called `fulltext`
+ * however the index is named. With the type-word guard applied to that name
+ * too, the shape test said no, the table-constraint reading never ran, and the
+ * declaration was read as a column `FULLTEXT` of type `KEY text (body)` — an
+ * attribute for a column the table does not have. A bare `KEY`/`INDEX`/
+ * `FULLTEXT`/`SPATIAL` followed straight by a name keeps the guard: there the
+ * word really can be a column's name (`key VARCHAR(50)`).
  */
 function looksLikeIndex(tokens, from, to) {
   let i = from + 1;
-  if (isWord(tokens[i], 'KEY') || isWord(tokens[i], 'INDEX')) i++;
+  const keyword = isWord(tokens[i], 'KEY') || isWord(tokens[i], 'INDEX');
+  if (keyword) i++;
   if (isPunct(tokens[i], '(') && i < to) return true;
-  if (!isName(tokens[i]) || isTypeWord(tokens[i])) return false;
+  if (!isName(tokens[i]) || (!keyword && isTypeWord(tokens[i]))) return false;
   return isPunct(tokens[i + 1], '(') && i + 1 < to;
 }
 
@@ -697,13 +709,17 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
   }
 
   /**
-   * What a foreign key's target names in this file. Four readings, in order:
-   * the exact `schema.name`; a reference with a schema the file does not
-   * declare, falling back to the one table of that name there is; a bare name
-   * in the referencing table's OWN schema, where SQL's search path looks first;
-   * and a bare name that is unique in the file. A bare name the file declares
-   * in several schemas, none of them the referencing table's, names no one
-   * thing — it reports the candidates rather than picking one.
+   * What a foreign key's **referenced** name names in this file. Four
+   * readings, in order: the exact `schema.name`; a reference with a schema the
+   * file does not declare, falling back to the one table of that name there
+   * is; a bare name in the referencing table's OWN schema, where SQL's search
+   * path looks first; and a bare name that is unique in the file. A bare name
+   * the file declares in several schemas, none of them the referencing
+   * table's, names no one thing — it reports the candidates rather than
+   * picking one.
+   *
+   * Only the referenced side. SQL is this lenient about what a key points at,
+   * not about what a statement is addressed to — see resolveOwnTable.
    */
   const resolveTable = (ref, fromSchema) => {
     const bare = byBareName.get(ref.name.toLowerCase()) ?? [];
@@ -720,6 +736,29 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
   };
   const schemasOf = list => [...new Set(list.map(t => t.schema ?? '(no schema)'))].sort();
 
+  /**
+   * The table an `ALTER TABLE` is addressed to — its OWN table, not something
+   * it references. Two readings only: the exact `schema.name`; and a name the
+   * file declares exactly once, which an ALTER may qualify when the
+   * declaration itself named no schema, because `CREATE TABLE sessions` beside
+   * `ALTER TABLE ONLY public.sessions` is the one dump style that mixes the
+   * two and the bare declaration says nothing the ALTER's schema contradicts.
+   *
+   * No fallback past that, which is the difference from resolveTable: an
+   * `ALTER TABLE archive.users` against a file whose only `users` is
+   * `public.users` names a table this file does not have, and reading it as
+   * the namesake marked a key the file declares on no such table. A statement
+   * naming a table that is not here is passed over in silence, as the pass
+   * below and docs/api.md both say.
+   */
+  const resolveOwnTable = ref => {
+    const bare = byBareName.get(ref.name.toLowerCase()) ?? [];
+    if (!ref.schema) return bare.length === 1 ? bare[0] : null;
+    const exact = byKey.get(`${ref.schema.toLowerCase()}.${ref.name.toLowerCase()}`);
+    if (exact) return exact;
+    return bare.length === 1 && !bare[0].schema ? bare[0] : null;
+  };
+
   // ── pass 2: the keys a trailing ALTER declares ─────────────────────────────
   // Marked exactly as the inline table-level form is, by the same rule: a
   // column that is one of two in a key is marked as being PART of one. Done
@@ -730,7 +769,7 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
   // table does not have, is passed over in silence: there is no proposal for
   // it to mark, so a drop reason would name something the draft never had.
   for (const raw of rawKeys) {
-    const table = resolveTable(raw.from, raw.from.schema).table;
+    const table = resolveOwnTable(raw.from);
     if (!table) continue;
     const kind = raw.columns.length > 1 ? 'composite' : 'single';
     for (const columnName of raw.columns) {
@@ -747,7 +786,7 @@ export function parseSqlSchema(text, { existingEntities = [], existingGroups = [
   const edgeKeys = new Set();
   const DEPENDS = ['Dependent', 'Dependency'];
   for (const raw of rawEdges) {
-    const fromTable = resolveTable(raw.from, raw.from.schema).table;
+    const fromTable = resolveOwnTable(raw.from);
     // A foreign key on a table this file does not declare — a trailing ALTER
     // against a table defined in another dump — can still land on an entity the
     // workspace already has, so the name is carried through as written.

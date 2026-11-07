@@ -836,23 +836,30 @@ credential, and `redactSecrets` has already taken that out. A `PRIMARY KEY (a, b
 over several columns, inline or in an ALTER, marks each of them `PRIMARY KEY (composite)` /
 `UNIQUE (composite)`, because a column that is one of two in a key is not a key on its own. MySQL's
 inline `KEY`/`UNIQUE KEY` indexes are read as constraints, not columns — and a column *called* `key`
-is still a column.
+is still a column. An index whose own name is a type word (`FULLTEXT KEY text (body)`) is read as the
+index it is, because the `KEY`/`INDEX` keyword settles it; only a bare `KEY idx (c)`-shaped
+declaration has to be told apart from `key varchar(50)` by the name.
 
 An `ALTER TABLE` is read for the constraints it **adds**, one per comma-separated action, each from
 that action's `ADD` — so a MySQL `ALTER TABLE x ADD PRIMARY KEY (…), ADD CONSTRAINT …` yields all of
 them and a SQL Server `ALTER TABLE x WITH CHECK ADD CONSTRAINT …` is read, while `ADD COLUMN flag
 boolean PRIMARY KEY` (a column, not a table constraint), `ALTER COLUMN … SET NOT NULL` and `DROP
-CONSTRAINT` are not mined for keys at all. A constraint naming a table the file does not declare, or
-a column that table does not have, is passed over in silence rather than as a drop reason: there is
-no proposal for it to mark. Indexes, views, triggers, grants and `ALTER TABLE … ADD COLUMN` are not
-read.
+CONSTRAINT` are not mined for keys at all. The table an `ALTER` is addressed to is resolved
+**exactly**: the `schema.name` the file declares, or a bare name it declares exactly once — which an
+`ALTER` may qualify when the declaration named no schema, the one dump style that mixes the two
+spellings. There is no namesake fallback here, unlike a foreign key's referenced name below: SQL is
+lenient about what a key points *at*, not about what a statement is addressed *to*, so an `ALTER
+TABLE archive.users` against a file that declares only `public.users` marks nothing. A constraint
+naming a table the file does not declare, or a column that table does not have, is passed over in
+silence rather than as a drop reason: there is no proposal for it to mark. Indexes, views, triggers,
+grants and `ALTER TABLE … ADD COLUMN` are not read.
 
-A foreign key's target resolves as ambiguously as SQL resolves it: the exact `schema.name`; failing
-that the referencing table's **own** schema, where the search path looks first; failing that the one
-table of that name the file declares. A bare name the file declares in several schemas and in none of
-them the referencing table's is a **drop reason**, not a guess. A target the file does not declare at
-all can still land on an entity the workspace already has, by title; otherwise it is dropped and said
-so.
+A foreign key's **referenced** target resolves as ambiguously as SQL resolves it: the exact
+`schema.name`; failing that the referencing table's **own** schema, where the search path looks
+first; failing that the one table of that name the file declares. A bare name the file declares in
+several schemas and in none of them the referencing table's is a **drop reason**, not a guess. A
+target the file does not declare at all can still land on an entity the workspace already has, by
+title; otherwise it is dropped and said so.
 
 A statement with no reading — `CREATE TABLE … AS SELECT` (no column list), an unclosed column list, a
 quote or comment that runs off the end of the file — is a **drop reason**, not a refusal: refusing a
