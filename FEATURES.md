@@ -36,39 +36,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision**
-  The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
-  already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,
-  `POST /drafts/*` loads `blocks` for the matched targets alone and runs `pruneKnownBlocks`
-  (`server/src/routes/drafts.js:374-379`, `lib/producers/dockerCompose.js:66-94`). **The braindump path has no such
-  pass.** `lib/generator.js:177` builds its roster as `.select('_id title updatedAt')`, `normalizeDraft` turns the
-  model's body into one text block and marks the item `op: 'update'` on an exact normalized-title match
-  (`lib/draftNormalizer.js:324-339`), and nothing compares it with what the entity holds — so generating twice over the
-  same notes, or over a superset of them (add a paragraph, re-generate — the workflow the overlay invites), appends a
-  byte-identical text block to every entity it matched.
-  The second half is true of both paths and is what makes the first worth fixing properly: after pruning an item can be
-  left proposing **nothing** — no blocks, no tag the entity lacks, and a summary the applier will not write over
-  (`draftApplier.js:122-124,147`) — and it is still queued as a decision, unflagged, so `POST /drafts/:id/decide-clean`
-  accepts it (`routes/drafts.js:662`) and `applyEntityUpdate` writes a `ChangeLog` row whose `changes` diff is empty
-  (`lib/changeLogger.js:68-81`). The review queue and the `Draft` corpus — which the Decision Log calls the training
-  corpus, not a work queue — fill with examples where accept and reject mean the same thing.
-  Build: one shared place for the create / update / nothing-left decision, used by the normalizer and the four
-  producers, which repeat it five times today (`draftNormalizer.js:289,329-339`, `dockerCompose.js:243,416-423`,
-  `openApi.js:484,515-522`, `kubernetes.js:602,634-641`, `sqlSchema.js:678,719-726`). Give the braindump path the same
-  enriched-target pass the route already has, move `withoutKnownBlocks` out of `producers/dockerCompose.js` (where its
-  three siblings import it from) into `lib/`, and **drop** an update item left proposing nothing, counted in
-  `diagnostics.dropReasons` as already in the graph and unchanged. Dropping rather than flagging: a flag makes
-  `decide-clean` skip it, which leaves the reviewer the same list to read.
-  Files: `server/src/lib/generator.js`, `server/src/lib/draftNormalizer.js`, `server/src/lib/producers/*.js`,
-  `server/src/routes/drafts.js`, the draft normalizer and four producer test files,
-  `server/tests/lib/draftApplier.test.js`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a braindump item whose text block the target already holds proposes
-  no blocks; an update left with nothing is absent from `items` and named in `dropReasons`; an update still carrying one
-  new tag or one new block survives; a dropped item does not blank the source span it was located in
-  (`client/src/lib/sourceCoverage.js` derives coverage from the items, so the located quote has to survive the drop);
-  and the four producers' existing fixtures unchanged. `cd client && yarn test --run`.
-  Out of scope: overwriting or diffing a human's prose (the append-only rule stands), an update op for open questions
-  (named as still open in KOL-016), re-generating a draft in place, and drift detection against a connected source.
 
 - [ ] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can**
   `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
@@ -348,6 +315,39 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision** (routine 2026-11-06, f114b51)
+  The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
+  already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,
+  `POST /drafts/*` loads `blocks` for the matched targets alone and runs `pruneKnownBlocks`
+  (`server/src/routes/drafts.js:374-379`, `lib/producers/dockerCompose.js:66-94`). **The braindump path has no such
+  pass.** `lib/generator.js:177` builds its roster as `.select('_id title updatedAt')`, `normalizeDraft` turns the
+  model's body into one text block and marks the item `op: 'update'` on an exact normalized-title match
+  (`lib/draftNormalizer.js:324-339`), and nothing compares it with what the entity holds — so generating twice over the
+  same notes, or over a superset of them (add a paragraph, re-generate — the workflow the overlay invites), appends a
+  byte-identical text block to every entity it matched.
+  The second half is true of both paths and is what makes the first worth fixing properly: after pruning an item can be
+  left proposing **nothing** — no blocks, no tag the entity lacks, and a summary the applier will not write over
+  (`draftApplier.js:122-124,147`) — and it is still queued as a decision, unflagged, so `POST /drafts/:id/decide-clean`
+  accepts it (`routes/drafts.js:662`) and `applyEntityUpdate` writes a `ChangeLog` row whose `changes` diff is empty
+  (`lib/changeLogger.js:68-81`). The review queue and the `Draft` corpus — which the Decision Log calls the training
+  corpus, not a work queue — fill with examples where accept and reject mean the same thing.
+  Build: one shared place for the create / update / nothing-left decision, used by the normalizer and the four
+  producers, which repeat it five times today (`draftNormalizer.js:289,329-339`, `dockerCompose.js:243,416-423`,
+  `openApi.js:484,515-522`, `kubernetes.js:602,634-641`, `sqlSchema.js:678,719-726`). Give the braindump path the same
+  enriched-target pass the route already has, move `withoutKnownBlocks` out of `producers/dockerCompose.js` (where its
+  three siblings import it from) into `lib/`, and **drop** an update item left proposing nothing, counted in
+  `diagnostics.dropReasons` as already in the graph and unchanged. Dropping rather than flagging: a flag makes
+  `decide-clean` skip it, which leaves the reviewer the same list to read.
+  Files: `server/src/lib/generator.js`, `server/src/lib/draftNormalizer.js`, `server/src/lib/producers/*.js`,
+  `server/src/routes/drafts.js`, the draft normalizer and four producer test files,
+  `server/tests/lib/draftApplier.test.js`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a braindump item whose text block the target already holds proposes
+  no blocks; an update left with nothing is absent from `items` and named in `dropReasons`; an update still carrying one
+  new tag or one new block survives; a dropped item does not blank the source span it was located in
+  (`client/src/lib/sourceCoverage.js` derives coverage from the items, so the located quote has to survive the drop);
+  and the four producers' existing fixtures unchanged. `cd client && yarn test --run`.
+  Out of scope: overwriting or diffing a human's prose (the append-only rule stands), an update op for open questions
+  (named as still open in KOL-016), re-generating a draft in place, and drift detection against a connected source.
 - [x] **(KOL-126) Fifth vertical-ingestion producer: a package manifest becomes a reviewable Draft** (routine 2026-11-04, 8dcdfd8)
   `docs/roadmap.md:84-93` lists five vertical-ingestion producers and names the repo one as the last unbuilt one after
   docker-compose (KOL-033), OpenAPI (KOL-051), Kubernetes (KOL-089) and SQL schema (KOL-121);

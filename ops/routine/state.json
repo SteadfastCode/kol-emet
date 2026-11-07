@@ -47,7 +47,7 @@
     "KOL-127": {
       "order": 3,
       "title": "A generated update stacks a block the entity already has, and an item proposing nothing is still a decision",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-127",
