@@ -71,6 +71,12 @@ workspaceInviteSchema.index({ email: 1 });
 // Account deletion sweeps workspace-scoped data once the workspace is gone, and
 // an invite written after that deletes itself (lib/ownerGuard.js). It is in
 // WORKSPACE_SCOPED_MODELS for the same reason.
+//
+// The guard covers the upsert in POST /workspace/invites, which is the only
+// path that creates an invite and the only upsert on a guarded model anywhere
+// in the server: since KOL-135 ownerGuard hooks an upserting findOneAndUpdate
+// alongside save and insertMany, so the write-then-check promise above holds
+// for the production write and not only for a create no caller makes.
 workspaceInviteSchema.plugin(ownerGuard, { path: 'workspaceId', owner: Workspace });
 
 export default mongoose.model('WorkspaceInvite', workspaceInviteSchema);

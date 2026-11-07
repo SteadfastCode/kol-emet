@@ -375,6 +375,50 @@ describe('workspace-scoped writes that race the deletion', () => {
   }
 
   /**
+   * How the product actually inserts a model, where that is neither `create`
+   * nor `insertMany`.
+   *
+   * The guard is a schema plugin so that it does not matter which code path
+   * writes — but a hook that misses the one shape a route uses is a guard over
+   * nothing, and that is exactly what KOL-135 found: ownerGuard hooked `save`
+   * and `insertMany`, and the only path that creates a WorkspaceInvite uses
+   * neither. Driving the generic shapes alone let that pass. So each model's
+   * real write is a case of its own, and a model missing from this map is
+   * asserting that `create`/`insertMany` *is* its production shape.
+   */
+  const PRODUCTION_INSERT = {
+    // POST /workspace/invites upserts on (workspaceId, email) — the pair the
+    // unique index covers — so a re-invite updates the waiting row instead of
+    // writing a second one (routes/workspace.js). Nothing calls
+    // WorkspaceInvite.create outside this suite.
+    WorkspaceInvite: (model, doc) => model.findOneAndUpdate(
+      { workspaceId: doc.workspaceId, email: doc.email },
+      { $set: { role: doc.role, invitedBy: doc.invitedBy } },
+      { new: false, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    ),
+  };
+
+  /**
+   * Every write shape the race is run against for `model`: the two generic
+   * inserts, plus its production insert when that is a third shape. Each
+   * carries the driver method the shape bottoms out in, which is what the
+   * test mocks to slip the whole deletion between validation and insert.
+   */
+  function writeShapes(model) {
+    const shapes = [
+      { how: 'create', driverMethod: 'insertOne', write: (doc) => model.create(doc) },
+      { how: 'insertMany', driverMethod: 'insertMany', write: (doc) => model.insertMany([doc]) },
+    ];
+    const production = PRODUCTION_INSERT[model.modelName];
+    if (production) shapes.push({ how: 'upsert', driverMethod: 'findOneAndUpdate', write: (doc) => production(model, doc) });
+    return shapes;
+  }
+
+  /** Insert `doc` the way the product would — the shape the routes use. */
+  const insertAsProduction = (model, doc) =>
+    (PRODUCTION_INSERT[model.modelName] ?? ((m, d) => m.create(d)))(model, doc);
+
+  /**
    * Tenant A about to be deleted, with tenant B editing in A's workspace. B's
    * account survives A's deletion, so a write B makes there can only be caught
    * by its workspace, never by its user.
@@ -387,7 +431,7 @@ describe('workspace-scoped writes that race the deletion', () => {
   }
 
   for (const model of WORKSPACE_SCOPED_MODELS) {
-    for (const [how, driverMethod] of [['create', 'insertOne'], ['insertMany', 'insertMany']]) {
+    for (const { how, driverMethod, write } of writeShapes(model)) {
       test(`${model.modelName}.${how} landing after its workspace is gone deletes itself`, async (t) => {
         const { a, b, before } = await seedSharedWorkspace();
 
@@ -405,10 +449,7 @@ describe('workspace-scoped writes that race the deletion', () => {
           return insert(...args);
         });
 
-        const doc = lateDoc(model, a, b);
-        const write = how === 'create' ? model.create(doc) : model.insertMany([doc]);
-
-        await assert.rejects(write, OwnerGoneError);
+        await assert.rejects(write(lateDoc(model, a, b)), OwnerGoneError);
         assert.ok(deleted, 'the deletion ran between validation and insert');
         assert.deepEqual(await snapshot(), without(before, a), 'nothing written into A\'s workspace was left behind');
       });
@@ -422,7 +463,7 @@ describe('workspace-scoped writes that race the deletion', () => {
     // exists, so each guard's check passes. That is the window the sweep covers.
     const deleteWorkspaces = Workspace.deleteMany.bind(Workspace);
     t.mock.method(Workspace, 'deleteMany', async (...args) => {
-      for (const model of WORKSPACE_SCOPED_MODELS) await model.create(lateDoc(model, a, b));
+      for (const model of WORKSPACE_SCOPED_MODELS) await insertAsProduction(model, lateDoc(model, a, b));
       return deleteWorkspaces(...args);
     });
 
@@ -439,7 +480,7 @@ describe('workspace-scoped writes that race the deletion', () => {
     const { a, b } = await seedSharedWorkspace();
 
     for (const model of WORKSPACE_SCOPED_MODELS) {
-      await model.create(lateDoc(model, a, b));
+      await insertAsProduction(model, lateDoc(model, a, b));
       assert.equal(await model.countDocuments({ workspaceId: a.workspace._id }), 2, `${model.modelName}: the seeded row and the new one`);
     }
   });

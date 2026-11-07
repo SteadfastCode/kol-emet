@@ -30,10 +30,21 @@
  *
  * It only works if the check runs on every insert, whichever code path does
  * it, so it is a schema plugin and not a helper each writer has to remember to
- * call. It runs on inserts only (`save` of a new document, `insertMany`). An
- * update to an existing document cannot bring back one that was deleted:
- * `save()` on it throws DocumentNotFoundError, and a plain updateOne matches
- * nothing.
+ * call. It runs on inserts only: `save` of a new document, `insertMany`, and
+ * an *upserting* `findOneAndUpdate`. An update to an existing document cannot
+ * bring back one that was deleted — `save()` on it throws
+ * DocumentNotFoundError and a plain updateOne matches nothing — but an upsert
+ * is precisely the update that can, and `POST /workspace/invites` creates
+ * every WorkspaceInvite that way on purpose, so that a re-invite is one row
+ * and not two (routes/workspace.js). Before KOL-135 the guard hooked `save`
+ * and `insertMany` only, which left the one shape the only invite-creating
+ * route uses unchecked. A non-upsert `findOneAndUpdate` stays unchecked, or
+ * every update in the codebase grows an owner lookup to catch an insert it
+ * cannot perform.
+ *
+ * `updateMany` and `bulkWrite` can upsert too and are deliberately *not*
+ * hooked: no route uses one, so guarding them would be a check on a path that
+ * does not exist. A route that starts upserting that way must hook it here.
  *
  * A discarded write rejects with OwnerGoneError instead of resolving, so no
  * caller reports a save that did not stick.
@@ -114,5 +125,22 @@ export function ownerGuard(schema, opts) {
   });
   schema.post('insertMany', async function (docs) {
     await discardIfOwnerGone(this, [].concat(docs), opts, 'insertMany');
+  });
+  schema.post('findOneAndUpdate', async function () {
+    // In query middleware `this` is the query, so its options say whether an
+    // insert was even possible. Only an upsert can have written a new row;
+    // anything else matched a document that already existed, or nothing.
+    if (!this.getOptions().upsert) return;
+
+    // The result is no use: the one route that upserts passes `new: false`, so
+    // it holds the pre-image (null exactly when the upsert inserted). Resolve
+    // the row by the filter that addressed it instead, and hand it to the same
+    // check every other insert goes through.
+    const doc = await this.model.findOne(this.getFilter()).lean();
+    if (!doc) {
+      log('light', `${this.model.modelName}.findOneAndUpdate: the upserted row was not there to read back; no ${opts.owner.modelName} check ran (source: owner guard)`);
+      return;
+    }
+    await discardIfOwnerGone(this.model, [doc], opts, 'findOneAndUpdate');
   });
 }
