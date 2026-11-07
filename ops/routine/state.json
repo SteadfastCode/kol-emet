@@ -85,7 +85,7 @@
     "KOL-135": {
       "order": 5,
       "title": "The only path that creates an invite is the one path ownerGuard cannot see",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-135",

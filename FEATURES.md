@@ -99,35 +99,6 @@ registration, or removes a feature.
   grants one account can mint — a delete route turns that ceiling into a loop.
 
 
-- [x] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see**
-  Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:241`).
-  `ownerGuard` hooks `post('save')` and `post('insertMany')` and nothing else
-  (`server/src/lib/ownerGuard.js:107-117`), on a documented argument that covers every other write: "An update to an
-  existing document cannot bring back one that was deleted" (:35-38). But `POST /workspace/invites` creates with
-  `findOneAndUpdate({ upsert: true })` (`routes/workspace.js:242-247`) — deliberately, so a re-invite is one row and
-  not two — and an upsert is precisely the update that can bring one back. So the write-then-check promise that
-  `models/WorkspaceInvite.js:70-73` and `docs/data-model.md` both make for `WorkspaceInvite` holds for no production
-  write at all, and the race test passes anyway because it drives `create` and `insertMany`
-  (`server/tests/lib/accountDeleter.test.js:368,388-390`), the two shapes no route uses. An invite upserted between
-  `deleteAccount`'s content pass and its final sweep therefore survives, pointing at a deleted workspace, and
-  `GET /invites` shows it to the invitee with a null workspace name until an accept 404s and drops it.
-  Build: give the plugin the hook rather than the route a workaround — it is a schema plugin exactly because "it only
-  works if the check runs on every insert, whichever code path does it" (`ownerGuard.js:31-33`). In
-  `post('findOneAndUpdate')` the query is `this`, so `this.getOptions().upsert` says whether an insert was possible;
-  the route passes `new: false`, so the hook cannot read the row from the result and must resolve it itself
-  (`this.model.findOne(this.getFilter())`) before handing it to the existing `discardIfOwnerGone` unchanged. A
-  non-upsert `findOneAndUpdate` must stay unchecked, or every update in the codebase grows an owner lookup. Then make
-  the late-write race test drive each model's real write shape, so a guard the production path bypasses fails.
-  Files: `server/src/lib/ownerGuard.js`, `server/src/models/WorkspaceInvite.js` (the comment that claims the guard),
-  `server/tests/lib/accountDeleter.test.js`, a new `server/tests/unit/ownerGuard.test.js` (there is none today),
-  `docs/data-model.md`.
-  Verify: `cd server && yarn test` with cases for: an invite upserted after its workspace is deleted deleting itself
-  and rejecting with `OwnerGoneError`; a re-invite in a live workspace still answering 200 with one row; a plain
-  non-upsert `findOneAndUpdate` on an existing row running no owner lookup; a doc with a null `workspaceId` still
-  passing unchecked; and every existing `create`/`insertMany` case unchanged. `cd server && node --check src/index.js`.
-  Out of scope: `updateMany` and `bulkWrite` upserts — no route uses one, so say so in the comment instead of
-  guarding a path that does not exist; the two-pass ordering in `accountDeleter` itself; and invite expiry, which
-  `models/WorkspaceInvite.js` argues against on purpose.
 
 - [ ] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not**
   Both found by the graders of the sql-schema items, and both reproduced against the current tree by running
@@ -269,6 +240,35 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see** (routine 2026-11-07, 688b190)
+  Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:241`).
+  `ownerGuard` hooks `post('save')` and `post('insertMany')` and nothing else
+  (`server/src/lib/ownerGuard.js:107-117`), on a documented argument that covers every other write: "An update to an
+  existing document cannot bring back one that was deleted" (:35-38). But `POST /workspace/invites` creates with
+  `findOneAndUpdate({ upsert: true })` (`routes/workspace.js:242-247`) — deliberately, so a re-invite is one row and
+  not two — and an upsert is precisely the update that can bring one back. So the write-then-check promise that
+  `models/WorkspaceInvite.js:70-73` and `docs/data-model.md` both make for `WorkspaceInvite` holds for no production
+  write at all, and the race test passes anyway because it drives `create` and `insertMany`
+  (`server/tests/lib/accountDeleter.test.js:368,388-390`), the two shapes no route uses. An invite upserted between
+  `deleteAccount`'s content pass and its final sweep therefore survives, pointing at a deleted workspace, and
+  `GET /invites` shows it to the invitee with a null workspace name until an accept 404s and drops it.
+  Build: give the plugin the hook rather than the route a workaround — it is a schema plugin exactly because "it only
+  works if the check runs on every insert, whichever code path does it" (`ownerGuard.js:31-33`). In
+  `post('findOneAndUpdate')` the query is `this`, so `this.getOptions().upsert` says whether an insert was possible;
+  the route passes `new: false`, so the hook cannot read the row from the result and must resolve it itself
+  (`this.model.findOne(this.getFilter())`) before handing it to the existing `discardIfOwnerGone` unchanged. A
+  non-upsert `findOneAndUpdate` must stay unchecked, or every update in the codebase grows an owner lookup. Then make
+  the late-write race test drive each model's real write shape, so a guard the production path bypasses fails.
+  Files: `server/src/lib/ownerGuard.js`, `server/src/models/WorkspaceInvite.js` (the comment that claims the guard),
+  `server/tests/lib/accountDeleter.test.js`, a new `server/tests/unit/ownerGuard.test.js` (there is none today),
+  `docs/data-model.md`.
+  Verify: `cd server && yarn test` with cases for: an invite upserted after its workspace is deleted deleting itself
+  and rejecting with `OwnerGoneError`; a re-invite in a live workspace still answering 200 with one row; a plain
+  non-upsert `findOneAndUpdate` on an existing row running no owner lookup; a doc with a null `workspaceId` still
+  passing unchecked; and every existing `create`/`insertMany` case unchanged. `cd server && node --check src/index.js`.
+  Out of scope: `updateMany` and `bulkWrite` upserts — no route uses one, so say so in the comment instead of
+  guarding a path that does not exist; the two-pass ordering in `accountDeleter` itself; and invite expiry, which
+  `models/WorkspaceInvite.js` argues against on purpose.
 - [x] **(KOL-134) Two owners, two demotions, zero owners: the last-owner floor is read-then-write** (routine 2026-11-07, 7dbbca7)
   Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:348`).
   `PATCH /workspace/members/:userId` reads the members array with `membersOf()` (:330), counts owners with
