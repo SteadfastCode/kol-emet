@@ -5,6 +5,7 @@ import User from '../models/User.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { hasTemplate } from '../config/templates.js';
 import { createWorkspace } from '../lib/workspaceSeeder.js';
+import { MOVE_OWNER_ID_TO_AN_OWNER, anotherOwnerThan } from '../lib/ownerFloor.js';
 import {
   WORKSPACE_NAME_MAX,
   defaultWorkspace,
@@ -186,28 +187,15 @@ async function membersOf(workspaceId) {
   return workspace ?? null;
 }
 
-/** Those members holding `owner` — what the last-owner guard counts. */
-const ownersOf = (workspace) => (workspace.members ?? []).filter(m => m.role === 'owner');
-
 /**
- * Keeps `Workspace.ownerId` naming a member who holds the owner role.
+ * Those members holding `owner`, as the request's own read saw them.
  *
- * `ownerId` is a separate field from the `members` array, and it is what
- * account deletion judges sole ownership by. Left alone, demoting or removing
- * the user it names would leave it pointing at a non-owner — or at someone who
- * is not a member at all, whose own account could then never be deleted
- * (lib/accountDeleter.js would see a workspace they "own" but do not solely
- * own, and refuse). So it moves to another owner.
- *
- * `members` is the array *after* the change. Returns the id it should hold, or
- * the current one when that is still an owner.
+ * Not the floor — that is `anotherOwnerThan` in lib/ownerFloor.js, and it
+ * lives in the write. This is what the refusal's log line reports: the count
+ * the read a moment earlier showed, next to the write that refused anyway —
+ * the whole shape of the race in one line.
  */
-function ownerIdAfter(workspace, members) {
-  const stillAnOwner = members.some(m => m.role === 'owner' && String(m.userId) === String(workspace.ownerId));
-  if (stillAnOwner) return null;
-  const next = members.find(m => m.role === 'owner');
-  return next ? next.userId : null;
-}
+const ownersOf = (workspace) => (workspace.members ?? []).filter(m => m.role === 'owner');
 
 // POST /workspace/invites — invite an address to this workspace. Owners only.
 router.post('/invites', requireWorkspaceRole('owner'), async (req, res, next) => {
@@ -344,29 +332,59 @@ router.patch('/members/:userId', requireWorkspaceRole('owner'), async (req, res,
       return res.json({ userId: member.userId, role });
     }
 
-    // The floor: a workspace keeps at least one owner, or nobody could ever
-    // rename it, invite into it or manage it again.
-    if (member.role === 'owner' && ownersOf(workspace).length <= 1) {
-      log('light', `refused PATCH /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} has one owner, and demoting them to ${role} would leave it with none (source: user ${req.actingUserId})`);
-      return res.status(409).json({ error: 'LAST_OWNER' });
+    // The floor — a workspace keeps at least one owner, or nobody could ever
+    // rename it, invite into it or manage it again — is the filter this write
+    // is matched on rather than a check in front of it, so two concurrent
+    // demotions cannot both pass it and both land. See lib/ownerFloor.js.
+    // An update pipeline, so the member's role and `ownerId` are both derived
+    // from the array as the write finds it; `$mergeObjects` keeps whatever else
+    // a membership row carries. Nothing here is cast or validated by Mongoose
+    // (a pipeline never is), so `role` arrives already checked by isRole and
+    // the only ids in it are stored ObjectIds.
+    const demotingAnOwner = member.role === 'owner';
+    const after = await Workspace.findOneAndUpdate(
+      {
+        _id: req.workspaceId,
+        'members.userId': member.userId,
+        ...(demotingAnOwner ? anotherOwnerThan(member.userId) : {}),
+      },
+      [
+        {
+          $set: {
+            members: {
+              $map: {
+                input: { $ifNull: ['$members', []] },
+                as: 'm',
+                in: {
+                  $cond: [
+                    { $eq: ['$$m.userId', member.userId] },
+                    { $mergeObjects: ['$$m', { role }] },
+                    '$$m',
+                  ],
+                },
+              },
+            },
+          },
+        },
+        MOVE_OWNER_ID_TO_AN_OWNER,
+      ],
+      { new: true },
+    ).select('_id ownerId members').lean();
+
+    if (!after) {
+      // No match. For an owner that is the floor holding; for anyone else the
+      // membership this request read is simply no longer there.
+      if (demotingAnOwner) {
+        log('light', `refused PATCH /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} holds no other owner at the moment of the write, so demoting them to ${role} would leave it with none (source: user ${req.actingUserId}; the read a moment earlier saw ${ownersOf(workspace).length} owner(s), which is why the floor is the write's filter and not a check in front of it)`);
+        return res.status(409).json({ error: 'LAST_OWNER' });
+      }
+      log('light', `refused PATCH /workspace/members/${req.params.userId} with 404 and wrote nothing: the membership read a moment earlier is gone from workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
+      return res.status(404).json({ error: 'Not found' });
     }
 
-    const after = workspace.members.map(m => (
-      String(m.userId) === String(req.params.userId) ? { ...m, role } : m
-    ));
-    const nextOwnerId = ownerIdAfter(workspace, after);
-
-    await Workspace.updateOne(
-      { _id: req.workspaceId, 'members.userId': req.params.userId },
-      {
-        $set: {
-          'members.$.role': role,
-          ...(nextOwnerId && { ownerId: nextOwnerId }),
-        },
-      },
-    );
-
-    log('light', `member ${req.params.userId} of workspace ${req.workspaceId} is now ${role}, was ${member.role}${nextOwnerId ? `; ownerId moved to ${nextOwnerId}, the demoted owner no longer holds the role` : ''} (source: PATCH /workspace/members/:userId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    const ownerIdMoved = String(after.ownerId) !== String(workspace.ownerId);
+    log('light', `member ${req.params.userId} of workspace ${req.workspaceId} is now ${role}, was ${member.role}${ownerIdMoved ? `; ownerId moved from ${workspace.ownerId} to ${after.ownerId}, the demoted owner no longer holds the role` : ''} (source: PATCH /workspace/members/:userId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    log('verbose', `workspace ${req.workspaceId} members after the write: ${JSON.stringify(after.members)}, ownerId ${after.ownerId}`);
     res.json({ userId: member.userId, role });
   } catch (err) {
     log('light', `failed to re-role member ${req.params.userId} of workspace ${req.workspaceId} (source: PATCH /workspace/members/:userId by user ${req.actingUserId}): ${err.message}`);
@@ -386,28 +404,52 @@ router.delete('/members/:userId', requireWorkspaceRole('owner'), async (req, res
       return res.status(404).json({ error: 'Not found' });
     }
 
-    if (member.role === 'owner' && ownersOf(workspace).length <= 1) {
-      log('light', `refused DELETE /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} has one owner (source: user ${req.actingUserId})`);
-      return res.status(409).json({ error: 'LAST_OWNER' });
+    // The same floor as the demotion above, in the same place: the filter this
+    // write is matched on, so two concurrent removals cannot both pass a count
+    // and both land. `members.userId` is in the filter too, so a membership
+    // another request removed first is a 404 rather than a silent 204.
+    const removingAnOwner = member.role === 'owner';
+    const after = await Workspace.findOneAndUpdate(
+      {
+        _id: req.workspaceId,
+        'members.userId': member.userId,
+        ...(removingAnOwner ? anotherOwnerThan(member.userId) : {}),
+      },
+      [
+        {
+          $set: {
+            members: {
+              $filter: {
+                input: { $ifNull: ['$members', []] },
+                as: 'm',
+                cond: { $ne: ['$$m.userId', member.userId] },
+              },
+            },
+          },
+        },
+        MOVE_OWNER_ID_TO_AN_OWNER,
+      ],
+      { new: true },
+    ).select('_id ownerId members').lean();
+
+    if (!after) {
+      if (removingAnOwner) {
+        log('light', `refused DELETE /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} holds no other owner at the moment of the write (source: user ${req.actingUserId}; the read a moment earlier saw ${ownersOf(workspace).length} owner(s), which is why the floor is the write's filter and not a check in front of it)`);
+        return res.status(409).json({ error: 'LAST_OWNER' });
+      }
+      log('light', `refused DELETE /workspace/members/${req.params.userId} with 404 and wrote nothing: the membership read a moment earlier is gone from workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
+      return res.status(404).json({ error: 'Not found' });
     }
 
-    const after = workspace.members.filter(m => String(m.userId) !== String(req.params.userId));
-    const nextOwnerId = ownerIdAfter(workspace, after);
-
-    await Workspace.updateOne(
-      { _id: req.workspaceId },
-      {
-        $pull: { members: { userId: req.params.userId } },
-        ...(nextOwnerId && { $set: { ownerId: nextOwnerId } }),
-      },
-    );
+    const ownerIdMoved = String(after.ownerId) !== String(workspace.ownerId);
 
     // Nothing is cleared from the removed member's session: resolveWorkspace
     // re-reads the membership list on every request, so a selection of this
     // workspace stops resolving on their very next one and falls back to a
     // workspace they are still in (middleware/workspace.js). Their content
     // stays — it belongs to the workspace, not to them.
-    log('light', `removed member ${req.params.userId} (${member.role}) from workspace ${req.workspaceId}${nextOwnerId ? `; ownerId moved to ${nextOwnerId}` : ''}; their next request resolves elsewhere (source: DELETE /workspace/members/:userId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    log('light', `removed member ${req.params.userId} (${member.role}) from workspace ${req.workspaceId}${ownerIdMoved ? `; ownerId moved from ${workspace.ownerId} to ${after.ownerId}` : ''}; their next request resolves elsewhere (source: DELETE /workspace/members/:userId by user ${req.actingUserId}, role ${req.workspaceRole})`);
+    log('verbose', `workspace ${req.workspaceId} members after the write: ${JSON.stringify(after.members)}, ownerId ${after.ownerId}`);
     res.status(204).end();
   } catch (err) {
     log('light', `failed to remove member ${req.params.userId} from workspace ${req.workspaceId} (source: DELETE /workspace/members/:userId by user ${req.actingUserId}): ${err.message}`);
