@@ -85,7 +85,7 @@
     "KOL-136": {
       "order": 5,
       "title": "Two table-level SQL declarations the schema producer reads as something they are not",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-136",

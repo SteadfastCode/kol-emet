@@ -100,42 +100,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not**
-  Both found by the graders of the sql-schema items, and both reproduced against the current tree by running
-  `parseSqlSchema` directly.
-  First, an index whose unquoted name is a type word invents a column (`server/src/lib/producers/sqlSchema.js:366-373`,
-  grader of KOL-130). `CONSTRAINT_SHAPES` (:384-397) routes `FULLTEXT`, `SPATIAL`, `KEY` and `INDEX` through
-  `looksLikeIndex`, which refuses a name `isTypeWord` matches — the only thing telling `KEY idx_user (user_id)` from a
-  column called `key VARCHAR(50)`. For `CREATE TABLE t (body text, FULLTEXT KEY text (body));` the index name *is* a
-  type word, the shape returns false, the fallback to the table-constraint reading never runs, and `readColumn`
-  proposes the attribute `FULLTEXT` = `KEY text (body)` on the Data Store — a column the table does not have. Narrow
-  in practice (mysqldump backtick-quotes index names, and a quoted ident bypasses `isTypeWord`) but hand-written DDL
-  hits it, and before the type-word guard the declaration was merely skipped rather than misread.
-  Second, a trailing ALTER marks a key on a table in another schema (:733, grader of KOL-131). Pass 2 resolves the
-  ALTER's *own* table with `resolveTable`, whose second reading — "a reference with a schema the file does not
-  declare, falling back to the one table of that name there is" (:698-706) — was written for a foreign key's
-  *referenced* name, where SQL is that lenient. It is not lenient about the target of an ALTER. So
-  `CREATE TABLE public.users (id integer NOT NULL, email text);` plus
-  `ALTER TABLE ONLY archive.users ADD CONSTRAINT users_pkey PRIMARY KEY (id);` marks `public.users.id` as
-  `PRIMARY KEY` — a key the file never declares on that table, and the opposite of what the pass-2 comment
-  (:728-731) and `docs/api.md` both promise, that a constraint naming an undeclared table is passed over in silence.
-  The existing test covers only the case where both namesakes exist.
-  Build: for the first, fall through to the table-constraint reading instead of returning false when the keyword is
-  `FULLTEXT` or `SPATIAL` — both are reserved index keywords in every dialect read here and can never be a column
-  name, unlike bare `KEY` and `INDEX`, which is what the guard was written for. For the second, resolve an ALTER's own
-  table exactly: `schema.name` when the file declares it, a bare name when it is unique in the file, nothing
-  otherwise — the lenient fallback stays on the referenced side of a foreign key, where it belongs.
-  Files: `server/src/lib/producers/sqlSchema.js`, `server/tests/unit/sqlSchema.test.js`,
-  `server/tests/fixtures/schema.sql` only if a case needs it, `docs/api.md`.
-  Verify: `cd server && yarn test` with cases for: `FULLTEXT KEY text (body)` and `SPATIAL KEY geom (geom)` producing
-  no attribute for the index and leaving the real columns intact; a column genuinely named `key` or `index` still
-  read as a column (the regression the type-word guard exists to prevent); an ALTER naming `archive.users` where only
-  `public.users` is declared marking nothing; the same ALTER unqualified still resolving to the one `users` there is;
-  a foreign key's referenced name keeping the lenient fallback; and the committed fixture's output unchanged.
-  `cd server && node --check src/index.js`.
-  Out of scope: new dialects, index entities of their own, `CREATE INDEX` statements outside a table body, and a
-  `PRODUCER_VERSION` bump — decide whether a parse fix that moves output is one and say which in the PR, rather than
-  bumping it silently.
 
 - [ ] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises**
   Two client findings from the graders of KOL-124 and KOL-123, in the same component and its test file.
@@ -240,6 +204,42 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not** (routine 2026-11-07, c158d1e)
+  Both found by the graders of the sql-schema items, and both reproduced against the current tree by running
+  `parseSqlSchema` directly.
+  First, an index whose unquoted name is a type word invents a column (`server/src/lib/producers/sqlSchema.js:366-373`,
+  grader of KOL-130). `CONSTRAINT_SHAPES` (:384-397) routes `FULLTEXT`, `SPATIAL`, `KEY` and `INDEX` through
+  `looksLikeIndex`, which refuses a name `isTypeWord` matches — the only thing telling `KEY idx_user (user_id)` from a
+  column called `key VARCHAR(50)`. For `CREATE TABLE t (body text, FULLTEXT KEY text (body));` the index name *is* a
+  type word, the shape returns false, the fallback to the table-constraint reading never runs, and `readColumn`
+  proposes the attribute `FULLTEXT` = `KEY text (body)` on the Data Store — a column the table does not have. Narrow
+  in practice (mysqldump backtick-quotes index names, and a quoted ident bypasses `isTypeWord`) but hand-written DDL
+  hits it, and before the type-word guard the declaration was merely skipped rather than misread.
+  Second, a trailing ALTER marks a key on a table in another schema (:733, grader of KOL-131). Pass 2 resolves the
+  ALTER's *own* table with `resolveTable`, whose second reading — "a reference with a schema the file does not
+  declare, falling back to the one table of that name there is" (:698-706) — was written for a foreign key's
+  *referenced* name, where SQL is that lenient. It is not lenient about the target of an ALTER. So
+  `CREATE TABLE public.users (id integer NOT NULL, email text);` plus
+  `ALTER TABLE ONLY archive.users ADD CONSTRAINT users_pkey PRIMARY KEY (id);` marks `public.users.id` as
+  `PRIMARY KEY` — a key the file never declares on that table, and the opposite of what the pass-2 comment
+  (:728-731) and `docs/api.md` both promise, that a constraint naming an undeclared table is passed over in silence.
+  The existing test covers only the case where both namesakes exist.
+  Build: for the first, fall through to the table-constraint reading instead of returning false when the keyword is
+  `FULLTEXT` or `SPATIAL` — both are reserved index keywords in every dialect read here and can never be a column
+  name, unlike bare `KEY` and `INDEX`, which is what the guard was written for. For the second, resolve an ALTER's own
+  table exactly: `schema.name` when the file declares it, a bare name when it is unique in the file, nothing
+  otherwise — the lenient fallback stays on the referenced side of a foreign key, where it belongs.
+  Files: `server/src/lib/producers/sqlSchema.js`, `server/tests/unit/sqlSchema.test.js`,
+  `server/tests/fixtures/schema.sql` only if a case needs it, `docs/api.md`.
+  Verify: `cd server && yarn test` with cases for: `FULLTEXT KEY text (body)` and `SPATIAL KEY geom (geom)` producing
+  no attribute for the index and leaving the real columns intact; a column genuinely named `key` or `index` still
+  read as a column (the regression the type-word guard exists to prevent); an ALTER naming `archive.users` where only
+  `public.users` is declared marking nothing; the same ALTER unqualified still resolving to the one `users` there is;
+  a foreign key's referenced name keeping the lenient fallback; and the committed fixture's output unchanged.
+  `cd server && node --check src/index.js`.
+  Out of scope: new dialects, index entities of their own, `CREATE INDEX` statements outside a table body, and a
+  `PRODUCER_VERSION` bump — decide whether a parse fix that moves output is one and say which in the PR, rather than
+  bumping it silently.
 - [x] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see** (routine 2026-11-07, 688b190)
   Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:241`).
   `ownerGuard` hooks `post('save')` and `post('insertMany')` and nothing else
