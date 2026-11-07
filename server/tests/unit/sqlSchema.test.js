@@ -55,6 +55,14 @@
  *   - existingByKey lookup removed    -> the re-import test fails
  *   - CONSTRAINT_SHAPES bypassed      -> a column called `period` or `exclude`
  *                                        vanishes from its table, silently
+ *   - the type-word guard applied to
+ *     an index that spells KEY out     -> `FULLTEXT KEY text (body)` becomes an
+ *                                        attribute `FULLTEXT` on the table: a
+ *                                        column the table does not have
+ *   - resolveOwnTable replaced by
+ *     resolveTable                     -> an `ALTER TABLE archive.users` marks
+ *                                        a key on `public.users`, which the
+ *                                        file never declares one on
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_SQL_SCHEMA_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -458,6 +466,48 @@ describe('a column named after a constraint keyword', () => {
     assert.deepEqual(dropReasons, []);
   });
 
+  test('an index named after a type is still an index, not a column of its own', () => {
+    // `FULLTEXT KEY text (body)` is legal hand-written MySQL: the index is
+    // called `text`. The type-word guard that tells `key VARCHAR(50)` from
+    // `KEY idx_user (user_id)` was applied to that name too, so the shape test
+    // said "not a constraint", the column reader took the declaration, and the
+    // table carried an attribute `FULLTEXT` = `KEY text (body)` — a column it
+    // does not have. A spelled-out `KEY`/`INDEX` keyword settles it: no
+    // dialect read here has a type by either name.
+    const sql = [
+      'CREATE TABLE documents (',
+      '  id int PRIMARY KEY,',
+      '  body text,',
+      '  geom geometry,',
+      '  FULLTEXT KEY text (body),',
+      '  SPATIAL KEY geom (geom),',
+      '  KEY idx_body (body)',
+      ');',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'indexes named after types');
+    assert.deepEqual(columns(entityNamed(items, 'documents')), [
+      'id = int PRIMARY KEY',
+      'body = text',
+      'geom = geometry',
+    ]);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('a column called `key` or `index` is still a column', () => {
+    // The regression the type-word guard exists to prevent, and the reason it
+    // is only lifted after a `KEY`/`INDEX` keyword: bare `key` and `index` are
+    // ordinary column names, and `key varchar(50)` has the shape of an index.
+    const sql = 'CREATE TABLE settings (id int PRIMARY KEY, key varchar(50), index int, value text);';
+    const { items, dropReasons } = parse(sql, {}, 'columns called `key` and `index`');
+    assert.deepEqual(columns(entityNamed(items, 'settings')), [
+      'id = int PRIMARY KEY',
+      'key = varchar(50)',
+      'index = int',
+      'value = text',
+    ]);
+    assert.deepEqual(dropReasons, []);
+  });
+
   test('a reserved keyword is a constraint on the bare word, and quoted is a column', () => {
     // CONSTRAINT, PRIMARY, UNIQUE, FOREIGN, CHECK and LIKE are reserved in both
     // Postgres and MySQL, so unquoted they cannot be a column name and need no
@@ -605,6 +655,45 @@ describe('keys a trailing ALTER TABLE declares', () => {
     assert.deepEqual(columns(entityNamed(items, 'audit.customers')), ['id = bigint PRIMARY KEY NOT NULL', 'email = text']);
   });
 
+  test('an ALTER naming a schema the file does not declare marks nothing', () => {
+    // The namesake reading is the foreign-key one: SQL is lenient about what a
+    // key points AT, not about what a statement is addressed TO. An
+    // `archive.users` the file never declares is not `public.users`, and
+    // marking its key here invented a key the file does not declare — the
+    // opposite of what this pass and docs/api.md promise. The existing cover
+    // for this was only the case where both namesakes are declared.
+    const sql = [
+      'CREATE TABLE public.users (id integer NOT NULL, email text);',
+      'ALTER TABLE ONLY archive.users ADD CONSTRAINT users_pkey PRIMARY KEY (id);',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'an ALTER on a schema the file does not declare');
+    assert.deepEqual(columns(entityNamed(items, 'users')), ['id = integer NOT NULL', 'email = text']);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('the same ALTER unqualified marks the one table of that name', () => {
+    // A bare name that is unique in the file names it: mysqldump qualifies
+    // nothing at all, and a one-schema file is the common case.
+    const sql = [
+      'CREATE TABLE public.users (id integer NOT NULL, email text);',
+      'ALTER TABLE ONLY users ADD CONSTRAINT users_pkey PRIMARY KEY (id);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'an unqualified ALTER on a qualified table');
+    assert.deepEqual(columns(entityNamed(items, 'users')), ['id = integer PRIMARY KEY NOT NULL', 'email = text']);
+  });
+
+  test('a qualified ALTER against an unqualified declaration still marks it', () => {
+    // The other half of the exact reading: a `CREATE TABLE sessions` names no
+    // schema, so `public.sessions` contradicts nothing it says. A dump written
+    // by hand, or a migration directory concatenated, mixes the two spellings.
+    const sql = [
+      'CREATE TABLE sessions (id bigint NOT NULL, note text);',
+      'ALTER TABLE ONLY public.sessions ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);',
+    ].join('\n');
+    const { items } = parse(sql, {}, 'a qualified ALTER on an unqualified table');
+    assert.deepEqual(columns(entityNamed(items, 'sessions')), ['id = bigint PRIMARY KEY NOT NULL', 'note = text']);
+  });
+
   test('a key with nothing in the draft to mark is passed over in silence', () => {
     // A drop reason here would name a table the draft never had, or a column
     // the dump never declared — noise in the one place a reviewer reads.
@@ -667,6 +756,36 @@ describe('foreign keys', () => {
     const { items } = parse(sql, {}, 'a self-referencing key');
     assert.deepEqual(relationships(items), []);
     assert.deepEqual(entities(items).map(i => i.proposed.title), ['nodes']);
+  });
+
+  test("a foreign key added to a table in another schema is not its namesake's", () => {
+    // The same exact reading as the keys pass, on the same side: the table an
+    // ALTER is addressed to. The key belongs to the `archive.users` the
+    // statement names — which can still land on an entity the workspace has,
+    // by the name as written — not to the `public.users` this file declares.
+    const existing = [{ _id: new mongoose.Types.ObjectId(), title: 'archive.users', updatedAt: new Date() }];
+    const sql = [
+      'CREATE TABLE public.users (id integer NOT NULL);',
+      'CREATE TABLE public.orders (id integer NOT NULL);',
+      'ALTER TABLE ONLY archive.users ADD CONSTRAINT users_order_fkey FOREIGN KEY (id) REFERENCES public.orders(id);',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, { existingEntities: existing }, 'an ALTER foreign key on another schema');
+    assert.deepEqual(edges(items), ['Dependent:archive.users → Dependency:orders']);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test("a reference to a schema the file does not declare still falls back to the one table there is", () => {
+    // The lenient reading stays where SQL is lenient: the referenced name. The
+    // file holds one `users`, so that is what the key points at, however the
+    // reference spells its schema.
+    const sql = [
+      'CREATE TABLE public.users (id integer NOT NULL);',
+      'CREATE TABLE public.orders (id integer NOT NULL, user_id integer NOT NULL);',
+      'ALTER TABLE ONLY public.orders ADD CONSTRAINT orders_user_fkey FOREIGN KEY (user_id) REFERENCES archive.users(id);',
+    ].join('\n');
+    const { items, dropReasons } = parse(sql, {}, 'a reference to a schema the file does not declare');
+    assert.deepEqual(edges(items), ['Dependent:orders → Dependency:users']);
+    assert.deepEqual(dropReasons, []);
   });
 
   test('a reference the file declares in several schemas, and in none of its own, is dropped', () => {
