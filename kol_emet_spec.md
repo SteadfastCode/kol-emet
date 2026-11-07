@@ -536,6 +536,19 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
     with the role when its holder steps down, because `lib/accountDeleter.js` judges *sole*
     ownership by that field: left pointing at someone who is no longer a member, it would refuse
     that person's own account deletion forever.
+    - **The floor is the write, not a check in front of it (decided 2026-11-07, KOL-134).** As
+      shipped it was read-then-write — read `members`, count the owners, refuse at one, then
+      update — so with two owners *two* concurrent demotions each read two owners, each passed the
+      count, and both landed. A workspace with nobody holding `owner` is permanent: every
+      membership write is `requireWorkspaceRole('owner')`, so nothing in the product could mint one
+      there again. The invariant moved into the condition the write is matched on — `$expr` over a
+      `$filter`/`$size` of `members` asserting an owner who is not this member, in
+      `server/src/lib/ownerFloor.js` — and **no match is the 409**, so the second of two racing
+      demotions is the one refused. `ownerId` moves in the same write, as an update-pipeline stage
+      reading the array that write produced, because a value computed from either request's own
+      read would leave it naming an owner the other request had just demoted. Not a transaction: a
+      replica-set session is not something `MongoMemoryServer.create()` gives the test suite, and
+      the invariant is expressible as a condition on one document, which is the smaller thing.
   - **Inviting a co-owner is allowed**, which is what makes the last-owner rule a floor rather than
     a wall — without it, no workspace could ever change hands even a little. Transferring ownership
     outright is still out of scope, as is seat billing and per-entity permission.

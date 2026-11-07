@@ -985,8 +985,8 @@ record is worse than a failure. The bulk equivalent is
 | POST | `/workspace/invites` | Invite an address (KOL-124). Body `{ email, role? }`; `role` defaults to `editor`. **Owners only.** 201 with `{ _id, email, role, invitedBy, createdAt }`; **200** with the same row when that address was already invited (the role is updated rather than a second invite written). 400 `INVALID_EMAIL` / `INVALID_ROLE`, 409 `ALREADY_A_MEMBER`. **No mail is sent and no link is minted**, and the answer says nothing about whether the address has an account |
 | GET | `/workspace/invites` | The addresses waiting on this workspace, oldest first, each `{ _id, email, role, invitedBy, createdAt }`. **Any member** |
 | DELETE | `/workspace/invites/:inviteId` | Withdraw one. **Owners only.** 204; 404 for an id that is not an invite of *this* workspace (never 403); 400 `INVALID_ID` |
-| PATCH | `/workspace/members/:userId` | Change a member's role. Body `{ role }`. **Owners only.** 200 `{ userId, role }`; 400 `INVALID_ROLE`; 404 for a user who is not a member; **409 `LAST_OWNER`** when it would demote the workspace's only owner, writing nothing |
-| DELETE | `/workspace/members/:userId` | Remove a membership. **Owners only.** 204; 404 for a non-member; **409 `LAST_OWNER`** for the only owner. Their content stays — it belongs to the workspace — and they lose access on their next request |
+| PATCH | `/workspace/members/:userId` | Change a member's role. Body `{ role }`. **Owners only.** 200 `{ userId, role }`; 400 `INVALID_ROLE`; 404 for a user who is not a member; **409 `LAST_OWNER`** when it would leave the workspace without an owner, writing nothing — judged at the moment of the write, so of two simultaneous demotions the second is the one refused |
+| DELETE | `/workspace/members/:userId` | Remove a membership. **Owners only.** 204; 404 for a non-member; **409 `LAST_OWNER`** on the same terms as `PATCH`. Their content stays — it belongs to the workspace — and they lose access on their next request |
 
 Registration has created a workspace since tenancy landed, and until KOL-071 nothing read its name
 back — every tenant's workspace was "My Workspace" and indistinguishable from every other. So
@@ -1094,6 +1094,13 @@ exercised only by tests. The routes are split across two mounts: the owner's hal
   naming a member who holds the role, so when that member is demoted or removed it moves to another
   owner; otherwise [account deletion](#auth) — which reads `ownerId` to decide sole ownership —
   would refuse forever for someone who is no longer a member at all.
+- **The floor is the write's own condition, not a check in front of it** (KOL-134). Both member
+  writes are matched on "this workspace still holds an owner who is not this member"
+  (`server/src/lib/ownerFloor.js`), and **no match is the 409** — so with two owners, two
+  simultaneous demotions cannot both read two owners, both pass a count and both land. The refusal
+  means the same thing to a client either way; what changed is that it can no longer be lost in the
+  gap between the count and the update. `ownerId` moves in the same write, derived from the members
+  array that write produced rather than from the array the request read.
 - **A removed member loses access on their next request.** Nothing is cleared from their session:
   `resolveWorkspace` re-reads the membership list every time, so their selection of that workspace
   stops resolving and falls back to one they are still in (see [Workspaces](#workspaces)). Their

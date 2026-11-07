@@ -25,7 +25,10 @@
  *   - **The workspace always keeps one owner**: the last owner cannot be
  *     demoted or removed (409 `LAST_OWNER`), and when a *co*-owner is demoted
  *     or removed `Workspace.ownerId` moves to one who still holds the role —
- *     the field `lib/accountDeleter.js` judges sole ownership by.
+ *     the field `lib/accountDeleter.js` judges sole ownership by. **And the
+ *     floor is the write's own filter** (KOL-134), so a demotion that read two
+ *     owners is still refused when another one landed in between: the last
+ *     group here races the real routes against each other and the floor holds.
  *   - **A removed member loses access on their next request**, because
  *     `resolveWorkspace` re-reads the membership list every time: the entity
  *     they created in that workspace is 404 to them afterwards and their
@@ -46,9 +49,11 @@
  * Falsification checks: drop `requireWorkspaceRole('owner')` from any write in
  * src/routes/workspace.js and the refusal groups fail; match the invite address
  * case-sensitively and the invitee stops seeing theirs; drop the `email`
- * equality from `ownInvite()` and the third-party accept succeeds; drop the
- * `ownersOf(...).length <= 1` guard and the last-owner group fails; stop moving
- * `ownerId` and the "a demoted owner can still delete their account" case fails.
+ * equality from `ownInvite()` and the third-party accept succeeds; drop
+ * `anotherOwnerThan` from either member write's filter and the last-owner group
+ * fails — the single-owner cases *and* the raced ones; drop
+ * `MOVE_OWNER_ID_TO_AN_OWNER` and both "ownerId follows the role" cases fail,
+ * as does "a demoted owner can still delete their account".
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_INVITES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -176,6 +181,69 @@ async function sharedWorkspace(role = 'editor') {
   const invitee = await register(role);
   await accepted(owner, invitee, role);
   return { owner, invitee };
+}
+
+/** A cast of an owner and `count` invitees who have accepted as co-owners. */
+async function coOwnedWorkspace(count) {
+  const owner = await register('owner');
+  const coOwners = [];
+  for (let i = 0; i < count; i += 1) {
+    const coOwner = await register(`co-owner-${i + 1}`);
+    await accepted(owner, coOwner, 'owner');
+    coOwners.push(coOwner);
+  }
+  return { owner, coOwners };
+}
+
+/**
+ * Runs `underTest` with `competing` landing *between* the route's read of the
+ * members array and the write that follows it — the race itself, with no sleep
+ * and no two requests in flight at once (KOL-134).
+ *
+ * `routes/workspace.js` reads the workspace (`membersOf`) and then writes, and
+ * that gap is the only place a concurrent member write can get in. So the hook
+ * wraps the one `Workspace.findById` that read makes, runs `competing` — a
+ * *real* request through the real route — as the read resolves, and takes
+ * itself off again. The request under test then continues on an array that is
+ * one owner out of date, which is exactly what two simultaneous demotions do to
+ * each other. Both of them are the product's own code; only the ordering is
+ * ours.
+ *
+ * One shot, and keyed on the workspace id, so no other query in either request
+ * is touched — and `fired` is asserted, because a hook that never ran would
+ * turn this into an ordinary sequential test that passes for the wrong reason.
+ */
+async function withARaceAfterTheRead(workspaceId, competing, underTest) {
+  const realFindById = Workspace.findById.bind(Workspace);
+  let fired = false;
+
+  Workspace.findById = function (...args) {
+    const query = realFindById(...args);
+    if (fired || String(query.getFilter()?._id) !== String(workspaceId)) return query;
+
+    fired = true;
+    Workspace.findById = realFindById;
+    const settle = query.then.bind(query);
+    // `.select()` and `.lean()` both return the same query object, so this
+    // override survives the chaining the route does before it awaits.
+    query.then = (onFulfilled, onRejected) => settle(
+      async (doc) => {
+        log('light', `the read of workspace ${workspaceId} has resolved; landing the competing write before the route gets to its own (source: withARaceAfterTheRead)`);
+        await competing();
+        return onFulfilled ? onFulfilled(doc) : doc;
+      },
+      onRejected,
+    );
+    return query;
+  };
+
+  try {
+    const res = await underTest();
+    assert.ok(fired, 'the competing write never landed: the route under test did not read the workspace by id');
+    return res;
+  } finally {
+    Workspace.findById = realFindById;
+  }
 }
 
 before(async () => {
@@ -582,6 +650,84 @@ describe('the workspace always keeps one owner', () => {
     }
     assert.equal(await storedRole(owner.workspaceId, invitee.userId), 'editor');
     assert.equal(await storedRole(stranger.workspaceId, stranger.userId), 'owner', "the stranger's own workspace is untouched");
+  });
+});
+
+describe('the floor is the write, not a check in front of it (KOL-134)', () => {
+  test('the second of two demotions is refused, though its own read saw two owners', async () => {
+    const { owner, coOwners: [coOwner] } = await coOwnedWorkspace(1);
+
+    // Both requests read a two-owner array. The one under test is the second
+    // to *write*, so it is the one the floor has to refuse — and a count taken
+    // before the write would have let it through.
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        const first = await send(coOwner, 'PATCH', `/workspace/members/${owner.userId}`, { role: 'editor' });
+        assert.equal(first.status, 200, 'the first demotion is legitimate: another owner remains');
+      },
+      () => send(owner, 'PATCH', `/workspace/members/${coOwner.userId}`, { role: 'editor' }),
+    );
+
+    assert.equal(res.status, 409, 'both demotions landing would leave the workspace with no owner at all');
+    assert.equal(res.body.error, 'LAST_OWNER');
+
+    const stored = await storedMembers(owner.workspaceId);
+    assert.equal(stored.members.filter(m => m.role === 'owner').length, 1,
+      'a workspace with no owner can never be renamed, invited into or managed again, by anyone');
+    assert.equal(await storedRole(owner.workspaceId, coOwner.userId), 'owner');
+    assert.equal(await storedRole(owner.workspaceId, owner.userId), 'editor');
+    assert.equal(String(stored.ownerId), coOwner.userId);
+  });
+
+  test('a removal racing a demotion is refused the same way, and pulls nobody', async () => {
+    const { owner, coOwners: [coOwner] } = await coOwnedWorkspace(1);
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        const first = await send(coOwner, 'PATCH', `/workspace/members/${owner.userId}`, { role: 'editor' });
+        assert.equal(first.status, 200);
+      },
+      () => send(owner, 'DELETE', `/workspace/members/${coOwner.userId}`),
+    );
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error, 'LAST_OWNER');
+
+    const stored = await storedMembers(owner.workspaceId);
+    assert.equal(stored.members.length, 2, 'the refused removal pulled a membership anyway');
+    assert.equal(stored.members.filter(m => m.role === 'owner').length, 1);
+    assert.equal(String(stored.ownerId), coOwner.userId);
+  });
+
+  test('a legitimate demotion is not refused by the race, and ownerId still names an owner', async () => {
+    // Three owners, two demotions of two *different* owners: both are
+    // legitimate and both must land. What the race breaks is `ownerId` — the
+    // second write's read still showed the first demoted owner holding the
+    // role, so an id computed from it would be left naming someone who no
+    // longer does, and `lib/accountDeleter.js` judges sole ownership by it.
+    const { owner, coOwners: [first, second] } = await coOwnedWorkspace(2);
+    assert.equal(String((await storedMembers(owner.workspaceId)).ownerId), owner.userId);
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        const stepDown = await send(first, 'PATCH', `/workspace/members/${owner.userId}`, { role: 'editor' });
+        assert.equal(stepDown.status, 200);
+        assert.equal(String((await storedMembers(owner.workspaceId)).ownerId), first.userId,
+          'ownerId moved off the owner who stepped down, to the next one in the array');
+      },
+      () => send(second, 'PATCH', `/workspace/members/${first.userId}`, { role: 'editor' }),
+    );
+
+    assert.equal(res.status, 200, 'with a third owner this demotion is legitimate and must not be refused');
+
+    const stored = await storedMembers(owner.workspaceId);
+    const owners = stored.members.filter(m => m.role === 'owner');
+    assert.deepEqual(owners.map(m => String(m.userId)), [second.userId]);
+    assert.equal(String(stored.ownerId), second.userId,
+      'ownerId must name a member who holds the role, not the one the stale read saw holding it');
   });
 });
 
