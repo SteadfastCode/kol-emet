@@ -47,10 +47,10 @@
     "KOL-127": {
       "order": 3,
       "title": "A generated update stacks a block the entity already has, and an item proposing nothing is still a decision",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-127",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -58,8 +58,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-07T03:39:25.174Z",
+      "runId": "2026-11-07T03:38:43.116Z",
       "lastFail": null
     },
     "KOL-128": {

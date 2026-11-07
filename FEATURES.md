@@ -36,7 +36,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision**
+- [x] **(KOL-127) A generated update stacks a block the entity already has, and an item proposing nothing is still a decision**
   The applier appends and never overwrites (`server/src/lib/draftApplier.js:9,144-147`), so a proposed block the target
   already carries becomes a second copy of it. The file-producer path defends against exactly that: after the parse,
   `POST /drafts/*` loads `blocks` for the matched targets alone and runs `pruneKnownBlocks`
