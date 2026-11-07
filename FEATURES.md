@@ -98,7 +98,7 @@ registration, or removes a feature.
   allowance, and until the grant question is settled `WORKSPACE_MAX_PER_OWNER` is the only thing bounding how many
   grants one account can mint — a delete route turns that ceiling into a loop.
 
-- [ ] **(KOL-134) Two owners, two demotions, zero owners: the last-owner floor is read-then-write**
+- [x] **(KOL-134) Two owners, two demotions, zero owners: the last-owner floor is read-then-write**
   Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:348`).
   `PATCH /workspace/members/:userId` reads the members array with `membersOf()` (:330), counts owners with
   `ownersOf()` (:349), and then writes with a separate `Workspace.updateOne` (:359). With two owners, two concurrent

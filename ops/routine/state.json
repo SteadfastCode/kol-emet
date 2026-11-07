@@ -44,26 +44,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-128": {
-      "order": 3,
-      "title": "An account deletion cannot reach a connector's stream, and three places say it can",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-128",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-11-07T19:26:17.249Z",
-      "runId": "2026-11-07T19:26:01.784Z",
-      "lastFail": null
-    },
     "KOL-138": {
-      "order": 4,
+      "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -81,7 +63,7 @@
       "lastFail": null
     },
     "KOL-133": {
-      "order": 5,
+      "order": 4,
       "title": "Delete a workspace: the one tenancy verb the product has never had",
       "status": "pending",
       "attempts": 0,
@@ -101,12 +83,12 @@
       "lastFail": null
     },
     "KOL-134": {
-      "order": 6,
+      "order": 5,
       "title": "Two owners, two demotions, zero owners: the last-owner floor is read-then-write",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-134",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -114,12 +96,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-07T19:40:14.071Z",
+      "runId": "2026-11-07T19:26:01.784Z",
       "lastFail": null
     },
     "KOL-135": {
-      "order": 7,
+      "order": 6,
       "title": "The only path that creates an invite is the one path ownerGuard cannot see",
       "status": "pending",
       "attempts": 0,
@@ -137,7 +119,7 @@
       "lastFail": null
     },
     "KOL-136": {
-      "order": 8,
+      "order": 7,
       "title": "Two table-level SQL declarations the schema producer reads as something they are not",
       "status": "pending",
       "attempts": 0,
@@ -155,7 +137,7 @@
       "lastFail": null
     },
     "KOL-137": {
-      "order": 9,
+      "order": 8,
       "title": "A refused Accept reports itself in another group, and a test claims a guard it never exercises",
       "status": "pending",
       "attempts": 0,
@@ -173,7 +155,7 @@
       "lastFail": null
     },
     "KOL-140": {
-      "order": 10,
+      "order": 9,
       "title": "Dropping an entity update discards that item's own evidence span, so the client's source-coverage…",
       "status": "pending",
       "attempts": 0,
@@ -191,7 +173,7 @@
       "lastFail": null
     },
     "KOL-139": {
-      "order": 11,
+      "order": 10,
       "title": "A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…",
       "status": "pending",
       "attempts": 0,
@@ -209,7 +191,7 @@
       "lastFail": null
     },
     "KOL-132": {
-      "order": 12,
+      "order": 11,
       "title": "Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…",
       "status": "pending",
       "attempts": 0,
@@ -227,7 +209,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 13,
+      "order": 12,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -245,7 +227,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 14,
+      "order": 13,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -263,7 +245,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 15,
+      "order": 14,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -281,7 +263,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 16,
+      "order": 15,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -296,6 +278,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-128": {
+      "order": null,
+      "title": "An account deletion cannot reach a connector's stream, and three places say it can",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-128",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-07T19:26:17.249Z",
+      "runId": "2026-11-07T19:26:01.784Z",
       "lastFail": null
     },
     "KOL-127": {
