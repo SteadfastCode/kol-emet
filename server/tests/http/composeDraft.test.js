@@ -17,10 +17,11 @@
  *     while the host in that DSN still becomes the edge it is there for;
  *   - decide-clean + apply writes the services, data stores and external host
  *     with those categories, and the Depends on / Calls groups between them;
- *   - importing the same file again proposes updates to what the first import
- *     created rather than a second copy — the entities AND the groups between
- *     them, so applying a re-import twice over leaves one group per edge and
- *     one back-reference per entity (KOL-054);
+ *   - importing the same file again proposes nothing for the entities it already
+ *     created — each would write nothing, so each is dropped (KOL-127) — and
+ *     updates to the groups between them rather than a second copy, so applying
+ *     a re-import twice over leaves one group per edge and one back-reference
+ *     per entity (KOL-054);
  *   - a group someone has widened by hand survives a re-import with their
  *     member intact;
  *   - a parse error is a 400 naming the line, a workspace without the types
@@ -237,19 +238,39 @@ describe('POST /drafts/compose', () => {
     assert.equal(web.relationships.length, 4, 'back-references are written on the members');
   });
 
-  test('importing the same file again proposes updates to what the first import created', async () => {
+  test('importing the same file again proposes nothing for the entities it already created', async () => {
     const res = await postCompose(architect, { text: FIXTURE });
     assert.equal(res.status, 201, JSON.stringify(res.body));
     assert.equal(res.body.title, 'docker-compose', 'no filename, so a generic title');
 
-    const idByTitle = new Map(applied.map(e => [e.title, String(e._id)]));
-    const entities = res.body.items.filter(i => i.kind === 'entity');
-    assert.equal(entities.length, 5);
-    for (const item of entities) {
-      assert.equal(item.op, 'update', `${item.proposed.title} should be an update`);
-      assert.equal(item.matchedBy, 'exact-normalized-title');
-      assert.equal(String(item.targetEntityId), idByTitle.get(item.proposed.title));
-      assert.deepEqual(item.proposed.blocks, [], `${item.proposed.title} already has every attribute this file gives it`);
+    // Every entity matched the one the first import created and gives it no
+    // attribute, tag or summary it does not already have, so applying it would write
+    // a ChangeLog row with an empty diff. Each is dropped instead of queued as a
+    // decision where accept and reject mean the same thing (lib/draftTarget.js).
+    assert.deepEqual(res.body.items.filter(i => i.kind === 'entity'), []);
+    const reasons = res.body.diagnostics.dropReasons;
+    for (const entity of applied) {
+      assert.ok(reasons.includes(`entity ${JSON.stringify(entity.title)} is already in this workspace and unchanged`),
+        `${entity.title} should be named as a drop; the reasons were ${JSON.stringify(reasons)}`);
+    }
+    assert.equal(reasons.filter(r => / is already in this workspace and unchanged$/.test(r)).length, applied.length,
+      'one drop per entity the first import created, and no more');
+    // `dropped` is the whole count while the listed reasons are capped, and a
+    // producer may report several drops as one reason, so it is only ever at
+    // least the number of items this pass took out.
+    assert.ok(res.body.counts.dropped >= applied.length, JSON.stringify(res.body.counts));
+
+    // The edges are a separate question: a group update re-asserts the roles the
+    // file names, and every member points at the entity it matched by id now
+    // that the items naming it are gone.
+    for (const item of res.body.items.filter(i => i.kind === 'relationship')) {
+      assert.equal(item.op, 'update', `${item.proposed.label} should target the group it created`);
+      assert.equal(item.matchedBy, 'same-members-and-label');
+      assert.deepEqual(item.dependsOn, [], 'nothing depends on an item that was dropped');
+      for (const m of item.proposed.members) {
+        assert.equal(m.localKey, null, `${m.name} must not name a dropped item`);
+        assert.ok(m.refId, `${m.name} carries the id of the entity in the graph`);
+      }
     }
   });
 
@@ -317,7 +338,9 @@ describe('POST /drafts/compose', () => {
     const before = await composeGraph();
     assert.equal(before.groups.length, 7);
 
-    await decideAndApply(reimport._id, 12);
+    // 7, not 12: the five entity updates were dropped as already in the graph
+    // and unchanged, so the relationship updates are the whole draft.
+    await decideAndApply(reimport._id, 7);
 
     const after = await composeGraph();
     // The same documents, not new ones beside them: ids included.
@@ -348,7 +371,7 @@ describe('POST /drafts/compose', () => {
     assert.equal(third.status, 201, JSON.stringify(third.body));
     const matched = third.body.items.filter(i => i.proposed.targetGroupId === String(widened._id));
     assert.equal(matched.length, 1, 'the widened group is still the one edge it holds');
-    await decideAndApply(third.body._id, 12);
+    await decideAndApply(third.body._id, 7);
 
     const after = await composeGraph();
     assert.equal(after.groups.length, before.groups.length, 'still one group per edge');

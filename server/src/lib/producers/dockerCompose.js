@@ -24,6 +24,7 @@
 import { parseDocument, LineCounter, visit, isAlias, isMap, isScalar, isSeq } from 'yaml';
 import { normalizeTitle, nearestTitle } from '../similarity.js';
 import { DUPLICATE_THRESHOLD, MAX_ITEMS, relationshipGroupMatcher, relationshipTarget } from '../draftNormalizer.js';
+import { entityTarget } from '../draftTarget.js';
 
 export const PRODUCER = 'docker-compose';
 export const PRODUCER_VERSION = 'docker-compose@1';
@@ -49,49 +50,6 @@ export const MAX_COMPOSE_CHARS = 60_000;
  * drops are still counted, and the count is reported as one closing line.
  */
 export const MAX_DROP_REASONS = 50;
-
-/**
- * Drop the attribute blocks an update's target already carries, re-ordering
- * what is left. Updates append, so re-importing an unchanged file must not
- * stack a second copy of every attribute onto the entity.
- *
- * Exported because a caller learns which entities the file matched only from
- * parseCompose's own output: it prunes the items it already has rather than
- * parsing the whole file a second time with the blocks filled in.
- *
- * @param {object[]} items  draft items; matched ones are mutated in place
- * @param {Map<string, object[]>} blocksById  entity id, as a string -> its blocks
- * @returns {object[]} the same items
- */
-export function pruneKnownBlocks(items, blocksById) {
-  for (const item of items) {
-    if (item.kind !== 'entity' || !item.targetEntityId) continue;
-    const existingBlocks = blocksById.get(String(item.targetEntityId));
-    if (Array.isArray(existingBlocks)) item.proposed.blocks = withoutKnownBlocks(item.proposed.blocks, existingBlocks);
-  }
-  return items;
-}
-
-/**
- * The blocks of `blocks` that `existingBlocks` does not already carry, re-ordered.
- *
- * Exported for the sibling producers, which have to prune on exactly the terms
- * `pruneKnownBlocks` prunes on — see openApi.js, whose entities carry a text
- * block (`info.description`) that a re-import must not stack either. This
- * producer emits no text blocks, so that half is a no-op here.
- */
-export function withoutKnownBlocks(blocks, existingBlocks) {
-  const attributes = new Set(existingBlocks
-    .filter(b => b.type === 'attribute')
-    .map(b => `${b.data?.label}\u0000${b.data?.value}`));
-  const texts = new Set(existingBlocks
-    .filter(b => b.type === 'text')
-    .map(b => String(b.data?.markdown ?? '').trim()));
-  return blocks
-    .filter(b => b.type !== 'attribute' || !attributes.has(`${b.data?.label}\u0000${b.data?.value}`))
-    .filter(b => b.type !== 'text' || !texts.has(String(b.data?.markdown ?? '').trim()))
-    .map((b, order) => ({ ...b, order }));
-}
 
 /**
  * Images treated as data stores, matched on the image's own name — registry,
@@ -414,15 +372,9 @@ export function parseCompose(text, { existingEntities = [], existingGroups = [],
 
     const localKey = `e${++e}`;
     const existing = existingByKey.get(key);
-    let op = 'create', targetEntityId = null, baseUpdatedAt = null, matchedBy = 'none';
-    let blocks = ent.blocks;
-    if (existing) {
-      op = 'update';
-      targetEntityId = existing._id;
-      baseUpdatedAt = existing.updatedAt ?? null;
-      matchedBy = 'exact-normalized-title';
-      if (Array.isArray(existing.blocks)) blocks = withoutKnownBlocks(blocks, existing.blocks);
-    }
+    // One shared decision for every producer, and the blocks an update's target
+    // already carries come off here when the caller has them — see lib/draftTarget.js.
+    const { op, targetEntityId, baseUpdatedAt, matchedBy, blocks } = entityTarget(existing, ent.blocks);
 
     const flags = [];
     let duplicateOf = null, duplicateScore = null;
