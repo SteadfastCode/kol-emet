@@ -13,6 +13,10 @@
  *   mechanisms are asserted below: logout closes the session's streams at once,
  *   and the keep-alive sweep closes a stream whose session has left the store
  *   by any other route (expiry, a logout on another instance, a store wiped).
+ *   A stream opened on the `BEARER_TOKEN` has no session to outlive, so what
+ *   is pinned for it is the other end (KOL-128): deleting the account its
+ *   token is bound to closes it, which is only possible because the route
+ *   records that account on the connection.
  *
  *   **One tenant must not be able to open an unbounded number.** Each
  *   connection is a held socket plus a write every 30 seconds on the single
@@ -52,6 +56,9 @@
  *   - Record a session id for the bearer path too and nothing here fails, which
  *     is why that case is a unit test instead (no session is stored for it, so
  *     the first sweep would drop such a stream).
+ *   - Record *no user* for the bearer path — `userId: bySession ? … : null`, as
+ *     the route read before KOL-128 — and the connector case fails: nothing
+ *     ties that socket to the account whose deletion has to end it.
  *
  * Deliberately not covered: the 30-second keep-alive *timer* (the sweep it runs
  * is called directly; waiting for the tick would cost the suite 30 seconds),
@@ -87,6 +94,9 @@ import * as db from '../helpers/db.js';
 import { SUITE_AUTH_LIMITS } from '../helpers/suiteLimits.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
+// One test authorizes the MCP connector as its own fixture account, which is
+// what makes a BEARER_TOKEN stream resolve to a user at all.
+import { setMcpUser } from '../../src/lib/mcpUserStore.js';
 
 // createApp() reads NODE_ENV when called and the OAuth router reads its token at
 // module load, so the environment is in place before src/app.js is imported —
@@ -98,7 +108,9 @@ process.env.SESSION_SECRET = 'test-session-secret';
 process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
 process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 // Unset on purpose: with no bearer token configured, no stray Authorization
-// header can satisfy requireAuth and open a stream with no session at all.
+// header can satisfy requireAuth and open a stream with no session at all. The
+// one test that opens a connector's stream sets it for itself and unsets it
+// again.
 delete process.env.BEARER_TOKEN;
 process.env.SEED_LOG_LEVEL ??= 'off';
 // The broadcaster narrates every connect, drop and broadcast; readable when a
@@ -189,14 +201,18 @@ function sessionIdFrom(cookie) {
  * server closed the stream, which is what several tests assert) from this
  * file's own teardown.
  */
-function openStream(label, cookie) {
+function openStream(label, cookie, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: '127.0.0.1',
       port,
       path: '/events',
       method: 'GET',
-      headers: { Cookie: cookie, Accept: 'text/event-stream' },
+      headers: {
+        ...(cookie ? { Cookie: cookie } : {}),
+        Accept: 'text/event-stream',
+        ...extraHeaders,
+      },
     });
     req.on('error', reject);
     req.on('response', (res) => {
@@ -440,6 +456,41 @@ describe('a stream does not outlive its session', () => {
 
     await waitFor(() => here.endedByServer, 'the deleting browser\'s stream to be closed');
     await waitFor(() => elsewhere.endedByServer, 'the account\'s other browser\'s stream to be closed');
+  });
+
+  test('deleting the account closes the stream its MCP token holds', async () => {
+    // KOL-128. The BEARER_TOKEN path has no session, so nothing swept this
+    // stream and — until the route recorded the account the token is bound to
+    // (`Settings.mcpUserId`, which resolveWorkspace resolves for it) — the
+    // user-keyed closer could not match it either. Being workspace-scoped it
+    // received nothing after the deletion, but it held a socket and one of the
+    // capped slots until the client hung up.
+    const owner = await registerUser('authorizes-a-connector@example.com');
+    process.env.BEARER_TOKEN = 'test-bearer-token';
+    await setMcpUser(owner.userId);
+    try {
+      const connector = await openStream('connector/stream', null, { Authorization: 'Bearer test-bearer-token' });
+      assert.equal(connector.status, 200, 'the bearer token did not open a stream');
+      await waitFor(() => framesNamed(connector, 'client:id').length === 1, 'the connector to be given a client id');
+
+      // It is a live stream in the owner's workspace first: nothing here may
+      // cost the connector the updates it connected for.
+      send('entity:created', { _id: 'e1', title: 'Iron Gate' }, owner.workspaceId);
+      await waitFor(() => framesNamed(connector, 'entity:created').length === 1,
+        'the connector to receive its workspace\'s broadcast');
+
+      const deleted = await owner.agent.delete('/auth/account').send({ email: owner.email, password: PASSWORD });
+      assert.equal(deleted.status, 204, `DELETE /auth/account failed: ${deleted.status} ${JSON.stringify(deleted.body)}`);
+
+      await waitFor(() => connector.endedByServer, 'the connector\'s stream to be closed by the deletion');
+      assert.deepEqual(framesNamed(connector, 'error').map((f) => f.data), [{ error: 'session-ended' }],
+        'the connector was not told why its stream ended');
+    } finally {
+      delete process.env.BEARER_TOKEN;
+      // The deleter clears this itself when the account it points at goes, so
+      // this is for the paths that did not get that far.
+      await setMcpUser(null);
+    }
   });
 });
 

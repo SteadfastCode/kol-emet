@@ -52,7 +52,12 @@
  *   *but its own*, so `closeStreamsForUser` takes an `exceptSessionId`: the
  *   frame it sends is `session-ended`, which the browser reads as permanent,
  *   and sending it to a session that stays signed in left that tab blind for
- *   good (KOL-112).
+ *   good (KOL-112). A bearer-authenticated stream is that question asked of a
+ *   credential that is not a session (KOL-128), so the two calls answer it
+ *   differently: `DELETE /auth/account` closes it with `includeBearer`, because
+ *   the token was bound to the account that is gone and nothing else would ever
+ *   close it, and the revocation leaves it alone, because that token still
+ *   works and `session-ended` is final.
  *
  * Fake `res` objects rather than real sockets: the function reads exactly one
  * thing off `res` (`write`), and "the socket is gone" is trivially expressible
@@ -94,6 +99,11 @@
  *     `client.sessionId !== spared` without the `spared !== null` guard and
  *     the bearer-stream case fails, because `null === null` would keep a
  *     connector's stream open on an account deletion.
+ *   - Close bearer streams whether or not `includeBearer` was passed and the
+ *     revocation case fails; skip them whatever it says and the deletion case
+ *     fails. Key the cap bucket on `userId` rather than on the credential and
+ *     the bearer-bucket case fails, because a connector would then be refused
+ *     a stream by the tabs of the account it acts for.
  *
  * Deliberately not covered: the keep-alive interval's own *timer* (the sweep it
  * runs is called directly here; asserting the 30-second tick would cost the
@@ -537,16 +547,26 @@ describe('the per-user stream cap', () => {
     });
   });
 
-  test('connections with no user share one bucket', async () => {
-    // The BEARER_TOKEN path has no user to key on. Those connections share one
-    // credential, so they share one allowance rather than being unbounded.
+  test('bearer connections share one bucket, and never the account\'s own', async () => {
+    // The BEARER_TOKEN path is one credential however many connections it
+    // opens, so those connections share one allowance rather than being
+    // unbounded. Since KOL-128 such a connection also records the account the
+    // token is bound to — so an account deletion can reach it — and that id
+    // must not become the bucket: a connector and the browsers of the account
+    // it acts for would then spend each other's slots.
     await withCap('1', () => {
       const workspaceId = uniqueWs();
-      const first = connect('bearer-1', workspaceId);
-      const second = connect('bearer-2', workspaceId);
+      const first = connect('bearer-1', workspaceId, { userId: 'u1', bearer: true });
+      const second = connect('bearer-2', workspaceId, { userId: 'u1', bearer: true });
+      const browser = connect('tab-1', workspaceId, { userId: 'u1', sessionId: 'sid-1' });
+      // A connection with no user at all — nothing resolved one — is bounded
+      // by the same bucket rather than by none.
+      const unkeyed = connect('bearer-3', workspaceId);
 
       assert.equal(first.added.accepted, true);
       assert.equal(second.added.accepted, false, 'bearer connections were counted separately, so they are unbounded');
+      assert.equal(browser.added.accepted, true, 'a connector\'s stream spent the account\'s own slot');
+      assert.equal(unkeyed.added.accepted, false, 'a connection with no user was counted in a bucket of its own');
     });
   });
 
@@ -742,19 +762,46 @@ describe('closing streams for a session or a user', () => {
       'a closed stream received a broadcast');
   });
 
-  test('a stream with no session id is closed, spared session or not', async () => {
-    // `null === null` must not read as "this is the session that asked". A
-    // stream can carry a user and no session id, and an account deletion —
-    // which spares nothing — has to reach it like every other.
-    const unsessioned = connect('tab-1', uniqueWs(), { userId: 'u1', sessionId: null });
-    assert.equal(closeStreamsForUser('u1', 'DELETE /auth/account'), 1,
-      'a stream with no session id was spared by a call that spares nothing');
-    assert.equal(unsessioned.ended, true);
+  test('an account deletion closes that account\'s bearer stream, and no session can spare it', async () => {
+    // The shape `GET /events` records for a BEARER_TOKEN caller since KOL-128:
+    // the account the token is bound to (`Settings.mcpUserId`) and no session
+    // id, because no session is stored for that path. Two rules meet here.
+    const connector = connect('mcp-1', uniqueWs(), { userId: 'u1', bearer: true });
 
-    const alongside = connect('tab-2', uniqueWs(), { userId: 'u1', sessionId: null });
-    assert.equal(closeStreamsForUser('u1', 'POST /auth/sessions/revoke-all', { exceptSessionId: 'sid-1' }), 1,
-      'a stream with no session id was spared by a call sparing a different one');
-    assert.equal(alongside.ended, true);
+    // One: a caller that did not ask for bearer streams does not get them.
+    assert.equal(closeStreamsForUser('u1', 'a caller that asked about sessions'), 0,
+      'a bearer stream was closed by a call that did not ask for one');
+    assert.equal(connector.ended, false);
+
+    // Two: `DELETE /auth/account` asks, and spares nothing — so `null === null`
+    // must not read as "this is the session that asked".
+    assert.equal(closeStreamsForUser('u1', 'DELETE /auth/account', { includeBearer: true }), 1,
+      'the deleted account\'s connector stream was spared by a call that spares nothing');
+    assert.equal(connector.ended, true);
+    assert.deepEqual(errors(connector), [{ error: 'session-ended' }],
+      'the connector was not told why its stream ended');
+  });
+
+  test('a revocation closes the revoked session\'s stream and leaves the bearer one live', async () => {
+    // `POST /auth/sessions/revoke-all` ends *sessions*; a connector holds none,
+    // and `requireAuth`'s bearer path goes on working after a revocation. The
+    // frame this would send is `session-ended`, which the client treats as
+    // final, so closing it would be the KOL-112 mistake one credential over.
+    const workspaceId = uniqueWs();
+    const connector = connect('mcp-1', workspaceId, { userId: 'u1', bearer: true });
+    const revoked = connect('tab-1', workspaceId, { userId: 'u1', sessionId: 'sid-2' });
+
+    const closed = closeStreamsForUser('u1', 'POST /auth/sessions/revoke-all', { exceptSessionId: 'sid-1' });
+
+    assert.equal(closed, 1, 'only the revoked session\'s stream should have been closed');
+    assert.equal(revoked.ended, true);
+    assert.equal(connector.ended, false, 'a session revocation closed a connector\'s stream');
+
+    // Open is not the same as live: the connector still receives this
+    // workspace's updates, which is the whole point of leaving it alone.
+    broadcast('entity:created', { _id: 'e1' }, { workspaceId });
+    assert.equal(frames(connector).filter((f) => f.event === 'entity:created').length, 1,
+      'the connector stopped receiving live updates');
   });
 
   test('an id matching nothing, or a missing one, is a no-op', () => {

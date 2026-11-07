@@ -5,8 +5,10 @@
  * clients: Map of clientId -> {
  *   res,            // the held response
  *   workspaceId,    // String; the tenancy filter every broadcast runs through
- *   userId,         // String|null; null when the caller authenticated with BEARER_TOKEN
+ *   userId,         // String|null; the account this stream acts for — the
+ *                   //   signed-in user, or the account a BEARER_TOKEN is bound to
  *   sessionId,      // String|null; the express-session id, when there is one
+ *   bearer,         // Boolean; BEARER_TOKEN authenticated it, not a session
  *   sessionAlive,   // (sessionId) => Promise<boolean>; injected, see below
  * }
  *
@@ -91,15 +93,23 @@ export function maxStreamsPerUser() {
 /**
  * The bucket a connection is counted in.
  *
- * Connections with no user — the `BEARER_TOKEN` path through `requireAuth` —
- * share one bucket, because they share one credential: a single secret handed
- * to an AI connector should not be the one way to open unlimited streams.
+ * Bearer connections — the `BEARER_TOKEN` path through `requireAuth` — share
+ * one bucket, because they share one credential: a single secret handed to an
+ * AI connector should not be the one way to open unlimited streams.
+ *
+ * Keyed by the *credential* and not by the user, because since KOL-128 such a
+ * connection does carry a user: the account its token is bound to, so that an
+ * account deletion can reach it. Were that id the key, a connector and the
+ * browsers of the account it acts for would spend each other's slots — ten open
+ * tabs would refuse the connector its first stream, and nothing on either side
+ * could say why. A connection with no user at all is counted here too: nothing
+ * resolved one, and an unkeyed connection must still be bounded by something.
  */
-const streamKey = (userId) => (userId == null ? 'bearer' : String(userId));
+const streamKey = ({ userId, bearer }) => (bearer || userId == null ? 'bearer' : String(userId));
 
 const openFor = (key) => {
   let n = 0;
-  for (const { userId } of clients.values()) if (streamKey(userId) === key) n += 1;
+  for (const client of clients.values()) if (streamKey(client) === key) n += 1;
   return n;
 };
 
@@ -111,7 +121,13 @@ const openFor = (key) => {
  * @param {import('express').Response} res
  * @param {any} workspaceId
  * @param {object} [opts]
- * @param {any}    [opts.userId]  the signed-in user, or null for a bearer caller
+ * @param {any}    [opts.userId]  the account this stream acts for: the signed-in
+ *   user, or — on the bearer path — the account the token is bound to
+ *   (`Settings.mcpUserId`), so `closeStreamsForUser` can reach it
+ * @param {boolean} [opts.bearer] true when `BEARER_TOKEN` authenticated this
+ *   connection. Recorded separately from `userId` because it decides two things
+ *   that id cannot: which cap bucket the connection counts in (see
+ *   `streamKey`), and whether a closer that is about *sessions* touches it
  * @param {string} [opts.sessionId] express-session id; null means "never sweep
  *   this connection for a missing session". A bearer-authenticated request has
  *   a `req.sessionID` but no *stored* session (saveUninitialized is false), so
@@ -121,8 +137,8 @@ const openFor = (key) => {
  *   `open` is the count for this user, after a successful add.
  */
 export function addClient(clientId, res, workspaceId, opts = {}) {
-  const { userId = null, sessionId = null, sessionAlive = null } = opts;
-  const key = streamKey(userId);
+  const { userId = null, sessionId = null, bearer = false, sessionAlive = null } = opts;
+  const key = streamKey({ userId, bearer });
   const limit = maxStreamsPerUser();
   const open = openFor(key);
 
@@ -136,6 +152,7 @@ export function addClient(clientId, res, workspaceId, opts = {}) {
     workspaceId: String(workspaceId),
     userId: userId == null ? null : String(userId),
     sessionId: sessionId == null ? null : String(sessionId),
+    bearer: Boolean(bearer),
     sessionAlive,
   });
   log('normal', `client connected (${clientId}) for ${key} in workspace ${String(workspaceId)} — ${open + 1}/${limit} for this user, ${clients.size} total`);
@@ -223,25 +240,54 @@ export function closeStreamsForSession(sessionId, reason = 'its session ended') 
  * changed, so the honest thing is to leave its streams alone — not to close
  * them and hope the reconnect is allowed.
  *
- * A client with no session id — the `BEARER_TOKEN` path — is never the spared
- * one: `null` matching `null` would silently keep a connector's stream open on
- * an account deletion.
+ * `exceptSessionId` never reaches a bearer-authenticated stream — the
+ * `BEARER_TOKEN` path records no session id, so there is no session of it to
+ * spare. The `spared !== null` guard below is what makes that true and it
+ * stays: `null` matching `null` would read as "this is the session that asked"
+ * and spare a stream nothing had asked for.
+ *
+ * Whether such a stream is closed at all is `includeBearer`, and the two
+ * callers answer differently (KOL-128). `DELETE /auth/account` passes true: the
+ * token is bound to an account too (`Settings.mcpUserId`, which the deleter
+ * clears when that account is the one going away), so once it is deleted the
+ * connector's stream is a channel to nothing, and nothing else would ever close
+ * it. Being workspace-scoped it receives nothing more either — but it holds a
+ * socket and one of the capped slots (KOL-062) until the client hangs up.
+ * `POST /auth/sessions/revoke-all` passes nothing and so closes none: that
+ * route ends *sessions*, a connector holds none, and its credential is
+ * untouched (`requireAuth`'s bearer path has nothing to revoke). Sending it
+ * `session-ended`, which this client treats as final, would be the KOL-112
+ * mistake again one credential over.
+ *
+ * Before KOL-128 a bearer stream was matched by neither call, because the route
+ * recorded no user for it: this function has always keyed on `client.userId`.
  *
  * @param {any} userId
  * @param {string} [reason] what the light tier reports per closed stream
  * @param {object} [opts]
  * @param {string} [opts.exceptSessionId] a session whose streams stay open
+ * @param {boolean} [opts.includeBearer] also close this account's
+ *   bearer-authenticated streams. Default false, the safe direction: a caller
+ *   that forgets it leaves a connector holding a socket, where the opposite
+ *   default would have it tell a live credential, permanently, to stop coming
+ *   back
  * @returns {number} how many were closed
  */
 export function closeStreamsForUser(userId, reason = 'its account was deleted', opts = {}) {
   if (userId == null) return 0;
-  const { exceptSessionId = null } = opts;
+  const { exceptSessionId = null, includeBearer = false } = opts;
   const target = String(userId);
   const spared = exceptSessionId == null ? null : String(exceptSessionId);
   let closed = 0;
   let kept = 0;
+  let keptBearer = 0;
   for (const [clientId, client] of clients) {
     if (client.userId !== target) continue;
+    if (client.bearer && !includeBearer) {
+      keptBearer += 1;
+      log('verbose', `stream ${clientId} kept open — BEARER_TOKEN authenticated it, and this call ends sessions`);
+      continue;
+    }
     if (spared !== null && client.sessionId === spared) {
       kept += 1;
       log('verbose', `stream ${clientId} kept open — its session (${spared}) is the one that asked`);
@@ -249,7 +295,7 @@ export function closeStreamsForUser(userId, reason = 'its account was deleted', 
     }
     closed += endStream(clientId, reason, { error: 'session-ended' }) ? 1 : 0;
   }
-  log('normal', `closed ${closed} stream(s) for user ${target}${spared === null ? '' : `, keeping ${kept} on session ${spared}`} — ${reason}`);
+  log('normal', `closed ${closed} stream(s) for user ${target}${spared === null ? '' : `, keeping ${kept} on session ${spared}`}${keptBearer === 0 ? '' : `, keeping ${keptBearer} bearer stream(s) (source: includeBearer was not set, and this call ends sessions)`} — ${reason}`);
   return closed;
 }
 

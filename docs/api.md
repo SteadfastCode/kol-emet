@@ -1289,10 +1289,15 @@ held open while whole entity documents are pushed down it:
   signed out; account deletion closes **every** stream of that account in the process, since the
   session store cannot be searched by user. A closed stream gets one `event: error` frame with
   `{"error":"session-ended"}` before the socket ends. Connections authenticated with `BEARER_TOKEN`
-  have no stored session and are never swept for one.
+  have no stored session and are never swept for one — but they do record the account their token is
+  bound to (`Settings.mcpUserId`), which is what lets that account's deletion close them (KOL-128).
+  Nothing else would: such a stream receives nothing more once its workspace is gone, yet holds a
+  socket and one of the capped slots until the client hangs up.
 - **`session-ended` is only ever sent to a session that really has ended.** It is final to the
   client — the tab stops reconnecting for good — so `POST /auth/sessions/revoke-all` closes the
-  account's *other* streams and leaves the calling session's open (KOL-112). It used to close those
+  account's *other* streams and leaves the calling session's open (KOL-112) — and leaves a bearer
+  connection's open as well, because that route revokes sessions and a connector holds none, so
+  nothing it did is final for that credential. It used to close those
   too and assume the browser would re-dial; nothing re-dials, so the one device the route promises
   to keep signed in was the one left with dead live sync and a toast saying it had been signed out.
 - **One user may hold at most `EVENTS_MAX_STREAMS_PER_USER` (default 10).** The next connection
