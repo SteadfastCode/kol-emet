@@ -530,7 +530,12 @@ reachable for the first time. A *pending* invite is not a membership and does no
 leave a row behind. Every model carrying `workspaceId` looks up its workspace after each insert, and
 `UserMemory` and `Conversation` look up their user. A row whose owner is gone deletes itself
 ([`lib/ownerGuard.js`](../server/src/lib/ownerGuard.js)), and the deleter sweeps again after
-deleting each owner. So neither background memory extraction nor a content request that resolved
+deleting each owner. An *insert* there means `save` of a new document, `insertMany`, or an
+**upserting `findOneAndUpdate`** — the one update that can bring a deleted row back, and since
+KOL-135 guarded like any other insert, because the only path that creates a
+[`WorkspaceInvite`](#workspaceinvite) is one. A non-upsert update stays unchecked: it cannot
+insert, so an owner lookup on it would buy nothing. `updateMany` and `bulkWrite` can upsert and are
+deliberately not hooked — no route uses one, and a route that starts to must hook it. So neither background memory extraction nor a content request that resolved
 its workspace before the deletion can leave data behind. The same guard means content cannot be
 inserted under a `workspaceId` that has no workspace behind it.
 
@@ -610,8 +615,10 @@ test between two stored primitives rather than a regex built from a request.
   accept is idempotent rather than a spent invite with no membership.
 - **Workspace-scoped data**, so it is in `WORKSPACE_SCOPED_MODELS` and carries
   [`ownerGuard`](../server/src/lib/ownerGuard.js) on `workspaceId`: invites go when their workspace
-  does, and one written after that deletes itself. Invites addressed *to* a deleted account are
-  swept by address — see [Workspace](#workspace).
+  does, and one written after that deletes itself. The guard covers the upsert above, which is the
+  only way an invite is ever created and the only upsert on a guarded model in the server — before
+  KOL-135 it hooked `save` and `insertMany` only, so this promise held for no production write.
+  Invites addressed *to* a deleted account are swept by address — see [Workspace](#workspace).
 - `invitedBy` is deliberately not required to still exist: an invite whose inviter deleted their
   account is stale, not invalid, and the workspace it points at is the authority.
 
