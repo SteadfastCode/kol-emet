@@ -19,12 +19,24 @@ router.get('/', requireAuth, (req, res) => {
   // a session id: the BEARER_TOKEN path through requireAuth has a req.sessionID
   // too, but no stored session (saveUninitialized is false), so recording it
   // would have the first sweep drop the stream as "session gone".
+  // requireAuth admits exactly two credentials, so a connection that is not
+  // session-authenticated is a bearer one.
   const bySession = Boolean(req.session?.userId);
 
-  // req.workspaceId is set by resolveWorkspace, mounted ahead of this router.
+  // req.workspaceId and req.actingUserId are both set by resolveWorkspace,
+  // mounted ahead of this router.
   const added = addClient(clientId, res, req.workspaceId, {
-    userId: bySession ? req.session.userId : null,
+    // resolveWorkspace resolved this from whichever credential authenticated the
+    // request — on the bearer path it is the account the token is bound to
+    // (Settings.mcpUserId) — so `DELETE /auth/account`'s user-keyed closer
+    // reaches a connector's stream too (KOL-128). While this was null, nothing
+    // ended that stream when the account whose workspace it watches was
+    // deleted: being workspace-scoped it received nothing afterwards, but it
+    // held a socket and one of the tenant's capped slots until the client hung
+    // up. Recording it is not recording a *session* — see the note above.
+    userId: req.actingUserId ?? null,
     sessionId: bySession ? req.sessionID : null,
+    bearer: !bySession,
     // Built by createApp from the session store, so the broadcaster needs no
     // store of its own — see app.js.
     sessionAlive: req.app.locals.sessionAlive ?? null,

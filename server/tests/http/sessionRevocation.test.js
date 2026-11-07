@@ -39,6 +39,12 @@
  *     still receiving broadcasts** (KOL-112): that frame is final to the
  *     client, so sending it to the one session this route keeps signed in left
  *     that tab blind for the rest of its life.
+ *   - A stream the **MCP bearer token** holds is left open too (KOL-128), for
+ *     the same reason the token itself keeps working: this route revokes
+ *     sessions, and a connector holds none. Since KOL-128 such a stream does
+ *     carry the account it acts for — so that an account *deletion* can close
+ *     it — which is what makes leaving it alone here a decision rather than an
+ *     accident.
  *
  * Not here, but part of the same mechanism: the two OAuth approval forms, which
  * read `req.session.userId` themselves until KOL-098 put them behind
@@ -55,7 +61,9 @@
  * bump before re-stamping and the caller is signed out when the store write
  * fails; use `requireAuth` instead of the bearer guard and the connector signs
  * every device out; drop the `exceptSessionId` the route passes
- * `closeStreamsForUser` and the calling browser loses its live stream.
+ * `closeStreamsForUser` and the calling browser loses its live stream; pass
+ * `includeBearer` there and the connector's stream is closed by a revocation
+ * that took nothing from it.
  *
  * Real stack throughout — createApp() over supertest, real registration
  * (bcrypt, Workspace, seedWorkspace), real mongod, a real `@simplewebauthn`
@@ -245,13 +253,33 @@ const liveStreams = [];
  * here, with a fake `res` standing in for the held socket.
  */
 function liveStream(clientId, session, workspaceId) {
+  return registerStream(clientId, workspaceId,
+    { userId: session.userId, sessionId: session.sid },
+    `for session ${session.sid}`);
+}
+
+/**
+ * A live stream opened on the **MCP bearer token**, as the route records one
+ * (KOL-128): the account the token is bound to (`Settings.mcpUserId`) and no
+ * session id, because that path stores no session for the keep-alive sweep to
+ * find. Which is what makes it the one stream of this account a *session*
+ * revocation must not touch.
+ */
+function bearerStream(clientId, userId, workspaceId) {
+  return registerStream(clientId, workspaceId,
+    { userId, bearer: true },
+    `on the MCP bearer token, acting as ${userId}`);
+}
+
+/** The two above, with the fake `res` that stands in for a held socket. */
+function registerStream(clientId, workspaceId, registration, what) {
   const res = { chunks: [], ended: false };
   res.write = (chunk) => { res.chunks.push(chunk); return true; };
   res.end = () => { res.ended = true; };
-  const added = addClient(clientId, res, workspaceId, { userId: session.userId, sessionId: session.sid });
+  const added = addClient(clientId, res, workspaceId, registration);
   assert.equal(added.accepted, true, `the broadcaster refused the ${clientId} fixture`);
   liveStreams.push(clientId);
-  log('normal', `opened a live /events stream (${clientId}) for session ${session.sid}`);
+  log('normal', `opened a live /events stream (${clientId}) ${what}`);
   return res;
 }
 
@@ -550,6 +578,37 @@ describe('POST /auth/sessions/revoke-all', () => {
     assert.equal(streamFrames(theirs).filter(f => f.event === 'entity:created').length, 0,
       'a closed stream received a broadcast');
     log('light', `user ${t.userId}: the revoked device's stream was closed and the caller's ${caller.chunks.length} frame(s) kept flowing (source: POST /auth/sessions/revoke-all)`);
+  });
+
+  test('leaves the connector’s live stream open — this route revoked nothing it holds', async () => {
+    // KOL-128. `GET /events` records the account a BEARER_TOKEN stream acts for,
+    // so that deleting that account can close it. This route must not: it ends
+    // *sessions*, a connector holds none, and the case above proves its token
+    // goes on working afterwards. The frame this would send is `session-ended`,
+    // which the client treats as final — so closing it would silence the
+    // connector for the life of the process, the KOL-112 mistake one credential
+    // over.
+    const t = await tenant('keeps-its-connector');
+    const other = await signIn(t, 'the device left behind');
+    const workspaceId = 'ws-revoke-bearer';
+    const connector = bearerStream('revoke-connector-stream', t.userId, workspaceId);
+    const theirs = liveStream('revoke-other-device-tab', other, workspaceId);
+
+    const res = called('POST /auth/sessions/revoke-all (with a connector stream open)', await t.agent
+      .post('/auth/sessions/revoke-all')
+      .send({ password: PASSWORD }));
+    assert.equal(res.status, 200, `revocation failed: ${res.status} ${JSON.stringify(res.body)}`);
+
+    assert.equal(theirs.ended, true, 'the revoked device kept its live stream');
+    assert.equal(connector.ended, false, 'a session revocation closed the connector\'s stream');
+    assert.equal(streamFrames(connector).filter(f => f.event === 'error').length, 0,
+      'the connector was told its session had ended, which it has none of');
+
+    // Open is not the same as live.
+    broadcast('entity:created', { entity: { _id: 'e1', title: 'After the revocation' } }, { workspaceId });
+    assert.equal(streamFrames(connector).filter(f => f.event === 'entity:created').length, 1,
+      'the connector stopped receiving live updates');
+    log('light', `user ${t.userId}: the connector's stream survived the revocation with ${connector.chunks.length} frame(s) (source: POST /auth/sessions/revoke-all, which passes no includeBearer)`);
   });
 });
 

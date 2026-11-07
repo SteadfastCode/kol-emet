@@ -875,7 +875,16 @@ router.delete('/account', requireActor, async (req, res) => {
   // (see GET /auth/me above), so a deleted account's other browsers would keep
   // receiving the workspace's entity documents until their sessions expired.
   // Those sessions do outlive the account; their push channels need not.
-  const closedStreams = closeStreamsForUser(userId, DELETE_SOURCE);
+  //
+  // `includeBearer` because the MCP token is bound to an account as well
+  // (`Settings.mcpUserId`, which the deleter above cleared if it was this one),
+  // and a stream opened on it is recorded against that account since KOL-128.
+  // After the deletion it is a channel to an account that no longer exists, and
+  // no sweep would ever close it: it carries no session for the keep-alive
+  // check to miss. The session-ended frame is honest here in a way it is not at
+  // `POST /auth/sessions/revoke-all`, which leaves the connector alone — there
+  // the token still works, here there is nothing left for it to act as.
+  const closedStreams = closeStreamsForUser(userId, DELETE_SOURCE, { includeBearer: true });
   if (closedStreams) logDeletion('light', `${DELETE_SOURCE}: closed ${closedStreams} live /events stream(s) for user ${userId} (source: lib/broadcaster.js)`);
 
   // Before destroy(), which takes req.session.cookie with it. Clearing with the
@@ -1215,6 +1224,12 @@ router.post('/sessions/revoke-all', requireActor, async (req, res) => {
     // changed: it was re-stamped above and is as good as it was a line ago. So
     // its streams are left alone rather than closed in the hope that the
     // reconnect this file used to assume would happen ever did.
+    //
+    // A connector's stream is left alone for the same reason, and without an
+    // exception to name it: this route ends sessions, a bearer caller holds
+    // none, and its token goes on working afterwards (see `requireAuth`). So
+    // `includeBearer` is not passed, and `closeStreamsForUser` skips the
+    // bearer streams this account's token has open (KOL-128).
     const closedStreams = closeStreamsForUser(userId, REVOKE_SOURCE, { exceptSessionId: req.sessionID });
 
     logSessions('light', `user ${userId}: every session issued before ${new Date(revokedAt).toISOString()} is revoked, re-authenticated with ${byPassword ? 'the password' : 'a passkey'}; session ${req.sessionID} was re-stamped, stays signed in and keeps its live /events stream(s), and ${closedStreams} other live /events stream(s) were closed (source: ${REVOKE_SOURCE})`);
