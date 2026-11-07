@@ -1,0 +1,79 @@
+{
+  "item": "KOL-127",
+  "repo": "kol-emet",
+  "mergeSha": "f114b5111f64629ef7cf25affb84a7081ec6d012",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-07T12:50:50.862Z",
+  "gradedAtUtc": "2026-11-07T13:02:03.649Z",
+  "independent": [
+    {
+      "file": "server/src/lib/draftTarget.js",
+      "line": 150,
+      "severity": "medium",
+      "summary": "Dropping an entity update discards that item's own evidence span, so the client's source-coverage pane (client/src/lib/sourceCoverage.js) reports the dropped item's quoted passage as text the generator never read. pruneAgainstTargets re-points dependents (relationship members, entry_ids, dependsOn) but nothing preserves the dropped item's own located quote; on the item's central workflow — re-generating over the same notes, where every matched entity is dropped — the pane will claim large parts of the notes were unused, which is exactly the false claim the module's own comment says the drop must not produce and the behaviour the item's verify list required ('a dropped item does not blank the source span it was located in')."
+    },
+    {
+      "file": "server/tests/unit/draftTarget.test.js",
+      "line": 137,
+      "severity": "low",
+      "summary": "The test 'a dropped item does not blank the source span it was located in' does not test that property: it passes only because the fixture's relationship quote ('Mira keeps it.') is byte-identical to the dropped entity's quote, so another surviving item happens to cover the same span. Give the entity a quote no other raw item cites (the ordinary case in real notes) and the assertion fails, so the suite gives false assurance that a drop preserves coverage."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No authentication, session, or authorization code is touched; the only request-scoping use (workspaceId in the Entity.find) is unchanged."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The redaction seam, tokens, and credential handling are untouched by the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No change to the allowance/spend accounting or provider cost paths; only post-normalization pruning was added."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change's core mechanism is discarding generated draft items (and my finding 1 shows real collateral loss from it), so flagging data-dropping is a fair read even though the cited line is only the op decision."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No model-provider or outbound HTTP call is added or altered; the added work is two local DB reads and in-memory pruning."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, migrations, deploy config, or producer-version changes in the diff."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local model reported no findings at all, missing both the coverage-span regression and the test that only appears to verify it, though its triage answers were all defensible.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.119557,
+  "numTurns": 20,
+  "durationMs": 243458,
+  "sessionId": "95c791b3-74eb-4901-b9ec-7866ec78de7f"
+}

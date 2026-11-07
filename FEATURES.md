@@ -248,6 +248,16 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-140) Dropping an entity update discards that item's own evidence span, so the client's source-coverage…**
+  Found by the grader of KOL-127 (medium, server/src/lib/draftTarget.js:150). Dropping an entity
+  update discards that item's own evidence span, so the client's source-coverage pane
+  (client/src/lib/sourceCoverage.js) reports the dropped item's quoted passage as text the
+  generator never read. pruneAgainstTargets re-points dependents (relationship members, entry_ids,
+  dependsOn) but nothing preserves the dropped item's own located quote; on the item's central
+  workflow — re-generating over the same notes, where every matched entity is dropped — the pane
+  will claim large parts of the notes were unused, which is exactly the false claim the module's
+  own comment says the drop must not produce and the behaviour the item's verify list required ('a
+  dropped item does not blank the source span it was located in').
 - [ ] **(KOL-139) A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…**
   Found by the grader of KOL-126 (medium, server/src/lib/producers/packageManifest.js:223). A
   go.mod's Service title is the last path segment with no handling of Go's semantic import
