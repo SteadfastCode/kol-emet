@@ -98,32 +98,6 @@ registration, or removes a feature.
   allowance, and until the grant question is settled `WORKSPACE_MAX_PER_OWNER` is the only thing bounding how many
   grants one account can mint — a delete route turns that ceiling into a loop.
 
-- [x] **(KOL-134) Two owners, two demotions, zero owners: the last-owner floor is read-then-write**
-  Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:348`).
-  `PATCH /workspace/members/:userId` reads the members array with `membersOf()` (:330), counts owners with
-  `ownersOf()` (:349), and then writes with a separate `Workspace.updateOne` (:359). With two owners, two concurrent
-  demotions each read two owners, each pass `ownersOf(workspace).length <= 1`, and both writes land — leaving a
-  workspace with no owner at all. `DELETE /workspace/members/:userId` has the same three steps (:378,389,397). The
-  resulting state is permanent: a role change and an invite are both `requireWorkspaceRole('owner')`, so nothing in
-  the product can create an owner in a workspace that has none, and that workspace can never again be renamed,
-  invited into or managed. The floor's own comment (:347-348) says why it exists; it just is not where the write is.
-  Build: make the invariant part of the write instead of a check in front of it. The `updateOne` filter re-asserts
-  what the read asserted — that this workspace still holds an owner who is not this member — with `$expr` over a
-  `$filter`/`$size` of `members`, so a `matchedCount` of 0 **is** the 409 `LAST_OWNER` and the second of two racing
-  demotions is the one refused. Same filter for the removal path. `ownerIdAfter` (:205) may keep reading the
-  pre-write array, since the write can no longer be the one that empties the role, but a run that leaves `ownerId`
-  pointing at a demoted owner must be asserted against rather than assumed away.
-  Files: `server/src/routes/workspace.js`, `server/tests/http/workspace.test.js` (or `invites.test.js`, wherever the
-  existing `LAST_OWNER` cases live), `docs/api.md` if the refusal's wording moves.
-  Verify: `cd server && yarn test` — a test that performs both reads before either write, then runs the two guarded
-  updates in order, and asserts the first matched one document, the second matched none, and the workspace still has
-  exactly one owner. No sleeps and no real concurrency: both reads happening before both writes *is* the race, and
-  that is expressible directly. Plus the existing single-owner refusals, the ordinary two-owner demotion, and the
-  same pair of cases for removal. `cd server && node --check src/index.js`.
-  Out of scope: a transaction or a replica-set session — `MongoMemoryServer.create()` runs standalone in these tests
-  (`server/tests/helpers/db.js:58`), so a fix that needs one cannot be verified here; the owner count on
-  `POST /auth/register` and `POST /workspaces`, which each write their single owner in one insert; and any change to
-  what `LAST_OWNER` means to a client.
 
 - [ ] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see**
   Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:241`).
@@ -295,6 +269,32 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-134) Two owners, two demotions, zero owners: the last-owner floor is read-then-write** (routine 2026-11-07, 7dbbca7)
+  Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:348`).
+  `PATCH /workspace/members/:userId` reads the members array with `membersOf()` (:330), counts owners with
+  `ownersOf()` (:349), and then writes with a separate `Workspace.updateOne` (:359). With two owners, two concurrent
+  demotions each read two owners, each pass `ownersOf(workspace).length <= 1`, and both writes land — leaving a
+  workspace with no owner at all. `DELETE /workspace/members/:userId` has the same three steps (:378,389,397). The
+  resulting state is permanent: a role change and an invite are both `requireWorkspaceRole('owner')`, so nothing in
+  the product can create an owner in a workspace that has none, and that workspace can never again be renamed,
+  invited into or managed. The floor's own comment (:347-348) says why it exists; it just is not where the write is.
+  Build: make the invariant part of the write instead of a check in front of it. The `updateOne` filter re-asserts
+  what the read asserted — that this workspace still holds an owner who is not this member — with `$expr` over a
+  `$filter`/`$size` of `members`, so a `matchedCount` of 0 **is** the 409 `LAST_OWNER` and the second of two racing
+  demotions is the one refused. Same filter for the removal path. `ownerIdAfter` (:205) may keep reading the
+  pre-write array, since the write can no longer be the one that empties the role, but a run that leaves `ownerId`
+  pointing at a demoted owner must be asserted against rather than assumed away.
+  Files: `server/src/routes/workspace.js`, `server/tests/http/workspace.test.js` (or `invites.test.js`, wherever the
+  existing `LAST_OWNER` cases live), `docs/api.md` if the refusal's wording moves.
+  Verify: `cd server && yarn test` — a test that performs both reads before either write, then runs the two guarded
+  updates in order, and asserts the first matched one document, the second matched none, and the workspace still has
+  exactly one owner. No sleeps and no real concurrency: both reads happening before both writes *is* the race, and
+  that is expressible directly. Plus the existing single-owner refusals, the ordinary two-owner demotion, and the
+  same pair of cases for removal. `cd server && node --check src/index.js`.
+  Out of scope: a transaction or a replica-set session — `MongoMemoryServer.create()` runs standalone in these tests
+  (`server/tests/helpers/db.js:58`), so a fix that needs one cannot be verified here; the owner count on
+  `POST /auth/register` and `POST /workspaces`, which each write their single owner in one insert; and any change to
+  what `LAST_OWNER` means to a client.
 - [x] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can** (routine 2026-11-07, 780fc1a)
   `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
   (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same

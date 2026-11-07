@@ -85,7 +85,7 @@
     "KOL-134": {
       "order": 5,
       "title": "Two owners, two demotions, zero owners: the last-owner floor is read-then-write",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-134",
