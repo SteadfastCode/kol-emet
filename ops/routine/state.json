@@ -82,13 +82,13 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-134": {
+    "KOL-135": {
       "order": 5,
-      "title": "Two owners, two demotions, zero owners: the last-owner floor is read-then-write",
-      "status": "done",
+      "title": "The only path that creates an invite is the one path ownerGuard cannot see",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-134",
+      "branch": "routine/item/KOL-135",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -96,30 +96,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-11-07T19:40:14.071Z",
+      "claimedAtUtc": "2026-11-07T19:57:05.349Z",
       "runId": "2026-11-07T19:26:01.784Z",
       "lastFail": null
     },
-    "KOL-135": {
-      "order": 6,
-      "title": "The only path that creates an invite is the one path ownerGuard cannot see",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-136": {
-      "order": 7,
+      "order": 6,
       "title": "Two table-level SQL declarations the schema producer reads as something they are not",
       "status": "pending",
       "attempts": 0,
@@ -137,7 +119,7 @@
       "lastFail": null
     },
     "KOL-137": {
-      "order": 8,
+      "order": 7,
       "title": "A refused Accept reports itself in another group, and a test claims a guard it never exercises",
       "status": "pending",
       "attempts": 0,
@@ -155,7 +137,7 @@
       "lastFail": null
     },
     "KOL-140": {
-      "order": 9,
+      "order": 8,
       "title": "Dropping an entity update discards that item's own evidence span, so the client's source-coverage…",
       "status": "pending",
       "attempts": 0,
@@ -173,7 +155,7 @@
       "lastFail": null
     },
     "KOL-139": {
-      "order": 10,
+      "order": 9,
       "title": "A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…",
       "status": "pending",
       "attempts": 0,
@@ -191,7 +173,7 @@
       "lastFail": null
     },
     "KOL-132": {
-      "order": 11,
+      "order": 10,
       "title": "Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…",
       "status": "pending",
       "attempts": 0,
@@ -209,7 +191,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 12,
+      "order": 11,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -227,7 +209,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 13,
+      "order": 12,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -245,7 +227,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 14,
+      "order": 13,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -263,7 +245,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 15,
+      "order": 14,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -278,6 +260,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-134": {
+      "order": null,
+      "title": "Two owners, two demotions, zero owners: the last-owner floor is read-then-write",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-134",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-07T19:40:14.071Z",
+      "runId": "2026-11-07T19:26:01.784Z",
       "lastFail": null
     },
     "KOL-128": {

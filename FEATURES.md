@@ -99,7 +99,7 @@ registration, or removes a feature.
   grants one account can mint — a delete route turns that ceiling into a loop.
 
 
-- [ ] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see**
+- [x] **(KOL-135) The only path that creates an invite is the one path ownerGuard cannot see**
   Found by the grader of KOL-124 (low, `server/src/routes/workspace.js:241`).
   `ownerGuard` hooks `post('save')` and `post('insertMany')` and nothing else
   (`server/src/lib/ownerGuard.js:107-117`), on a documented argument that covers every other write: "An update to an
