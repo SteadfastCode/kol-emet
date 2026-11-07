@@ -37,7 +37,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can**
+- [x] **(KOL-128) An account deletion cannot reach a connector's stream, and three places say it can**
   `closeStreamsForUser` returns 0 for a null id and matches on `client.userId`
   (`server/src/lib/broadcaster.js:237,244`), while `GET /events` records `userId` and `sessionId` from the same
   `bySession` flag — both or neither (`server/src/routes/events.js:22-27`). A `BEARER_TOKEN` stream therefore carries
