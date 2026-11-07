@@ -100,7 +100,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not**
+- [x] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not**
   Both found by the graders of the sql-schema items, and both reproduced against the current tree by running
   `parseSqlSchema` directly.
   First, an index whose unquoted name is a type word invents a column (`server/src/lib/producers/sqlSchema.js:366-373`,
