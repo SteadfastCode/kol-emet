@@ -1,0 +1,87 @@
+{
+  "item": "KOL-136",
+  "repo": "kol-emet",
+  "mergeSha": "c158d1e0716cfdaef0e3105632639c31de2528a7",
+  "completedAtUtc": "2026-11-07T20:18:16.258Z",
+  "completeRunId": "2026-11-07T19:26:01.784Z",
+  "reviewRunId": "2026-11-08T08:01:10.793Z",
+  "reviewedAtUtc": "2026-11-08T08:35:42.376Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 18863,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "server/src/lib/producers/sqlSchema.js"
+      ],
+      "part": null,
+      "bytes": 10346,
+      "contextBytes": 0,
+      "promptTokens": 4155,
+      "completionTokens": 156,
+      "latencyMs": 19926,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/sqlSchema.test.js"
+      ],
+      "part": null,
+      "bytes": 8517,
+      "contextBytes": 0,
+      "promptTokens": 3504,
+      "completionTokens": 151,
+      "latencyMs": 14462,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff addresses two issues in the SQL schema parsing logic. The first issue involves an index whose name is a type word, which was incorrectly interpreted as a column. The second issue involves an ALTER TABLE statement that targets a table not declared in the file, which was incorrectly marked as a key on a different table. The changes aim to fix these issues by adjusting the parsing logic for indexes and ALTER TABLE statements. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15056,
+    "completionTokens": 559
+  },
+  "latencyMs": 65285
+}

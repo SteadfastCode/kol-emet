@@ -1,0 +1,89 @@
+{
+  "item": "KOL-135",
+  "repo": "kol-emet",
+  "mergeSha": "688b190459316fc38ad76820591da024402bad48",
+  "completedAtUtc": "2026-11-07T20:04:36.540Z",
+  "completeRunId": "2026-11-07T19:26:01.784Z",
+  "reviewRunId": "2026-11-08T08:01:10.793Z",
+  "reviewedAtUtc": "2026-11-08T08:34:36.997Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 20928,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/data-model.md",
+        "server/src/lib/ownerGuard.js",
+        "server/src/models/WorkspaceInvite.js",
+        "server/tests/lib/accountDeleter.test.js"
+      ],
+      "part": null,
+      "bytes": 11326,
+      "contextBytes": 0,
+      "promptTokens": 4203,
+      "completionTokens": 122,
+      "latencyMs": 18035,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/ownerGuard.test.js"
+      ],
+      "part": null,
+      "bytes": 9602,
+      "contextBytes": 0,
+      "promptTokens": 3722,
+      "completionTokens": 112,
+      "latencyMs": 13531,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/lib/ownerGuard.js:126"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change adds a hook for `findOneAndUpdate` in `ownerGuard.js` to ensure that upsert operations are guarded against deleted owners. It also updates the test suite to include production write shapes and modifies the documentation to reflect these changes. · The change introduces a new test file `server/tests/unit/ownerGuard.test.js` to verify the behavior of the `ownerGuard` plugin. The tests cover various scenarios, including upsert operations and plain updates, ensuring that the guard correctly checks for owner existence during document creation. No real defects are identified in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15588,
+    "completionTokens": 510
+  },
+  "latencyMs": 65174
+}

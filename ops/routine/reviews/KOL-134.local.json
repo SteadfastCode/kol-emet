@@ -1,0 +1,150 @@
+{
+  "item": "KOL-134",
+  "repo": "kol-emet",
+  "mergeSha": "7dbbca7deb4a27a7a534f0eb52d3152c2648b6e8",
+  "completedAtUtc": "2026-11-07T19:55:54.757Z",
+  "completeRunId": "2026-11-07T19:26:01.784Z",
+  "reviewRunId": "2026-11-08T08:01:10.793Z",
+  "reviewedAtUtc": "2026-11-08T08:33:31.714Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 43945,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/ownerFloor.js"
+      ],
+      "part": null,
+      "bytes": 10145,
+      "contextBytes": 0,
+      "promptTokens": 3877,
+      "completionTokens": 80,
+      "latencyMs": 15078,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/workspace.js"
+      ],
+      "part": null,
+      "bytes": 11239,
+      "contextBytes": 0,
+      "promptTokens": 3982,
+      "completionTokens": 97,
+      "latencyMs": 13754,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/invites.test.js"
+      ],
+      "part": null,
+      "bytes": 9362,
+      "contextBytes": 0,
+      "promptTokens": 3585,
+      "completionTokens": 74,
+      "latencyMs": 11371,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/ownerFloor.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12766,
+      "contextBytes": 0,
+      "promptTokens": 4528,
+      "completionTokens": 72,
+      "latencyMs": 14260,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/ownerFloor.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 638,
+      "contextBytes": 3793,
+      "promptTokens": 2295,
+      "completionTokens": 172,
+      "latencyMs": 14674,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/workspace.js:359"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. The change ensures that the last-owner floor is enforced as part of the write operation, preventing concurrent demotions from leaving a workspace without an owner. · No real defects found in the provided diff. However, additional information is needed to fully understand and verify the changes. · No real defects found. However, the symbol 'anotherOwnerThan' is used in the diff but not defined or imported within the provided context. · No real defects found in the provided diff. However, additional context is needed to fully understand the behavior of `requireWorkspaceRole`. · The diff introduces a new test file `ownerFloor.test.js` to verify the behavior of owner demotion and removal. The context provides additional tests for different scenarios involving workspace members and their roles. The needs list includes symbols from `workspace.js` that are used in the test but not defined within it.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 35879,
+    "completionTokens": 1178
+  },
+  "latencyMs": 146299
+}
