@@ -1,0 +1,72 @@
+{
+  "item": "KOL-136",
+  "repo": "kol-emet",
+  "mergeSha": "c158d1e0716cfdaef0e3105632639c31de2528a7",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-13T03:21:22.421Z",
+  "gradedAtUtc": "2026-11-13T04:04:04.375Z",
+  "independent": [
+    {
+      "file": "server/tests/unit/sqlSchema.test.js",
+      "line": 492,
+      "severity": "low",
+      "summary": "The new index test only exercises the lifted type-word guard on the FULLTEXT line: the SPATIAL case uses index name `geom`, which is not in TYPE_WORDS (GEOMETRY is), so `SPATIAL KEY geom (geom)` was already read as an index before the fix. Re-introducing the guard for SPATIAL alone (e.g. `SPATIAL KEY point (p)`) would break parsing with no failing test; a type-word index name (`point`, `text`) was needed on that line to cover it."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only the SQL-schema parser, its unit tests and docs — no session, passkey, OAuth or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential handling changed; `redactSecrets` is untouched and only appears in unmodified docs context."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, pricing- or token-cost-related is in the change."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Pure parse-time resolution changes; no deletes, migrations or data-overwriting paths."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The producer is a local text parser; no outbound calls or third-party clients are involved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, changelog or deploy config changed — PRODUCER_VERSION was deliberately left at `sql-schema@1` and that decision is stated in the commit, not silently bumped."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model reported nothing and its all-\"not touched\" triage is correct, so it produced no false positives but also no signal on an otherwise well-scoped change whose only weakness is a thin SPATIAL test case.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.773509,
+  "numTurns": 20,
+  "durationMs": 246165,
+  "sessionId": "9fe4e8fd-f464-49cf-a13a-40d9bb326da3"
+}

@@ -127,6 +127,15 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-141) The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…**
+  Found by the grader of KOL-134 (medium, server/src/routes/workspace.js:344). The floor filter is
+  still applied conditionally on a stale read: `demotingAnOwner`/`removingAnOwner` (lines 344,
+  411) come from the request's own `membersOf()` read, so when a member read as `editor` is
+  concurrently promoted to `owner` while the other owner is concurrently demoted, the in-flight
+  PATCH (or DELETE) runs with no `anotherOwnerThan` in its filter, matches, and lands — leaving
+  the workspace with zero owners, the exact permanent state the item exists to prevent. Applying
+  the filter whenever the target role is not `owner` (and unconditionally on removal) closes it;
+  the write-level invariant is only as strong as the read-derived branch in front of it.
 - [ ] **(KOL-140) Dropping an entity update discards that item's own evidence span, so the client's source-coverage…**
   Found by the grader of KOL-127 (medium, server/src/lib/draftTarget.js:150). Dropping an entity
   update discards that item's own evidence span, so the client's source-coverage pane

@@ -1,0 +1,63 @@
+{
+  "item": "KOL-135",
+  "repo": "kol-emet",
+  "mergeSha": "688b190459316fc38ad76820591da024402bad48",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-13T03:21:22.421Z",
+  "gradedAtUtc": "2026-11-13T04:10:01.701Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No authentication or authorization check is modified — the diff changes a model-lifecycle guard, its comments, docs and tests, not any permission gate (the invite route itself is untouched)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env-based secrets appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, pricing- or usage-metering-related is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Right call: the new post('findOneAndUpdate') hook routes upserted rows into discardIfOwnerGone, which issues model.deleteMany — a new row-deleting path; the cited line number is a few lines off but the category judgment is correct."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP, provider SDK or third-party integration is involved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, migration or packaging change — only lib code, a model comment, tests and docs."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported nothing and, on my own cold read, there is nothing to report — the hook correctly gates on getOptions().upsert, resolves the row itself because the route passes new:false, leaves non-upsert updates unchecked, and the tests (including the new accountDeleter upsert shape, whose mock on collection.findOneAndUpdate is the method mongoose actually calls) are non-vacuous — so the clean verdict is right, and its triage was fully correct, but it offers no evidence of having verified anything.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.3709359999999995,
+  "numTurns": 29,
+  "durationMs": 357289,
+  "sessionId": "5bed33d3-b2f0-411e-911f-3783a52343c2"
+}

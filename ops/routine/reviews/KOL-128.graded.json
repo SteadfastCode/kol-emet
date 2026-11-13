@@ -1,0 +1,63 @@
+{
+  "item": "KOL-128",
+  "repo": "kol-emet",
+  "mergeSha": "780fc1a67a71f4f2313cb6d08c99c197afe5cf13",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-13T03:21:22.421Z",
+  "gradedAtUtc": "2026-11-13T04:17:31.736Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change edits `GET /events` credential recording, `requireAuth`'s two auth paths' consequences, `DELETE /auth/account` and `POST /auth/sessions/revoke-all` — squarely auth."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret storage, logging or config handling changes; the only token literal is a test fixture value for `BEARER_TOKEN`."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, quota-cost- or payment-related is touched."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "It broadens what the account-deletion path tears down (bearer streams now closed via `includeBearer: true`), so the destructive path is genuinely touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are involved; everything is in-process stream bookkeeping."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, migration, deploy config or dependency change — only source, tests and docs."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no findings, which matches my own cold read — the `bearer` flag, the `includeBearer` default-off closer, the corrected docstring/Decision Log and the rewritten tests are consistent with `resolveWorkspace`'s `actingUserId` and the two real callers — and its triage is correct on all six keys.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.965983,
+  "numTurns": 21,
+  "durationMs": 212529,
+  "sessionId": "81f20c24-0c69-4714-a16d-26655728b0a6"
+}
