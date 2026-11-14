@@ -1,0 +1,116 @@
+{
+  "item": "KOL-138",
+  "repo": "kol-emet",
+  "mergeSha": "4dc202985735dfc3ff14dc95ae23580cea5d21d9",
+  "completedAtUtc": "2026-11-14T05:11:12.062Z",
+  "completeRunId": "2026-11-14T04:56:43.110Z",
+  "reviewRunId": "2026-11-14T08:01:47.593Z",
+  "reviewedAtUtc": "2026-11-14T08:03:22.177Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 19580,
+  "contextFiles": 0,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 2048,
+      "contextBytes": 0,
+      "promptTokens": 1419,
+      "completionTokens": 80,
+      "latencyMs": 26520,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13849,
+      "contextBytes": 0,
+      "promptTokens": 4518,
+      "completionTokens": 145,
+      "latencyMs": 16828,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 3948,
+      "contextBytes": 0,
+      "promptTokens": 1963,
+      "completionTokens": 211,
+      "latencyMs": 14467,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/mcp.js:83"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds a new workqueue item to FEATURES.md, but the `<orchestrator>` path is not defined in the provided diff. It needs to be read from the runbook. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · The diff introduces a new feature to cap the size of log records written by unauthenticated callers. The changes are primarily in `mcpFailure.js` and related test files. However, without seeing the implementation details of the functions and variables mentioned in the needs list, it is not possible to fully verify the correctness of the changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15407,
+    "completionTokens": 824
+  },
+  "latencyMs": 93222
+}
