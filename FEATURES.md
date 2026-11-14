@@ -125,6 +125,22 @@ registration, or removes a feature.
   Out of scope: the server's refusal codes and `collaboratorMessage`'s copy, the toast a successful accept raises,
   and any rework of the settings panel's layout.
 
+- [ ] **(KOL-147) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-21]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 ## Proposed
 
 - [ ] **(KOL-141) The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…**
@@ -165,6 +181,172 @@ registration, or removes a feature.
   `template: null` creates — ~10x the intended paid-provider spend per account. The cap's
   rationale in the route and the Decision Log weighs only the DB cost of a seed, and neither the
   route nor `createWorkspace()` zeroes or shares the grant.
+
+- [ ] **(KOL-142) The one block type anything can write and nothing can show: a gallery holds image URLs** [proposed]
+  `gallery` has been in `BLOCK_TYPES` (`server/src/models/Entity.js:6`) since the block migration, and every write
+  path takes it: `validateBlocks` checks the type, a numeric `order` and that `data` is an object, and nothing about
+  its shape (`server/src/routes/entities.js:40-48`, mirrored in `server/src/lib/draftApplier.js:50-60` and
+  `server/src/lib/graphImporter.js:330`), `GET /export` round-trips it, and the MCP tools declare
+  `data: z.record(z.unknown())` (`server/src/routes/mcp.js:100-105`) — so the Claude.ai connector can write one too.
+  The editor offers "Gallery" in its block menu and seeds `{ images: [] }`
+  (`client/src/components/EntityEditor.vue:166,173`). What a reader gets is the whole of `GalleryBlock.vue`: a dashed
+  box reading "Image hosting coming soon." A gallery block can therefore be created, generated, exported and
+  re-imported today and never be seen by anyone — the one place in the product where a write is accepted and has no
+  reader at all. It is the open half of roadmap Phase 5 and of the `docs/wishlist.md` gallery line.
+  Build the half that needs no storage credential and no bill: a gallery holds images the user already has somewhere.
+  `data.images` becomes `[{ url, caption }]` — `url` required, `http:`/`https:` only (parsed with `new URL`, never
+  matched with a regex), length-capped; `caption` optional and capped; the array capped per block. Validate it in a
+  `blockDataError(block)` exported beside `BLOCK_TYPES` in `models/Entity.js` and called from the three validators
+  that already exist, rather than merging them: Generator v1's refusal to extract shared write helpers out of the
+  write path stands, and this adds a leaf to it instead. `GalleryBlock.vue` renders the images with their captions,
+  `loading="lazy"`, a caption-derived `alt`, and `referrerpolicy="no-referrer"` — a wiki must not tell a third-party
+  host which workspace is reading it. An image that fails to load says so and names its host instead of leaving a
+  broken glyph, because a URL someone pasted can die. The editor's gallery case becomes add/remove rows of URL +
+  caption, and an empty gallery reads as an empty block instead of a promise.
+  Files: `server/src/models/Entity.js`, `server/src/routes/entities.js`, `server/src/lib/draftApplier.js`,
+  `server/src/lib/graphImporter.js`, `client/src/components/blocks/GalleryBlock.vue`,
+  `client/src/components/EntityEditor.vue`, a new `server/tests/http/galleryBlock.test.js`, a new
+  `client/src/components/blocks/GalleryBlock.test.js`, `client/src/components/EntityEditor.test.js`,
+  `docs/data-model.md` (the block shapes), `docs/wishlist.md`, `docs/roadmap.md` (the Phase 5 line), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a gallery of two `{url, caption}` images accepted by
+  `POST /entities` and read back unchanged; a `javascript:` and a `data:` url refused with a message naming the
+  block; a non-array `images` refused; a legacy `{ images: [] }` block still accepted on update, so no existing
+  entity becomes unsaveable; the same refusals applying to `POST /import` and to a generated item the applier writes,
+  so no path is a side door; and an entity exported and re-imported keeping its images.
+  `cd client && yarn test --run` with cases for: images rendered with their captions and `referrerpolicy`; a failed
+  load showing the per-image message; an empty gallery showing the empty state and not "coming soon"; and the editor
+  adding and removing a row. `cd client && yarn build`.
+  Out of scope: uploads and hosting of any kind (that is the half needing a storage credential), image proxying or
+  caching, drag-to-reorder inside a gallery, a lightbox, and any CSP change — name the `img-src` consequence in the
+  PR rather than shipping a header.
+
+- [ ] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would** [proposed]
+  Two residuals of KOL-118 ("in a cluster a name is not unique"), both found by its grader and both reproduced
+  against the current tree by calling `parseKubernetes` directly.
+  First, `configMaps` is keyed by bare `metadata.name` (`server/src/lib/producers/kubernetes.js:343,371`) while every
+  other identity in that file is a `(name, namespace)` pair — so two same-named ConfigMaps in one stream overwrite
+  each other and the last document silently wins. A stream with `app-env` in `prod`
+  (`CACHE_URL: redis://prod-cache:6379`), the same name in `staging` (`redis://staging-cache:6379`) and a Deployment
+  `api` in `prod` whose `envFrom.configMapRef` names `app-env` proposes `Calls: api → staging-cache`: an edge built
+  out of env that is not in that pod, from a ConfigMap `api` cannot read (`envEntries`, `:756-759`). A `configMapRef`
+  carries no namespace field in Kubernetes precisely because it always means the pod's own namespace, so the lookup
+  has exactly one correct answer and this one takes the other.
+  Second, `readIn`'s `perNamespace.size === 1` fallback (`:847`) resolves a BARE host across a namespace boundary:
+  `api` in `prod` with `redis://cache:6379` gets `Calls: api → cache` when the only `cache` is in `infra`, which
+  `cache.prod.svc.cluster.local` would never reach. The justifying comment ("so a file whose manifests are vague
+  about namespaces still resolves the way it always did") does not describe what it does — a single-namespace file is
+  already answered by the preceding `perNamespace.has(readerNamespace)` branch (`:844`), so the fallback fires only
+  when reader and target are in different namespaces — and it contradicts the ≥2-candidate case beside it, which
+  refuses and reports its candidates.
+  Build: key `configMaps` by name *and* namespace, and look one up with the reading workload's namespace, dropping an
+  `envFrom` whose ConfigMap is not in that namespace with a reason naming both. For the host, the lenient
+  one-candidate read stays on the cluster-suffix path alone — `postgres.prod.svc.cluster.local` says in-cluster and
+  may name a namespace no document in the file declares, which is the case that comment was written for — while a
+  bare host resolves only within the reader's own namespace. Both skips are drop reasons, not silence.
+  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js`,
+  `server/tests/fixtures/kubernetes.yaml` only if a case needs it, `docs/api.md` (the `/drafts/kubernetes` contract).
+  Verify: `cd server && yarn test` with cases for: the two `app-env` ConfigMaps above giving `api` the `prod` values
+  and no edge to `staging-cache`; a workload whose `envFrom` names a ConfigMap that exists only in another namespace
+  getting a drop reason and no edge; a bare `redis://cache:6379` read from `prod` with the only `cache` in `infra`
+  proposing no edge; the same host still resolving when `cache` is in `prod`; `redis://cache.infra.svc.cluster.local`
+  read from `prod` still resolving to the `infra` one; and the committed fixture's output unchanged.
+  `cd server && node --check src/index.js`.
+  Out of scope: `envFrom.secretRef` (a Secret names no host, and the redactor owns it), cross-namespace Services,
+  `NetworkPolicy`, and a `PRODUCER_VERSION` bump — say in the PR whether a resolution fix is one.
+
+- [ ] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped** [proposed]
+  The third residual of KOL-118, found by its grader and reproduced against the current tree. `titleFor`
+  (`server/src/lib/producers/kubernetes.js:326-328`) qualifies a name appearing in two namespaces as
+  `name.namespace`, and `normalizeTitle` (`server/src/lib/similarity.js:79-86`) strips every non-word character
+  before anything is compared — so `cache.prod` and `cache-prod` both normalize to `cacheprod`. Two consequences,
+  both observed by running the producer. Within one file, a stream holding `cache` in `prod`, `cache` in `team-b` and
+  an unrelated workload named `cache-prod` proposes `cache.prod` and `cache.team-b` and drops the third with the
+  reason `duplicate entity "cache-prod" within the same file`: a real object in the stream discarded as a copy of a
+  title the producer itself invented. And against the workspace, the same stream with an existing entity titled
+  `cache-prod` on the roster proposes `cache.prod` as an `op: 'update'` of it, `matchedBy:
+  'exact-normalized-title'` — an update aimed at an unrelated entity, the one dedup outcome a reviewer is least
+  likely to question, because the item reads as a routine re-import.
+  Build: qualify with a form no Kubernetes name can collide with. A `metadata.name` is an RFC 1123 label — lower-case
+  letters, digits and `-` — so it can never contain a space, and `cache (prod)` normalizes to `cache prod`, which no
+  legal name can reach, while `cache.prod`, `cache_prod` and `cache-prod` all collapse together. Change `titleFor`
+  alone: `normalizeTitle` is the dedup key for every producer and for the generator, and widening it to keep
+  separators would move the matching of every workspace, which this item does not touch. The titles of unresolved
+  external hosts stay verbatim — `cache.prod` as an External Dependency title is the user's own text, not a qualifier
+  this producer added — and the `Namespace` attribute block stays as it is.
+  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js` (existing cases assert the
+  `cache.prod` / `cache.team-b` titles and the edge endpoints built from them),
+  `server/tests/http/kubernetesDraft.test.js` if it names one, `docs/api.md` (the `/drafts/kubernetes` title rule).
+  Verify: `cd server && yarn test` with cases for: the three-workload stream above proposing three entities and
+  dropping none; the qualified title not matching a roster `cache-prod`, so the import proposes a create; a
+  single-namespace file still titling its objects bare; the `Namespace` attribute still naming the namespace; an
+  unresolved `redis://cache.prod:6379` still titling its External Dependency `cache.prod`; and edges naming their
+  endpoints by the new title. `cd server && node --check src/index.js`.
+  Out of scope: `normalizeTitle` itself and the dedup contract it defines, the title format of the other four
+  producers, re-titling anything already imported, and the `PRODUCER_VERSION` question — decide it in the PR.
+
+- [ ] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised** [proposed]
+  Two findings of the KOL-126 grader in the newest producer, both reproduced by calling `parseManifest` — one on the
+  suite's own fixture, one on a crafted file.
+  First, PEP 621 build requirements are dropped in silence. `readPyproject`
+  (`server/src/lib/producers/packageManifest.js:849-930`) reads `project.dependencies`, Poetry's table, Poetry's
+  groups and `project.optional-dependencies`, and never looks at `[build-system].requires` — while the exactly
+  analogous Cargo `[build-dependencies]` is reported and counted (`:1014-1021`). The producer's own rule is that
+  what it does not propose is dropped *with a reason*, "so a reviewer who expected to see `jest` can find out where
+  it went". Run against `server/tests/fixtures/manifest-pyproject.toml`, which declares `requires = ["hatchling"]`,
+  the result carries two drop reasons — the `dev` and `docs` extras — and no mention of `hatchling` anywhere, and
+  `dropped` does not count it.
+  Second, the hand-written TOML reader recurses once per nested array or inline table with no depth bound
+  (`readValue`, `:664-695`), so a file `detectFamily` accepts as TOML — `[package]`, a `name`, then `x = ` followed
+  by 20,000 `[` — overflows the stack. The resulting `RangeError` is not a `ManifestParseError`, so
+  `fileProducerRoute`'s catch falls through to `next(err)` (`server/src/routes/drafts.js:461-465`) and an
+  authenticated caller gets a 500 where the route promises a 400 naming the line, for a file well inside
+  `MAX_MANIFEST_CHARS` (60,000). The stack unwinds, so this is a wrong answer rather than a dead process — which is
+  also why no test noticed.
+  Build: read `[build-system].requires` as a drop with a reason in the same voice as the Cargo one (a build backend
+  is not part of what the module runs), counted in `dropped`. Bound the reader's nesting with a named constant and a
+  `fail()` at the offending offset, so an over-nested file gets the 400-with-a-line the route documents; the depth a
+  real manifest needs is a handful, so a low ceiling costs nothing.
+  Files: `server/src/lib/producers/packageManifest.js`, `server/tests/unit/packageManifest.test.js`,
+  `server/tests/http/manifestDraft.test.js`, `docs/api.md` (the `/drafts/manifest` drop rules).
+  Verify: `cd server && yarn test` with cases for: the committed pyproject fixture naming `hatchling` in a drop
+  reason and counting it, its other reasons unchanged; a pyproject with no `[build-system]` adding no reason; a
+  Poetry project's own `[build-system]` (every Poetry project has one) reported the same way; nesting past the
+  ceiling raising `ManifestParseError` with a line, and `POST /drafts/manifest` answering 400 for that file rather
+  than 500; a legitimately nested value — an inline table inside an array, as a Cargo dependency is written — still
+  parsing; and the other three families' fixture output unchanged. `cd server && node --check src/index.js`.
+  Out of scope: PEP 735 `[dependency-groups]` and `[tool.uv]`, proposing a build backend as an entity rather than as
+  a drop reason, replacing the hand-written TOML reader or taking a dependency on one, and `MAX_MANIFEST_CHARS`.
+
+- [ ] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time** [proposed]
+  Found by the grader of KOL-047. `mcpLogRecord` (`server/src/lib/mcpFailure.js:152-171`) writes three
+  caller-controlled values into every refusal record with no cap: `requestId` is `body.id` verbatim through
+  `rpcView` (`:136-147`), and `caller.ua` / `caller.client` are the `user-agent` header and
+  `params.clientInfo.name`/`version` (`callerView`, `:121-130`). `shortSession` truncates the session id (`:114`)
+  and nothing truncates these. The record goes out at the `light` tier — the tier a deployment actually runs — and on
+  `/mcp` the bearer gate refuses *with* it (`server/src/routes/mcp.js:83-95`), before any credential has been
+  accepted; `/bridge/mcp` has the same shape. The app parses bodies with `express.json()` at its default ~100KB
+  (`server/src/app.js:80`), so an unauthenticated `POST /mcp` carrying `{"id": "<~100KB of chosen text>"}` writes
+  that text into the log on every request, where the old 401 path printed one fixed line. `body.id` need not be a
+  string either: an object or an array is stringified into the record whole, so the module header's "one line,
+  parseable" promise is the caller's to break.
+  Build: cap all three where the record is built, not at its call sites. `requestId` keeps a string or a number up to
+  a short ceiling and becomes a type name otherwise — a JSON-RPC id is an id, and one too long to be an id has
+  earned no more of the log than that; `ua` and `client` truncate to their own ceilings. Every truncation is marked
+  in the record (an explicit marker, the way `shortSession` already appends one) so an operator can tell a value
+  that was cut from one the caller sent short. `mcpFailure.js` has no test of its own today; this adds its first.
+  Files: `server/src/lib/mcpFailure.js`, a new `server/tests/unit/mcpFailure.test.js`,
+  `server/tests/http/mcp.test.js` and `server/tests/http/bridge.test.js` for one end-to-end each,
+  `docs/architecture.md` (the refusal-record paragraph).
+  Verify: `cd server && yarn test` with cases for: a 100,000-character `id` producing a record under a stated size
+  with its marker; a short id unchanged; an object and an array `id` recorded as a type name; a long `user-agent`
+  and a long `clientInfo.name` truncated; the record still parsing as one JSON line in every case; the JSON-RPC
+  *response* body unchanged, since the cap is on the record and not on what the client is answered; and an
+  unauthenticated `POST /mcp` with a long id still answering 401 with the record capped.
+  `cd server && node --check src/index.js`.
+  Out of scope: a rate limit on refused MCP requests, the `verbose` tier's payload logging (opt-in, and the payload
+  is the point of it), log shipping or retention, and the tier the bridge's session-mismatch record is emitted at —
+  a separate finding of the same grader.
+
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their
