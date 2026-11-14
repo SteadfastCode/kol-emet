@@ -38,21 +38,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-138) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-11]
-  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
-  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
-  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
-  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
-  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
-  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
-  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
-  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
-  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
-  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
-  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
-  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
-  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
-  for `diff-policy`).
 
 - [ ] **(KOL-133) Delete a workspace: the one tenancy verb the product has never had** (needs KOL-132)
   `docs/roadmap.md:111` names it among what is still open after invites — "deleting a workspace, seat billing and
@@ -395,6 +380,21 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-138) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-11] (routine 2026-11-14, 4dc2029)
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
 - [x] **(KOL-136) Two table-level SQL declarations the schema producer reads as something they are not** (routine 2026-11-07, c158d1e)
   Both found by the graders of the sql-schema items, and both reproduced against the current tree by running
   `parseSqlSchema` directly.
