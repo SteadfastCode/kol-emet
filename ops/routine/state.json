@@ -47,10 +47,10 @@
     "KOL-138": {
       "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-138",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -58,8 +58,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": "2026-11-11",
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-14T04:57:24.003Z",
+      "runId": "2026-11-14T04:56:43.110Z",
       "lastFail": null
     },
     "KOL-133": {
