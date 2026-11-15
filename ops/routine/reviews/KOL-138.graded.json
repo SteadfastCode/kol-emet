@@ -1,0 +1,63 @@
+{
+  "item": "KOL-138",
+  "repo": "kol-emet",
+  "mergeSha": "4dc202985735dfc3ff14dc95ae23580cea5d21d9",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-15T06:50:53.185Z",
+  "gradedAtUtc": "2026-11-15T06:55:13.561Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The change touches only FEATURES.md backlog prose; `server/src/routes/mcp.js` is not modified at all, so citing its bearer gate as evidence of an auth-touching change is wrong."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret handling, env var, or credential code is changed — token names appear only inside pre-existing or newly added descriptive prose."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, quota, or provider-spend code is changed; 'paid generator run' appears only as prose in the renewed item's text."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff is purely additive to a markdown file — no deletions, migrations, or data-removing code."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound call, client, or third-party integration is added or altered."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, deploy config, workflow, or packaging file is touched — FEATURES.md is a backlog document."
+    }
+  ],
+  "missed": [],
+  "summary": "Reporting no defects was the right call — the filing uses the correct next free ids (142–147, none reused), tags all five items `[proposed]`, renews with a verbatim block copy dated commit-day+7, touches only FEATURES.md, and all five candidates verify as genuinely unbuilt in the current tree (gallery placeholder, bare-name `configMaps` key, `titleFor`/`normalizeTitle` collision, unread `[build-system].requires` plus unbounded `readValue` recursion, uncapped `mcpLogRecord` fields) — but the local review's lone substantive claim, that auth is touched, is false.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.1124794999999998,
+  "numTurns": 21,
+  "durationMs": 125131,
+  "sessionId": "aca21734-dee5-451f-8c7d-1bbe0f55c4a5"
+}
