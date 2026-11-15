@@ -44,26 +44,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-138": {
-      "order": 3,
-      "title": "Backlog audit: file new candidates under Proposed",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-138",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": "2026-11-11",
-      "claimedAtUtc": "2026-11-14T04:57:24.003Z",
-      "runId": "2026-11-14T04:56:43.110Z",
-      "lastFail": null
-    },
     "KOL-133": {
-      "order": 4,
+      "order": 3,
       "title": "Delete a workspace: the one tenancy verb the product has never had",
       "status": "pending",
       "attempts": 0,
@@ -83,12 +65,12 @@
       "lastFail": null
     },
     "KOL-137": {
-      "order": 5,
+      "order": 4,
       "title": "A refused Accept reports itself in another group, and a test claims a guard it never exercises",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-137",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -96,12 +78,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-15T16:26:25.323Z",
+      "runId": "2026-11-15T16:25:45.636Z",
       "lastFail": null
     },
     "KOL-147": {
-      "order": 6,
+      "order": 5,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -119,7 +101,7 @@
       "lastFail": null
     },
     "KOL-141": {
-      "order": 7,
+      "order": 6,
       "title": "The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…",
       "status": "pending",
       "attempts": 0,
@@ -137,7 +119,7 @@
       "lastFail": null
     },
     "KOL-140": {
-      "order": 8,
+      "order": 7,
       "title": "Dropping an entity update discards that item's own evidence span, so the client's source-coverage…",
       "status": "pending",
       "attempts": 0,
@@ -155,7 +137,7 @@
       "lastFail": null
     },
     "KOL-139": {
-      "order": 9,
+      "order": 8,
       "title": "A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…",
       "status": "pending",
       "attempts": 0,
@@ -173,7 +155,7 @@
       "lastFail": null
     },
     "KOL-132": {
-      "order": 10,
+      "order": 9,
       "title": "Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…",
       "status": "pending",
       "attempts": 0,
@@ -191,7 +173,7 @@
       "lastFail": null
     },
     "KOL-142": {
-      "order": 11,
+      "order": 10,
       "title": "The one block type anything can write and nothing can show: a gallery holds image URLs",
       "status": "pending",
       "attempts": 0,
@@ -209,7 +191,7 @@
       "lastFail": null
     },
     "KOL-143": {
-      "order": 12,
+      "order": 11,
       "title": "Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would",
       "status": "pending",
       "attempts": 0,
@@ -227,7 +209,7 @@
       "lastFail": null
     },
     "KOL-144": {
-      "order": 13,
+      "order": 12,
       "title": "A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped",
       "status": "pending",
       "attempts": 0,
@@ -245,7 +227,7 @@
       "lastFail": null
     },
     "KOL-145": {
-      "order": 14,
+      "order": 13,
       "title": "A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised",
       "status": "pending",
       "attempts": 0,
@@ -263,7 +245,7 @@
       "lastFail": null
     },
     "KOL-146": {
-      "order": 15,
+      "order": 14,
       "title": "An unauthenticated caller chooses what the deployed log says, 100KB at a time",
       "status": "pending",
       "attempts": 0,
@@ -281,7 +263,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 16,
+      "order": 15,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -299,7 +281,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 17,
+      "order": 16,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -317,7 +299,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 18,
+      "order": 17,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -335,7 +317,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 19,
+      "order": 18,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -350,6 +332,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-138": {
+      "order": null,
+      "title": "Backlog audit: file new candidates under Proposed",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-138",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": "2026-11-11",
+      "claimedAtUtc": "2026-11-14T04:57:24.003Z",
+      "runId": "2026-11-14T04:56:43.110Z",
       "lastFail": null
     },
     "KOL-136": {

@@ -86,7 +86,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises**
+- [x] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises**
   Two client findings from the graders of KOL-124 and KOL-123, in the same component and its test file.
   `acceptMyInvite` and `declineMyInvite` write their refusal into `collabError`
   (`client/src/components/WikiLayout.vue:1073,1087`), which is rendered in exactly one place: inside the Collaborators
