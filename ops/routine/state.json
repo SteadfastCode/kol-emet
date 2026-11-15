@@ -67,7 +67,7 @@
     "KOL-137": {
       "order": 4,
       "title": "A refused Accept reports itself in another group, and a test claims a guard it never exercises",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-137",

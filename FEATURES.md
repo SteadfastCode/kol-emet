@@ -86,29 +86,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises**
-  Two client findings from the graders of KOL-124 and KOL-123, in the same component and its test file.
-  `acceptMyInvite` and `declineMyInvite` write their refusal into `collabError`
-  (`client/src/components/WikiLayout.vue:1073,1087`), which is rendered in exactly one place: inside the Collaborators
-  group (:297). The buttons that produce it are in "Invitations for you" (:218-226), the group above, which has no
-  error line of its own — and both handlers reload in `finally` (:1076,1090), so a failed Accept (a 404 because the
-  workspace was deleted meanwhile) prints its message in a different group further down the panel while the row it
-  was about vanishes, since the group is `v-if="myInvites.length"`. Every other group in that panel says its refusal
-  next to the control that caused it, which is the stated contract.
-  `WikiLayout.test.js:644-651`, titled "sends nothing without a name, and nothing twice", submits once: it asserts the
-  blank-name refusal and the disabled button and never submits twice, so the `workspaceCreating` re-entry guard
-  (`WikiLayout.vue:871,874`) is unasserted under a title that claims it (grader of KOL-123, low).
-  Build: an `inviteError` ref beside `collabError`, rendered inside the invitations group, written by the two
-  handlers that live there and cleared on success — and the group kept mounted while it has a message to show, so a
-  reload that empties `myInvites` cannot take the explanation with it. Then give the test the second submit it
-  claims: fire submit twice without awaiting the first and assert `createWorkspace` was called once.
-  Files: `client/src/components/WikiLayout.vue`, `client/src/components/WikiLayout.test.js`.
-  Verify: `cd client && yarn test --run` with cases for: a rejected `acceptInvite` rendering its message inside the
-  invitations group and not in the Collaborators group; the same for `declineInvite`; the message surviving a reload
-  that returns no invites; a successful accept clearing it and leaving no empty group behind; and the double submit
-  calling `createWorkspace` exactly once. `cd client && yarn build`.
-  Out of scope: the server's refusal codes and `collaboratorMessage`'s copy, the toast a successful accept raises,
-  and any rework of the settings panel's layout.
 
 - [ ] **(KOL-147) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-21]
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
@@ -380,6 +357,29 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises** (routine 2026-11-15, df0250d)
+  Two client findings from the graders of KOL-124 and KOL-123, in the same component and its test file.
+  `acceptMyInvite` and `declineMyInvite` write their refusal into `collabError`
+  (`client/src/components/WikiLayout.vue:1073,1087`), which is rendered in exactly one place: inside the Collaborators
+  group (:297). The buttons that produce it are in "Invitations for you" (:218-226), the group above, which has no
+  error line of its own — and both handlers reload in `finally` (:1076,1090), so a failed Accept (a 404 because the
+  workspace was deleted meanwhile) prints its message in a different group further down the panel while the row it
+  was about vanishes, since the group is `v-if="myInvites.length"`. Every other group in that panel says its refusal
+  next to the control that caused it, which is the stated contract.
+  `WikiLayout.test.js:644-651`, titled "sends nothing without a name, and nothing twice", submits once: it asserts the
+  blank-name refusal and the disabled button and never submits twice, so the `workspaceCreating` re-entry guard
+  (`WikiLayout.vue:871,874`) is unasserted under a title that claims it (grader of KOL-123, low).
+  Build: an `inviteError` ref beside `collabError`, rendered inside the invitations group, written by the two
+  handlers that live there and cleared on success — and the group kept mounted while it has a message to show, so a
+  reload that empties `myInvites` cannot take the explanation with it. Then give the test the second submit it
+  claims: fire submit twice without awaiting the first and assert `createWorkspace` was called once.
+  Files: `client/src/components/WikiLayout.vue`, `client/src/components/WikiLayout.test.js`.
+  Verify: `cd client && yarn test --run` with cases for: a rejected `acceptInvite` rendering its message inside the
+  invitations group and not in the Collaborators group; the same for `declineInvite`; the message surviving a reload
+  that returns no invites; a successful accept clearing it and leaving no empty group behind; and the double submit
+  calling `createWorkspace` exactly once. `cd client && yarn build`.
+  Out of scope: the server's refusal codes and `collaboratorMessage`'s copy, the toast a successful accept raises,
+  and any rework of the settings panel's layout.
 - [x] **(KOL-138) Backlog audit: file new candidates under Proposed** [not-before: 2026-11-11] (routine 2026-11-14, 4dc2029)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
