@@ -214,8 +214,12 @@
         </div>
         <!-- Invitations waiting for this account (KOL-124). Above the collaborator list because
              it is about a workspace you are not in yet — and because nothing delivers an invite,
-             this is the only place one is ever seen. Hidden when there are none. -->
-        <div v-if="myInvites.length" class="settings-group">
+             this is the only place one is ever seen. Hidden when there are none and there is
+             nothing to say about them: a refusal from Accept or Decline is said here, next to the
+             button that caused it (KOL-137), and both handlers re-read the list in `finally`, so
+             the group stays mounted while it holds a message — otherwise a failed Accept on the
+             last invitation would take its own explanation off the screen along with the row. -->
+        <div v-if="myInvites.length || inviteError" class="settings-group">
           <div class="settings-group-title">Invitations for you</div>
           <div v-for="invite in myInvites" :key="invite._id" class="invite-row">
             <span class="invite-label">
@@ -225,10 +229,11 @@
             <button class="btn-sm" :disabled="inviteBusy" @click="acceptMyInvite(invite)">Accept</button>
             <button class="btn-sm" :disabled="inviteBusy" @click="declineMyInvite(invite)">Decline</button>
           </div>
-          <p class="settings-note">
+          <p v-if="myInvites.length" class="settings-note">
             Accepting adds the workspace to “Acting in” above; this tab stays where it is until you
             switch to it. Declining removes the invitation and does not tell whoever sent it.
           </p>
+          <p v-if="inviteError" class="settings-error" role="alert">{{ inviteError }}</p>
         </div>
         <!-- Collaborators (KOL-124): who is in this workspace, and the owner's invite form. The
              list is shown to every member — working together means knowing who with — while every
@@ -723,6 +728,9 @@ const workspaceRenameReady = computed(() => {
 
 async function loadWorkspace() {
   workspaceError.value = '';
+  // A fresh open starts with nothing to explain: the invitations group is kept mounted by its own
+  // message (KOL-137), and a refusal from a previous open must not resurrect an empty group.
+  inviteError.value = '';
   try {
     workspace.value = await getWorkspace({ source: 'Settings → Workspace' });
     workspaceDraft.value = workspace.value.name;
@@ -941,6 +949,10 @@ const inviting = ref(false);
 const memberBusy = ref(false);
 const inviteBusy = ref(false);
 const collabError = ref('');
+// Said inside the Collaborators group, which is where every control that writes it lives.
+// Accept and Decline live in "Invitations for you", one group up, so their refusals go in their
+// own message instead of being printed somewhere the row they were about cannot be seen (KOL-137).
+const inviteError = ref('');
 
 const inviteReady = computed(() => !!inviteEmail.value.trim());
 
@@ -1059,7 +1071,7 @@ async function dropMember(member) {
 async function acceptMyInvite(invite) {
   if (inviteBusy.value) return;
   inviteBusy.value = true;
-  collabError.value = '';
+  inviteError.value = '';
   try {
     const joined = await acceptInvite(invite._id, { source: 'Settings → Invitations for you → Accept' });
     addToast({
@@ -1070,7 +1082,7 @@ async function acceptMyInvite(invite) {
     // stays where it is until the switcher is used.
     await loadWorkspaceList();
   } catch (err) {
-    collabError.value = collaboratorMessage(err, 'Could not accept that invitation.');
+    inviteError.value = collaboratorMessage(err, 'Could not accept that invitation.');
   } finally {
     await loadMyInvites();
     inviteBusy.value = false;
@@ -1080,11 +1092,11 @@ async function acceptMyInvite(invite) {
 async function declineMyInvite(invite) {
   if (inviteBusy.value) return;
   inviteBusy.value = true;
-  collabError.value = '';
+  inviteError.value = '';
   try {
     await declineInvite(invite._id, { workspaceName: invite.workspaceName, source: 'Settings → Invitations for you → Decline' });
   } catch (err) {
-    collabError.value = collaboratorMessage(err, 'Could not decline that invitation.');
+    inviteError.value = collaboratorMessage(err, 'Could not decline that invitation.');
   } finally {
     await loadMyInvites();
     inviteBusy.value = false;
