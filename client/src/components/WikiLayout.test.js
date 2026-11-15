@@ -650,6 +650,19 @@ describe('WikiLayout workspace group', () => {
       expect(createWorkspace).not.toHaveBeenCalled();
       // The button says so too, rather than only the handler refusing on submit.
       expect(form(wrapper).get('button[type="submit"]').attributes('disabled')).toBeDefined();
+
+      // And the other half of the title (KOL-137): a double-tap, or Enter twice before the first
+      // create answers. Both submits are dispatched before either is awaited, so what holds the
+      // second is the `workspaceCreating` re-entry guard in the handler — not the button going
+      // disabled, which a form submit does not consult.
+      await form(wrapper).get('#new-workspace-name').setValue('Only Once');
+      const first = form(wrapper).trigger('submit');
+      const second = form(wrapper).trigger('submit');
+      await Promise.all([first, second]);
+      await flushPromises();
+
+      expect(createWorkspace).toHaveBeenCalledTimes(1);
+      expect(createWorkspace.mock.calls[0][0]).toBe('Only Once');
     });
 
     it('says what the cap is when the server refuses one, and selects nothing', async () => {
@@ -874,6 +887,89 @@ describe('WikiLayout collaborators', () => {
     it('is absent for an account with none', async () => {
       listMyInvites.mockResolvedValue([]);
       const wrapper = await openSettings();
+      expect(groupNamed(wrapper, 'Invitations for you')).toBeUndefined();
+    });
+
+    /**
+     * Where a refused Accept or Decline is said (KOL-137). Both used to write `collabError`,
+     * which is rendered in exactly one place — inside Collaborators, the group below — so the
+     * refusal appeared under a list it was not about while the row it *was* about vanished in the
+     * reload that follows. These pin the message to the group the two buttons live in, and the
+     * group to the message: it stays mounted while it has something to explain, which is the only
+     * way an explanation survives a reload that comes back with no invitations left.
+     */
+    const GONE = () => Object.assign(new Error('Not found'), { status: 404 });
+    const GONE_SAID = 'That is no longer there — reopening Settings will refresh it.';
+
+    it('says a refused Accept in its own group, not down in Collaborators', async () => {
+      acceptInvite.mockRejectedValue(GONE());
+      const wrapper = await openSettings();
+
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[0].trigger('click');
+      await flushPromises();
+
+      expect(groupNamed(wrapper, 'Invitations for you').get('.settings-error').text()).toBe(GONE_SAID);
+      expect(groupNamed(wrapper, 'Collaborators').find('.settings-error').exists()).toBe(false);
+    });
+
+    it('says a refused Decline in its own group, not down in Collaborators', async () => {
+      declineInvite.mockRejectedValue(GONE());
+      const wrapper = await openSettings();
+
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[1].trigger('click');
+      await flushPromises();
+
+      expect(groupNamed(wrapper, 'Invitations for you').get('.settings-error').text()).toBe(GONE_SAID);
+      expect(groupNamed(wrapper, 'Collaborators').find('.settings-error').exists()).toBe(false);
+    });
+
+    it('keeps the explanation when the reload after it comes back with no invitations', async () => {
+      // The workspace was deleted while the panel was open: the Accept 404s, and the list that
+      // both handlers re-read in `finally` no longer has the row the message is about.
+      acceptInvite.mockRejectedValue(GONE());
+      listMyInvites.mockReset();
+      listMyInvites.mockResolvedValueOnce([{ ...INVITATION }]).mockResolvedValue([]);
+      const wrapper = await openSettings();
+
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[0].trigger('click');
+      await flushPromises();
+
+      const group = groupNamed(wrapper, 'Invitations for you');
+      expect(group).toBeDefined();
+      expect(group.findAll('.invite-row').length).toBe(0);
+      expect(group.get('.settings-error').text()).toBe(GONE_SAID);
+    });
+
+    it('a successful accept clears it and leaves no empty group behind', async () => {
+      declineInvite.mockRejectedValue(GONE());
+      const wrapper = await openSettings();
+
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[1].trigger('click');
+      await flushPromises();
+      expect(groupNamed(wrapper, 'Invitations for you').get('.settings-error').text()).toBe(GONE_SAID);
+
+      // The other invitation's Accept works, and takes the last row with it.
+      listMyInvites.mockResolvedValue([]);
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[0].trigger('click');
+      await flushPromises();
+
+      expect(acceptInvite).toHaveBeenCalledTimes(1);
+      expect(groupNamed(wrapper, 'Invitations for you')).toBeUndefined();
+    });
+
+    it('does not carry a refusal into the next time Settings is opened', async () => {
+      acceptInvite.mockRejectedValue(GONE());
+      const wrapper = await openSettings();
+
+      await groupNamed(wrapper, 'Invitations for you').findAll('button')[0].trigger('click');
+      await flushPromises();
+      expect(groupNamed(wrapper, 'Invitations for you').get('.settings-error').text()).toBe(GONE_SAID);
+
+      listMyInvites.mockResolvedValue([]);
+      await wrapper.get('.settings-close').trigger('click');
+      await settingsTab(wrapper).trigger('click');
+      await flushPromises();
+
       expect(groupNamed(wrapper, 'Invitations for you')).toBeUndefined();
     });
   });
