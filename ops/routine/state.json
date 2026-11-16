@@ -85,10 +85,10 @@
     "KOL-142": {
       "order": 5,
       "title": "The one block type anything can write and nothing can show: a gallery holds image URLs",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-142",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -96,8 +96,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-16T17:39:08.413Z",
+      "runId": "2026-11-16T17:37:43.150Z",
       "lastFail": null
     },
     "KOL-143": {

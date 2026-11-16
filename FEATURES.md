@@ -103,7 +103,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-142) The one block type anything can write and nothing can show: a gallery holds image URLs**
+- [x] **(KOL-142) The one block type anything can write and nothing can show: a gallery holds image URLs**
   `gallery` has been in `BLOCK_TYPES` (`server/src/models/Entity.js:6`) since the block migration, and every write
   path takes it: `validateBlocks` checks the type, a numeric `order` and that `data` is an object, and nothing about
   its shape (`server/src/routes/entities.js:40-48`, mirrored in `server/src/lib/draftApplier.js:50-60` and
