@@ -11,7 +11,9 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 - Entry detail panel — full styling polish pass (in progress)
 
 ## Frontend — Features
-- Gallery block — image hosting (currently placeholder)
+- Gallery block — ✅ images by URL (validated `{ url, caption }` rows, rendered with captions,
+  lazily and with no referrer) shipped 2026-11-16 (KOL-142); **uploads and hosting are still
+  open** — that is the half needing a storage credential and a bill
 - Entry linking from sidebar — clicking a [[link]] from search results
 - ✅ Tag autocomplete on entry editor — shipped 2026-09-18 (KOL-041)
 - ✅ Bulk tag operations — workspace-wide tag rename, merge and delete, shipped 2026-10-06 (KOL-053);

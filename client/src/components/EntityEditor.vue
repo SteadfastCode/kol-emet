@@ -115,9 +115,38 @@
               <input v-model="block.data.attribution" class="input" placeholder="Attribution" style="margin-top:6px" />
             </div>
 
-            <!-- Gallery block -->
-            <div v-else-if="block.type === 'gallery'" class="gallery-placeholder">
-              Image hosting coming soon.
+            <!-- Gallery block: rows of URL + caption. No upload — a gallery
+                 holds images the user already hosts somewhere. -->
+            <div v-else-if="block.type === 'gallery'" class="gallery-fields">
+              <div
+                v-for="(image, imageIndex) in block.data.images"
+                :key="imageIndex"
+                class="gallery-row"
+              >
+                <input
+                  v-model="image.url"
+                  class="input"
+                  type="url"
+                  inputmode="url"
+                  placeholder="Image URL (https://…)"
+                  :aria-label="`Image ${imageIndex + 1} URL`"
+                  style="flex:3"
+                />
+                <input
+                  v-model="image.caption"
+                  class="input"
+                  placeholder="Caption (optional)"
+                  :aria-label="`Image ${imageIndex + 1} caption`"
+                  style="flex:2"
+                />
+                <button
+                  class="icon-btn small danger"
+                  title="Remove image"
+                  :aria-label="`Remove image ${imageIndex + 1}`"
+                  @click="removeImage(block, imageIndex)"
+                >✕</button>
+              </div>
+              <button class="btn-sm add-image-btn" @click="addImage(block)">+ Add image</button>
             </div>
           </div>
         </template>
@@ -197,6 +226,27 @@ let keyCounter = 0;
 
 function makeKey() { return ++keyCounter; }
 
+/**
+ * Block data the v-model rows can be bound to directly.
+ *
+ * A gallery block stored before KOL-142 — or written by a path whose schema
+ * only said "an object" — may carry no `images` array at all, and `v-for` over
+ * `undefined` renders nothing while every row added afterwards is lost. The
+ * array is created here, once, at hydration/creation time rather than during
+ * render.
+ */
+function withEditableData(type, data) {
+  if (type === 'gallery' && !Array.isArray(data.images)) data.images = [];
+  return data;
+}
+
+function addImage(block) {
+  block.data.images.push({ url: '', caption: '' });
+}
+function removeImage(block, index) {
+  block.data.images.splice(index, 1);
+}
+
 // Hydrate before anything else runs, so applyDefaultBlocks does not overwrite
 // imported blocks with category defaults.
 if (props.initial) {
@@ -207,7 +257,7 @@ if (props.initial) {
   blocks.value = (props.initial.blocks ?? []).map(b => ({
     type: b.type,
     order: b.order,
-    data: { ...b.data },
+    data: withEditableData(b.type, { ...b.data }),
     _key: makeKey(),
   }));
 }
@@ -344,7 +394,7 @@ function addBlock(type) {
   blocks.value.push({
     type,
     order: blocks.value.length,
-    data: { ...BLOCK_DEFAULTS[type] },
+    data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }),
     _key: makeKey(),
   });
   showAddMenu.value = false;
@@ -365,6 +415,17 @@ async function save() {
 
     const cleanBlocks = blocks.value.map((b, i) => {
       const { _key, ...rest } = b;
+      // A gallery row the user added and never filled in would be refused by
+      // the server (`url` is required), losing the whole save over an empty
+      // row nobody meant to add. Trimmed and dropped here instead.
+      if (rest.type === 'gallery') {
+        rest.data = {
+          ...rest.data,
+          images: (rest.data.images ?? [])
+            .map(img => ({ url: String(img.url ?? '').trim(), caption: String(img.caption ?? '').trim() }))
+            .filter(img => img.url),
+        };
+      }
       return { ...rest, order: i };
     });
 
@@ -496,13 +557,8 @@ async function save() {
 }
 .block-textarea:focus { outline: none; border-color: #555; }
 
-.gallery-placeholder {
-  font-size: 12px;
-  color: #555;
-  font-style: italic;
-  padding: 8px 0;
-}
-
+.gallery-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.add-image-btn { margin-top: 2px; }
 .add-block-section {
   padding: 8px 0 0;
 }

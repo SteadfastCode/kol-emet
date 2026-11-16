@@ -41,7 +41,11 @@
 
 ## Phase 5 — Polish (current)
 - Entity detail panel UI polish
-- Gallery block image hosting (currently placeholder)
+- ✅ **Gallery block, the half that needs no storage credential** (KOL-142) — `data.images` is
+  `[{ url, caption }]` validated on every write path (`http:`/`https:` only, parsed not
+  pattern-matched, capped), rendered with captions, `loading="lazy"`, a caption-derived `alt`
+  and `referrerpolicy="no-referrer"`; a dead URL names its host instead of showing a broken
+  glyph. **Uploads and hosting remain open.**
 
 ---
 

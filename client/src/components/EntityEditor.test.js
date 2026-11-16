@@ -169,3 +169,80 @@ describe('EntityEditor tag suggestions', () => {
     expect(wrapper.emitted('saved')[0][0].tags).toEqual(['alpha', 'ca']);
   });
 });
+
+/**
+ * The editor's gallery case (KOL-142). It was the string "Image hosting coming
+ * soon." — the block could be added from the menu and then not filled in, in
+ * the editor whose job is filling blocks in. It is now rows of URL + caption.
+ *
+ * The save-time pruning is as much the point as the rows: a row someone added
+ * and left blank would be refused by the server (`url` is required), losing a
+ * whole entity's save over an empty row nobody meant to add.
+ */
+describe('EntityEditor gallery rows', () => {
+  const addGalleryBlock = async (wrapper) => {
+    await wrapper.get('.add-block-trigger').trigger('click');
+    const gallery = wrapper.findAll('.block-type-btn').find((b) => b.text() === 'Gallery');
+    await gallery.trigger('click');
+    return wrapper;
+  };
+
+  const urlInputs = (wrapper) => wrapper.findAll('.gallery-row input[type="url"]');
+
+  it('adds and removes a URL + caption row', async () => {
+    const wrapper = await addGalleryBlock(await openEditor());
+
+    // A new gallery block starts with no rows at all — an empty block, not a promise.
+    expect(wrapper.findAll('.gallery-row')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain('coming soon');
+
+    await wrapper.get('.add-image-btn').trigger('click');
+    await wrapper.get('.add-image-btn').trigger('click');
+    expect(urlInputs(wrapper)).toHaveLength(2);
+
+    await urlInputs(wrapper)[0].setValue('https://images.example.test/engine.jpg');
+    await wrapper.findAll('.gallery-row input:not([type="url"])')[0].setValue('The engine');
+
+    // Remove the second (empty) row; the first keeps what was typed into it.
+    await wrapper.findAll('.gallery-row .icon-btn').at(-1).trigger('click');
+    expect(urlInputs(wrapper)).toHaveLength(1);
+    expect(urlInputs(wrapper)[0].element.value).toBe('https://images.example.test/engine.jpg');
+
+    await wrapper.get('.title-input').setValue('Engine Room');
+    await wrapper.get('.editor-footer .primary').trigger('click');
+
+    const saved = wrapper.emitted('saved')[0][0];
+    expect(saved.blocks.at(-1)).toMatchObject({
+      type: 'gallery',
+      data: { images: [{ url: 'https://images.example.test/engine.jpg', caption: 'The engine' }] },
+    });
+  });
+
+  it('drops a row left blank rather than letting it fail the save', async () => {
+    const wrapper = await addGalleryBlock(await openEditor());
+
+    await wrapper.get('.add-image-btn').trigger('click');
+    await wrapper.get('.add-image-btn').trigger('click');
+    await urlInputs(wrapper)[0].setValue('  https://images.example.test/engine.jpg  ');
+
+    await wrapper.get('.title-input').setValue('Engine Room');
+    await wrapper.get('.editor-footer .primary').trigger('click');
+
+    const saved = wrapper.emitted('saved')[0][0];
+    expect(saved.blocks.at(-1).data.images).toEqual([
+      { url: 'https://images.example.test/engine.jpg', caption: '' },
+    ]);
+  });
+
+  it('hydrates a gallery block that was stored with no images array', async () => {
+    const wrapper = mount(EntityEditor, {
+      props: { initial: { title: 'Legacy', category: 'Characters', blocks: [{ type: 'gallery', order: 0, data: {} }] } },
+    });
+    await flushPromises();
+
+    // v-for over `undefined` would render nothing and lose every row added
+    // after it, so the array is created at hydration.
+    await wrapper.get('.add-image-btn').trigger('click');
+    expect(urlInputs(wrapper)).toHaveLength(1);
+  });
+});

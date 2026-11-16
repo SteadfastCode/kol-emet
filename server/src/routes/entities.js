@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import Entity, { BLOCK_TYPES } from '../models/Entity.js';
+import Entity, { BLOCK_TYPES, blockDataError } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { requireActor } from '../middleware/auth.js';
 import { logCreate, logUpdate, logDelete } from '../lib/changeLogger.js';
@@ -43,6 +43,11 @@ function validateBlocks(blocks) {
     if (!BLOCK_TYPES.includes(block.type)) return `Invalid block type: ${block.type}`;
     if (typeof block.order !== 'number') return 'Each block must have a numeric order';
     if (!block.data || typeof block.data !== 'object') return 'Each block must have a data object';
+    // Per-type shape rules live with the type list (models/Entity.js). Until
+    // KOL-142 this loop was the whole of it, so a gallery block could carry
+    // anything at all — including a `javascript:` image URL.
+    const dataError = blockDataError(block);
+    if (dataError) return dataError;
   }
   return null;
 }

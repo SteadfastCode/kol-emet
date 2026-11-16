@@ -22,7 +22,7 @@
 
 import mongoose from 'mongoose';
 
-import Entity, { BLOCK_TYPES } from '../models/Entity.js';
+import Entity, { BLOCK_TYPES, blockDataError } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import OpenQuestion from '../models/OpenQuestion.js';
 import { logCreate, logUpdate } from '../lib/changeLogger.js';
@@ -53,6 +53,8 @@ function validateBlocks(blocks) {
     if (!BLOCK_TYPES.includes(b.type)) return `Invalid block type: ${b.type}`;
     if (typeof b.order !== 'number') return 'Each block must have a numeric order';
     if (!b.data || typeof b.data !== 'object') return 'Each block must have a data object';
+    const dataError = blockDataError(b);
+    if (dataError) return dataError;
   }
   return null;
 }

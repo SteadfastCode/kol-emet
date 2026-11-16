@@ -4,7 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import Entity, { BLOCK_TYPES } from '../models/Entity.js';
+import Entity, { BLOCK_TYPES, blockDataError } from '../models/Entity.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
 import { resolveGroupLabels } from '../lib/relationshipResolver.js';
 import OpenQuestion from '../models/OpenQuestion.js';
@@ -228,6 +228,14 @@ function createMcpServer({ readOnly = false } = {}) {
         data.blocks = [...data.blocks]
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
+        // `BlockInput.data` is `z.record(z.unknown())` — the schema says "an
+        // object" and nothing further, so the per-type shape rules (KOL-142)
+        // are asked here: the same leaf routes/entities.js, the draft applier
+        // and the importer call. This path writes with Entity.create rather
+        // than through POST /entities, so without it the connector is the one
+        // writer that can still plant a gallery no reader will show.
+        const blockError = data.blocks.map(b => blockDataError(b)).find(Boolean);
+        if (blockError) throw new Error(blockError);
       }
       const entity = await Entity.create({ ...data, workspaceId: await mcpWriteWorkspaceId() });
       const actor = await resolveMcpActor();
@@ -255,6 +263,14 @@ function createMcpServer({ readOnly = false } = {}) {
         data.blocks = [...data.blocks]
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((b, i) => ({ ...b, order: i }));
+        // `BlockInput.data` is `z.record(z.unknown())` — the schema says "an
+        // object" and nothing further, so the per-type shape rules (KOL-142)
+        // are asked here: the same leaf routes/entities.js, the draft applier
+        // and the importer call. This path writes with Entity.create rather
+        // than through POST /entities, so without it the connector is the one
+        // writer that can still plant a gallery no reader will show.
+        const blockError = data.blocks.map(b => blockDataError(b)).find(Boolean);
+        if (blockError) throw new Error(blockError);
       }
       const workspaceId = await mcpWriteWorkspaceId();
       const before = await Entity.findOne({ _id: id, workspaceId }).lean();

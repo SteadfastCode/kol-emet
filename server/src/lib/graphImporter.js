@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import Entity, { BLOCK_TYPES } from '../models/Entity.js';
+import Entity, { BLOCK_TYPES, blockDataError } from '../models/Entity.js';
 import EntityType from '../models/EntityType.js';
 import RelationshipType from '../models/RelationshipType.js';
 import RelationshipGroup from '../models/RelationshipGroup.js';
@@ -334,6 +334,11 @@ function planIds(collections, canonicalByKey) {
         throw refusal('MALFORMED_DOCUMENT', `${at}.order is not a number`, [`${at}.order`]);
       }
       if (block.data == null) throw refusal('MALFORMED_DOCUMENT', `${at}.data is missing`, [`${at}.data`]);
+      // Per-type shape rules (models/Entity.js) — the same leaf the entity
+      // route and the draft applier call, so an import is not the side door
+      // into the graph for a block shape a POST would refuse.
+      const dataError = blockDataError(block);
+      if (dataError) throw refusal('MALFORMED_DOCUMENT', `${at}: ${dataError}`, [`${at}.data`]);
     });
   });
 
