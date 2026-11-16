@@ -85,7 +85,7 @@
     "KOL-142": {
       "order": 5,
       "title": "The one block type anything can write and nothing can show: a gallery holds image URLs",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-142",

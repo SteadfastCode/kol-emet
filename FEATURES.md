@@ -103,43 +103,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-142) The one block type anything can write and nothing can show: a gallery holds image URLs**
-  `gallery` has been in `BLOCK_TYPES` (`server/src/models/Entity.js:6`) since the block migration, and every write
-  path takes it: `validateBlocks` checks the type, a numeric `order` and that `data` is an object, and nothing about
-  its shape (`server/src/routes/entities.js:40-48`, mirrored in `server/src/lib/draftApplier.js:50-60` and
-  `server/src/lib/graphImporter.js:330`), `GET /export` round-trips it, and the MCP tools declare
-  `data: z.record(z.unknown())` (`server/src/routes/mcp.js:100-105`) — so the Claude.ai connector can write one too.
-  The editor offers "Gallery" in its block menu and seeds `{ images: [] }`
-  (`client/src/components/EntityEditor.vue:166,173`). What a reader gets is the whole of `GalleryBlock.vue`: a dashed
-  box reading "Image hosting coming soon." A gallery block can therefore be created, generated, exported and
-  re-imported today and never be seen by anyone — the one place in the product where a write is accepted and has no
-  reader at all. It is the open half of roadmap Phase 5 and of the `docs/wishlist.md` gallery line.
-  Build the half that needs no storage credential and no bill: a gallery holds images the user already has somewhere.
-  `data.images` becomes `[{ url, caption }]` — `url` required, `http:`/`https:` only (parsed with `new URL`, never
-  matched with a regex), length-capped; `caption` optional and capped; the array capped per block. Validate it in a
-  `blockDataError(block)` exported beside `BLOCK_TYPES` in `models/Entity.js` and called from the three validators
-  that already exist, rather than merging them: Generator v1's refusal to extract shared write helpers out of the
-  write path stands, and this adds a leaf to it instead. `GalleryBlock.vue` renders the images with their captions,
-  `loading="lazy"`, a caption-derived `alt`, and `referrerpolicy="no-referrer"` — a wiki must not tell a third-party
-  host which workspace is reading it. An image that fails to load says so and names its host instead of leaving a
-  broken glyph, because a URL someone pasted can die. The editor's gallery case becomes add/remove rows of URL +
-  caption, and an empty gallery reads as an empty block instead of a promise.
-  Files: `server/src/models/Entity.js`, `server/src/routes/entities.js`, `server/src/lib/draftApplier.js`,
-  `server/src/lib/graphImporter.js`, `client/src/components/blocks/GalleryBlock.vue`,
-  `client/src/components/EntityEditor.vue`, a new `server/tests/http/galleryBlock.test.js`, a new
-  `client/src/components/blocks/GalleryBlock.test.js`, `client/src/components/EntityEditor.test.js`,
-  `docs/data-model.md` (the block shapes), `docs/wishlist.md`, `docs/roadmap.md` (the Phase 5 line), the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a gallery of two `{url, caption}` images accepted by
-  `POST /entities` and read back unchanged; a `javascript:` and a `data:` url refused with a message naming the
-  block; a non-array `images` refused; a legacy `{ images: [] }` block still accepted on update, so no existing
-  entity becomes unsaveable; the same refusals applying to `POST /import` and to a generated item the applier writes,
-  so no path is a side door; and an entity exported and re-imported keeping its images.
-  `cd client && yarn test --run` with cases for: images rendered with their captions and `referrerpolicy`; a failed
-  load showing the per-image message; an empty gallery showing the empty state and not "coming soon"; and the editor
-  adding and removing a row. `cd client && yarn build`.
-  Out of scope: uploads and hosting of any kind (that is the half needing a storage credential), image proxying or
-  caching, drag-to-reorder inside a gallery, a lightbox, and any CSP change — name the `img-src` consequence in the
-  PR rather than shipping a header.
 
 - [ ] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would**
   Two residuals of KOL-118 ("in a cluster a name is not unique"), both found by its grader and both reproduced
@@ -357,6 +320,43 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-142) The one block type anything can write and nothing can show: a gallery holds image URLs** (routine 2026-11-16, eed2d43)
+  `gallery` has been in `BLOCK_TYPES` (`server/src/models/Entity.js:6`) since the block migration, and every write
+  path takes it: `validateBlocks` checks the type, a numeric `order` and that `data` is an object, and nothing about
+  its shape (`server/src/routes/entities.js:40-48`, mirrored in `server/src/lib/draftApplier.js:50-60` and
+  `server/src/lib/graphImporter.js:330`), `GET /export` round-trips it, and the MCP tools declare
+  `data: z.record(z.unknown())` (`server/src/routes/mcp.js:100-105`) — so the Claude.ai connector can write one too.
+  The editor offers "Gallery" in its block menu and seeds `{ images: [] }`
+  (`client/src/components/EntityEditor.vue:166,173`). What a reader gets is the whole of `GalleryBlock.vue`: a dashed
+  box reading "Image hosting coming soon." A gallery block can therefore be created, generated, exported and
+  re-imported today and never be seen by anyone — the one place in the product where a write is accepted and has no
+  reader at all. It is the open half of roadmap Phase 5 and of the `docs/wishlist.md` gallery line.
+  Build the half that needs no storage credential and no bill: a gallery holds images the user already has somewhere.
+  `data.images` becomes `[{ url, caption }]` — `url` required, `http:`/`https:` only (parsed with `new URL`, never
+  matched with a regex), length-capped; `caption` optional and capped; the array capped per block. Validate it in a
+  `blockDataError(block)` exported beside `BLOCK_TYPES` in `models/Entity.js` and called from the three validators
+  that already exist, rather than merging them: Generator v1's refusal to extract shared write helpers out of the
+  write path stands, and this adds a leaf to it instead. `GalleryBlock.vue` renders the images with their captions,
+  `loading="lazy"`, a caption-derived `alt`, and `referrerpolicy="no-referrer"` — a wiki must not tell a third-party
+  host which workspace is reading it. An image that fails to load says so and names its host instead of leaving a
+  broken glyph, because a URL someone pasted can die. The editor's gallery case becomes add/remove rows of URL +
+  caption, and an empty gallery reads as an empty block instead of a promise.
+  Files: `server/src/models/Entity.js`, `server/src/routes/entities.js`, `server/src/lib/draftApplier.js`,
+  `server/src/lib/graphImporter.js`, `client/src/components/blocks/GalleryBlock.vue`,
+  `client/src/components/EntityEditor.vue`, a new `server/tests/http/galleryBlock.test.js`, a new
+  `client/src/components/blocks/GalleryBlock.test.js`, `client/src/components/EntityEditor.test.js`,
+  `docs/data-model.md` (the block shapes), `docs/wishlist.md`, `docs/roadmap.md` (the Phase 5 line), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a gallery of two `{url, caption}` images accepted by
+  `POST /entities` and read back unchanged; a `javascript:` and a `data:` url refused with a message naming the
+  block; a non-array `images` refused; a legacy `{ images: [] }` block still accepted on update, so no existing
+  entity becomes unsaveable; the same refusals applying to `POST /import` and to a generated item the applier writes,
+  so no path is a side door; and an entity exported and re-imported keeping its images.
+  `cd client && yarn test --run` with cases for: images rendered with their captions and `referrerpolicy`; a failed
+  load showing the per-image message; an empty gallery showing the empty state and not "coming soon"; and the editor
+  adding and removing a row. `cd client && yarn build`.
+  Out of scope: uploads and hosting of any kind (that is the half needing a storage credential), image proxying or
+  caching, drag-to-reorder inside a gallery, a lightbox, and any CSP change — name the `img-src` consequence in the
+  PR rather than shipping a header.
 - [x] **(KOL-137) A refused Accept reports itself in another group, and a test claims a guard it never exercises** (routine 2026-11-15, df0250d)
   Two client findings from the graders of KOL-124 and KOL-123, in the same component and its test file.
   `acceptMyInvite` and `declineMyInvite` write their refusal into `collabError`
