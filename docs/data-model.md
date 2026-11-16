@@ -62,6 +62,29 @@ depends on `type`.
 }
 ```
 
+#### `data` by type
+
+| `type` | `data` |
+|--------|--------|
+| `text` | `{ markdown: String }` |
+| `timeline_event` | `{ date: String, sortKey: Number, era: String, description: String, linkedEntryId: ObjectId \| null }` |
+| `attribute` | `{ label: String, value: String }` |
+| `quote` | `{ text: String, attribution: String }` |
+| `gallery` | `{ images: [{ url: String, caption: String }] }` |
+
+Only `gallery` has its shape **enforced** today, by `blockDataError(block)` exported from
+[`Entity.js`](../server/src/models/Entity.js) and called by every write path (the entity routes, the
+draft applier, the importer, the MCP write tools). The others are conventions the editor and the
+block components follow; `data` stays `Mixed`, because a block type's payload is the type's business.
+
+**Gallery rules** (KOL-142) — a gallery holds images the user already hosts somewhere; there is no
+upload path:
+- `url` is **required**, parsed with `new URL` (never regex-matched) and must be `http:` or `https:`
+  — a `javascript:` or `data:` URL is refused by every writer, with a message naming the block;
+- `url` is capped at 2048 characters, `caption` (optional) at 300, and a block at 24 images;
+- `images` absent or `null` is an **empty gallery, not a refusal**, so a block written before these
+  rules cannot make an existing entity unsaveable. A *present* non-array is refused.
+
 `BLOCK_TYPES` is exported from [`Entity.js`](../server/src/models/Entity.js) and validated on write.
 **Relationships are not a block type** — they are a separate collection (below). On create/update the
 API sorts blocks by `order` and rewrites them to a dense `0..n-1` sequence, so `order` gaps never
