@@ -738,3 +738,34 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   object's namespace, and a cluster-DNS host naming a namespace nothing declares), each run red
   against the pre-fix code. **Out of scope:** `envFrom.secretRef` (a Secret names no host and the
   redactor owns it), cross-namespace Services, and `NetworkPolicy`.
+- **A namespace qualifier has to be a title no object can own, so it is parenthesised (decided
+  2026-11-17, KOL-144)** — the third residual of KOL-118, found by its grader. `titleFor` qualified a
+  name appearing in two namespaces as `name.namespace`, and `normalizeTitle` — the dedup key for every
+  producer and for the generator, within a file and against the workspace — strips every non-word
+  character before anything is compared. So `cache.prod` and `cache-prod` are one key, `cacheprod`,
+  and `cache-prod` is a perfectly legal `metadata.name`. Two consequences, both reproduced by running
+  the producer: a stream holding `cache` in `prod`, `cache` in `team-b` and an unrelated workload
+  `cache-prod` proposed the two qualified titles and dropped the third with the reason `duplicate
+  entity "cache-prod" within the same file` — a real object in the dump discarded as a copy of a title
+  the producer itself invented; and against a workspace already holding `cache-prod`, the invented
+  `cache.prod` was proposed as an `op: 'update'` of it, `matchedBy: 'exact-normalized-title'`, an
+  update aimed at an unrelated entity and the one dedup outcome a reviewer is least likely to question,
+  because the item reads as a routine re-import. **The fix qualifies with a form no Kubernetes name can
+  reach:** a `metadata.name` is an RFC 1123 label — lower-case letters, digits and `-` — so it can
+  never contain a space, and `cache (prod)` keys as `cache prod` while `cache.prod`, `cache_prod` and
+  `cache-prod` all collapse together. `titleFor` changes alone: `normalizeTitle` is the dedup contract
+  every producer and the generator share, and widening it to keep separators would move the matching
+  of every workspace — a far larger change than the bug warrants, and one that would weaken the
+  punctuation-insensitive matching that contract exists for. Unresolved external hosts keep their text
+  verbatim (`cache.prod` as an External Dependency title is the manifest's own, not a qualifier this
+  producer added) and the *Namespace* attribute block is unchanged. `PRODUCER_VERSION` stays
+  `kubernetes@1` on the rule KOL-143 wrote down: the version names the **mapping** — which object
+  becomes which entity and which edge joins them — and that is untouched here; only the rendering of
+  the qualifier a mapping already emitted changes, which is less of a change than KOL-118 made when it
+  introduced the qualifier at `kubernetes@1`. Nothing branches on the recorded version, so a bump would
+  buy a reviewer nothing and imply a re-titling of already-imported entities that this entry
+  deliberately does not do. Covered by three cases in `server/tests/unit/kubernetes.test.js` (the
+  three-workload collision inside one file, the qualified title against a `cache-prod` on the roster,
+  and a single-namespace file still titling bare), the first two run red against the pre-fix code, plus
+  the existing namespace cases moved to the new titles. **Out of scope:** `normalizeTitle` itself, the
+  title format of the other four producers, and re-titling anything already imported.

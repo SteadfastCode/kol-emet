@@ -35,7 +35,9 @@
  * of those a name is not unique — two teams run a `cache`, and a host that
  * carries a namespace means THAT namespace. So every object's namespace is
  * recorded (`default` when it declares none); a name that appears in more than
- * one of them is titled `name.namespace`, so both objects are proposed instead
+ * one of them is titled `name (namespace)` — parenthesised because a dotted
+ * qualifier keys the same as the legal name `name-namespace` and so collides
+ * with a real object (titleFor, KOL-144) — so both objects are proposed instead
  * of the second being dropped as a duplicate of the first; a Service's selector
  * reaches only its own namespace, as Kubernetes' does; and a host is resolved
  * against the namespace it names, or the reading pod's own (resolveHost).
@@ -321,7 +323,7 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   // Which namespaces each title-bearing name appears in. A name that appears in
   // one keeps it — which is every single-namespace file, i.e. nearly all of them
   // — and a name in two is two different objects, so each is titled
-  // `name.namespace` and BOTH are proposed. Keyed on the bare name alone rather
+  // `name (namespace)` and BOTH are proposed. Keyed on the bare name alone rather
   // than per kind, so a Deployment and the Service in front of it still agree on
   // whether the name needs qualifying.
   const namespacesOfName = new Map();
@@ -331,8 +333,25 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
     if (!namespacesOfName.has(key)) namespacesOfName.set(key, new Set());
     namespacesOfName.get(key).add(obj.namespace);
   }
+  // The qualifier is parenthesised, not dotted, because the title it builds has
+  // to be a title no OTHER object can own. `normalizeTitle` — the dedup key for
+  // every producer, within a file and against the workspace — strips every
+  // non-word character before anything is compared, so `cache.prod`,
+  // `cache_prod` and `cache-prod` are all the one key `cacheprod`. And
+  // `cache-prod` is a perfectly legal `metadata.name`, so a dotted qualifier
+  // collided with a real object twice over: a stream holding `cache` in two
+  // namespaces plus an unrelated `cache-prod` dropped the third as a
+  // `duplicate entity "cache-prod" within the same file`, and against a
+  // workspace that already held `cache-prod` the invented `cache.prod` was
+  // proposed as an `exact-normalized-title` UPDATE of it — a re-import aimed at
+  // an unrelated entity, the one dedup outcome a reviewer never questions.
+  // A space survives normalizeTitle and an RFC 1123 label (lower-case letters,
+  // digits, `-`) can never contain one, so `cache prod` is a key no
+  // `metadata.name` can reach, whatever its punctuation. normalizeTitle itself
+  // is deliberately left alone: widening it to keep separators would move the
+  // matching of every workspace (KOL-144).
   const titleFor = obj => (namespacesOfName.get(obj.name.toLowerCase())?.size > 1
-    ? `${obj.name}.${obj.namespace}`
+    ? `${obj.name} (${obj.namespace})`
     : obj.name);
 
   /** The namespace an object declares, as a block, so a reviewer can tell two same-named objects apart. */
