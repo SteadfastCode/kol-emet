@@ -105,7 +105,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped**
+- [x] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped**
   The third residual of KOL-118, found by its grader and reproduced against the current tree. `titleFor`
   (`server/src/lib/producers/kubernetes.js:326-328`) qualifies a name appearing in two namespaces as
   `name.namespace`, and `normalizeTitle` (`server/src/lib/similarity.js:79-86`) strips every non-word character
