@@ -106,38 +106,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised**
-  Two findings of the KOL-126 grader in the newest producer, both reproduced by calling `parseManifest` — one on the
-  suite's own fixture, one on a crafted file.
-  First, PEP 621 build requirements are dropped in silence. `readPyproject`
-  (`server/src/lib/producers/packageManifest.js:849-930`) reads `project.dependencies`, Poetry's table, Poetry's
-  groups and `project.optional-dependencies`, and never looks at `[build-system].requires` — while the exactly
-  analogous Cargo `[build-dependencies]` is reported and counted (`:1014-1021`). The producer's own rule is that
-  what it does not propose is dropped *with a reason*, "so a reviewer who expected to see `jest` can find out where
-  it went". Run against `server/tests/fixtures/manifest-pyproject.toml`, which declares `requires = ["hatchling"]`,
-  the result carries two drop reasons — the `dev` and `docs` extras — and no mention of `hatchling` anywhere, and
-  `dropped` does not count it.
-  Second, the hand-written TOML reader recurses once per nested array or inline table with no depth bound
-  (`readValue`, `:664-695`), so a file `detectFamily` accepts as TOML — `[package]`, a `name`, then `x = ` followed
-  by 20,000 `[` — overflows the stack. The resulting `RangeError` is not a `ManifestParseError`, so
-  `fileProducerRoute`'s catch falls through to `next(err)` (`server/src/routes/drafts.js:461-465`) and an
-  authenticated caller gets a 500 where the route promises a 400 naming the line, for a file well inside
-  `MAX_MANIFEST_CHARS` (60,000). The stack unwinds, so this is a wrong answer rather than a dead process — which is
-  also why no test noticed.
-  Build: read `[build-system].requires` as a drop with a reason in the same voice as the Cargo one (a build backend
-  is not part of what the module runs), counted in `dropped`. Bound the reader's nesting with a named constant and a
-  `fail()` at the offending offset, so an over-nested file gets the 400-with-a-line the route documents; the depth a
-  real manifest needs is a handful, so a low ceiling costs nothing.
-  Files: `server/src/lib/producers/packageManifest.js`, `server/tests/unit/packageManifest.test.js`,
-  `server/tests/http/manifestDraft.test.js`, `docs/api.md` (the `/drafts/manifest` drop rules).
-  Verify: `cd server && yarn test` with cases for: the committed pyproject fixture naming `hatchling` in a drop
-  reason and counting it, its other reasons unchanged; a pyproject with no `[build-system]` adding no reason; a
-  Poetry project's own `[build-system]` (every Poetry project has one) reported the same way; nesting past the
-  ceiling raising `ManifestParseError` with a line, and `POST /drafts/manifest` answering 400 for that file rather
-  than 500; a legitimately nested value — an inline table inside an array, as a Cargo dependency is written — still
-  parsing; and the other three families' fixture output unchanged. `cd server && node --check src/index.js`.
-  Out of scope: PEP 735 `[dependency-groups]` and `[tool.uv]`, proposing a build backend as an entity rather than as
-  a drop reason, replacing the hand-written TOML reader or taking a dependency on one, and `MAX_MANIFEST_CHARS`.
 
 - [ ] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time**
   Found by the grader of KOL-047. `mcpLogRecord` (`server/src/lib/mcpFailure.js:152-171`) writes three
@@ -258,6 +226,38 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised** (routine 2026-11-17, e49e0b1)
+  Two findings of the KOL-126 grader in the newest producer, both reproduced by calling `parseManifest` — one on the
+  suite's own fixture, one on a crafted file.
+  First, PEP 621 build requirements are dropped in silence. `readPyproject`
+  (`server/src/lib/producers/packageManifest.js:849-930`) reads `project.dependencies`, Poetry's table, Poetry's
+  groups and `project.optional-dependencies`, and never looks at `[build-system].requires` — while the exactly
+  analogous Cargo `[build-dependencies]` is reported and counted (`:1014-1021`). The producer's own rule is that
+  what it does not propose is dropped *with a reason*, "so a reviewer who expected to see `jest` can find out where
+  it went". Run against `server/tests/fixtures/manifest-pyproject.toml`, which declares `requires = ["hatchling"]`,
+  the result carries two drop reasons — the `dev` and `docs` extras — and no mention of `hatchling` anywhere, and
+  `dropped` does not count it.
+  Second, the hand-written TOML reader recurses once per nested array or inline table with no depth bound
+  (`readValue`, `:664-695`), so a file `detectFamily` accepts as TOML — `[package]`, a `name`, then `x = ` followed
+  by 20,000 `[` — overflows the stack. The resulting `RangeError` is not a `ManifestParseError`, so
+  `fileProducerRoute`'s catch falls through to `next(err)` (`server/src/routes/drafts.js:461-465`) and an
+  authenticated caller gets a 500 where the route promises a 400 naming the line, for a file well inside
+  `MAX_MANIFEST_CHARS` (60,000). The stack unwinds, so this is a wrong answer rather than a dead process — which is
+  also why no test noticed.
+  Build: read `[build-system].requires` as a drop with a reason in the same voice as the Cargo one (a build backend
+  is not part of what the module runs), counted in `dropped`. Bound the reader's nesting with a named constant and a
+  `fail()` at the offending offset, so an over-nested file gets the 400-with-a-line the route documents; the depth a
+  real manifest needs is a handful, so a low ceiling costs nothing.
+  Files: `server/src/lib/producers/packageManifest.js`, `server/tests/unit/packageManifest.test.js`,
+  `server/tests/http/manifestDraft.test.js`, `docs/api.md` (the `/drafts/manifest` drop rules).
+  Verify: `cd server && yarn test` with cases for: the committed pyproject fixture naming `hatchling` in a drop
+  reason and counting it, its other reasons unchanged; a pyproject with no `[build-system]` adding no reason; a
+  Poetry project's own `[build-system]` (every Poetry project has one) reported the same way; nesting past the
+  ceiling raising `ManifestParseError` with a line, and `POST /drafts/manifest` answering 400 for that file rather
+  than 500; a legitimately nested value — an inline table inside an array, as a Cargo dependency is written — still
+  parsing; and the other three families' fixture output unchanged. `cd server && node --check src/index.js`.
+  Out of scope: PEP 735 `[dependency-groups]` and `[tool.uv]`, proposing a build backend as an entity rather than as
+  a drop reason, replacing the hand-written TOML reader or taking a dependency on one, and `MAX_MANIFEST_CHARS`.
 - [x] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped** (routine 2026-11-17, 1f9183f)
   The third residual of KOL-118, found by its grader and reproduced against the current tree. `titleFor`
   (`server/src/lib/producers/kubernetes.js:326-328`) qualifies a name appearing in two namespaces as

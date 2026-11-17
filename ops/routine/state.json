@@ -85,7 +85,7 @@
     "KOL-145": {
       "order": 5,
       "title": "A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-145",
