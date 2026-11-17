@@ -36,6 +36,12 @@
  *   - titleFor's qualification removed           -> the second of two same-named
  *                                                   workloads is dropped as a
  *                                                   duplicate of the first
+ *   - titleFor back to a dotted `name.namespace` -> a `cache` in two namespaces
+ *                                                   beside a `cache-prod`
+ *                                                   drops the `cache-prod`,
+ *                                                   and `cache.prod` is
+ *                                                   proposed as an update of a
+ *                                                   workspace's `cache-prod`
  *   - the selector's namespace check removed     -> a Service in `prod` claims a
  *                                                   workload in `team-b`
  *   - `configMaps` keyed by bare name again      -> the `prod` pod reads the
@@ -595,13 +601,86 @@ describe('other manifest shapes', () => {
     );
     const { items, dropReasons } = parse(text, {}, 'one name, two namespaces');
     assert.deepEqual(entities(items).map(i => [i.proposed.title, i.proposed.category]), [
-      ['cache.prod', 'Data Store'],
-      ['cache.team-b', 'Data Store'],
+      ['cache (prod)', 'Data Store'],
+      ['cache (team-b)', 'Data Store'],
     ]);
     assert.deepEqual(dropReasons, [], 'neither is a duplicate of the other');
-    assert.equal(attribute(entityNamed(items, 'cache.prod'), 'Namespace'), 'prod');
-    assert.deepEqual(edges(items, 'Calls'), ['Caller:cache.prod → Callee:cache.team-b'],
+    assert.equal(attribute(entityNamed(items, 'cache (prod)'), 'Namespace'), 'prod');
+    assert.deepEqual(edges(items, 'Calls'), ['Caller:cache (prod) → Callee:cache (team-b)'],
       'and the edge reaches the one the host actually names');
+  });
+
+  test('a qualified title cannot collide with a hyphenated name the file also holds', () => {
+    // KOL-144, the third residual of KOL-118. `normalizeTitle` strips every
+    // non-word character before anything is compared, so a dotted `cache.prod`
+    // keyed as `cacheprod` — exactly what the legal `metadata.name`
+    // `cache-prod` keys as. A stream holding both proposed two of the three and
+    // dropped the real object as `duplicate entity "cache-prod" within the same
+    // file`: an object in the file discarded as a copy of a title the producer
+    // itself invented. The parenthesised form keys `cache prod`, and no RFC 1123
+    // label can hold a space.
+    const text = manifest(
+      deployment('cache', 'redis:7', { app: 'cache' }, 'prod'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'team-b'),
+      deployment('cache-prod', 'ghcr.io/acme/cache-admin:1', { app: 'cache-prod' }, 'prod'),
+    );
+    const { items, dropReasons } = parse(text, {}, 'two namespaces beside a hyphenated name');
+    assert.deepEqual(entities(items).map(i => i.proposed.title),
+      ['cache (prod)', 'cache (team-b)', 'cache-prod'],
+      'the unrelated workload is a third object, not a duplicate of an invented title');
+    assert.deepEqual(dropReasons, []);
+    // The namespace is still said out loud in a block, which is what tells a
+    // reviewer which `cache` is which.
+    assert.equal(attribute(entityNamed(items, 'cache (prod)'), 'Namespace'), 'prod');
+    assert.equal(attribute(entityNamed(items, 'cache (team-b)'), 'Namespace'), 'team-b');
+  });
+
+  test('a qualified title is not an update of a workspace entity whose name merely hyphenates', () => {
+    // The same collision against the roster, and the worse half of it: the
+    // invented `cache.prod` matched an existing `cache-prod` on
+    // `exact-normalized-title`, so the draft proposed overwriting an unrelated
+    // entity — the one dedup outcome a reviewer is least likely to question,
+    // because the item reads as a routine re-import.
+    const existing = [{
+      _id: new mongoose.Types.ObjectId(),
+      title: 'cache-prod',
+      updatedAt: new Date('2026-10-01T00:00:00Z'),
+    }];
+    const text = manifest(
+      deployment('cache', 'redis:7', { app: 'cache' }, 'prod'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'team-b'),
+    );
+    const { items } = parse(text, { existingEntities: existing }, 'a qualified title against a hyphenated roster');
+    const qualified = entityNamed(items, 'cache (prod)');
+    assert.equal(qualified.op, 'create', 'an unrelated entity is never the target of this import');
+    assert.equal(qualified.targetEntityId, null);
+    assert.equal(qualified.matchedBy, 'none');
+    // Nor a near miss of it: the space breaks the trigrams, so `cache prod` vs.
+    // `cacheprod` scores 0.5, under the 0.72 duplicate threshold. That is the
+    // honest reading — `cache-prod` is a different workload, and a
+    // `duplicate_candidate` flag would invite a reviewer to merge the two.
+    assert.deepEqual(qualified.flags, []);
+    assert.equal(qualified.duplicateOf, null);
+    // And the entity the workspace already holds is untouched by the import.
+    assert.deepEqual(entities(items).map(i => [i.proposed.title, i.op]),
+      [['cache (prod)', 'create'], ['cache (team-b)', 'create']]);
+  });
+
+  test('a single-namespace file titles its objects bare', () => {
+    // Which is nearly every file. The qualifier is the exception, so a stream
+    // whose names are unique must read exactly as it did before KOL-118.
+    const text = manifest(
+      deployment('cache', 'redis:7', { app: 'cache' }, 'prod'),
+      deployment('cache-prod', 'ghcr.io/acme/cache-admin:1', { app: 'cache-prod' }, 'prod'),
+      ['apiVersion: v1', 'kind: Service', 'metadata:', '  name: cache', '  namespace: prod',
+        'spec:', '  selector:', '    app: cache', '  ports:', '    - port: 6379'].join('\n'),
+    );
+    const { items, dropReasons } = parse(text, {}, 'one namespace, unique names');
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['cache', 'cache-prod', 'cache:6379']);
+    assert.deepEqual(dropReasons, []);
+    assert.equal(attribute(entityNamed(items, 'cache'), 'Namespace'), 'prod',
+      'a bare title still carries the namespace it declares');
+    assert.deepEqual(edges(items, 'Exposes'), ['Provider:cache → Endpoint:cache:6379']);
   });
 
   test('a bare host that is a name in several namespaces, and in none of them the reader’s, resolves to nothing', () => {
@@ -626,7 +705,7 @@ describe('other manifest shapes', () => {
     assert.deepEqual(edges(fromElsewhere.items, 'Depends on'), [],
       'a name this file holds twice is not an external host');
     assert.deepEqual(entities(fromElsewhere.items).map(i => i.proposed.title),
-      ['api', 'cache.prod', 'cache.team-b']);
+      ['api', 'cache (prod)', 'cache (team-b)']);
     assert.deepEqual(fromElsewhere.dropReasons, [
       '"cache" in api\'s CACHE_URL names an object in `prod` and `team-b` and none in `edge`, '
       + 'so nothing was proposed for it',
@@ -635,7 +714,7 @@ describe('other manifest shapes', () => {
     // The same host from a pod that DOES sit beside one of them is not ambiguous
     // at all — that is the namespace Kubernetes' own search path would reach.
     const fromProd = parse(manifest(reader('prod'), ...caches), {}, 'the same host from inside prod');
-    assert.deepEqual(edges(fromProd.items, 'Calls'), ['Caller:api → Callee:cache.prod']);
+    assert.deepEqual(edges(fromProd.items, 'Calls'), ['Caller:api → Callee:cache (prod)']);
     assert.deepEqual(fromProd.dropReasons, []);
   });
 
@@ -744,7 +823,7 @@ describe('other manifest shapes', () => {
         'spec:', '  selector:', '    app: cache', '  ports:', '    - port: 6379'].join('\n'),
     );
     const { items, dropReasons } = parse(text, {}, 'a Service selecting across a namespace');
-    assert.deepEqual(entities(items).map(i => i.proposed.title), ['cache.team-b', 'cache.prod:6379']);
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['cache (team-b)', 'cache (prod):6379']);
     assert.deepEqual(edges(items, 'Exposes'), []);
     assert.deepEqual(dropReasons, [
       'Service "cache" selects app=cache, which no workload in namespace `prod` carries',
