@@ -26,8 +26,10 @@
  *     filename to go on;
  *   - a body over the character cap is refused with the size it was;
  *   - a file that is no manifest at all is a 400, one that does not parse is a
- *     400 naming the line, a workspace without the types is a 400 naming them,
- *     and no workspace but the caller's own can be named.
+ *     400 naming the line — an over-nested TOML included, which the reader
+ *     refuses rather than overflowing its stack into a 500 — a workspace
+ *     without the types is a 400 naming them, and no workspace but the
+ *     caller's own can be named.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_MANIFEST_DRAFT_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -335,7 +337,9 @@ describe('POST /drafts/manifest reads each format from its own content', () => {
     assert.deepEqual(res.body.items.filter(i => i.kind === 'entity').map(i => i.proposed.title), [
       'billing-reports', 'requests', 'httpx', 'SQLAlchemy', 'jinja2',
     ]);
-    assert.equal(res.body.counts.dropped, 3, 'the dev and docs extras');
+    assert.equal(res.body.counts.dropped, 4, 'the dev and docs extras, and the build backend');
+    assert.ok(res.body.diagnostics.dropReasons.some(r => r.includes('hatchling')),
+      `the build backend is named where it went: ${res.body.diagnostics.dropReasons.join(' | ')}`);
   });
 
   test('a Cargo.toml becomes its crate and its [dependencies]', async () => {
@@ -360,6 +364,24 @@ describe('POST /drafts/manifest refusals', () => {
     assert.equal(res.status, 400);
     assert.equal(res.body.line, 3);
     assert.match(res.body.error, /Invalid JSON/);
+  });
+
+  test('an over-nested TOML is a 400 naming the line, not a 500', async () => {
+    // The hand-written TOML reader recurses once per nesting level, and this
+    // file — a `[package]`, a name, and 20,000 `[` — is well inside the
+    // character cap. The stack overflow it used to raise was not a
+    // ManifestParseError, so the route's catch fell through to next(err) and an
+    // authenticated caller got a 500 where this route promises a 400.
+    const text = `[package]\nname = "deep"\nversion = "0.1.0"\nx = ${'['.repeat(20_000)}`;
+    assert.ok(text.length < MAX_MANIFEST_CHARS, 'the file under test must be inside the character cap');
+    const before = await Draft.countDocuments({ workspaceId: architect.workspaceId });
+
+    const res = await postManifest(architect, { text, filename: 'Cargo.toml' });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.line, 4);
+    assert.match(res.body.error, /nested deeper than/);
+    assert.equal(await Draft.countDocuments({ workspaceId: architect.workspaceId }), before,
+      'nothing was stored for a request that was refused');
   });
 
   test('a manifest with no dependencies is a one-item draft, not a refusal', async () => {

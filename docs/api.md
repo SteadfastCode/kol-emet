@@ -924,10 +924,11 @@ is Go's, and a `.toml` is a pyproject or a Cargo manifest by the tables it decla
 transitive closure would spend the whole 60-item cap on packages nobody chose, and a dev or test
 dependency is not part of what the module *runs*. So `devDependencies`, Cargo's `[dev-dependencies]`,
 `[build-dependencies]` and `[target.*]` tables, PEP 621's extras, Poetry's groups and optional
-dependencies, and go.mod's `// indirect` requires each become **one drop reason naming the group and
-its packages** — one line for the twenty of them, rather than twenty lines each saying the same
-thing, while `counts.dropped` still counts every package. An optional or a peer npm dependency IS
-proposed: `npm install --omit=dev` installs the first, and the second is a runtime requirement the
+dependencies, `[build-system].requires` — the build backend, which every PEP 517 project declares,
+Poetry's included — and go.mod's `// indirect` requires each become **one drop reason naming the
+group and its packages** — one line for the twenty of them, rather than twenty lines each saying the
+same thing, while `counts.dropped` still counts every package. An optional or a peer npm dependency
+IS proposed: `npm install --omit=dev` installs the first, and the second is a runtime requirement the
 host satisfies.
 
 A manifest that parses but names **no** dependencies is a one-item draft, not a refusal: the module
@@ -943,7 +944,7 @@ flagged `duplicate_candidate`, never merged.
 | Status | Meaning |
 |--------|---------|
 | 201 | The draft, `status: 'ready'` |
-| 400 | `text` missing or longer than 60,000 characters; a file that is none of the four formats, or a TOML that is neither manifest; a manifest that does not parse (`{ error, line }` — the line in the file as sent); a manifest that declares no name; or the workspace lacks the `Service` or `External Dependency` entity type (`{ error, missingCategories }`) — no draft is created |
+| 400 | `text` missing or longer than 60,000 characters; a file that is none of the four formats, or a TOML that is neither manifest; a manifest that does not parse (`{ error, line }` — the line in the file as sent), a TOML value nested deeper than 16 arrays or inline tables included; a manifest that declares no name; or the workspace lacks the `Service` or `External Dependency` entity type (`{ error, missingCategories }`) — no draft is created |
 
 `MANIFEST_LOG_LEVEL` = `off | light | normal | verbose` (default `light`), the same tiers and a
 separate setting again.
