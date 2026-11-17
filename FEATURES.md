@@ -104,7 +104,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would**
+- [x] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would**
   Two residuals of KOL-118 ("in a cluster a name is not unique"), both found by its grader and both reproduced
   against the current tree by calling `parseKubernetes` directly.
   First, `configMaps` is keyed by bare `metadata.name` (`server/src/lib/producers/kubernetes.js:343,371`) while every

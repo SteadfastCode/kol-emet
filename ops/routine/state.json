@@ -85,10 +85,10 @@
     "KOL-143": {
       "order": 5,
       "title": "Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-143",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -96,8 +96,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-17T14:11:17.372Z",
+      "runId": "2026-11-17T14:10:13.161Z",
       "lastFail": null
     },
     "KOL-144": {
