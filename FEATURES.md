@@ -105,35 +105,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped**
-  The third residual of KOL-118, found by its grader and reproduced against the current tree. `titleFor`
-  (`server/src/lib/producers/kubernetes.js:326-328`) qualifies a name appearing in two namespaces as
-  `name.namespace`, and `normalizeTitle` (`server/src/lib/similarity.js:79-86`) strips every non-word character
-  before anything is compared — so `cache.prod` and `cache-prod` both normalize to `cacheprod`. Two consequences,
-  both observed by running the producer. Within one file, a stream holding `cache` in `prod`, `cache` in `team-b` and
-  an unrelated workload named `cache-prod` proposes `cache.prod` and `cache.team-b` and drops the third with the
-  reason `duplicate entity "cache-prod" within the same file`: a real object in the stream discarded as a copy of a
-  title the producer itself invented. And against the workspace, the same stream with an existing entity titled
-  `cache-prod` on the roster proposes `cache.prod` as an `op: 'update'` of it, `matchedBy:
-  'exact-normalized-title'` — an update aimed at an unrelated entity, the one dedup outcome a reviewer is least
-  likely to question, because the item reads as a routine re-import.
-  Build: qualify with a form no Kubernetes name can collide with. A `metadata.name` is an RFC 1123 label — lower-case
-  letters, digits and `-` — so it can never contain a space, and `cache (prod)` normalizes to `cache prod`, which no
-  legal name can reach, while `cache.prod`, `cache_prod` and `cache-prod` all collapse together. Change `titleFor`
-  alone: `normalizeTitle` is the dedup key for every producer and for the generator, and widening it to keep
-  separators would move the matching of every workspace, which this item does not touch. The titles of unresolved
-  external hosts stay verbatim — `cache.prod` as an External Dependency title is the user's own text, not a qualifier
-  this producer added — and the `Namespace` attribute block stays as it is.
-  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js` (existing cases assert the
-  `cache.prod` / `cache.team-b` titles and the edge endpoints built from them),
-  `server/tests/http/kubernetesDraft.test.js` if it names one, `docs/api.md` (the `/drafts/kubernetes` title rule).
-  Verify: `cd server && yarn test` with cases for: the three-workload stream above proposing three entities and
-  dropping none; the qualified title not matching a roster `cache-prod`, so the import proposes a create; a
-  single-namespace file still titling its objects bare; the `Namespace` attribute still naming the namespace; an
-  unresolved `redis://cache.prod:6379` still titling its External Dependency `cache.prod`; and edges naming their
-  endpoints by the new title. `cd server && node --check src/index.js`.
-  Out of scope: `normalizeTitle` itself and the dedup contract it defines, the title format of the other four
-  producers, re-titling anything already imported, and the `PRODUCER_VERSION` question — decide it in the PR.
 
 - [ ] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised**
   Two findings of the KOL-126 grader in the newest producer, both reproduced by calling `parseManifest` — one on the
@@ -287,6 +258,35 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped** (routine 2026-11-17, 1f9183f)
+  The third residual of KOL-118, found by its grader and reproduced against the current tree. `titleFor`
+  (`server/src/lib/producers/kubernetes.js:326-328`) qualifies a name appearing in two namespaces as
+  `name.namespace`, and `normalizeTitle` (`server/src/lib/similarity.js:79-86`) strips every non-word character
+  before anything is compared — so `cache.prod` and `cache-prod` both normalize to `cacheprod`. Two consequences,
+  both observed by running the producer. Within one file, a stream holding `cache` in `prod`, `cache` in `team-b` and
+  an unrelated workload named `cache-prod` proposes `cache.prod` and `cache.team-b` and drops the third with the
+  reason `duplicate entity "cache-prod" within the same file`: a real object in the stream discarded as a copy of a
+  title the producer itself invented. And against the workspace, the same stream with an existing entity titled
+  `cache-prod` on the roster proposes `cache.prod` as an `op: 'update'` of it, `matchedBy:
+  'exact-normalized-title'` — an update aimed at an unrelated entity, the one dedup outcome a reviewer is least
+  likely to question, because the item reads as a routine re-import.
+  Build: qualify with a form no Kubernetes name can collide with. A `metadata.name` is an RFC 1123 label — lower-case
+  letters, digits and `-` — so it can never contain a space, and `cache (prod)` normalizes to `cache prod`, which no
+  legal name can reach, while `cache.prod`, `cache_prod` and `cache-prod` all collapse together. Change `titleFor`
+  alone: `normalizeTitle` is the dedup key for every producer and for the generator, and widening it to keep
+  separators would move the matching of every workspace, which this item does not touch. The titles of unresolved
+  external hosts stay verbatim — `cache.prod` as an External Dependency title is the user's own text, not a qualifier
+  this producer added — and the `Namespace` attribute block stays as it is.
+  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js` (existing cases assert the
+  `cache.prod` / `cache.team-b` titles and the edge endpoints built from them),
+  `server/tests/http/kubernetesDraft.test.js` if it names one, `docs/api.md` (the `/drafts/kubernetes` title rule).
+  Verify: `cd server && yarn test` with cases for: the three-workload stream above proposing three entities and
+  dropping none; the qualified title not matching a roster `cache-prod`, so the import proposes a create; a
+  single-namespace file still titling its objects bare; the `Namespace` attribute still naming the namespace; an
+  unresolved `redis://cache.prod:6379` still titling its External Dependency `cache.prod`; and edges naming their
+  endpoints by the new title. `cd server && node --check src/index.js`.
+  Out of scope: `normalizeTitle` itself and the dedup contract it defines, the title format of the other four
+  producers, re-titling anything already imported, and the `PRODUCER_VERSION` question — decide it in the PR.
 - [x] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would** (routine 2026-11-17, c27028f)
   Two residuals of KOL-118 ("in a cluster a name is not unique"), both found by its grader and both reproduced
   against the current tree by calling `parseKubernetes` directly.

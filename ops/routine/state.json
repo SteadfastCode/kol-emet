@@ -85,7 +85,7 @@
     "KOL-144": {
       "order": 5,
       "title": "A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-144",
