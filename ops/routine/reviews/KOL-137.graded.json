@@ -1,0 +1,79 @@
+{
+  "item": "KOL-137",
+  "repo": "kol-emet",
+  "mergeSha": "df0250d5dbbbe103a5e5d5e6abe4d846c51cf70c",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-17T05:01:23.594Z",
+  "gradedAtUtc": "2026-11-17T05:22:22.130Z",
+  "independent": [
+    {
+      "file": "client/src/components/WikiLayout.vue",
+      "line": 952,
+      "severity": "low",
+      "summary": "The doc comment introduced directly above `const inviteError` says \"Said inside the Collaborators group, which is where every control that writes it lives\" — that sentence describes `collabError`, and read as documentation of `inviteError` it asserts the exact placement KOL-137 removed, so the comment now contradicts the template (`:236` renders it inside \"Invitations for you\")."
+    },
+    {
+      "file": "client/src/components/WikiLayout.test.js",
+      "line": 951,
+      "severity": "low",
+      "summary": "The comment \"The other invitation's Accept works\" misdescribes the fixture: the `beforeEach` stubs `listMyInvites` with exactly one invitation and the failed Decline's `finally` reload returns that same one, so `findAll('button')[0]` is the Accept of the *same* row, not another invitation's — the assertions still hold, but the comment invites a future reader to assume a two-row fixture."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only renames the ref a refusal is written to and moves where it is rendered; no permission check, session, or credential path changes, and the accept/decline API calls are untouched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No tokens, keys, env vars, or credential handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, price-, or quota-related is touched — only error placement in the settings panel and one test assertion."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Decline remains the same single API call with the same arguments; no deletion, migration, or data-loss behaviour is added or altered."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The component still calls the same first-party REST wrappers with unchanged arguments; no third-party service or new endpoint is introduced."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, lockfile, build config, or deploy manifest is in the diff — only a Vue component and its test."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "Reporting nothing was close to right here — the change is correct, all 84 WikiLayout tests and `yarn build` pass, and the new double-submit test genuinely exercises the `workspaceCreating` guard — but the local model offered no evidence it verified anything and missed two comments that now misdescribe the code they sit on; its triage was fully correct.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.9718425,
+  "numTurns": 12,
+  "durationMs": 132641,
+  "sessionId": "22b9000c-d9da-4232-80bb-16eeff9ae57e"
+}
