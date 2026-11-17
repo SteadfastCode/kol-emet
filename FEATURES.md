@@ -104,39 +104,6 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [x] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would**
-  Two residuals of KOL-118 ("in a cluster a name is not unique"), both found by its grader and both reproduced
-  against the current tree by calling `parseKubernetes` directly.
-  First, `configMaps` is keyed by bare `metadata.name` (`server/src/lib/producers/kubernetes.js:343,371`) while every
-  other identity in that file is a `(name, namespace)` pair — so two same-named ConfigMaps in one stream overwrite
-  each other and the last document silently wins. A stream with `app-env` in `prod`
-  (`CACHE_URL: redis://prod-cache:6379`), the same name in `staging` (`redis://staging-cache:6379`) and a Deployment
-  `api` in `prod` whose `envFrom.configMapRef` names `app-env` proposes `Calls: api → staging-cache`: an edge built
-  out of env that is not in that pod, from a ConfigMap `api` cannot read (`envEntries`, `:756-759`). A `configMapRef`
-  carries no namespace field in Kubernetes precisely because it always means the pod's own namespace, so the lookup
-  has exactly one correct answer and this one takes the other.
-  Second, `readIn`'s `perNamespace.size === 1` fallback (`:847`) resolves a BARE host across a namespace boundary:
-  `api` in `prod` with `redis://cache:6379` gets `Calls: api → cache` when the only `cache` is in `infra`, which
-  `cache.prod.svc.cluster.local` would never reach. The justifying comment ("so a file whose manifests are vague
-  about namespaces still resolves the way it always did") does not describe what it does — a single-namespace file is
-  already answered by the preceding `perNamespace.has(readerNamespace)` branch (`:844`), so the fallback fires only
-  when reader and target are in different namespaces — and it contradicts the ≥2-candidate case beside it, which
-  refuses and reports its candidates.
-  Build: key `configMaps` by name *and* namespace, and look one up with the reading workload's namespace, dropping an
-  `envFrom` whose ConfigMap is not in that namespace with a reason naming both. For the host, the lenient
-  one-candidate read stays on the cluster-suffix path alone — `postgres.prod.svc.cluster.local` says in-cluster and
-  may name a namespace no document in the file declares, which is the case that comment was written for — while a
-  bare host resolves only within the reader's own namespace. Both skips are drop reasons, not silence.
-  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js`,
-  `server/tests/fixtures/kubernetes.yaml` only if a case needs it, `docs/api.md` (the `/drafts/kubernetes` contract).
-  Verify: `cd server && yarn test` with cases for: the two `app-env` ConfigMaps above giving `api` the `prod` values
-  and no edge to `staging-cache`; a workload whose `envFrom` names a ConfigMap that exists only in another namespace
-  getting a drop reason and no edge; a bare `redis://cache:6379` read from `prod` with the only `cache` in `infra`
-  proposing no edge; the same host still resolving when `cache` is in `prod`; `redis://cache.infra.svc.cluster.local`
-  read from `prod` still resolving to the `infra` one; and the committed fixture's output unchanged.
-  `cd server && node --check src/index.js`.
-  Out of scope: `envFrom.secretRef` (a Secret names no host, and the redactor owns it), cross-namespace Services,
-  `NetworkPolicy`, and a `PRODUCER_VERSION` bump — say in the PR whether a resolution fix is one.
 
 - [ ] **(KOL-144) A namespace-qualified title and a hyphenated name share one dedup key, so a real object is dropped**
   The third residual of KOL-118, found by its grader and reproduced against the current tree. `titleFor`
@@ -320,6 +287,39 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-143) Two namespaces, one ConfigMap: env resolution still crosses a boundary Kubernetes never would** (routine 2026-11-17, c27028f)
+  Two residuals of KOL-118 ("in a cluster a name is not unique"), both found by its grader and both reproduced
+  against the current tree by calling `parseKubernetes` directly.
+  First, `configMaps` is keyed by bare `metadata.name` (`server/src/lib/producers/kubernetes.js:343,371`) while every
+  other identity in that file is a `(name, namespace)` pair — so two same-named ConfigMaps in one stream overwrite
+  each other and the last document silently wins. A stream with `app-env` in `prod`
+  (`CACHE_URL: redis://prod-cache:6379`), the same name in `staging` (`redis://staging-cache:6379`) and a Deployment
+  `api` in `prod` whose `envFrom.configMapRef` names `app-env` proposes `Calls: api → staging-cache`: an edge built
+  out of env that is not in that pod, from a ConfigMap `api` cannot read (`envEntries`, `:756-759`). A `configMapRef`
+  carries no namespace field in Kubernetes precisely because it always means the pod's own namespace, so the lookup
+  has exactly one correct answer and this one takes the other.
+  Second, `readIn`'s `perNamespace.size === 1` fallback (`:847`) resolves a BARE host across a namespace boundary:
+  `api` in `prod` with `redis://cache:6379` gets `Calls: api → cache` when the only `cache` is in `infra`, which
+  `cache.prod.svc.cluster.local` would never reach. The justifying comment ("so a file whose manifests are vague
+  about namespaces still resolves the way it always did") does not describe what it does — a single-namespace file is
+  already answered by the preceding `perNamespace.has(readerNamespace)` branch (`:844`), so the fallback fires only
+  when reader and target are in different namespaces — and it contradicts the ≥2-candidate case beside it, which
+  refuses and reports its candidates.
+  Build: key `configMaps` by name *and* namespace, and look one up with the reading workload's namespace, dropping an
+  `envFrom` whose ConfigMap is not in that namespace with a reason naming both. For the host, the lenient
+  one-candidate read stays on the cluster-suffix path alone — `postgres.prod.svc.cluster.local` says in-cluster and
+  may name a namespace no document in the file declares, which is the case that comment was written for — while a
+  bare host resolves only within the reader's own namespace. Both skips are drop reasons, not silence.
+  Files: `server/src/lib/producers/kubernetes.js`, `server/tests/unit/kubernetes.test.js`,
+  `server/tests/fixtures/kubernetes.yaml` only if a case needs it, `docs/api.md` (the `/drafts/kubernetes` contract).
+  Verify: `cd server && yarn test` with cases for: the two `app-env` ConfigMaps above giving `api` the `prod` values
+  and no edge to `staging-cache`; a workload whose `envFrom` names a ConfigMap that exists only in another namespace
+  getting a drop reason and no edge; a bare `redis://cache:6379` read from `prod` with the only `cache` in `infra`
+  proposing no edge; the same host still resolving when `cache` is in `prod`; `redis://cache.infra.svc.cluster.local`
+  read from `prod` still resolving to the `infra` one; and the committed fixture's output unchanged.
+  `cd server && node --check src/index.js`.
+  Out of scope: `envFrom.secretRef` (a Secret names no host, and the redactor owns it), cross-namespace Services,
+  `NetworkPolicy`, and a `PRODUCER_VERSION` bump — say in the PR whether a resolution fix is one.
 - [x] **(KOL-142) The one block type anything can write and nothing can show: a gallery holds image URLs** (routine 2026-11-16, eed2d43)
   `gallery` has been in `BLOCK_TYPES` (`server/src/models/Entity.js:6`) since the block migration, and every write
   path takes it: `validateBlocks` checks the type, a numeric `order` and that `data` is an object, and nothing about
