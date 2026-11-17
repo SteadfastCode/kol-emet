@@ -769,3 +769,46 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   and a single-namespace file still titling bare), the first two run red against the pre-fix code, plus
   the existing namespace cases moved to the new titles. **Out of scope:** `normalizeTitle` itself, the
   title format of the other four producers, and re-titling anything already imported.
+- **A drop needs a reason even when what was dropped is a build backend, and a hand-written reader
+  needs a nesting bound (decided 2026-11-17, KOL-145)** — two findings of the KOL-126 grader in the
+  manifest producer, both reproduced by calling `parseManifest`. First, `readPyproject` read
+  `project.dependencies`, Poetry's table, Poetry's groups and `project.optional-dependencies` and
+  never looked at `[build-system].requires`, while the exactly analogous Cargo `[build-dependencies]`
+  was reported and counted. So the committed pyproject fixture — `requires = ["hatchling"]` — produced
+  two drop reasons, both about extras, and no mention of `hatchling` anywhere; `counts.dropped` said
+  3. That is the one rule this producer's header states about what it leaves out: dropped **with a
+  reason**, "so a reviewer who expected to see `jest` can find out where it went", and a build backend
+  is the drop most reviewers meet, because every PEP 517 project declares one and Poetry writes
+  `poetry-core` into every file it generates. `[build-system].requires` is now a drop reason in the
+  Cargo one's voice — *a build backend is not part of what the module runs* — counted in `dropped`,
+  listed last because it is the one drop that is not a dependency group. It stays a **reason** rather
+  than becoming a proposed entity: a backend builds the wheel and is absent from what the module runs,
+  which is the line between a runtime dependency and a dev one that this producer draws everywhere
+  else. Second, `readValue` recursed once per nested array or inline table with no bound, so a file
+  `detectFamily` accepts as TOML — `[package]`, a `name`, then `x = ` followed by 20,000 `[` — overflowed
+  the stack at 20,025 characters, a third of `MAX_MANIFEST_CHARS`. The `RangeError` is not a
+  `ManifestParseError`, so `fileProducerRoute`'s catch fell through to `next(err)` and an authenticated
+  caller got a **500 where the route documents a 400 naming the line**; the stack unwinds, so this was
+  a wrong answer rather than a dead process, which is why no test noticed. `MAX_TOML_DEPTH` (16) is now
+  checked at the `[` or `{` that would cross it, as a `fail()` at that offset, so the file is refused
+  the way every other unreadable manifest is. The ceiling is low on purpose: a real manifest nests two
+  levels (`serde = { version = "1.0", features = ["derive"] }`) and a Poetry multiple-constraints
+  dependency three, so nothing a person would hand over comes near it, and a bound chosen for the
+  stack's size rather than the data's would be a guess about a number V8 does not publish. Replacing
+  the hand-written reader with a TOML dependency was rejected again, for the reason KOL-126 gave when
+  it wrote the reader: the subset a manifest uses is small, and a parser would be a dependency added
+  for four file shapes. `PRODUCER_VERSION` stays `package-manifest@1` on the rule KOL-143 and KOL-144
+  wrote down — the version names the **mapping**, which object becomes which entity and which edge
+  joins them, and neither fix changes it: `hatchling` was never proposed and still is not, and a
+  refusal proposes nothing. Covered by six cases in `server/tests/unit/packageManifest.test.js` (the
+  fixture's third drop reason and its count, the reason naming `hatchling`, a pyproject with no
+  `[build-system]` adding none, a Poetry project's own `[build-system]`, the 20,000-`[` file and one
+  past the ceiling refused with their line, and the nesting a real manifest uses — Cargo's array
+  inside an inline table, Poetry's inline tables inside an array, and the ceiling itself — still
+  parsing) plus one in `server/tests/http/manifestDraft.test.js` that posts the over-nested file and
+  gets a 400 with `line`. Four of the six run red against the pre-fix producer: the three about the
+  build backend, and the refusal, where the pre-fix `RangeError` fails the assertion that a refusal
+  is a `ManifestParseError`. The other two are regression guards for what must NOT change — a
+  pyproject with no `[build-system]`, and the nesting a real manifest uses — and pass either side.
+  **Out of scope:** PEP 735 `[dependency-groups]` and `[tool.uv]`, proposing a build backend as an
+  entity, replacing the hand-written reader, and `MAX_MANIFEST_CHARS`.

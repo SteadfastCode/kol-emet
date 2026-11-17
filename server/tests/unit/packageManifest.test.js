@@ -42,6 +42,11 @@
  *   - python/requires-python read as
  *     a dependency                   -> Python itself becomes an External
  *                                       Dependency
+ *   - `[build-system].requires` left
+ *     unread                         -> the pyproject fixture says nothing
+ *                                       about `hatchling` and counts 3 drops
+ *   - the TOML depth bound removed    -> a file of 20,000 `[` is a RangeError
+ *                                       rather than a refusal naming its line
  *   - the no-dependency draft turned
  *     into a refusal                 -> a manifest with no dependencies 400s
  *   - the item cap removed           -> a 500-dependency manifest proposes
@@ -65,7 +70,7 @@ import mongoose from 'mongoose';
 
 import {
   parseManifest, parseRequirement, detectFamily, ManifestParseError,
-  PRODUCER, PRODUCER_VERSION, MAX_MANIFEST_CHARS, SERVICE, EXTERNAL_DEPENDENCY,
+  PRODUCER, PRODUCER_VERSION, MAX_MANIFEST_CHARS, MAX_TOML_DEPTH, SERVICE, EXTERNAL_DEPENDENCY,
 } from '../../src/lib/producers/packageManifest.js';
 import { MAX_COMPOSE_CHARS } from '../../src/lib/producers/dockerCompose.js';
 import { MAX_ITEMS } from '../../src/lib/draftNormalizer.js';
@@ -285,20 +290,69 @@ describe('pyproject.toml (PEP 621)', () => {
     assert.ok(!attribute(entityNamed(items, 'requests'), 'Version constraint').includes('#'));
   });
 
-  test('every extra is dropped with a reason naming its group', () => {
+  test('every extra and the build backend are dropped with a reason each', () => {
     assert.deepEqual(dropReasons, [
       '2 dependencies in `project.optional-dependencies.dev` were not proposed — an extra or a ' +
       'dev group is not part of what the module runs: pytest, ruff',
       '1 dependency in `project.optional-dependencies.docs` was not proposed — an extra or a ' +
       'dev group is not part of what the module runs: mkdocs',
+      '1 dependency in `build-system.requires` was not proposed — a build backend is not part ' +
+      'of what the module runs: hatchling',
     ]);
-    assert.equal(dropped, 3);
+    assert.equal(dropped, 4);
   });
 
   test('neither Python itself nor a [tool.*] table becomes an entity', () => {
     assert.ok(!titles(items).some(t => /^python$/i.test(t)), 'the interpreter is the runtime, not a dependency');
     assert.ok(!titles(items).includes('ruff'), '[tool.ruff] is configuration, not a dependency');
     assert.ok(!titles(items).includes('hatchling'), 'the build backend is not a runtime dependency');
+  });
+
+  test('the build backend is named where it went, not dropped in silence', () => {
+    // The producer's own rule: what it does not propose is dropped WITH a
+    // reason, so a reviewer who expected to see `hatchling` can find out where
+    // it went — the same courtesy Cargo's `[build-dependencies]` already got.
+    assert.ok(
+      dropReasons.some(r => r.includes('`build-system.requires`') && r.includes('hatchling')),
+      `no drop reason names hatchling: ${dropReasons.join(' | ')}`,
+    );
+  });
+
+  test('a pyproject with no [build-system] adds no reason for one', () => {
+    const out = parse(
+      '[project]\nname = "leaf"\nversion = "0.1.0"\ndependencies = ["requests>=2.31"]\n',
+      {}, 'a pyproject with no build system',
+    );
+    assert.deepEqual(titles(out.items), ['leaf', 'requests']);
+    assert.deepEqual(out.dropReasons, []);
+    assert.equal(out.dropped, 0);
+  });
+
+  test('a Poetry project\'s own [build-system] is reported the same way', () => {
+    // Every Poetry project writes one, so this is the common case rather than
+    // the exotic one.
+    const text = [
+      '[tool.poetry]',
+      'name = "billing-reports"',
+      'version = "2.0.0"',
+      '',
+      '[tool.poetry.dependencies]',
+      'python = "^3.12"',
+      'requests = "^2.31"',
+      '',
+      '[build-system]',
+      'requires = ["poetry-core>=1.0.0"]',
+      'build-backend = "poetry.core.masonry.api"',
+      '',
+    ].join('\n');
+    const out = parse(text, {}, 'a Poetry pyproject with its build system');
+    assert.deepEqual(titles(out.items), ['billing-reports', 'requests'],
+      'poetry-core is a drop reason, not an entity');
+    assert.deepEqual(out.dropReasons, [
+      '1 dependency in `build-system.requires` was not proposed — a build backend is not part ' +
+      'of what the module runs: poetry-core',
+    ]);
+    assert.equal(out.dropped, 1);
   });
 
   test('Poetry\'s spelling of the same manifest reads the same way', () => {
@@ -466,6 +520,43 @@ describe('refusals', () => {
       assert.match(items[0].proposed.summary, /with 0 direct runtime dependencies/);
       assert.equal(dropped, 0, 'nothing was dropped: there was nothing there');
     }
+  });
+
+  test('a value nested past the depth ceiling is refused with its line, not a stack overflow', () => {
+    // The reader recurses once per nesting level, so an unbounded one met this
+    // file with a `RangeError` — which is not a ManifestParseError, so the
+    // route answered 500 where it promises a 400 naming the line, for a file
+    // well inside the character cap. `refusal` asserts the class, which is the
+    // half of this that was wrong.
+    const bomb = `[package]\nname = "deep"\nx = ${'['.repeat(20_000)}`;
+    assert.ok(bomb.length < MAX_MANIFEST_CHARS, 'the file under test must be inside the character cap');
+    const err = refusal(() => parseManifest(bomb));
+    assert.equal(err.line, 3, 'the line the nesting ran away on');
+    assert.match(err.message, new RegExp(`nested deeper than ${MAX_TOML_DEPTH}`));
+
+    // One past the ceiling is the same refusal: the bound is the bound, not a
+    // guess about how deep a stack happens to be.
+    const over = `[package]\nname = "deep"\nx = ${'['.repeat(MAX_TOML_DEPTH + 1)}${']'.repeat(MAX_TOML_DEPTH + 1)}\n`;
+    assert.equal(refusal(() => parseManifest(over)).line, 3);
+  });
+
+  test('the nesting a real manifest uses is read, not refused', () => {
+    // Cargo's own spelling: an array inside an inline table, two levels deep.
+    const cargo = '[package]\nname = "statement-renderer"\nversion = "0.3.1"\n\n'
+      + '[dependencies]\nserde = { version = "1.0", features = ["derive"] }\n';
+    assert.deepEqual(titles(parse(cargo, {}, 'an array inside an inline table').items),
+      ['statement-renderer', 'serde']);
+
+    // Poetry's multiple-constraints spelling: inline tables inside an array.
+    const poetry = '[tool.poetry]\nname = "billing-reports"\nversion = "2.0.0"\n\n'
+      + '[tool.poetry.dependencies]\npython = "^3.12"\n'
+      + 'numpy = [{ version = "^1.26", python = "^3.9" }, { version = "^2.0", python = "^3.12" }]\n';
+    assert.deepEqual(titles(parse(poetry, {}, 'inline tables inside an array').items),
+      ['billing-reports', 'numpy']);
+
+    // And the ceiling itself is allowed, so the bound refuses only past it.
+    const atCeiling = `[package]\nname = "deep"\nx = ${'['.repeat(MAX_TOML_DEPTH)}${']'.repeat(MAX_TOML_DEPTH)}\n`;
+    assert.equal(parse(atCeiling, {}, 'nesting exactly at the ceiling').items.length, 1);
   });
 
   test('an empty file is refused rather than becoming an empty draft', () => {

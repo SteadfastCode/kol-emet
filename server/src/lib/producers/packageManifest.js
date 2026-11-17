@@ -40,8 +40,9 @@
  *     carries, and they go the same way;
  *   - a dev or test dependency is not part of what the module RUNS, so it is
  *     not an edge in an architecture graph. `devDependencies`, Cargo's
- *     `[dev-dependencies]` and `[build-dependencies]`, Poetry's groups and
- *     PEP 621's extras are all read, counted and dropped.
+ *     `[dev-dependencies]` and `[build-dependencies]`, Poetry's groups,
+ *     PEP 621's extras and `[build-system].requires` — the build backend — are
+ *     all read, counted and dropped.
  * Dropped with a REASON rather than silently, so a reviewer who expected to see
  * `jest` can find out where it went. One reason per GROUP rather than per
  * package: a typical package.json has twenty devDependencies, and twenty lines
@@ -553,6 +554,20 @@ const unquote = value => String(value ?? '').replace(/^["'`]|["'`]$/g, '').trim(
 // ─── pyproject.toml and Cargo.toml ───────────────────────────────────────────
 
 /**
+ * How deep an array or an inline table may nest.
+ *
+ * The reader below recurses once per level, so without a ceiling a file of
+ * 20,000 `[` — well inside MAX_MANIFEST_CHARS, and a TOML manifest as far as
+ * `detectFamily` is concerned — overflows the stack, and a `RangeError` is not
+ * a ManifestParseError: the route would answer 500 where it promises a 400
+ * naming the line. A real manifest nests two levels (`serde = { version =
+ * "1.0", features = ["derive"] }`) and a Poetry multi-constraint dependency
+ * three, so a low ceiling costs nothing, and crossing it is refused as the
+ * parse error it is.
+ */
+export const MAX_TOML_DEPTH = 16;
+
+/**
  * The TOML these two need, read by hand.
  *
  * There is no TOML parser among the server's dependencies, and the subset a
@@ -661,41 +676,30 @@ function readTomlTables(source, fail) {
     node[parts[parts.length - 1]] = value;
   };
 
+  /** How many arrays and inline tables the reader is currently inside. */
+  let depth = 0;
+
+  /**
+   * A value: a string, an array, an inline table, or the text up to the
+   * delimiter.
+   *
+   * The two that nest are the two that recurse, so the nesting bound
+   * (MAX_TOML_DEPTH) is checked here, once, at the `[` or `{` that would cross
+   * it — a refusal naming its line, which is what the route documents, rather
+   * than the stack overflow an unbounded reader answers with.
+   */
   const readValue = () => {
     skipSpace();
     const c = source[i];
     if (c === '"' || c === "'") return readString();
-    if (c === '[') {
-      const start = i++;
-      const out = [];
-      for (;;) {
-        skipGaps();
-        if (i >= source.length) throw fail('An unclosed array', start);
-        if (source[i] === ']') { i++; return out; }
-        out.push(readValue());
-        skipGaps();
-        if (source[i] === ',') { i++; continue; }
-        if (source[i] === ']') { i++; return out; }
-        throw fail('An array missing a comma', i);
+    if (c === '[' || c === '{') {
+      if (depth >= MAX_TOML_DEPTH) {
+        throw fail(`A value nested deeper than ${MAX_TOML_DEPTH} arrays or inline tables`, i);
       }
-    }
-    if (c === '{') {
-      const start = i++;
-      const out = {};
-      for (;;) {
-        skipGaps();
-        if (i >= source.length) throw fail('An unclosed inline table', start);
-        if (source[i] === '}') { i++; return out; }
-        const key = readKey();
-        skipSpace();
-        if (source[i] !== '=') throw fail('An inline table entry with no `=`', i);
-        i++;
-        assign(out, key, readValue());
-        skipGaps();
-        if (source[i] === ',') { i++; continue; }
-        if (source[i] === '}') { i++; return out; }
-        throw fail('An inline table missing a comma', i);
-      }
+      depth++;
+      const value = c === '[' ? readArray() : readInlineTable();
+      depth--;
+      return value;
     }
     const start = i;
     while (i < source.length && !'\n,]}#'.includes(source[i])) i++;
@@ -704,6 +708,42 @@ function readTomlTables(source, fail) {
     if (raw === 'true') return true;
     if (raw === 'false') return false;
     return raw;
+  };
+
+  /** `[a, b]`, over as many lines, comments and trailing commas as it likes. */
+  const readArray = () => {
+    const start = i++;
+    const out = [];
+    for (;;) {
+      skipGaps();
+      if (i >= source.length) throw fail('An unclosed array', start);
+      if (source[i] === ']') { i++; return out; }
+      out.push(readValue());
+      skipGaps();
+      if (source[i] === ',') { i++; continue; }
+      if (source[i] === ']') { i++; return out; }
+      throw fail('An array missing a comma', i);
+    }
+  };
+
+  /** `{ version = "1.0", features = ["derive"] }`. */
+  const readInlineTable = () => {
+    const start = i++;
+    const out = {};
+    for (;;) {
+      skipGaps();
+      if (i >= source.length) throw fail('An unclosed inline table', start);
+      if (source[i] === '}') { i++; return out; }
+      const key = readKey();
+      skipSpace();
+      if (source[i] !== '=') throw fail('An inline table entry with no `=`', i);
+      i++;
+      assign(out, key, readValue());
+      skipGaps();
+      if (source[i] === ',') { i++; continue; }
+      if (source[i] === '}') { i++; return out; }
+      throw fail('An inline table missing a comma', i);
+    }
   };
 
   for (;;) {
@@ -844,7 +884,9 @@ const constraintOf = value => {
  *
  * Extras and groups are dropped: `[project.optional-dependencies]` and Poetry's
  * groups are not installed by a plain install, which is the line this producer
- * draws between a runtime dependency and a dev one.
+ * draws between a runtime dependency and a dev one. `[build-system].requires`
+ * goes the same way, with the same reason Cargo's `[build-dependencies]` is
+ * given: a build backend is not part of what the module runs.
  */
 function readPyproject(source, tree, fail, dropMany) {
   const { get, offsetOf } = tree;
@@ -938,6 +980,25 @@ function readPyproject(source, tree, fail, dropMany) {
       dropMany(names.length,
         `${names.length} ${plural(names.length)} in \`tool.poetry.group.${group}.dependencies\` ${names.length === 1 ? 'was' : 'were'} not proposed — ` +
         `a Poetry group is not taken by a plain install: ${listNames(names)}`);
+    }
+  }
+
+  // The build backend, dropped with a reason of its own.
+  // `[build-system].requires` names what BUILDS the wheel — hatchling, setuptools, poetry-core
+  // — which is not part of what the module runs, exactly as Cargo's
+  // `[build-dependencies]` is not. Every PEP 517 project has one, Poetry's
+  // included, so a silent drop here is the one a reviewer would most often be
+  // left guessing at. Listed last, after the extras and the groups, because
+  // this is the one drop that is not a dependency group at all.
+  const buildRequires = get(['build-system', 'requires']);
+  if (Array.isArray(buildRequires)) {
+    const names = buildRequires
+      .map(entry => parseRequirement(String(entry))?.name ?? String(entry).trim())
+      .filter(Boolean);
+    if (names.length) {
+      dropMany(names.length,
+        `${names.length} ${plural(names.length)} in \`build-system.requires\` ${names.length === 1 ? 'was' : 'were'} not proposed — ` +
+        `a build backend is not part of what the module runs: ${listNames(names)}`);
     }
   }
 
