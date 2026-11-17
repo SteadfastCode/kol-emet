@@ -1,0 +1,175 @@
+{
+  "item": "KOL-142",
+  "repo": "kol-emet",
+  "mergeSha": "eed2d43914637cc6e109187b77681dbbc90646ef",
+  "completedAtUtc": "2026-11-16T17:50:39.163Z",
+  "completeRunId": "2026-11-16T17:37:43.150Z",
+  "reviewRunId": "2026-11-17T08:01:47.892Z",
+  "reviewedAtUtc": "2026-11-17T08:12:09.447Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 59268,
+  "contextFiles": 13,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntityEditor.test.js",
+        "client/src/components/EntityEditor.vue"
+      ],
+      "part": null,
+      "bytes": 8422,
+      "contextBytes": 0,
+      "promptTokens": 3592,
+      "completionTokens": 150,
+      "latencyMs": 17496,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/blocks/GalleryBlock.test.js",
+        "client/src/components/blocks/GalleryBlock.vue"
+      ],
+      "part": null,
+      "bytes": 11133,
+      "contextBytes": 0,
+      "promptTokens": 4518,
+      "completionTokens": 146,
+      "latencyMs": 17389,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/data-model.md",
+        "docs/roadmap.md",
+        "docs/wishlist.md",
+        "kol_emet_spec.md",
+        "server/src/lib/draftApplier.js",
+        "server/src/lib/graphImporter.js"
+      ],
+      "part": null,
+      "bytes": 9812,
+      "contextBytes": 0,
+      "promptTokens": 4003,
+      "completionTokens": 79,
+      "latencyMs": 12341,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/Entity.js",
+        "server/src/routes/entities.js",
+        "server/src/routes/mcp.js"
+      ],
+      "part": null,
+      "bytes": 9108,
+      "contextBytes": 0,
+      "promptTokens": 3797,
+      "completionTokens": 109,
+      "latencyMs": 13184,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/galleryBlock.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11633,
+      "contextBytes": 0,
+      "promptTokens": 4541,
+      "completionTokens": 72,
+      "latencyMs": 13701,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/galleryBlock.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 9375,
+      "contextBytes": 0,
+      "promptTokens": 3886,
+      "completionTokens": 399,
+      "latencyMs": 27900,
+      "findings": 0,
+      "needs": 12,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. The change introduces a new gallery block type with URL and caption fields, but the server-side validation logic is not yet implemented. · No real defects found in the provided diff. The changes seem to add a new gallery block type with proper validation and rendering logic. · No real defects found. The change introduces a new gallery block type with validation rules and rendering logic, but the implementation details are not fully visible in the provided diff. · No real defects found in the provided diff. However, additional verification is needed to ensure that the `validateBlocks` function and the `blockDataError` function are correctly integrated and functioning as expected. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `blockDataError`. · The diff introduces a new test file for gallery block validation and import/export scenarios. It includes tests for valid and invalid gallery blocks, legacy empty galleries, and the draft applier's behavior with good and bad gallery blocks. The code relies on several symbols that are not defined in the provided diff, such as `MAX_GALLERY_IMAGES`, `postEntity`, `galleryBlock`, etc.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 47888,
+    "completionTokens": 1711
+  },
+  "latencyMs": 192886
+}
