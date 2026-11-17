@@ -704,3 +704,37 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   `server/tests/http/sessionRevocation.test.js` that pins the other side; each runs red against the
   pre-fix code. **Out of scope, deliberately:** closing a bearer stream on a session revocation (see
   above), the session-store limit KOL-076 recorded, and any change to the `session-ended` contract.
+- **A name crosses a namespace only where the host itself proves it is in-cluster (decided 2026-11-17,
+  KOL-143)** — KOL-118 made the namespace data rather than inference, and its own grader found two
+  places the Kubernetes producer still crossed a boundary Kubernetes never would. `configMaps` was
+  keyed by bare `metadata.name` while every other identity in that file is a `(name, namespace)` pair,
+  so two `app-env` ConfigMaps in one stream overwrote each other and the **last document in the file**
+  silently decided what every pod naming `app-env` reads: a Deployment `api` in `prod` whose
+  `envFrom.configMapRef` names `app-env` was given `staging`'s values and proposed `Calls api →
+  staging-cache` — an edge out of env that is not in that pod, from a ConfigMap it cannot read. And
+  `readIn`'s `perNamespace.size === 1` fallback resolved a **bare** host across a boundary: `api` in
+  `prod` reading `redis://cache:6379` reached a `cache` in `infra` whenever that was the file's only
+  one. The comment justifying it — "so a file whose manifests are vague about namespaces still resolves
+  the way it always did" — described a case the branch above it already answers, because a
+  single-namespace file *is* the reader's namespace; what the fallback actually did was fire only when
+  reader and target were in different namespaces, the one thing a bare host cannot mean. **A
+  `configMapRef` is looked up in the reading workload's namespace and nowhere else** (it carries no
+  namespace field in Kubernetes precisely because it always means the pod's own, so the lookup has
+  exactly one correct answer), and **a bare host resolves only in the reader's own namespace**, which
+  is all the pod's DNS search path reaches. The lenient one-candidate read survives on the
+  cluster-suffix path alone: `postgres.prod.svc.cluster.local` is itself proof the host is in-cluster
+  and may name a namespace no document in the file declares — an overlay that patches it in, a stream
+  holding one half of a pair — which is the case that comment was written for. Both skips are **drop
+  reasons naming both namespaces**, not silence, for the reason KOL-111 gave: a false `Calls` edge is
+  the worst shape of wrong for this producer, and a reviewer who cannot see what was skipped cannot
+  tell a quiet one from a correct reading. A `configMapRef` naming a ConfigMap the file holds *nowhere*
+  stays silent, because that is the normal shape of the input — `kubectl get all -A` lists no
+  ConfigMaps — and a reason per ref would bury the drops that mean something. `PRODUCER_VERSION` stays
+  `kubernetes@1`: the version names the *mapping* — which object becomes which entity and which edge
+  joins them — and both fixes correct a lookup inside that mapping rather than changing the shape it
+  emits, exactly as KOL-118 did when it introduced namespace identity. Covered by four cases in
+  `server/tests/unit/kubernetes.test.js` (the two `app-env` ConfigMaps, an `envFrom` the file holds
+  only elsewhere plus the absent ref that stays quiet, a bare host from outside and from inside its
+  object's namespace, and a cluster-DNS host naming a namespace nothing declares), each run red
+  against the pre-fix code. **Out of scope:** `envFrom.secretRef` (a Secret names no host and the
+  redactor owns it), cross-namespace Services, and `NetworkPolicy`.

@@ -39,7 +39,14 @@
  * of the second being dropped as a duplicate of the first; a Service's selector
  * reaches only its own namespace, as Kubernetes' does; and a host is resolved
  * against the namespace it names, or the reading pod's own (resolveHost).
- * KOL-118.
+ * KOL-118. Every identity in this file is that (name, namespace) pair, the
+ * ConfigMap an `envFrom` reads included, and the ONE place a name is read across
+ * a namespace boundary is a host that carries the cluster-DNS suffix — the one
+ * host that is proof of being in-cluster and may name a namespace no document
+ * here declares. A bare host, and a `configMapRef`, mean the reader's own
+ * namespace and nothing else; where they name an object this file has only
+ * elsewhere, that is a drop reason naming both namespaces, not silence.
+ * KOL-143.
  *
  * A `kind` this mapping has no reading for — Ingress, HorizontalPodAutoscaler,
  * CustomResourceDefinition, anything a controller of its own owns — is a drop
@@ -112,9 +119,10 @@ const TITLED_KINDS = new Set([...WORKLOAD_KINDS, 'PersistentVolumeClaim', 'Servi
 /**
  * Kinds this mapping deliberately passes over without a drop reason: they
  * carry no architecture of their own, or they are read as part of something
- * else. A ConfigMap is read — its values are where an envFrom URL lives — but
- * it is not an entity: a graph with one node per ConfigMap says nothing a
- * reviewer wants. A Secret is never read at all.
+ * else. A ConfigMap is read — its values are where an envFrom URL lives, for the
+ * pods in its own namespace (envEntries) — but it is not an entity: a graph with
+ * one node per ConfigMap says nothing a reviewer wants. A Secret is never read
+ * at all.
  */
 const QUIET_KINDS = new Set([
   'ConfigMap', 'Secret', 'Namespace', 'ServiceAccount', 'List',
@@ -340,9 +348,25 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   const externals = [];           // same shape; listed after everything in the file
   const entityByTitle = new Map();
   const workloads = [];           // { name, obj, labels, containers }
-  const configMaps = new Map();   // name -> { values: [{ key, value, offset }] }
+  // `name` -> `namespace` -> { values: [{ key, value, offset }] }. Nested exactly
+  // as hostToEntity is, and for the same reason: in a cluster a name is not
+  // unique. Keyed by the bare name alone, two `app-env` ConfigMaps in one stream
+  // overwrote each other, so the last document in the file silently decided what
+  // every pod naming `app-env` reads — and an edge built out of those values was
+  // attributed to a pod that cannot read the ConfigMap it came from (KOL-143).
+  const configMaps = new Map();
   const edges = [];               // { label, roles, from, to, offset }
   const edgeKeys = new Set();
+
+  const addConfigMap = (name, namespace, values) => {
+    let perNamespace = configMaps.get(name);
+    if (!perNamespace) configMaps.set(name, perNamespace = new Map());
+    // First document wins, the same as every other identity in this file
+    // (addHost, entityByTitle): two objects of one kind sharing a name AND a
+    // namespace cannot both exist in a cluster, so a stream holding both says
+    // nothing about which is current.
+    if (!perNamespace.has(namespace)) perNamespace.set(namespace, { values });
+  };
 
   const addEdge = (label, roles, from, to, offset) => {
     const key = `${label}\u0000${from}\u0000${to}`;
@@ -368,7 +392,7 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
           if (value != null) values.push({ key: String(p.key.value), value, offset: p.key.range?.[0] });
         }
       }
-      if (name) configMaps.set(name, { values });
+      if (name) addConfigMap(name, obj.namespace, values);
       continue;
     }
 
@@ -564,20 +588,21 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
   // ── pass 3: env and envFrom URLs -> Calls, or an External Dependency ───────
   for (const w of workloads) {
     const { read } = w;
-    for (const { key, value, offset } of envEntries(w, read, configMaps)) {
+    for (const { key, value, offset } of envEntries(w, read, configMaps, drop)) {
       for (const host of urlHosts(value)) {
-        const { target, ambiguousIn } = resolveHost(host, hostToEntity, w.namespace);
+        const { target, elsewhereIn } = resolveHost(host, hostToEntity, w.namespace);
         if (target) {
           addEdge('Calls', CALLS, w.title, target, offset);
-        } else if (ambiguousIn) {
-          // The file DOES name this host, in several namespaces and none of them
-          // this pod's, so the External Dependency reading — "a host naming
+        } else if (elsewhereIn) {
+          // The file DOES name this host, but only in namespaces this pod cannot
+          // reach it in, so the External Dependency reading — "a host naming
           // nothing in the file" (see the mapping at the top) — is not true of
-          // it, and picking one of the candidates would be a guess. So it is
-          // said out loud and nothing is proposed, the same as any other
-          // reference this producer cannot read (KOL-118).
+          // it, and reaching across the boundary anyway would propose an edge
+          // the cluster's own DNS would never make. So it is said out loud and
+          // nothing is proposed, the same as any other reference this producer
+          // cannot read (KOL-118, KOL-143).
           drop(`"${host}" in ${w.title}'s ${key} names an object in ` +
-            `${ambiguousIn.map(ns => `\`${ns}\``).join(' and ')} and none in \`${w.namespace}\`, ` +
+            `${elsewhereIn.map(ns => `\`${ns}\``).join(' and ')} and none in \`${w.namespace}\`, ` +
             'so nothing was proposed for it');
         } else if (!LOCAL_HOSTS.has(host) && !host.startsWith('127.')) {
           if (!entityByTitle.has(host)) {
@@ -732,8 +757,22 @@ export function parseKubernetes(text, { existingEntities = [], existingGroups = 
  *
  * The first binding of a name wins, the way a container's own `env` overrides
  * what `envFrom` brought in.
+ *
+ * A `configMapRef` is looked up in the WORKLOAD'S OWN NAMESPACE, and nowhere
+ * else. It carries no namespace field in Kubernetes precisely because it always
+ * means the pod's namespace, so the lookup has exactly one correct answer: an
+ * `app-env` in `staging` is a different object from the `app-env` in `prod`, and
+ * reading it for a pod in `prod` attributes env — and every host resolved out of
+ * it — to a pod that cannot read a byte of it (KOL-143).
+ *
+ * `configMaps` is `name` -> `namespace` -> values. A ref the file holds only in
+ * other namespaces is a drop reason naming both ends; a ref to a ConfigMap the
+ * file does not hold at all stays silent, because that is the normal shape of
+ * the input — `kubectl get all -A` lists no ConfigMaps, and a stream whose
+ * config is applied separately names refs this file can say nothing about. One
+ * reason per workload and ref, not per container that pulls it in.
  */
-function envEntries(workload, read, configMaps) {
+function envEntries(workload, read, configMaps, drop) {
   const out = [];
   const seen = new Set();
   const add = (key, value, offset) => {
@@ -751,12 +790,23 @@ function envEntries(workload, read, configMaps) {
       add(name, read.scalarString(read.pairOf(entry, 'value')?.value), namePair?.key?.range?.[0]);
     }
   }
+  const reported = new Set();
   for (const container of workload.containers) {
     for (const entry of read.seqItems(read.pairOf(container, 'envFrom')?.value)) {
       const refPair = read.pairAt(entry, ['configMapRef', 'name']);
       const name = (read.scalarString(refPair?.value) ?? '').trim();
-      const configMap = name ? configMaps.get(name) : null;
-      if (!configMap) continue;
+      if (!name) continue;
+      const perNamespace = configMaps.get(name);
+      const configMap = perNamespace?.get(workload.namespace) ?? null;
+      if (!configMap) {
+        if (perNamespace?.size && !reported.has(name)) {
+          reported.add(name);
+          drop(`${workload.title}'s \`envFrom\` names ConfigMap "${name}", which this file declares in ` +
+            `${[...perNamespace.keys()].sort().map(ns => `\`${ns}\``).join(' and ')} and not in ` +
+            `\`${workload.namespace}\`, so its values were not read`);
+        }
+        continue;
+      }
       for (const { key, value, offset } of configMap.values) add(key, value, offset);
     }
   }
@@ -765,9 +815,9 @@ function envEntries(workload, read, configMaps) {
 
 /**
  * What an env URL's host names: `{ target }` when it reaches one entity in this
- * file, `{ ambiguousIn: [namespace, …] }` when the name is in the file but in
- * several namespaces and none of them the reading pod's, and neither when it
- * names nothing here at all.
+ * file, `{ elsewhereIn: [namespace, …] }` when the name is in the file but only
+ * in namespaces the reading pod would not reach it in, and neither when it names
+ * nothing here at all.
  *
  * `hostToEntity` is `name` -> `namespace` -> entity title, so the namespace a
  * host carries is CHECKED rather than thrown away. Four readings, in order:
@@ -775,10 +825,12 @@ function envEntries(workload, read, configMaps) {
  *   `postgres`                            an exact name wins first, because a
  *                                         workload name may be a DNS subdomain
  *                                         and so may carry a dot of its own
- *   `postgres`                            else the `postgres` in the reading
- *                                         pod's own namespace — where Kubernetes
- *                                         looks first — and failing that the
- *                                         only `postgres` in the file
+ *   `postgres`                            the `postgres` in the reading pod's
+ *                                         OWN namespace, and only there: a bare
+ *                                         host is what Kubernetes resolves off
+ *                                         the pod's search path, which begins
+ *                                         `<reader namespace>.svc.cluster.local`
+ *                                         and reaches no other namespace
  *   `postgres.prod`                       the `postgres` in `prod`, and nothing
  *                                         else: a `postgres` in `team-b` is a
  *                                         different object and this host does
@@ -803,49 +855,64 @@ function envEntries(workload, read, configMaps) {
  * two-label host used to resolve on nothing more than its second label being a
  * namespace named somewhere in the stream, so in `kubectl get all -A` output —
  * the input this producer's own header invites — `cache.prod` reached a `cache`
- * in `team-b` and proposed a `Calls` edge to the wrong object (KOL-118).
+ * in `team-b` and proposed a `Calls` edge to the wrong object (KOL-118). Nor is
+ * being the ONLY candidate in the file a reading of its own: a bare `cache` read
+ * from `prod` used to reach a `cache` in `infra` whenever that was the file's
+ * only one, which `cache.prod.svc.cluster.local` — the name the pod's search
+ * path actually asks for — would never do (KOL-143).
  */
 function resolveHost(host, hostToEntity, readerNamespace) {
   const exact = readIn(hostToEntity.get(host), readerNamespace);
-  if (exact.target || exact.ambiguousIn) return exact;
+  if (exact.target || exact.elsewhereIn) return exact;
 
   if (CLUSTER_SUFFIX_RE.test(host)) {
     // `postgres.prod.svc.cluster.local` -> the `postgres` in `prod`, or the only
     // `postgres` there is. Matching the namespace is preferred but not required
-    // here, which is the one place a cluster name is read more loosely than a
-    // bare `name.namespace`: the suffix says the host is in-cluster, and the
-    // namespace it names may belong to no document in the file.
+    // here, and this is the ONE path that reads a name across a namespace
+    // boundary: the suffix is proof the host is in-cluster, and the namespace it
+    // names may belong to no document in the file — an overlay that patches the
+    // namespace in, a file holding one half of a pair. A bare host carries no
+    // such proof, so it gets no such licence (KOL-143).
     const labels = host.replace(CLUSTER_SUFFIX_RE, '').split('.');
     const perNamespace = hostToEntity.get(labels[0]);
     if (labels.length === 2 && perNamespace?.has(labels[1])) {
-      return { target: perNamespace.get(labels[1]), ambiguousIn: null };
+      return { target: perNamespace.get(labels[1]), elsewhereIn: null };
     }
-    return readIn(perNamespace, readerNamespace);
+    return readIn(perNamespace, readerNamespace, { acrossNamespaces: true });
   }
 
   const labels = host.split('.');
   if (labels.length === 2) {
     const perNamespace = hostToEntity.get(labels[0]);
-    if (perNamespace?.has(labels[1])) return { target: perNamespace.get(labels[1]), ambiguousIn: null };
+    if (perNamespace?.has(labels[1])) return { target: perNamespace.get(labels[1]), elsewhereIn: null };
   }
-  return { target: null, ambiguousIn: null };
+  return { target: null, elsewhereIn: null };
 }
 
 /**
  * One name's `namespace` -> title map, read the way a pod in `readerNamespace`
- * reads a bare host: its own namespace first, because that is where Kubernetes'
- * search path looks; then, when the name is in exactly one namespace, that one,
- * so a file whose manifests are vague about namespaces still resolves the way it
- * always did. A name in SEVERAL namespaces, none of them the reader's, names no
- * one thing — it reports the candidates rather than picking one of them.
+ * reads the host: its own namespace, because a bare name resolves off the pod's
+ * search path and that path reaches nowhere else. A name the reader's namespace
+ * does not hold names no one thing here — it reports the namespaces that DO hold
+ * it rather than reaching into one of them.
+ *
+ * `acrossNamespaces` is the cluster-suffix caller's licence to take the file's
+ * only candidate anyway (see resolveHost). It was unconditional until KOL-143,
+ * and the comment that justified it — "so a file whose manifests are vague about
+ * namespaces still resolves the way it always did" — described a case the branch
+ * above already answers: a single-namespace file IS the reader's namespace, so
+ * the one-candidate fallback only ever fired when reader and target were in
+ * different namespaces, which is the one thing a bare host cannot mean.
  */
-function readIn(perNamespace, readerNamespace) {
-  if (!perNamespace?.size) return { target: null, ambiguousIn: null };
+function readIn(perNamespace, readerNamespace, { acrossNamespaces = false } = {}) {
+  if (!perNamespace?.size) return { target: null, elsewhereIn: null };
   if (perNamespace.has(readerNamespace)) {
-    return { target: perNamespace.get(readerNamespace), ambiguousIn: null };
+    return { target: perNamespace.get(readerNamespace), elsewhereIn: null };
   }
-  if (perNamespace.size === 1) return { target: [...perNamespace.values()][0], ambiguousIn: null };
-  return { target: null, ambiguousIn: [...perNamespace.keys()].sort() };
+  if (acrossNamespaces && perNamespace.size === 1) {
+    return { target: [...perNamespace.values()][0], elsewhereIn: null };
+  }
+  return { target: null, elsewhereIn: [...perNamespace.keys()].sort() };
 }
 
 /** Lower-cased hosts of every URL in `value`; templated hosts are skipped. */

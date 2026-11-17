@@ -38,6 +38,15 @@
  *                                                   duplicate of the first
  *   - the selector's namespace check removed     -> a Service in `prod` claims a
  *                                                   workload in `team-b`
+ *   - `configMaps` keyed by bare name again      -> the `prod` pod reads the
+ *                                                   `staging` ConfigMap's values
+ *   - readIn's one-candidate fallback made
+ *     unconditional again                        -> a bare `cache` read from
+ *                                                   `prod` reaches the `cache`
+ *                                                   in `infra`
+ *   - `acrossNamespaces` ignored on the
+ *     cluster-suffix path                        -> `db.legacy.svc.cluster.local`
+ *                                                   stops resolving
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_KUBERNETES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -357,6 +366,24 @@ describe('other manifest shapes', () => {
     `          image: ${image}`,
   ].join('\n');
 
+  const configMap = (name, namespace, data) => [
+    'apiVersion: v1',
+    'kind: ConfigMap',
+    'metadata:',
+    `  name: ${name}`,
+    ...(namespace ? [`  namespace: ${namespace}`] : []),
+    'data:',
+    ...Object.entries(data).map(([k, v]) => `  ${k}: ${v}`),
+  ].join('\n');
+
+  /** A workload that pulls one ConfigMap in wholesale, the shape `envFrom` takes. */
+  const readerOf = (configMapName, namespace) => [
+    deployment('api', 'ghcr.io/acme/api:1', { app: 'api' }, namespace),
+    '          envFrom:',
+    '            - configMapRef:',
+    `                name: ${configMapName}`,
+  ].join('\n');
+
   test('a DaemonSet is a workload like the other two kinds', () => {
     const text = manifest([
       'apiVersion: apps/v1',
@@ -610,6 +637,102 @@ describe('other manifest shapes', () => {
     const fromProd = parse(manifest(reader('prod'), ...caches), {}, 'the same host from inside prod');
     assert.deepEqual(edges(fromProd.items, 'Calls'), ['Caller:api → Callee:cache.prod']);
     assert.deepEqual(fromProd.dropReasons, []);
+  });
+
+  test('a bare host is read in the reading pod’s namespace and in no other', () => {
+    // KOL-143. The one-candidate fallback used to answer this: a pod in `prod`
+    // reading `redis://cache:6379` reached the `cache` in `infra` whenever that
+    // was the file's only one — an edge `cache.prod.svc.cluster.local`, the name
+    // the pod's own search path asks for, would never make. A single-namespace
+    // file was never the case that fallback served (the reader's namespace IS
+    // that namespace), so what it actually did was cross a boundary.
+    const reader = namespace => [
+      deployment('api', 'ghcr.io/acme/api:1', { app: 'api' }, namespace),
+      '          env:',
+      '            - name: CACHE_URL',
+      '              value: redis://cache:6379/0',
+    ].join('\n');
+
+    const across = parse(manifest(reader('prod'), deployment('cache', 'redis:7', { app: 'cache' }, 'infra')),
+      {}, 'a bare host whose only candidate is in another namespace');
+    assert.deepEqual(edges(across.items, 'Calls'), [], 'the `cache` in infra is not on this pod’s search path');
+    assert.deepEqual(edges(across.items, 'Depends on'), [],
+      'a name this file does hold is not an external host either');
+    assert.deepEqual(entities(across.items).map(i => i.proposed.title), ['api', 'cache']);
+    assert.deepEqual(across.dropReasons, [
+      '"cache" in api\'s CACHE_URL names an object in `infra` and none in `prod`, '
+      + 'so nothing was proposed for it',
+    ]);
+
+    // The same host beside the object it names resolves exactly as it always did.
+    const beside = parse(manifest(reader('prod'), deployment('cache', 'redis:7', { app: 'cache' }, 'prod')),
+      {}, 'the same host with its candidate in prod');
+    assert.deepEqual(edges(beside.items, 'Calls'), ['Caller:api → Callee:cache']);
+    assert.deepEqual(beside.dropReasons, []);
+  });
+
+  test('a cluster-DNS host is the one reading that may cross a namespace', () => {
+    // The suffix is proof the host is in-cluster, and the namespace it carries
+    // may belong to no document in the file — an overlay that patches the
+    // namespace in, a stream holding one half of a pair. So `cache.infra.svc…`
+    // reaches the `infra` one by name, and `db.legacy.svc…` — `legacy` being a
+    // namespace nothing here declares — still takes the file's only `db`. This
+    // is the licence KOL-143 took away from a bare host, kept where it belongs.
+    const text = manifest(
+      [deployment('api', 'ghcr.io/acme/api:1', { app: 'api' }, 'prod'),
+        '          env:',
+        '            - name: CACHE_URL',
+        '              value: redis://cache.infra.svc.cluster.local:6379/0',
+        '            - name: DB_URL',
+        '              value: postgres://db.legacy.svc.cluster.local:5432/x',
+      ].join('\n'),
+      deployment('cache', 'redis:7', { app: 'cache' }, 'infra'),
+      deployment('db', 'postgres:16', { app: 'db' }, 'infra'),
+    );
+    const { items, dropReasons } = parse(text, {}, 'cluster-DNS hosts read from another namespace');
+    assert.deepEqual(edges(items, 'Calls'), ['Caller:api → Callee:cache', 'Caller:api → Callee:db']);
+    assert.deepEqual(edges(items, 'Depends on'), []);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('an `envFrom` ConfigMap is read in the workload’s own namespace, not whichever document came last', () => {
+    // KOL-143. `configMaps` was keyed by bare `metadata.name`, so the second
+    // `app-env` overwrote the first and the last document in the file silently
+    // decided what every pod naming `app-env` reads: `api` in `prod` was given
+    // `staging`'s values and proposed a dependency on `staging-cache`, a host
+    // that is in no ConfigMap it can read. A `configMapRef` carries no namespace
+    // field precisely because it always means the pod's own.
+    const text = manifest(
+      configMap('app-env', 'prod', { CACHE_URL: 'redis://prod-cache:6379' }),
+      configMap('app-env', 'staging', { CACHE_URL: 'redis://staging-cache:6379' }),
+      readerOf('app-env', 'prod'),
+    );
+    const { items, dropReasons } = parse(text, {}, 'two same-named ConfigMaps in two namespaces');
+    assert.deepEqual(entities(items).map(i => i.proposed.title), ['api', 'prod-cache'],
+      'the staging ConfigMap belongs to no pod in this file');
+    assert.deepEqual(edges(items, 'Depends on'), ['Dependent:api → Dependency:prod-cache']);
+    assert.deepEqual(dropReasons, []);
+  });
+
+  test('an `envFrom` naming a ConfigMap this file has only elsewhere is a drop reason', () => {
+    const across = parse(manifest(
+      configMap('app-env', 'staging', { CACHE_URL: 'redis://staging-cache:6379' }),
+      readerOf('app-env', 'prod'),
+    ), {}, 'an envFrom reaching across a namespace');
+    assert.deepEqual(entities(across.items).map(i => i.proposed.title), ['api']);
+    assert.deepEqual(relationships(across.items), [], 'nothing it cannot read builds an edge');
+    assert.deepEqual(across.dropReasons, [
+      'api\'s `envFrom` names ConfigMap "app-env", which this file declares in `staging` '
+      + 'and not in `prod`, so its values were not read',
+    ]);
+
+    // A ref to a ConfigMap the file does not hold AT ALL stays silent, as it
+    // always has: `kubectl get all -A` lists no ConfigMaps and a stream whose
+    // config is applied separately names refs this file can say nothing about,
+    // so a reason per ref would bury the drops that mean something.
+    const absent = parse(readerOf('app-env', 'prod'), {}, 'an envFrom naming a ConfigMap not in the file');
+    assert.deepEqual(absent.dropReasons, []);
+    assert.deepEqual(entities(absent.items).map(i => i.proposed.title), ['api']);
   });
 
   test('a Service’s selector does not reach a workload in another namespace', () => {
