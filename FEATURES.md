@@ -106,7 +106,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised**
+- [x] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised**
   Two findings of the KOL-126 grader in the newest producer, both reproduced by calling `parseManifest` — one on the
   suite's own fixture, one on a crafted file.
   First, PEP 621 build requirements are dropped in silence. `readPyproject`
