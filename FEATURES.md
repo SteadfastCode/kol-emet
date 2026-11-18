@@ -139,6 +139,17 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-148) data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }) shallow-copies BLOCK_DEFAULTS.gallery,…**
+  Found by the grader of KOL-142 (medium, client/src/components/EntityEditor.vue:397). `data:
+  withEditableData(type, { ...BLOCK_DEFAULTS[type] })` shallow-copies `BLOCK_DEFAULTS.gallery`, so
+  every gallery block created in one editor instance shares the *same* `images` array object (the
+  spread copies the reference, and `withEditableData` leaves it alone because `Array.isArray` is
+  already true). Add two gallery blocks to one entity, click "+ Add image" in the second and type
+  a URL: the row appears in the first gallery too, and the save writes identical images into both
+  blocks. The hydration path at line 260 has the same aliasing — `{ ...b.data }` keeps
+  `props.initial.blocks[i].data.images`, so editing rows mutates the caller's object (the draft
+  item in the draft-review screen) even if the user cancels. Both tests pass only because each
+  exercises a single gallery block.
 - [ ] **(KOL-141) The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…**
   Found by the grader of KOL-134 (medium, server/src/routes/workspace.js:344). The floor filter is
   still applied conditionally on a stale read: `demotingAnOwner`/`removingAnOwner` (lines 344,

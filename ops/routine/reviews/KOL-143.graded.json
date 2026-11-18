@@ -1,0 +1,72 @@
+{
+  "item": "KOL-143",
+  "repo": "kol-emet",
+  "mergeSha": "c27028f41ede9e7c24d363864bbf7d31bce0170e",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-18T15:33:53.103Z",
+  "gradedAtUtc": "2026-11-18T16:01:44.604Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 931,
+      "severity": "low",
+      "summary": "On the cluster-suffix path, `readIn`'s reader-namespace branch runs before the `acrossNamespaces && size === 1` licence, so a cluster-DNS host that names a namespace the file does not hold for that name still resolves to the reader's own object even when there are 2+ candidates: `api` in `prod` with `redis://cache.infra.svc.cluster.local:6379`, plus a `cache` in `prod` and a `cache` in `staging` and none in `infra`, proposes `Calls: api → cache (prod)` — an edge to an object the host does not name, contradicting both docs/api.md (\"falling back to the only `cache` in the file\") and the new comment's claim that the licence is only \"to take the file's only candidate anyway\"; the ≥2-candidate case should report `elsewhereIn` as it does on every other path."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change touches only the Kubernetes manifest producer's name/namespace resolution, no auth, session or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret handling is changed — `envFrom.secretRef` is explicitly left unread and the redactor is untouched."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or usage-accounting code is in the diff."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Nothing deletes or overwrites data; the producer only proposes draft items and drop reasons."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound request or third-party client is touched; \"External Dependency\" here is only a proposed entity category inside the parser."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, package manifest or deploy config is modified — `PRODUCER_VERSION` is deliberately left at `kubernetes@1`."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model found nothing on a change that is largely correct but still carries one residual cross-namespace resolution in the very path it reworked, and its triage, while all correct, is the trivially-correct all-\"not touched\" answer for a parser-only diff.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.3959245,
+  "numTurns": 14,
+  "durationMs": 226468,
+  "sessionId": "cb2deb25-dc6d-4221-bb6e-768ed5dadc8c"
+}

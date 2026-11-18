@@ -1,0 +1,63 @@
+{
+  "item": "KOL-145",
+  "repo": "kol-emet",
+  "mergeSha": "e49e0b1efbb4e4f67ca3f3b60c347a4755fdbf36",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-18T15:33:53.103Z",
+  "gradedAtUtc": "2026-11-18T15:55:22.899Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, or permission logic changes; the HTTP test merely reuses the existing authenticated fixture."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env vars, or redaction logic are touched."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing- or pricing-related; 'billing-reports' is only a fixture package name."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Parser and drop-reason changes only — no deletes, migrations, or data rewrites, and the refusal path stores nothing."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "All parsing is local to the manifest text; no outbound calls or third-party clients are added."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version, CI, or deploy config changes; PRODUCER_VERSION deliberately stays package-manifest@1."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects and no defects exist — the build-backend drop reason, the MAX_TOML_DEPTH bound (checked at the crossing `[`/`{`, allowing exactly 16 and refusing 17 as a ManifestParseError with a line), the docs update, and the tests all hold up, with both touched test files passing (45 unit, 18 HTTP) — and its triage was right on all six categories, so this is a correct pass rather than a lucky one.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.06931,
+  "numTurns": 11,
+  "durationMs": 134839,
+  "sessionId": "ab6b1c3e-2ded-406f-8019-e98b9c00705b"
+}

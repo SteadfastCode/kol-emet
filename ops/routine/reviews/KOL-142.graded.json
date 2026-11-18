@@ -1,0 +1,93 @@
+{
+  "item": "KOL-142",
+  "repo": "kol-emet",
+  "mergeSha": "eed2d43914637cc6e109187b77681dbbc90646ef",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-18T15:33:53.103Z",
+  "gradedAtUtc": "2026-11-18T16:06:34.205Z",
+  "independent": [
+    {
+      "file": "client/src/components/EntityEditor.vue",
+      "line": 397,
+      "severity": "medium",
+      "summary": "`data: withEditableData(type, { ...BLOCK_DEFAULTS[type] })` shallow-copies `BLOCK_DEFAULTS.gallery`, so every gallery block created in one editor instance shares the *same* `images` array object (the spread copies the reference, and `withEditableData` leaves it alone because `Array.isArray` is already true). Add two gallery blocks to one entity, click \"+ Add image\" in the second and type a URL: the row appears in the first gallery too, and the save writes identical images into both blocks. The hydration path at line 260 has the same aliasing — `{ ...b.data }` keeps `props.initial.blocks[i].data.images`, so editing rows mutates the caller's object (the draft item in the draft-review screen) even if the user cancels. Both tests pass only because each exercises a single gallery block."
+    },
+    {
+      "file": "server/src/lib/draftItemSchema.js",
+      "line": 18,
+      "severity": "low",
+      "summary": "The human-edited-draft-item schema still validates blocks as `data: z.record(z.unknown())` and was not given the new `blockDataError` leaf, so a reviewer editing a generated item can store a gallery with a `javascript:` url; it is only refused later by `applyDraft`. The file documents itself as mirroring \"what POST /entities would accept, rather than being a separate dialect\", which is no longer true for gallery data (no entity is written, so this is a stored-draft defect, not a bypass into the graph)."
+    },
+    {
+      "file": "server/tests/http/galleryBlock.test.js",
+      "line": 20,
+      "severity": "low",
+      "summary": "The suite header says the MCP `create_entity` path \"is covered by `tests/http/mcp.test.js`'s harness\", but `tests/http/mcp.test.js` contains no gallery case at all — grep for \"gallery\" there returns nothing. Deleting both `blockDataError` calls added to `routes/mcp.js` breaks no test, so the file's own falsification claim (\"no write path is a side door\", \"each group fails only for its own writer\") does not hold for the fourth writer it names."
+    },
+    {
+      "file": "client/src/components/EntityEditor.vue",
+      "line": 421,
+      "severity": "low",
+      "summary": "The save-time pruning only drops blank rows; a row whose URL is scheme-less (`images.example.test/x.jpg`) or otherwise unparseable is posted as-is and refused with a 400 whose message never reaches the user — `onEntitySaved` (WikiLayout.vue:1333) awaits `addEntity` with no catch, so the rejection is unhandled, the panel stays open and the save silently does nothing. There is no client-side URL check either (the `type=\"url\"` input is not inside a `<form>`, so constraint validation never runs), which is the same \"losing a whole save\" failure the blank-row pruning was added to avoid."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No auth, session, passkey or permission code is changed; the suite only registers users as fixtures."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env secrets are added or read (the item deliberately avoids any storage credential)."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or paid-API path is touched; uploads/hosting (the cost-bearing half) are explicitly out of scope."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletions or migrations; the new validator is explicitly written so existing `{images: []}` / `{}` blocks stay saveable."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound API client or service integration is added — the third-party image fetches are the browser loading `<img>` URLs, not code calling an external API."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only docs/roadmap/wishlist/decision-log prose changes; no version bump, CI, packaging or deploy configuration."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "summary": "The local review found nothing and its triage was right on every category, but it missed the aliased gallery `images` array in the editor plus three smaller validation/coverage gaps, so it contributed no signal beyond triage.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 4,
+    "independent": 4,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.0236554999999994,
+  "numTurns": 24,
+  "durationMs": 289547,
+  "sessionId": "e1e953bd-576b-4ed2-bff3-8a9b4de776b8"
+}

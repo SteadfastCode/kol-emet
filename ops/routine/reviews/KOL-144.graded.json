@@ -1,0 +1,79 @@
+{
+  "item": "KOL-144",
+  "repo": "kol-emet",
+  "mergeSha": "1f9183fa95b53eff4e212a755e0ba49b4c3d7aef",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-18T15:33:53.103Z",
+  "gradedAtUtc": "2026-11-18T15:57:58.092Z",
+  "independent": [
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 353,
+      "severity": "low",
+      "summary": "The parenthesised qualifier is claimed to be \"a key no `metadata.name` can reach\", but `normalizeTitle` also strips a leading article (`^(the|a|an)\\s+`), so a workload/Service/PVC named exactly `a`, `an` or `the` appearing in two namespaces still keys onto a plain name: `a (prod)` normalizes to `prod`, which is exactly the key of a legal object named `prod`. The same two failures the item fixes recur — the second object dropped as `duplicate entity \"prod\" within the same file`, or `a (prod)` proposed as an `exact-normalized-title` update of a workspace entity titled `prod`. Verified by reading `server/src/lib/similarity.js:79-86`; contrived input, but it is the same defect class left unclosed."
+    },
+    {
+      "file": "server/src/lib/producers/kubernetes.js",
+      "line": 353,
+      "severity": "low",
+      "summary": "Re-importing a manifest that was already imported under the old dotted titles now forks every qualified entity silently: `cache (prod)` keys `cache prod` against the stored `cache.prod`'s `cacheprod`, which is neither an exact match nor above DUPLICATE_THRESHOLD (trigram Jaccard 0.5 < 0.72, as the new test itself asserts for the hyphenated case), so the item is an unflagged `op: 'create'` with no `duplicate_candidate` flag and no drop reason — a second copy of an entity the workspace already holds, in a producer whose header advertises being safe to re-run. The spec entry declines to re-title already-imported entities but does not account for the unflagged duplicate that follows."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only changes entity title construction in the Kubernetes producer plus docs/spec/tests; no session, passkey, OAuth or permission code is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "Secret handling (redactSecrets, the `secretRef` skip) is untouched; only the namespace qualifier's rendering changed."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "This producer is deterministic with no model call, so no allowance, token or billing path is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No delete/overwrite path is modified — the applier remains append-only and the change only alters which title a proposal carries."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party clients appear in the diff; the producer parses local manifest text only."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No package manifest, deploy config or version constant changes — `PRODUCER_VERSION` is deliberately left at `kubernetes@1`, with only the Decision Log prose added."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local model found nothing and its triage is accurate, but it missed both residuals — the article-strip hole in the \"no name can reach this key\" claim and the unflagged duplicate a re-import of previously-imported dotted titles now produces — so it is a correct-but-empty review.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.4812830000000001,
+  "numTurns": 18,
+  "durationMs": 155159,
+  "sessionId": "e10be9e7-b956-496c-882a-473d939f859c"
+}
