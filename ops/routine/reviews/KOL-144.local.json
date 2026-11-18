@@ -1,0 +1,88 @@
+{
+  "item": "KOL-144",
+  "repo": "kol-emet",
+  "mergeSha": "1f9183fa95b53eff4e212a755e0ba49b4c3d7aef",
+  "completedAtUtc": "2026-11-17T14:31:16.174Z",
+  "completeRunId": "2026-11-17T14:10:13.161Z",
+  "reviewRunId": "2026-11-18T08:01:10.916Z",
+  "reviewedAtUtc": "2026-11-18T08:05:34.750Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 21790,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 9666,
+      "contextBytes": 0,
+      "promptTokens": 3651,
+      "completionTokens": 151,
+      "latencyMs": 17407,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js",
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": null,
+      "bytes": 12124,
+      "contextBytes": 0,
+      "promptTokens": 4332,
+      "completionTokens": 95,
+      "latencyMs": 14430,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change aims to fix a deduplication issue in Kubernetes titles by changing the namespace qualifier from `name.namespace` to `name (namespace)`. The diff includes updates to documentation and a specification file, but it does not include changes to the actual implementation of `titleFor` or `normalizeTitle`. To verify the correctness of this change, the implementation details of these functions need to be reviewed. · No real defects found in the provided diff. However, additional context is needed to fully understand the impact of the changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 15704,
+    "completionTokens": 498
+  },
+  "latencyMs": 63849
+}

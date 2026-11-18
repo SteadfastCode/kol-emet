@@ -1,0 +1,131 @@
+{
+  "item": "KOL-143",
+  "repo": "kol-emet",
+  "mergeSha": "c27028f41ede9e7c24d363864bbf7d31bce0170e",
+  "completedAtUtc": "2026-11-17T14:22:49.761Z",
+  "completeRunId": "2026-11-17T14:10:13.161Z",
+  "reviewRunId": "2026-11-18T08:01:10.916Z",
+  "reviewedAtUtc": "2026-11-18T08:04:30.792Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 33685,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 9476,
+      "contextBytes": 0,
+      "promptTokens": 3725,
+      "completionTokens": 170,
+      "latencyMs": 17874,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10901,
+      "contextBytes": 0,
+      "promptTokens": 4132,
+      "completionTokens": 68,
+      "latencyMs": 11736,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/producers/kubernetes.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 5256,
+      "contextBytes": 6757,
+      "promptTokens": 4238,
+      "completionTokens": 88,
+      "latencyMs": 13285,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/kubernetes.test.js"
+      ],
+      "part": null,
+      "bytes": 8264,
+      "contextBytes": 0,
+      "promptTokens": 3497,
+      "completionTokens": 131,
+      "latencyMs": 13228,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff addresses two issues related to namespace handling in Kubernetes configurations. The first issue involves the `configMaps` object being keyed by `metadata.name` alone, which can lead to overwriting when multiple ConfigMaps have the same name but are in different namespaces. The second issue is with resolving bare hosts across namespace boundaries. The proposed changes aim to fix these issues by ensuring that ConfigMap lookups are scoped to the reading workload's namespace and that bare hosts resolve only within their own namespace. · No real defects found. However, additional context is needed to fully understand the behavior of `resolveHost`. · No real defects found, but additional context is needed to fully verify the changes. · The diff introduces tests for scenarios where a workload reads from a ConfigMap or host in the same namespace, and where it does not. It also includes changes to handle cases where a ConfigMap is referenced across namespaces. The needs list includes symbols that are used but not defined in the provided diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 30660,
+    "completionTokens": 961
+  },
+  "latencyMs": 113795
+}
