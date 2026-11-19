@@ -93,6 +93,21 @@ stateless and ignores a session id it is sent, recording that as
 `bridge_session_header_ignored` / `stateless_server_mismatch`; a bridge tool that refuses its
 arguments records `bridge_tool_failed` with its tool name.
 
+Every field of that record the *caller* chooses is capped where the record is built (KOL-146): the
+JSON-RPC `id`, the `user-agent`, the announced `clientInfo`, the method and tool names, and the
+address (`trust proxy` is set, so a forwarding header can supply it). A value that was cut carries
+the marker `…(+N)`, N being the characters dropped, so an operator can tell a value the server
+shortened from one the caller sent short; an `id` that is neither a string nor a number is recorded
+as its type (`<object>`, `<array>`) rather than stringified whole, because an id that is an object
+is not an id. The record is emitted at `light` — the tier a deployment runs — and on `/mcp` the
+bearer gate refuses *with* it before any credential has been accepted, while the app parses bodies
+at `express.json()`'s ~100 kB default: uncapped, an unauthenticated `POST /mcp` carrying
+`{"id": "<100 kB of chosen text>"}` chose what a deployed log said, 100 kB per request, where the
+old bare 401 printed one fixed line. The caps are on the record only — the error body still echoes
+the `id` the caller sent, which is how a client matches an answer to its call. Ceilings live in
+`MCP_RECORD_LIMITS` ([`lib/mcpFailure.js`](../server/src/lib/mcpFailure.js)); the `verbose` tier's
+payload logging is opt-in and deliberately uncapped, since the payload is the point of it.
+
 The root [`.mcp.json`](../.mcp.json) points Claude Code at the local dev endpoint
 (`http://localhost:3004/mcp`) via the HTTP transport. (The old standalone stdio package and its
 config were removed.)

@@ -40,6 +40,25 @@
  * is visible in a deployed process by default and can still be silenced with
  * `off`. Nothing here logs a credential: the caller's `auth` field says whether
  * a bearer header was present, never its value.
+ *
+ * Caps (KOL-146). Most of the record is this module's own words, but several
+ * fields are the caller's: the JSON-RPC `id`, the `user-agent` header, the
+ * `clientInfo` a handshake announces, the method and tool names, and — because
+ * `trust proxy` is set — the address. The record is emitted at `light`, the
+ * tier a deployment runs, and on `/mcp` the bearer gate refuses *with* it
+ * before any credential has been accepted, while the app parses bodies at
+ * `express.json()`'s ~100 kB default. So an unauthenticated
+ * `POST /mcp {"id": "<100 kB of chosen text>"}` would write 100 kB of a
+ * stranger's prose into a deployed log on every request, where the old 401 path
+ * printed one fixed line. Every caller-chosen field is therefore cut to its own
+ * ceiling (`MCP_RECORD_LIMITS`) here, where the record is built, rather than at
+ * the call sites — a new caller of `mcpLogRecord` inherits the cap instead of
+ * having to remember it. A cut value carries an explicit marker, `…(+N)` with N
+ * the number of characters dropped, so an operator can tell a value this module
+ * shortened from one the caller sent short, and still see the scale of what
+ * arrived. The caps are on the *record*: the JSON-RPC error body still answers
+ * the client with the `id` it sent, verbatim, because that is what lets the
+ * client match the answer to its call.
  */
 
 /** What the client should do about it; see the header. */
@@ -114,6 +133,54 @@ export const MCP_REFUSALS = {
 export const shortSession = (id) => (id ? `${String(id).slice(0, 8)}…` : null);
 
 /**
+ * Ceilings, in characters, for the fields of a record whose content the caller
+ * chooses (KOL-146; see the header). Each is generous for the honest case — a
+ * real `user-agent` is well under 200 characters, a client announces a name and
+ * a semver, a JSON-RPC method is `tools/call`, and an id is an id — and
+ * together they are what bounds the record: a refusal line is these plus a few
+ * hundred characters of this module's own, however large the request was.
+ */
+export const MCP_RECORD_LIMITS = Object.freeze({
+  requestId: 64,
+  ua: 200,
+  client: 80,
+  ip: 64,
+  rpc: 64,
+  tool: 64,
+});
+
+/** The marker a cut value carries, naming how many characters went missing. */
+export const clipMark = (dropped) => `…(+${dropped})`;
+
+/**
+ * One caller-chosen value, cut to `max` and marked when it was cut. A value at
+ * or under its ceiling is recorded verbatim and unmarked, which is the whole
+ * point of the marker: it is how a reader tells those two cases apart.
+ */
+export function clip(value, max) {
+  if (value === null || value === undefined) return null;
+  const text = String(value);
+  return text.length <= max ? text : `${text.slice(0, max)}${clipMark(text.length - max)}`;
+}
+
+/**
+ * `requestId` for the record. A JSON-RPC id is a string, a number or null. A
+ * parsed number needs no ceiling of its own — however many digits were sent, a
+ * double prints in about twenty characters — so it is recorded as it came, and
+ * a string is cut to the id ceiling. Anything else is not an id at all: an
+ * object or an array is recorded as its type name, because stringifying it
+ * whole puts an unbounded structure of the caller's choosing inside a line this
+ * module promises is one bounded, parseable record, and "the caller sent an
+ * object" is the only fact about it a log needs.
+ */
+export function requestIdView(id) {
+  if (id === null || id === undefined) return null;
+  if (typeof id === 'number') return id;
+  if (typeof id === 'string') return clip(id, MCP_RECORD_LIMITS.requestId);
+  return `<${Array.isArray(id) ? 'array' : typeof id}>`;
+}
+
+/**
  * Who is calling, as far as a refused request can tell. `auth` describes the
  * *presentation* of the credential, never its value — a rejected token is a
  * secret someone typed, and the routers already log it at `verbose` only.
@@ -122,9 +189,12 @@ export function callerView(req) {
   const auth = req.headers?.['authorization'];
   const clientInfo = req.body?.params?.clientInfo;
   return {
-    ip: req.ip ?? req.socket?.remoteAddress ?? null,
-    ua: req.headers?.['user-agent'] ?? null,
-    client: clientInfo?.name ? `${clientInfo.name}/${clientInfo.version ?? '?'}` : null,
+    // Every field but `auth` is the caller's own text, so every field but
+    // `auth` is capped (KOL-146). `ip` included: `trust proxy` is set in
+    // src/app.js, so this can be a value a forwarding header carried.
+    ip: clip(req.ip ?? req.socket?.remoteAddress ?? null, MCP_RECORD_LIMITS.ip),
+    ua: clip(req.headers?.['user-agent'] ?? null, MCP_RECORD_LIMITS.ua),
+    client: clientInfo?.name ? clip(`${clientInfo.name}/${clientInfo.version ?? '?'}`, MCP_RECORD_LIMITS.client) : null,
     auth: !auth ? 'absent' : /^Bearer /.test(auth) ? 'bearer' : 'non-bearer',
   };
 }
@@ -159,9 +229,11 @@ export function mcpLogRecord({ event, endpoint, req, status = null, code = null,
     code,
     reason,
     retry,
-    rpc,
-    tool,
-    requestId: id,
+    // `rpc`, `tool` and `requestId` come off the body the caller sent; capped
+    // here so every record is bounded wherever it is logged from (KOL-146).
+    rpc: clip(rpc, MCP_RECORD_LIMITS.rpc),
+    tool: clip(tool, MCP_RECORD_LIMITS.tool),
+    requestId: requestIdView(id),
     session: shortSession(req.headers?.['mcp-session-id']),
     caller: callerView(req),
     source,

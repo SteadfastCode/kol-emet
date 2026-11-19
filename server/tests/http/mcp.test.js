@@ -711,6 +711,41 @@ describe('session loss', () => {
     // The light-tier rule: say the source of the answer, not just the answer.
     assert.match(r.source, /not in this process's session map/);
   });
+
+  /**
+   * KOL-146. The record goes out at `light`, the tier a deployment runs, and
+   * the bearer gate refuses *with* it — before any credential has been
+   * accepted. So an unauthenticated stranger used to choose what a deployed log
+   * said, `express.json()`'s ~100 kB default at a time, where the old 401 path
+   * printed one fixed line. The caps live in `mcpLogRecord`, so what is
+   * asserted here is the end of that: a hostile request is answered exactly as
+   * before, and the line it writes is small.
+   */
+  test('an unauthenticated POST carrying a 100 kB id answers 401 with a small record (KOL-146)', async () => {
+    const huge = 'x'.repeat(100_000);
+    const { lines, value: res } = await captureRouterLog(() => request(app).post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('User-Agent', 'z'.repeat(5_000))
+      .send({ jsonrpc: '2.0', id: huge, method: 'tools/call', params: { name: 'get_entity', arguments: {} } }));
+
+    assert.equal(res.status, 401, `an unauthenticated POST must still be refused: ${res.status} ${res.text.slice(0, 200)}`);
+    assertRefusal(res, { reason: 'unauthorized', retry: 'never', code: -32000, status: 401 });
+    // The answer is unchanged: a client matches a reply to its call by the id
+    // it chose, so the cap is on the record and not on what the caller is told.
+    assert.equal(res.body.id, huge, 'the refusal must echo the id the caller sent, whatever its size');
+
+    const refusals = lines.filter(line => line.includes('mcp_request_refused'));
+    assert.equal(refusals.length, 1, `one record per refusal; got ${refusals.length}`);
+    const [line] = refusals;
+    const bytes = Buffer.byteLength(line, 'utf8');
+    log('light', `a ${huge.length}-character id and a 5,000-character user-agent produced a ${bytes}-byte log line (source: the light-tier refusal record)`);
+    assert.ok(bytes < 2048, `a refusal record must stay small however large the request was, got ${bytes} bytes`);
+
+    const r = JSON.parse(line.slice(line.indexOf('{')));
+    assert.match(r.requestId, /^x{64}…\(\+99936\)$/, `the id must be cut and marked, got ${JSON.stringify(String(r.requestId).slice(0, 120))}`);
+    assert.ok(r.caller.ua.length < 300, `the user-agent must be cut, got ${r.caller.ua.length} characters`);
+    assert.equal(r.tool, 'get_entity', 'and the fields that make the record worth reading survive');
+  });
 });
 
 describe('tools/list', () => {
