@@ -85,7 +85,7 @@
     "KOL-140": {
       "order": 5,
       "title": "Dropping an entity update discards that item's own evidence span, so the client's source-coverage…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-140",
