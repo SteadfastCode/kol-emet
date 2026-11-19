@@ -10,7 +10,7 @@
  */
 
 /**
- * The last-owner floor, as the write's own filter (KOL-134).
+ * The last-owner floor, as the write's own filter (KOL-134, KOL-141).
  *
  * The floor used to be an `if` in front of the write: read the members array,
  * count the owners, refuse at one, then `updateOne`. Read-then-write, so with
@@ -22,32 +22,64 @@
  * managed.
  *
  * So the invariant moved into the condition the write itself is matched on:
- * *this workspace still holds an owner who is not this member*. MongoDB
- * evaluates it against the document as it stands at the moment of the write, so
- * the second of two racing demotions finds the first already landed and matches
- * nothing. **No match is the 409** — the refusal and the check are one
- * operation, and there is no window between them to lose.
+ * *this member is not the last owner of this workspace*. MongoDB evaluates it
+ * against the document as it stands at the moment of the write, so the second
+ * of two racing demotions finds the first already landed and matches nothing.
+ * **No match is the 409** — the refusal and the check are one operation, and
+ * there is no window between them to lose.
+ *
+ * Who holds `owner` is therefore read **here**, inside the filter, and never
+ * passed in (KOL-141). The routes used to spread this in only when their own
+ * read of the members array showed the member holding `owner`, which put the
+ * stale read straight back in front of the write: a member read as an editor,
+ * promoted to owner while the request was in flight, was demoted again by a
+ * write carrying no floor at all. One `$expr` over `$members`, applied whenever
+ * a write could reduce the number of owners, is what closes that — the caller
+ * decides nothing about the member's role.
+ *
+ * Two ways to not be the last owner, and the write may land in either:
+ *   - another member holds `owner` at the moment of the write, so taking the
+ *     role or the membership away from this one leaves the workspace managed;
+ *   - **nobody** holds it. Not a state these routes can produce — this filter
+ *     is why — but a workspace that reached it some other way must not have
+ *     every role change and removal refused on top, or it could never be
+ *     repaired. There is no last owner there to lose.
  *
  * `memberId` must be the stored ObjectId, not a request string: `$expr` is an
  * aggregation expression and Mongoose does not cast inside one, so a string
  * would be `$ne` to every member and the floor would never hold.
  *
- * (A workspace deleted between the read and the write also matches nothing, and
- * is reported as the refusal. Telling the two apart would mean a second read
- * whose answer could be stale again, to change one status code on a path where
- * nothing was written either way.)
+ * (A workspace deleted between the read and the write also matches nothing.
+ * Which of the refusals a no-match was is settled by a re-read on the refusal
+ * path in routes/workspace.js, for the status code only — by then the write has
+ * refused itself, so a stale answer there can mislabel a refusal but never
+ * cause one.)
  */
-export const anotherOwnerThan = (memberId) => ({
+export const notTheLastOwner = (memberId) => ({
   $expr: {
-    $gte: [{
-      $size: {
-        $filter: {
-          input: { $ifNull: ['$members', []] },
-          as: 'm',
-          cond: { $and: [{ $eq: ['$$m.role', 'owner'] }, { $ne: ['$$m.userId', memberId] }] },
+    $let: {
+      vars: {
+        owners: {
+          $filter: {
+            input: { $ifNull: ['$members', []] },
+            as: 'm',
+            cond: { $eq: ['$$m.role', 'owner'] },
+          },
         },
       },
-    }, 1],
+      in: {
+        $or: [
+          {
+            $gte: [{
+              $size: {
+                $filter: { input: '$$owners', as: 'o', cond: { $ne: ['$$o.userId', memberId] } },
+              },
+            }, 1],
+          },
+          { $eq: [{ $size: '$$owners' }, 0] },
+        ],
+      },
+    },
   },
 });
 

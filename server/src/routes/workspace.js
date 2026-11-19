@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { hasTemplate } from '../config/templates.js';
 import { createWorkspace } from '../lib/workspaceSeeder.js';
-import { MOVE_OWNER_ID_TO_AN_OWNER, anotherOwnerThan } from '../lib/ownerFloor.js';
+import { MOVE_OWNER_ID_TO_AN_OWNER, notTheLastOwner } from '../lib/ownerFloor.js';
 import {
   WORKSPACE_NAME_MAX,
   defaultWorkspace,
@@ -190,12 +190,50 @@ async function membersOf(workspaceId) {
 /**
  * Those members holding `owner`, as the request's own read saw them.
  *
- * Not the floor — that is `anotherOwnerThan` in lib/ownerFloor.js, and it
- * lives in the write. This is what the refusal's log line reports: the count
- * the read a moment earlier showed, next to the write that refused anyway —
- * the whole shape of the race in one line.
+ * Not the floor — that is `notTheLastOwner` in lib/ownerFloor.js, and it lives
+ * in the write. This is what the refusal's log line reports: the count the read
+ * a moment earlier showed, next to the write that refused anyway — the whole
+ * shape of the race in one line.
  */
 const ownersOf = (workspace) => (workspace.members ?? []).filter(m => m.role === 'owner');
+
+/**
+ * Which refusal a guarded member write's no-match was (KOL-141).
+ *
+ * A member write is matched on three things at once — the workspace, the
+ * membership, and the floor in lib/ownerFloor.js — so no match is one of: the
+ * workspace is gone, the membership this request read is no longer there, or
+ * this member is the last owner. The write has already refused itself either
+ * way; **nothing was written and nothing will be**, so all that is left to
+ * choose is the status code, and a re-read is safe here in a way it would never
+ * be in front of the write: a stale answer can mislabel a refusal, never cause
+ * one.
+ *
+ * It cannot be taken from the read the route already holds, which is the item
+ * itself: a member read as an editor and promoted to owner while the request
+ * was in flight is refused by the floor, and answering 404 "not a member" there
+ * would be a lie about a member who is very much still there. So the cause is
+ * re-read rather than inferred, and `because` says which of the three it was.
+ */
+async function refusalFor(workspaceId, memberId) {
+  const workspace = await membersOf(workspaceId);
+  if (!workspace) {
+    return { status: 404, error: 'Not found', because: `workspace ${workspaceId} is no longer there` };
+  }
+  if (!membershipOf(workspace, memberId)) {
+    return { status: 404, error: 'Not found', because: `user ${memberId} is no longer a member of workspace ${workspaceId}` };
+  }
+
+  const owners = ownersOf(workspace);
+  const isTheLastOwner = owners.length === 1 && String(owners[0].userId) === String(memberId);
+  return {
+    status: 409,
+    error: 'LAST_OWNER',
+    because: isTheLastOwner
+      ? `user ${memberId} holds the only owner role in workspace ${workspaceId}, which has to keep one`
+      : `the floor refused the write, though a re-read a moment later already sees ${owners.length} owner(s) in workspace ${workspaceId} — the membership changed again underneath`,
+  };
+}
 
 // POST /workspace/invites — invite an address to this workspace. Owners only.
 router.post('/invites', requireWorkspaceRole('owner'), async (req, res, next) => {
@@ -341,12 +379,22 @@ router.patch('/members/:userId', requireWorkspaceRole('owner'), async (req, res,
     // a membership row carries. Nothing here is cast or validated by Mongoose
     // (a pipeline never is), so `role` arrives already checked by isRole and
     // the only ids in it are stored ObjectIds.
-    const demotingAnOwner = member.role === 'owner';
+    //
+    // What the member holds *now* is not what decides whether the floor is in
+    // the filter (KOL-141): that decision came from this request's own read,
+    // which put the stale count back in front of the write it had just been
+    // moved out of. A member read as an editor, promoted to owner by a
+    // concurrent request, then demoted here by a write carrying no floor, is
+    // the ownerless workspace all over again. Only the role the body *asks
+    // for* decides, because that one cannot go stale: a promotion to `owner`
+    // adds an owner and can never reduce their number, so it alone is
+    // unguarded. Every other target role carries the floor and lets the write
+    // itself judge who holds `owner`.
     const after = await Workspace.findOneAndUpdate(
       {
         _id: req.workspaceId,
         'members.userId': member.userId,
-        ...(demotingAnOwner ? anotherOwnerThan(member.userId) : {}),
+        ...(role === 'owner' ? {} : notTheLastOwner(member.userId)),
       },
       [
         {
@@ -372,14 +420,11 @@ router.patch('/members/:userId', requireWorkspaceRole('owner'), async (req, res,
     ).select('_id ownerId members').lean();
 
     if (!after) {
-      // No match. For an owner that is the floor holding; for anyone else the
-      // membership this request read is simply no longer there.
-      if (demotingAnOwner) {
-        log('light', `refused PATCH /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} holds no other owner at the moment of the write, so demoting them to ${role} would leave it with none (source: user ${req.actingUserId}; the read a moment earlier saw ${ownersOf(workspace).length} owner(s), which is why the floor is the write's filter and not a check in front of it)`);
-        return res.status(409).json({ error: 'LAST_OWNER' });
-      }
-      log('light', `refused PATCH /workspace/members/${req.params.userId} with 404 and wrote nothing: the membership read a moment earlier is gone from workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
-      return res.status(404).json({ error: 'Not found' });
+      // No match, so nothing was written. Which refusal it was is re-read
+      // rather than taken from the read above, for the reasons on refusalFor.
+      const refusal = await refusalFor(req.workspaceId, member.userId);
+      log('light', `refused PATCH /workspace/members/${req.params.userId} to ${role} with ${refusal.status} ${refusal.error} and wrote nothing: ${refusal.because} (source: user ${req.actingUserId}; this request's own read saw them as ${member.role ?? 'no role'} alongside ${ownersOf(workspace).length} owner(s), which is why the floor is the write's filter and not a check in front of it)`);
+      return res.status(refusal.status).json({ error: refusal.error });
     }
 
     const ownerIdMoved = String(after.ownerId) !== String(workspace.ownerId);
@@ -408,12 +453,18 @@ router.delete('/members/:userId', requireWorkspaceRole('owner'), async (req, res
     // write is matched on, so two concurrent removals cannot both pass a count
     // and both land. `members.userId` is in the filter too, so a membership
     // another request removed first is a 404 rather than a silent 204.
-    const removingAnOwner = member.role === 'owner';
+    //
+    // Unconditional here (KOL-141), with no `removingAnOwner` read in front of
+    // it: a removal takes the membership away whatever role it turns out to
+    // hold, so there is no shape of this request that cannot reduce the number
+    // of owners, and the role this request read is exactly the thing a
+    // concurrent promotion makes wrong. The filter itself reads who holds
+    // `owner` at the moment of the write.
     const after = await Workspace.findOneAndUpdate(
       {
         _id: req.workspaceId,
         'members.userId': member.userId,
-        ...(removingAnOwner ? anotherOwnerThan(member.userId) : {}),
+        ...notTheLastOwner(member.userId),
       },
       [
         {
@@ -433,12 +484,9 @@ router.delete('/members/:userId', requireWorkspaceRole('owner'), async (req, res
     ).select('_id ownerId members').lean();
 
     if (!after) {
-      if (removingAnOwner) {
-        log('light', `refused DELETE /workspace/members/${req.params.userId} with 409 LAST_OWNER and wrote nothing: workspace ${req.workspaceId} holds no other owner at the moment of the write (source: user ${req.actingUserId}; the read a moment earlier saw ${ownersOf(workspace).length} owner(s), which is why the floor is the write's filter and not a check in front of it)`);
-        return res.status(409).json({ error: 'LAST_OWNER' });
-      }
-      log('light', `refused DELETE /workspace/members/${req.params.userId} with 404 and wrote nothing: the membership read a moment earlier is gone from workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
-      return res.status(404).json({ error: 'Not found' });
+      const refusal = await refusalFor(req.workspaceId, member.userId);
+      log('light', `refused DELETE /workspace/members/${req.params.userId} with ${refusal.status} ${refusal.error} and wrote nothing: ${refusal.because} (source: user ${req.actingUserId}; this request's own read saw them as ${member.role ?? 'no role'} alongside ${ownersOf(workspace).length} owner(s), which is why the floor is the write's filter and not a check in front of it)`);
+      return res.status(refusal.status).json({ error: refusal.error });
     }
 
     const ownerIdMoved = String(after.ownerId) !== String(workspace.ownerId);

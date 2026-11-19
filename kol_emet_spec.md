@@ -551,6 +551,23 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
       read would leave it naming an owner the other request had just demoted. Not a transaction: a
       replica-set session is not something `MongoMemoryServer.create()` gives the test suite, and
       the invariant is expressible as a condition on one document, which is the smaller thing.
+    - **And whether that filter is in the write is not decided by a read either (decided
+      2026-11-18, KOL-141).** KOL-134 moved the floor into the write but left the *decision to
+      apply it* on the route's own `membersOf()` read: `member.role === 'owner'`. So a member read
+      as an `editor`, promoted to `owner` by a concurrent request while the demotion was in flight,
+      was demoted again by a write carrying no floor at all — the ownerless workspace, through a
+      different door, in exactly the state the floor exists to prevent. Only the role the **body**
+      asks for decides now, because that one cannot go stale: a promotion to `owner` cannot reduce
+      the number of owners, so it alone is unguarded, and every other target role carries the floor.
+      A removal carries it unconditionally — it takes the membership away whatever role it turns out
+      to hold. The filter (`notTheLastOwner`) reads who holds `owner` itself, and admits one more
+      case than its predecessor: a workspace where **nobody** holds it. These routes cannot produce
+      that state, but refusing every role change and removal in one that reached it some other way
+      would make it unrepairable, and there is no last owner there to lose. Which of the three
+      refusals a no-match was — workspace gone, membership gone, last owner — is settled by a
+      re-read on the refusal path, for the status code only: the write has already refused itself,
+      so a stale answer there can mislabel a refusal but never cause one, and answering 404 "not a
+      member" about a member who is plainly still there would be the lie the old branch told.
   - **Inviting a co-owner is allowed**, which is what makes the last-owner rule a floor rather than
     a wall — without it, no workspace could ever change hands even a little. Transferring ownership
     outright is still out of scope, as is seat billing and per-entity permission.
