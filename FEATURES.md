@@ -110,7 +110,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-141) The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…**
+- [x] **(KOL-141) The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…**
   Found by the grader of KOL-134 (medium, server/src/routes/workspace.js:344). The floor filter is
   still applied conditionally on a stale read: `demotingAnOwner`/`removingAnOwner` (lines 344,
   411) come from the request's own `membersOf()` read, so when a member read as `editor` is
