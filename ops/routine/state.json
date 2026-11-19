@@ -85,7 +85,7 @@
     "KOL-146": {
       "order": 5,
       "title": "An unauthenticated caller chooses what the deployed log says, 100KB at a time",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-146",

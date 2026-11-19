@@ -107,35 +107,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time**
-  Found by the grader of KOL-047. `mcpLogRecord` (`server/src/lib/mcpFailure.js:152-171`) writes three
-  caller-controlled values into every refusal record with no cap: `requestId` is `body.id` verbatim through
-  `rpcView` (`:136-147`), and `caller.ua` / `caller.client` are the `user-agent` header and
-  `params.clientInfo.name`/`version` (`callerView`, `:121-130`). `shortSession` truncates the session id (`:114`)
-  and nothing truncates these. The record goes out at the `light` tier — the tier a deployment actually runs — and on
-  `/mcp` the bearer gate refuses *with* it (`server/src/routes/mcp.js:83-95`), before any credential has been
-  accepted; `/bridge/mcp` has the same shape. The app parses bodies with `express.json()` at its default ~100KB
-  (`server/src/app.js:80`), so an unauthenticated `POST /mcp` carrying `{"id": "<~100KB of chosen text>"}` writes
-  that text into the log on every request, where the old 401 path printed one fixed line. `body.id` need not be a
-  string either: an object or an array is stringified into the record whole, so the module header's "one line,
-  parseable" promise is the caller's to break.
-  Build: cap all three where the record is built, not at its call sites. `requestId` keeps a string or a number up to
-  a short ceiling and becomes a type name otherwise — a JSON-RPC id is an id, and one too long to be an id has
-  earned no more of the log than that; `ua` and `client` truncate to their own ceilings. Every truncation is marked
-  in the record (an explicit marker, the way `shortSession` already appends one) so an operator can tell a value
-  that was cut from one the caller sent short. `mcpFailure.js` has no test of its own today; this adds its first.
-  Files: `server/src/lib/mcpFailure.js`, a new `server/tests/unit/mcpFailure.test.js`,
-  `server/tests/http/mcp.test.js` and `server/tests/http/bridge.test.js` for one end-to-end each,
-  `docs/architecture.md` (the refusal-record paragraph).
-  Verify: `cd server && yarn test` with cases for: a 100,000-character `id` producing a record under a stated size
-  with its marker; a short id unchanged; an object and an array `id` recorded as a type name; a long `user-agent`
-  and a long `clientInfo.name` truncated; the record still parsing as one JSON line in every case; the JSON-RPC
-  *response* body unchanged, since the cap is on the record and not on what the client is answered; and an
-  unauthenticated `POST /mcp` with a long id still answering 401 with the record capped.
-  `cd server && node --check src/index.js`.
-  Out of scope: a rate limit on refused MCP requests, the `verbose` tier's payload logging (opt-in, and the payload
-  is the point of it), log shipping or retention, and the tier the bridge's session-mismatch record is emitted at —
-  a separate finding of the same grader.
 
 ## Proposed
 
@@ -237,6 +208,35 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time** (routine 2026-11-18, 2cb93eb)
+  Found by the grader of KOL-047. `mcpLogRecord` (`server/src/lib/mcpFailure.js:152-171`) writes three
+  caller-controlled values into every refusal record with no cap: `requestId` is `body.id` verbatim through
+  `rpcView` (`:136-147`), and `caller.ua` / `caller.client` are the `user-agent` header and
+  `params.clientInfo.name`/`version` (`callerView`, `:121-130`). `shortSession` truncates the session id (`:114`)
+  and nothing truncates these. The record goes out at the `light` tier — the tier a deployment actually runs — and on
+  `/mcp` the bearer gate refuses *with* it (`server/src/routes/mcp.js:83-95`), before any credential has been
+  accepted; `/bridge/mcp` has the same shape. The app parses bodies with `express.json()` at its default ~100KB
+  (`server/src/app.js:80`), so an unauthenticated `POST /mcp` carrying `{"id": "<~100KB of chosen text>"}` writes
+  that text into the log on every request, where the old 401 path printed one fixed line. `body.id` need not be a
+  string either: an object or an array is stringified into the record whole, so the module header's "one line,
+  parseable" promise is the caller's to break.
+  Build: cap all three where the record is built, not at its call sites. `requestId` keeps a string or a number up to
+  a short ceiling and becomes a type name otherwise — a JSON-RPC id is an id, and one too long to be an id has
+  earned no more of the log than that; `ua` and `client` truncate to their own ceilings. Every truncation is marked
+  in the record (an explicit marker, the way `shortSession` already appends one) so an operator can tell a value
+  that was cut from one the caller sent short. `mcpFailure.js` has no test of its own today; this adds its first.
+  Files: `server/src/lib/mcpFailure.js`, a new `server/tests/unit/mcpFailure.test.js`,
+  `server/tests/http/mcp.test.js` and `server/tests/http/bridge.test.js` for one end-to-end each,
+  `docs/architecture.md` (the refusal-record paragraph).
+  Verify: `cd server && yarn test` with cases for: a 100,000-character `id` producing a record under a stated size
+  with its marker; a short id unchanged; an object and an array `id` recorded as a type name; a long `user-agent`
+  and a long `clientInfo.name` truncated; the record still parsing as one JSON line in every case; the JSON-RPC
+  *response* body unchanged, since the cap is on the record and not on what the client is answered; and an
+  unauthenticated `POST /mcp` with a long id still answering 401 with the record capped.
+  `cd server && node --check src/index.js`.
+  Out of scope: a rate limit on refused MCP requests, the `verbose` tier's payload logging (opt-in, and the payload
+  is the point of it), log shipping or retention, and the tier the bridge's session-mismatch record is emitted at —
+  a separate finding of the same grader.
 - [x] **(KOL-145) A build backend vanishes with no reason, and a nested TOML is a 500 where a 400 is promised** (routine 2026-11-17, e49e0b1)
   Two findings of the KOL-126 grader in the newest producer, both reproduced by calling `parseManifest` — one on the
   suite's own fixture, one on a crafted file.
