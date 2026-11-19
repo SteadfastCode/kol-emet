@@ -12,6 +12,13 @@
  *   - a quote that never located is counted and said out loud, because it
  *     leaves its span looking unused and would otherwise be read as the
  *     generator having skipped that passage.
+ *
+ * And the draft carries a second set of spans: an entity update the graph
+ * already satisfied was dropped before the draft was stored
+ * (server/src/lib/draftTarget.js), so its passage has no item left to point at
+ * it and rides on `source.droppedSpans` instead. Those passages were read —
+ * that is how the entity got there — so they count as used, and on the workflow
+ * where every matched entity is dropped they are most of the text (KOL-140).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -45,13 +52,20 @@ const item = (localKey, evidence) => ({
   flags: [],
 });
 
-const draftWith = (items, { _id = 'draft1', text = SOURCE, producer = 'braindump' } = {}) => ({
+const draftWith = (items, { _id = 'draft1', text = SOURCE, producer = 'braindump', droppedSpans = [] } = {}) => ({
   _id,
   status: 'ready',
-  source: { producer, producerVersion: 'braindump@1', text },
+  source: { producer, producerVersion: 'braindump@1', text, droppedSpans },
   items,
-  counts: { proposed: items.length, pending: items.length, dropped: 0 },
+  counts: { proposed: items.length, pending: items.length, dropped: droppedSpans.length },
 });
+
+/** The shape the server stores for an item it dropped: offsets, no quote. */
+function spanOf(quote) {
+  const at = SOURCE.indexOf(quote);
+  if (at === -1) throw new Error(`fixture quote is not in the source: ${quote}`);
+  return { charStart: at, charEnd: at + quote.length };
+}
 
 beforeEach(() => { localStorage.setItem('SOURCE_COVERAGE_LOG_LEVEL', 'off'); });
 afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
@@ -166,11 +180,70 @@ describe('coverageOf', () => {
     expect(c.unused).toEqual([]);                              // but it is not a passage you skipped
   });
 
+  it('counts a passage kept for an item that was dropped as already in the graph', () => {
+    // One item citing the first sentence, and a dropped proposal whose passage
+    // was the middle one. The middle paragraph is not text the generator
+    // skipped: it read it, proposed an entity the workspace already had, and
+    // that proposal was dropped rather than queued as a decision.
+    const c = coverageOf(draftWith([item('e1', evidenceFor(FIRST))], {
+      _id: 'draft-dropped', droppedSpans: [spanOf(MIDDLE)],
+    }));
+
+    expect(c.locatedCount).toBe(1);          // one item, counted against the item list
+    expect(c.droppedSpanCount).toBe(1);      // and one span with no item behind it
+    expect(c.spanCount).toBe(2);
+    expect(c.unused.map(p => p.text.trim())).toEqual([LAST]);
+  });
+
+  it('reads a re-generation that dropped every item as fully used, not fully ignored', () => {
+    // The central case: generate over the same notes twice and every matched
+    // entity is dropped, so the draft has no items at all. Without the spans
+    // the pane would call all of it text the generator never read.
+    const c = coverageOf(draftWith([], {
+      _id: 'draft-regen', droppedSpans: [FIRST, MIDDLE, LAST].map(spanOf),
+    }));
+
+    expect(c.locatedCount).toBe(0);
+    expect(c.droppedSpanCount).toBe(3);
+    expect(c.usedPct).toBe(100);
+    expect(c.unused).toEqual([]);
+    expect(c.segments.map(s => s.text).join('')).toBe(SOURCE);
+  });
+
+  it('invents no span for a dropped passage that points outside the stored source', () => {
+    const c = coverageOf(draftWith([item('e1', evidenceFor(FIRST))], {
+      _id: 'draft-dropped-clamp',
+      droppedSpans: [
+        { charStart: SOURCE.length + 10, charEnd: SOURCE.length + 22 },
+        { charStart: null, charEnd: null },
+      ],
+    }));
+
+    expect(c.droppedSpanCount).toBe(0);
+    expect(c.spanCount).toBe(1);
+    // A span with no item behind it has no card to caveat, so it is not counted
+    // as an unlocated quote either — it is simply not there.
+    expect(c.unlocatedCount).toBe(0);
+    expect(c.segments.map(s => s.text).join('')).toBe(SOURCE);
+  });
+
   it('reports nothing for a draft with no stored source', () => {
     const c = coverageOf(draftWith([], { text: '', _id: 'draft-empty' }));
     expect(c.hasSource).toBe(false);
     expect(c.usedPct).toBe(0);
     expect(c.unused).toEqual([]);
+  });
+
+  it('measures a draft stored before the field existed', () => {
+    // Draft has no TTL, so every draft already in the corpus has no
+    // `source.droppedSpans` at all. Those drafts measure exactly as they did.
+    const draft = draftWith([item('e1', evidenceFor(FIRST))], { _id: 'draft-legacy' });
+    delete draft.source.droppedSpans;
+    const c = coverageOf(draft);
+
+    expect(c.droppedSpanCount).toBe(0);
+    expect(c.spanCount).toBe(1);
+    expect(c.unused.map(p => p.text.trim())).toEqual([`${MIDDLE}\n\n${LAST}`]);
   });
 
   it('calls a file a file', () => {
@@ -191,6 +264,20 @@ describe('coverageOf', () => {
     expect(light).toContain('a test');
     expect(light).toContain('1 passage(s) unused');
     expect(logged.some(l => l.startsWith('[coverage:normal]'))).toBe(false);
+  });
+
+  it('light tier names where a span with no item behind it came from', () => {
+    localStorage.setItem('SOURCE_COVERAGE_LOG_LEVEL', 'light');
+    const logged = [];
+    vi.stubGlobal('console', { ...console, log: (m) => logged.push(m) });
+
+    coverageOf(draftWith([item('e1', evidenceFor(FIRST))], {
+      _id: 'draft-log-dropped', droppedSpans: [spanOf(MIDDLE)],
+    }), { source: 'a test' });
+
+    const light = logged.find(l => l.startsWith('[coverage:light]'));
+    expect(light).toContain('1 span(s) came from the draft itself');
+    expect(light).toContain('dropped as already in the graph');
   });
 });
 
@@ -248,6 +335,21 @@ describe('SourceCoverage pane', () => {
     expect(wrapper.get('.cov-head').text()).toContain('nothing substantial was left out');
     await wrapper.get('.cov-head').trigger('click');
     expect(wrapper.get('.cov-empty').text()).toContain('at least one proposal');
+  });
+
+  it('says which passages are behind a proposal that was dropped', async () => {
+    const wrapper = paneFor(draftWith([item('e1', evidenceFor(FIRST))], {
+      _id: 'draft-pane-dropped', droppedSpans: [spanOf(MIDDLE)],
+    }));
+    await wrapper.get('.cov-head').trigger('click');
+
+    const foot = wrapper.get('.cov-foot').text();
+    expect(foot).toContain('1 of 1 located');
+    expect(foot).toContain('1 passage behind a proposal dropped as already in your graph');
+    // The passage itself is used text, so it is not in the unused list.
+    expect(wrapper.findAll('.cov-passage').map(p => p.text())).toHaveLength(1);
+    expect(wrapper.get('.cov-passage').text()).toContain(LAST);
+    expect(wrapper.get('.cov-passage').text()).not.toContain(MIDDLE);
   });
 
   it('renders nothing for a draft whose source was not stored', () => {

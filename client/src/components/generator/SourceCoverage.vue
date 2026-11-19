@@ -62,7 +62,16 @@
       <p class="cov-foot">
         Measured from the quote each proposal was built on
         ({{ coverage.locatedCount }} of {{ itemCount }} located<template v-if="coverage.noEvidenceCount">,
-        {{ coverage.noEvidenceCount }} with no quote</template>).
+        {{ coverage.noEvidenceCount }} with no quote</template>).<!--
+        A proposal the graph already satisfied was dropped before this draft was
+        saved, so its passage has no item to point at — but it was read, which
+        is why that entity is already there. Said out loud rather than folded
+        into the number. -->
+        <template v-if="coverage.droppedSpanCount">
+          Plus {{ coverage.droppedSpanCount }} passage{{ coverage.droppedSpanCount === 1 ? '' : 's' }}
+          behind {{ coverage.droppedSpanCount === 1 ? 'a proposal' : 'proposals' }} dropped as already
+          in your graph, unchanged.
+        </template>
       </p>
     </div>
   </section>

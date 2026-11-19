@@ -638,6 +638,18 @@ Pre-stream failures are ordinary JSON errors, not SSE frames:
 | 402 | Not enough AI allowance to start a run (`GENERATOR_MIN_RUN_MICROS`, default $0.015) |
 | 409 | A generation is already running for this workspace — one at a time, since cost is only known after a run finishes |
 
+**An item the graph already satisfies is dropped — its passage is not.** An entity update left
+proposing nothing (no block the target lacks, no new tag, and no summary the applier would write) is
+dropped rather than queued as a decision where accept and reject mean the same thing
+([`lib/draftTarget.js`](../server/src/lib/draftTarget.js)), counted in `diagnostics.dropReasons`. The
+span that item was located in is stored on the draft as `source.droppedSpans` —
+`[{ charStart, charEnd }]`, offsets into `source.text`, no copy of the quote — because the client
+derives source coverage from the spans the draft cites
+([`sourceCoverage.js`](../client/src/lib/sourceCoverage.js)). Without them, re-generating over the
+same notes, where every matched entity is dropped, would report most of those notes as text the
+generator never read. The five file-producer routes below write the same field from the same pass; a
+draft stored before it existed carries none and measures as it always did.
+
 ### `POST /drafts/compose`
 
 The first vertical-ingestion producer ([`server/src/lib/producers/dockerCompose.js`](../server/src/lib/producers/dockerCompose.js)).

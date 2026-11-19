@@ -301,6 +301,12 @@ accommodate pre-tenancy rows. A new collection has none, so it fails closed from
                                   //   (docker-compose, openapi), credentials already removed
     textHash:        String,      // 'sha256:…' of `text` as stored
     redactedCount:   Number,      // credentials taken out before storage
+    // Where items dropped before storage had been located in `text`: an update
+    // the graph already satisfies is dropped rather than queued as a decision
+    // (lib/draftTarget.js), and source coverage is derived from the spans the
+    // draft cites, so the span has to survive the item or the coverage pane
+    // reports that passage as text the generator never read.
+    droppedSpans:    [{ charStart: Number, charEnd: Number }],
   },
 
   // Exactly what the model was shown, so a training example is reproducible.
