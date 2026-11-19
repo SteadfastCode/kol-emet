@@ -219,6 +219,12 @@ router.post('/', async (req, res, next) => {
     });
 
     draft.items = result.items;
+    // The spans of the items the prune dropped as already in the graph. Source
+    // coverage is the complement of the spans the draft cites
+    // (client/src/lib/sourceCoverage.js), so without these the pane reports a
+    // passage the model quoted — and whose entity is in the graph because of it
+    // — as text the generator never read (KOL-140).
+    draft.source.droppedSpans = result.droppedSpans ?? [];
     draft.route = result.route;
     draft.grounding = result.grounding;
     draft.diagnostics = {
@@ -372,6 +378,9 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
       let { items } = parsed;
       const { dropReasons } = parsed;
       let { dropped } = parsed;
+      // Where the items this route drops below were located in the file — see
+      // `draft.source.droppedSpans` and lib/draftTarget.js.
+      let droppedSpans = [];
 
       // Updates append blocks, so a re-import must see which attributes its
       // targets already carry. Fetched for the matched entities alone rather than
@@ -393,6 +402,7 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
         // the parse listed are capped (MAX_DROP_REASONS).
         dropReasons.push(...pruned.dropReasons);
         dropped += pruned.dropReasons.length;
+        droppedSpans = pruned.droppedSpans;
       }
 
       // Checked here rather than left to apply, where every entity would fail
@@ -418,6 +428,7 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
           text: source,
           textHash: hashText(source),
           redactedCount,
+          droppedSpans,
         },
         grounding: {
           categories,
@@ -451,7 +462,8 @@ function fileProducerRoute({ route, producer, producerVersion, parse, ParseError
         `${items.length - entityItems.length} relationships ` +
         `(${items.filter(i => i.kind === 'relationship' && i.op === 'update').length} already in the graph, ` +
         `matched against ${groups.length} existing group${groups.length === 1 ? '' : 's'}), ` +
-        `${dropped} dropped (${dropReasons.length} reasons listed)`);
+        `${dropped} dropped (${dropReasons.length} reasons listed, ` +
+        `${droppedSpans.length} source span(s) kept for dropped items)`);
       for (const reason of dropReasons) log('normal', `draft ${draft._id} dropped: ${reason}`);
       for (const i of items) {
         log('verbose', `draft ${draft._id} ${i.localKey} ${i.kind} ${i.op} ${JSON.stringify(i.proposed.title ?? i.proposed.label)} (line: ${JSON.stringify(i.input.evidence.quote)})`);

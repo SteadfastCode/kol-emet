@@ -829,3 +829,45 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   pyproject with no `[build-system]`, and the nesting a real manifest uses — and pass either side.
   **Out of scope:** PEP 735 `[dependency-groups]` and `[tool.uv]`, proposing a build backend as an
   entity, replacing the hand-written reader, and `MAX_MANIFEST_CHARS`.
+
+- **A dropped item's located span outlives the item, because coverage is derived from the spans a
+  draft cites (decided 2026-11-19, KOL-140)** — KOL-127 drops an entity update the graph already
+  satisfies instead of queueing a decision where accept and reject mean the same thing, and it was
+  careful about the three references that would otherwise dangle: a relationship member's
+  `localKey`, an open question's `entry_ids`, and `dependsOn`. Its own comment gives the reason —
+  source coverage is derived from the items (`client/src/lib/sourceCoverage.js`), so a drop that
+  took its dependents down with it would report the passage they quoted as text the generator never
+  read. **The dropped item's own span was the case that reasoning missed.** Nothing else in the
+  draft cites that passage, so re-pointing dependents cannot carry it, and on the very workflow the
+  prune exists for — re-generating over the same notes, or re-importing an unchanged file, where
+  every matched entity is dropped — the pane claimed most of the input had been ignored. The suite
+  KOL-127 shipped had a case named for this (`a dropped item does not blank the source span it was
+  located in`) and it passed by construction: its fixture's relationship item quoted the same
+  sentence as the entity item, so a sibling covered the span either way. **The span is kept where
+  the item is not**, because the two answer different questions: "is this a decision worth putting
+  to a person" (no — the apply would write an empty diff) and "did the generator read this passage"
+  (yes — it quoted it, and the entity it proposed is in the graph *because* someone read it before).
+  `pruneAgainstTargets` now returns `droppedSpans` alongside `dropReasons`, and both callers —
+  `lib/generator.js` and the shared file-producer route — store them on the draft as
+  `source.droppedSpans`: `{ charStart, charEnd }` pairs, offsets into `source.text`, with no copy of
+  the quote, since the text they index is stored beside them. The client merges them with the kept
+  items' spans and **counts them apart**, so the pane's footer says which number came from where
+  rather than overstating how many proposals were grounded. **This does not reverse "coverage is
+  derived, not stored" (Decision Log, 2026-10-24).** What is stored is evidence of the same kind
+  `items.input.evidence` already stores — where in the text something was found — for a proposal
+  that no longer exists; it cannot go stale the way a persisted percentage or a persisted list of
+  unused passages would, and a draft from before the field exists measures exactly as it did. A
+  quote the locator refused to anchor is still given no position here: `locatedSpan` applies the
+  same finite-and-non-empty test the client applies, so an unlocated quote contributes nothing
+  rather than a fabricated span. **Out of scope:** the normalizer's own drops, which happen before
+  `locateEvidence` runs and would need a located span invented for an item that was never built (a
+  duplicate within a run, a question the workspace already holds); keeping the dropped items
+  themselves, which is the decision KOL-127 made and this does not revisit; and the JSONL export,
+  whose schema is versioned and whose record still accounts for a drop in
+  `diagnostics.dropReasons`. Covered by three cases in `server/tests/unit/draftTarget.test.js` (the
+  span survives a drop that nothing else cites — the fixture now generates the entity alone, so it
+  fails for the stated reason — the spans handed back for the draft to store, and an unlocated quote
+  given none), the re-import case in `server/tests/http/composeDraft.test.js` (one span per dropped
+  item, covering each entity line the first import located, in the response *and* in the stored
+  row), and six in `client/src/components/generator/SourceCoverage.test.js`, including the
+  all-dropped re-generation reading as 100% used and a draft stored before the field existed.

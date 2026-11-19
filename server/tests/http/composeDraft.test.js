@@ -260,6 +260,28 @@ describe('POST /drafts/compose', () => {
     // least the number of items this pass took out.
     assert.ok(res.body.counts.dropped >= applied.length, JSON.stringify(res.body.counts));
 
+    // Every entity item is gone, so nothing left in this draft cites the lines
+    // they were located in. The draft carries those spans itself, or the
+    // coverage pane reports most of a re-imported file as text the producer
+    // never read — the false claim the drop must not produce (KOL-140).
+    const quoted = draft.items.filter(i => i.kind === 'entity' && Number.isFinite(i.input.evidence.charStart));
+    assert.equal(quoted.length, applied.length, 'fixture: every entity item in the first import located its line');
+    const spans = res.body.source.droppedSpans;
+    assert.equal(spans.length, quoted.length, `one span per dropped item: ${JSON.stringify(spans)}`);
+    for (const item of quoted) {
+      const { charStart, charEnd, quote } = item.input.evidence;
+      assert.ok(spans.some(s => s.charStart <= charStart && s.charEnd >= charEnd),
+        `the line ${JSON.stringify(quote)} is behind no span in ${JSON.stringify(spans)}`);
+    }
+    // Stored, not just answered: the pane reads this back from GET /drafts/:id.
+    const storedReimport = await Draft.findById(res.body._id).lean();
+    assert.deepEqual(
+      storedReimport.source.droppedSpans.map(s => [s.charStart, s.charEnd]),
+      spans.map(s => [s.charStart, s.charEnd]),
+    );
+    log('light', `draft ${res.body._id} kept ${spans.length} source span(s) for its dropped items `
+      + `(source: POST /drafts/compose re-import)`);
+
     // The edges are a separate question: a group update re-asserts the roles the
     // file names, and every member points at the entity it matched by id now
     // that the items naming it are gone.

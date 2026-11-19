@@ -9,6 +9,15 @@
  * spans are already derivable and need no new server field: merge the located
  * spans, and what is left over is "here is the text I did not use".
  *
+ * Two sets of spans, not one. An entity update the graph already satisfies is
+ * dropped before the draft is stored (server/src/lib/draftTarget.js), and the
+ * passage it quoted goes on the draft as `source.droppedSpans` because there is
+ * no item left to carry it. Those passages WERE read — that is how the entity
+ * got into the graph — so they count as used, and on the workflow where the
+ * drop earns its keep, re-generating over the same notes, they are most of the
+ * text. The two are merged together and counted apart, so the pane can say
+ * which number came from where.
+ *
  * A review's failure mode is believing the generator read everything. A span
  * nothing cites is the one thing the item list cannot show you, because the
  * item that would have shown it is the item that was never proposed.
@@ -22,7 +31,8 @@
  * is invisible in the UI beyond one caveat line, so the tiers exist to tell
  * "the generator ignored half the notes" from "the quotes did not locate".
  *   light   — one line per draft measured, naming which draft and what asked
- *             for it, how many items carried a usable span, and how many did not
+ *             for it, how many items carried a usable span, how many did not,
+ *             and how many spans came from items dropped before storage
  *   normal  — light, plus the merged span count and each item whose quote
  *             never located, by localKey
  *   verbose — normal, plus every unused passage's offsets and opening words
@@ -63,10 +73,26 @@ function labelFor(producer) {
 }
 
 /**
- * Merges the located evidence spans of `items`, clamped to `textLength`.
+ * Clamps one stored span to the text it indexes, or returns nothing when it
+ * indexes none of it.
+ *
+ * Clamp rather than trust: the offsets were computed against a `source.text`
+ * that is stored next to them, but a redaction pass or an edited fixture can
+ * leave a span pointing past the end, and `slice` would silently return ''.
+ */
+function clampSpan(charStart, charEnd, textLength) {
+  if (!Number.isFinite(charStart) || !Number.isFinite(charEnd)) return null;
+  const start = Math.max(0, Math.min(Math.trunc(charStart), textLength));
+  const end = Math.max(0, Math.min(Math.trunc(charEnd), textLength));
+  return end > start ? [start, end] : null;
+}
+
+/**
+ * Merges the located evidence spans of `items` and the draft's own
+ * `droppedSpans`, clamped to `textLength`.
  * Returns `[start, end]` pairs, sorted, non-overlapping, none empty.
  */
-function mergeSpans(items, textLength) {
+function mergeSpans(items, textLength, droppedSpans = []) {
   const spans = [];
   const unlocated = [];
   let noEvidence = 0;
@@ -76,22 +102,34 @@ function mergeSpans(items, textLength) {
     const { charStart, charEnd } = ev;
     const quote = String(ev.quote ?? '');
 
-    if (!Number.isFinite(charStart) || !Number.isFinite(charEnd)) {
-      // A quote with no offsets located nowhere; no quote at all is an item the
-      // generator never grounded (the `no_evidence` flag already says so on the
-      // card). They are counted apart because only the first understates coverage.
-      if (quote.trim()) unlocated.push(item.localKey ?? item._id ?? '?');
-      else noEvidence++;
-      continue;
+    const span = clampSpan(charStart, charEnd, textLength);
+    if (span) { spans.push(span); continue; }
+    // Offsets that clamped to nothing point outside the stored text, so that
+    // quote located nowhere either. A quote with no offsets at all is the same
+    // failure; no quote at all is an item the generator never grounded (the
+    // `no_evidence` flag already says so on the card). The last is counted
+    // apart because only the other two understate coverage.
+    if ((Number.isFinite(charStart) && Number.isFinite(charEnd)) || quote.trim()) {
+      unlocated.push(item.localKey ?? item._id ?? '?');
+    } else {
+      noEvidence++;
     }
+  }
 
-    // Clamp rather than trust: the offsets were computed against a `source.text`
-    // that is stored next to them, but a redaction pass or an edited fixture can
-    // leave a span pointing past the end, and `slice` would silently return ''.
-    const start = Math.max(0, Math.min(Math.trunc(charStart), textLength));
-    const end = Math.max(0, Math.min(Math.trunc(charEnd), textLength));
-    if (end > start) spans.push([start, end]);
-    else unlocated.push(item.localKey ?? item._id ?? '?');
+  // The items' own spans, before the draft's are added: this is the count the
+  // pane reports against the item list, and there is no item behind the rest.
+  const located = spans.length;
+
+  // Items dropped before the draft was stored have no item left to carry their
+  // span, so the draft carries it (server/src/lib/draftTarget.js). A span here
+  // is one the generator read and proposed from; the proposal was dropped only
+  // because the graph already held it.
+  let droppedLocated = 0;
+  for (const s of Array.isArray(droppedSpans) ? droppedSpans : []) {
+    const span = clampSpan(s?.charStart, s?.charEnd, textLength);
+    if (!span) continue;
+    spans.push(span);
+    droppedLocated++;
   }
 
   spans.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -102,7 +140,7 @@ function mergeSpans(items, textLength) {
     else merged.push([start, end]);
   }
 
-  return { merged, unlocated, noEvidence, located: spans.length };
+  return { merged, unlocated, noEvidence, located, droppedLocated };
 }
 
 /**
@@ -115,7 +153,8 @@ export function coverageOf(draft, { source = 'unknown' } = {}) {
   const items = Array.isArray(draft?.items) ? draft.items : [];
   const label = labelFor(draft?.source?.producer);
 
-  const { merged, unlocated, noEvidence, located } = mergeSpans(items, text.length);
+  const { merged, unlocated, noEvidence, located, droppedLocated } =
+    mergeSpans(items, text.length, draft?.source?.droppedSpans);
 
   // Alternating used/unused segments covering the whole text exactly once, so
   // the in-context view can render the source with nothing lost or repeated.
@@ -161,17 +200,20 @@ export function coverageOf(draft, { source = 'unknown' } = {}) {
     locatedCount: located,
     unlocatedCount: unlocated.length,
     noEvidenceCount: noEvidence,
+    droppedSpanCount: droppedLocated,
   };
 
   const signature = [
     draft?._id ?? '?', text.length, items.length,
-    located, unlocated.length, noEvidence, usedPct, unused.length,
+    located, droppedLocated, unlocated.length, noEvidence, usedPct, unused.length,
   ].join(':');
   if (signature !== lastLogged) {
     lastLogged = signature;
     log('light', `measured draft ${draft?._id ?? '(unsaved)'} for ${source}: `
       + `${located}/${items.length} item(s) carried a usable span, ${unlocated.length} quote(s) never located, `
-      + `${noEvidence} item(s) had no quote; ${usedPct}% of ${label} used, ${unused.length} passage(s) unused`);
+      + `${noEvidence} item(s) had no quote, ${droppedLocated} span(s) came from the draft itself `
+      + `(source: items dropped as already in the graph before it was stored); `
+      + `${usedPct}% of ${label} used, ${unused.length} passage(s) unused`);
     log('normal', `${merged.length} merged span(s) over ${text.length} char(s)`
       + (unlocated.length ? `; quotes that never located: ${unlocated.join(', ')}` : ''));
     for (const p of unused) {

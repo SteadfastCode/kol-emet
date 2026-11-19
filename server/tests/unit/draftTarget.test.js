@@ -27,15 +27,22 @@
  * gone — the apply would block it, and the evidence line it was located in
  * would vanish from the draft, which is where source coverage is derived from
  * (client/src/lib/sourceCoverage.js). `mergedSpans` below is that derivation,
- * mirrored over the server-side items.
+ * mirrored over the server-side items AND over the spans the pass hands back
+ * for the draft to keep: the dropped item's own passage has no item left to
+ * point at it, so re-pointing its dependents is not enough to keep coverage
+ * honest (KOL-140).
  *
- * Falsification check: run against the pre-fix path (`entityTarget` without the
- * prune and `pruneAgainstTargets` returning its input untouched), 7 of these 14
- * fail — every case that asserts a block the target already holds came off, or
- * that an item writing nothing is gone and nothing is left pointing at it —
- * while the controls pass: a create, a target holding none of it, a tag and a
- * summary and a block the target lacks, and a target that came back absent. So
- * the suite fails for the stated reason rather than by construction.
+ * Falsification check, in two parts. Against the path as it was before KOL-127
+ * (`entityTarget` without the prune and `pruneAgainstTargets` returning its
+ * input untouched), 7 of the 14 cases that shipped with it fail — every case
+ * that asserts a block the target already holds came off, or that an item
+ * writing nothing is gone and nothing is left pointing at it — while the
+ * controls pass: a create, a target holding none of it, a tag and a summary and
+ * a block the target lacks, and a target that came back absent. Against the
+ * pass as KOL-127 left it — which dropped an item and its located span
+ * together — the three span cases fail instead: `droppedSpans` is not there,
+ * and the passage the dropped item quoted is covered by nothing. So the suite
+ * fails for the stated reason rather than by construction.
  */
 
 import { describe, test } from 'node:test';
@@ -77,16 +84,26 @@ function generate(target, { raw = [rawMira, rawGate], relationships = [rawRelati
     categories: CATEGORIES, sourceText: SOURCE, existingEntities: [MIRA],
   });
   const pruned = pruneAgainstTargets(items, target ? new Map([[String(MIRA._id), target]]) : new Map());
-  return { items: pruned.items, dropReasons: [...dropReasons, ...pruned.dropReasons] };
+  return {
+    items: pruned.items,
+    dropReasons: [...dropReasons, ...pruned.dropReasons],
+    // What POST /drafts stores as `source.droppedSpans`.
+    droppedSpans: pruned.droppedSpans,
+  };
 }
 
 const entityItem = (items, title) => items.find(i => i.kind === 'entity' && i.proposed.title === title);
 const only = (items, kind) => items.filter(i => i.kind === kind);
 
-/** The client's coverage derivation, over these items: merged located spans. */
-function mergedSpans(items) {
-  const spans = items
-    .map(i => i.input.evidence)
+/**
+ * The client's coverage derivation, over these items and the spans the draft
+ * carries for the items that were dropped: all of them, merged.
+ */
+function mergedSpans(items, droppedSpans = []) {
+  const spans = [
+    ...items.map(i => i.input.evidence),
+    ...droppedSpans,
+  ]
     .filter(ev => Number.isFinite(ev.charStart) && Number.isFinite(ev.charEnd) && ev.charEnd > ev.charStart)
     .map(ev => [ev.charStart, ev.charEnd])
     .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -150,15 +167,47 @@ describe('the braindump path, over an entity the workspace already has', () => {
   });
 
   test('a dropped item does not blank the source span it was located in', () => {
-    const { items: before } = generate(null);
+    // Neither the relationship nor the question is generated here, so the
+    // entity item is the ONLY thing in the draft that cites its line and a drop
+    // that lost the span has nothing to hide behind. With them, a sibling item
+    // quoting the same sentence covers it either way — which is why the case
+    // this one replaced passed against a pass that discarded the span.
+    const alone = { relationships: [], questions: [] };
+    const { items: before } = generate(null, alone);
     const dropped = entityItem(before, 'Mira');
     const span = [dropped.input.evidence.charStart, dropped.input.evidence.charEnd];
     assert.ok(Number.isFinite(span[0]), 'fixture must locate the quote it is about to lose');
 
-    const { items } = generate({ blocks: [TEXT_BLOCK], tags: ['keeper'], summary: 'Written by hand' });
+    const target = { blocks: [TEXT_BLOCK], tags: ['keeper'], summary: 'Written by hand' };
+    const { items, droppedSpans } = generate(target, alone);
     assert.equal(entityItem(items, 'Mira'), undefined);
-    assert.ok(covers(mergedSpans(items), span),
-      `the span ${span} the dropped item cited is no longer covered by ${JSON.stringify(mergedSpans(items))}`);
+    assert.ok(!covers(mergedSpans(items), span),
+      'fixture: nothing that survived cites that passage, so the draft itself has to carry it');
+    assert.ok(covers(mergedSpans(items, droppedSpans), span),
+      `the span ${span} the dropped item cited is no longer covered by ${JSON.stringify(mergedSpans(items, droppedSpans))}`);
+  });
+
+  test("the dropped item's span is handed back for the draft to store", () => {
+    // `Draft.source.droppedSpans`: offsets into source.text, the same shape
+    // `input.evidence` carries, and no copy of the quote — the text it was
+    // taken from is stored beside them.
+    const { droppedSpans } = generate({ blocks: [TEXT_BLOCK], tags: ['keeper'], summary: 'Written by hand' });
+    const at = SOURCE.indexOf('Mira keeps it.');
+    assert.deepEqual(droppedSpans, [{ charStart: at, charEnd: at + 'Mira keeps it.'.length }]);
+  });
+
+  test('a dropped item whose quote never located is given no span either', () => {
+    // A model paraphrase none of the three fallbacks could anchor has null
+    // offsets. Carrying it as a span would invent a position for a quote the
+    // locator refused to place, which is the one thing the pane's caveat line
+    // about unlocated quotes exists to avoid.
+    const paraphrased = { ...rawMira, quote: 'she has kept it since the second age' };
+    const { items, droppedSpans } = generate(
+      { blocks: [TEXT_BLOCK], tags: ['keeper'], summary: 'Written by hand' },
+      { raw: [paraphrased, rawGate], relationships: [], questions: [] },
+    );
+    assert.equal(entityItem(items, 'Mira'), undefined, 'still dropped — the drop does not depend on the quote');
+    assert.deepEqual(droppedSpans, []);
   });
 
   test('a relationship that named the dropped item points at the entity by id instead', () => {

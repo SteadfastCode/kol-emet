@@ -263,12 +263,19 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
   // entity it matched.
   const targetIds = normalized.filter(i => i.targetEntityId).map(i => i.targetEntityId);
   let items = normalized;
+  // The passages the dropped items were located in. They go on the draft rather
+  // than nowhere: source coverage is derived from the items
+  // (client/src/lib/sourceCoverage.js), so a span with no item left to carry it
+  // reads as a passage this run never used — and on the workflow that makes the
+  // prune worth having, re-generating over the same notes, that is most of them.
+  let droppedSpans = [];
   if (targetIds.length) {
     const targets = await Entity.find({ _id: { $in: targetIds }, workspaceId })
       .select('_id blocks tags summary').lean();
     const pruned = pruneAgainstTargets(normalized, new Map(targets.map(t => [String(t._id), t])), { log });
     items = pruned.items;
     dropReasons.push(...pruned.dropReasons);
+    droppedSpans = pruned.droppedSpans;
   }
 
   diag.dropReasons = dropReasons;
@@ -277,10 +284,12 @@ async function runGeneration({ text, workspaceId, provider, roleStyle, onStage =
   log('light',
     `produced ${items.length} item(s) from ${rawEntities.length} raw entities + ` +
     `${rawRelationships.length} raw relationships + ${rawOpenQuestions.length} raw open ` +
-    `questions; ${dropReasons.length} dropped; ${diag.generationMs}ms`);
+    `questions; ${dropReasons.length} dropped (${droppedSpans.length} with a source span kept ` +
+    `for the draft); ${diag.generationMs}ms`);
 
   return {
     items,
+    droppedSpans,
     route: { provider: route.provider, model: route.model, strategy: 'json-prompt+ladder' },
     grounding: {
       promptVersion: PROMPT_VERSION,

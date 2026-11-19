@@ -45,6 +45,14 @@ const evidenceSchema = new mongoose.Schema({
   chunkIndex: { type: Number, default: 0 },
 }, { _id: false });
 
+// Where an item that was dropped before the draft was stored had been located
+// in `source.text` — see `source.droppedSpans`. The quote itself is not copied:
+// the text it was taken from is stored right beside these offsets.
+const droppedSpanSchema = new mongoose.Schema({
+  charStart: { type: Number, required: true },
+  charEnd:   { type: Number, required: true },
+}, { _id: false });
+
 const itemSchema = new mongoose.Schema({
   // Server-assigned: 'e1', 'r1', 'q1'. Ids emitted by the model are discarded,
   // so a model that repeats or invents ids cannot corrupt cross-references.
@@ -126,6 +134,16 @@ const draftSchema = new mongoose.Schema({
     // draft can say so rather than leaving a REDACTED in the evidence
     // unexplained. The values themselves are kept nowhere.
     redactedCount:   { type: Number, default: 0 },
+    // The located spans of items that never made it into `items`: an update the
+    // graph already satisfies is dropped rather than queued as a decision
+    // (lib/draftTarget.js). Source coverage is derived from the spans the draft
+    // cites rather than stored (Decision Log, 2026-10-24), so the span of a
+    // dropped item has to survive the item or the pane reports the passage the
+    // model quoted as text the generator never read. Spans, not a coverage
+    // summary: this is the same evidence `items.input.evidence` carries, kept
+    // for a proposal that is gone, and it cannot go stale the way a stored
+    // percentage would.
+    droppedSpans:    { type: [droppedSpanSchema], default: [] },
   },
 
   // Exactly what the model was shown, so a training example is reproducible.

@@ -56,7 +56,8 @@ console.log(`parsedVia  : ${result.diagnostics.parsedVia.join(', ')}`);
 console.log(`repaired   : ${result.diagnostics.repairAttempted}`);
 console.log(`passes     : ${result.diagnostics.passes}`);
 console.log(`proposed   : ${entities.length} entities, ${rels.length} relationships, ${questions.length} open questions`);
-console.log(`dropped    : ${result.diagnostics.dropReasons.length}`);
+console.log(`dropped    : ${result.diagnostics.dropReasons.length} ` +
+  `(${(result.droppedSpans ?? []).length} with a source span kept for the draft)`);
 const u = result.diagnostics.usage ?? {};
 const inTok = u.promptTokens ?? 0, outTok = u.completionTokens ?? 0;
 console.log(`tokens     : ${inTok} in + ${outTok} out = ${inTok + outTok} across ${u.calls ?? 0} call(s)`);
@@ -102,6 +103,11 @@ for (const it of questions) {
 if (result.diagnostics.dropReasons.length) {
   console.log(`\n--- dropped (${result.diagnostics.dropReasons.length}) ---`);
   for (const r of result.diagnostics.dropReasons) console.log(`  - ${r}`);
+  // What POST /drafts stores as `source.droppedSpans`: the passages the dropped
+  // items were located in, which source coverage still counts as read.
+  for (const s of result.droppedSpans ?? []) {
+    console.log(`  span ${s.charStart}-${s.charEnd} kept: "${text.slice(s.charStart, s.charEnd).slice(0, 60)}"`);
+  }
 }
 
 console.log('\nNothing was written.');

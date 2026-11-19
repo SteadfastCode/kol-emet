@@ -102,6 +102,21 @@ function writesNothing(proposed, target) {
 }
 
 /**
+ * Where a dropped item was located in the source, or nothing when its quote
+ * never located there.
+ *
+ * The same finite-and-non-empty test the client's coverage applies to an item's
+ * own evidence (`client/src/lib/sourceCoverage.js`), so a span carried out of
+ * here is a span that pass will count, and a quote the locator could not anchor
+ * is not given a fabricated position on its way past.
+ */
+function locatedSpan(item) {
+  const { charStart, charEnd } = item.input?.evidence ?? {};
+  if (!Number.isFinite(charStart) || !Number.isFinite(charEnd) || charEnd <= charStart) return null;
+  return { charStart, charEnd };
+}
+
+/**
  * Prunes a parsed draft against the entities its updates target: drops the
  * blocks those entities already carry, then drops any update left writing
  * nothing.
@@ -122,16 +137,30 @@ function writesNothing(proposed, target) {
  *   - `dependsOn` loses the key, so the review UI does not grey an item out
  *     waiting on a decision nobody will ever be asked for.
  *
+ * The dropped item's OWN span is the fourth thing that has to outlive it, and
+ * no re-pointing can carry it: nothing else in the draft cites that passage.
+ * It comes back as `droppedSpans` for the caller to store on the draft
+ * (`Draft.source.droppedSpans`), where the same coverage pass merges it with
+ * the spans of the items that stayed. The span is kept where the item is not
+ * because the two answer different questions — "is this a decision worth
+ * putting to a person" (no, see above) and "did the generator read this
+ * passage" (yes: it quoted it, and the entity it proposed is in the graph).
+ * Without it the pane's own central case — re-generating over the same notes,
+ * where every matched entity is dropped — reports most of those notes as text
+ * the generator never read.
+ *
  * @param {object[]} items  draft items, as the normalizer or a producer emits them
  * @param {Map<string, object>} targetsById  entity id, as a string -> { blocks, tags, summary }
  * @param {object} [opts]
  * @param {Function} [opts.log]  (level, msg) => void, this caller's tiered logger
- * @returns {{items: object[], dropReasons: string[]}}
+ * @returns {{items: object[], dropReasons: string[], droppedSpans: {charStart: number, charEnd: number}[]}}
  */
 export function pruneAgainstTargets(items, targetsById, { log = noLog } = {}) {
   const dropReasons = [];
   // localKey -> the id of the entity the dropped item would have updated.
   const dropped = new Map();
+  // The dropped items' own located spans, which outlive the items themselves.
+  const droppedSpans = [];
 
   for (const item of items) {
     if (item.kind !== 'entity' || item.op !== 'update' || !item.targetEntityId) continue;
@@ -151,12 +180,17 @@ export function pruneAgainstTargets(items, targetsById, { log = noLog } = {}) {
     if (!writesNothing(item.proposed, target)) continue;
     dropped.set(item.localKey, item.targetEntityId);
     dropReasons.push(`entity ${JSON.stringify(item.proposed.title)} is already in this workspace and unchanged`);
+    const span = locatedSpan(item);
+    if (span) droppedSpans.push(span);
     log('light', `item ${item.localKey} ${JSON.stringify(item.proposed.title)} dropped: already in the graph and ` +
       `unchanged (source: entity ${item.targetEntityId}, which carries every proposed block and tag` +
-      `${target.summary ? ' and a summary of its own' : ''})`);
+      `${target.summary ? ' and a summary of its own' : ''}); ` +
+      (span
+        ? `its source span ${span.charStart}-${span.charEnd} is carried out for the draft to keep`
+        : 'it cited nothing that located, so there is no source span to keep'));
   }
 
-  if (!dropped.size) return { items, dropReasons };
+  if (!dropped.size) return { items, dropReasons, droppedSpans };
 
   const kept = items.filter(item => !dropped.has(item.localKey));
   for (const item of kept) {
@@ -190,6 +224,7 @@ export function pruneAgainstTargets(items, targetsById, { log = noLog } = {}) {
   kept.forEach((item, i) => { item.seq = i; });
 
   log('light', `${dropped.size} of ${items.length} item(s) dropped as already in the graph and unchanged ` +
-    `(source: the ${targetsById.size} matched entit${targetsById.size === 1 ? 'y' : 'ies'} this pass was given)`);
-  return { items: kept, dropReasons };
+    `(source: the ${targetsById.size} matched entit${targetsById.size === 1 ? 'y' : 'ies'} this pass was given); ` +
+    `${droppedSpans.length} source span(s) kept for them, so coverage still reads those passages as read`);
+  return { items: kept, dropReasons, droppedSpans };
 }
