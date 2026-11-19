@@ -245,4 +245,56 @@ describe('EntityEditor gallery rows', () => {
     await wrapper.get('.add-image-btn').trigger('click');
     expect(urlInputs(wrapper)).toHaveLength(1);
   });
+
+  /**
+   * KOL-148: the block data came from `{ ...BLOCK_DEFAULTS[type] }`, which
+   * copies the *reference* to the gallery default's `images` array — so every
+   * gallery block in one editor shared one row list, and hydration shared its
+   * rows with the payload it was given. Both of these fail on that version.
+   */
+  it('keeps two gallery blocks in one entity from sharing their rows', async () => {
+    const wrapper = await openEditor();
+    await addGalleryBlock(wrapper);
+    await addGalleryBlock(wrapper);
+
+    const galleries = wrapper.findAll('.gallery-fields');
+    expect(galleries).toHaveLength(2);
+
+    // A row added to the second gallery must not appear in the first.
+    await galleries[1].get('.add-image-btn').trigger('click');
+    await galleries[1].get('input[type="url"]').setValue('https://images.example.test/second.jpg');
+    expect(galleries[0].findAll('.gallery-row')).toHaveLength(0);
+    expect(galleries[1].findAll('.gallery-row')).toHaveLength(1);
+
+    await wrapper.get('.title-input').setValue('Two Galleries');
+    await wrapper.get('.editor-footer .primary').trigger('click');
+
+    const saved = wrapper.emitted('saved')[0][0];
+    const [first, second] = saved.blocks.filter((b) => b.type === 'gallery');
+    expect(first.data.images).toEqual([]);
+    expect(second.data.images).toEqual([
+      { url: 'https://images.example.test/second.jpg', caption: '' },
+    ]);
+  });
+
+  it('does not mutate the hydrating payload while rows are edited', async () => {
+    // The draft-review screen passes its own draft item in as `initial`;
+    // editing rows must not write through to it, since the user may cancel.
+    const initial = {
+      title: 'Draft',
+      category: 'Characters',
+      blocks: [{ type: 'gallery', order: 0, data: { images: [{ url: 'https://images.example.test/a.jpg', caption: 'A' }] } }],
+    };
+    const snapshot = JSON.parse(JSON.stringify(initial));
+
+    const wrapper = mount(EntityEditor, { props: { initial } });
+    await flushPromises();
+
+    await urlInputs(wrapper)[0].setValue('https://images.example.test/b.jpg');
+    await wrapper.findAll('.gallery-row input:not([type="url"])')[0].setValue('B');
+    await wrapper.get('.add-image-btn').trigger('click');
+    await wrapper.findAll('.gallery-row .icon-btn').at(-1).trigger('click');
+
+    expect(initial).toEqual(snapshot);
+  });
 });

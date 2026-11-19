@@ -131,11 +131,25 @@ async function saveBlock(block, newData) {
   editingBlockId.value = null;
 }
 
+/**
+ * A new block's data, copied out of `BLOCK_DEFAULTS`. A shallow spread is not
+ * a copy of `BLOCK_DEFAULTS.gallery`: its `images` array would be shared by
+ * every gallery block this menu creates (KOL-148, where the same aliasing in
+ * EntityEditor made two galleries show each other's rows). Nothing on this
+ * path edits rows in place today — the block is emitted straight to a save —
+ * but anything that did would write them into both blocks.
+ */
+function freshBlockData(type) {
+  const data = { ...BLOCK_DEFAULTS[type] };
+  if (type === 'gallery') data.images = [];
+  return data;
+}
+
 function addBlock(type) {
   const newBlock = {
     type,
     order: (props.blocks?.length ?? 0),
-    data: { ...BLOCK_DEFAULTS[type] },
+    data: freshBlockData(type),
   };
   emit('add-block', newBlock);
   showAddMenu.value = false;

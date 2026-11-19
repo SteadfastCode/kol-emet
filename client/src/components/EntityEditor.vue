@@ -227,7 +227,21 @@ let keyCounter = 0;
 function makeKey() { return ++keyCounter; }
 
 /**
- * Block data the v-model rows can be bound to directly.
+ * Block data the v-model rows can be bound to directly — always a fresh object
+ * this editor owns, never one it shares with anybody.
+ *
+ * The copy is made here rather than at the call sites because a shallow spread
+ * at the call site is not enough and reads as if it were (KOL-148):
+ *
+ *   - `{ ...BLOCK_DEFAULTS.gallery }` copies the *reference* to its `images`
+ *     array, so every gallery block in this editor would share one row list:
+ *     a URL typed into the second gallery shows up in the first, and the save
+ *     writes the same images into both. (`BLOCK_DEFAULTS` is declared inside
+ *     `<script setup>`, so it is per editor instance — the sharing stops at
+ *     the editor, but inside one it covers every gallery block it created.)
+ *   - hydration is handed the caller's object (the draft item in the
+ *     draft-review screen). Editing or removing rows in place would mutate it
+ *     even if the user then cancels, so the row objects are copied too.
  *
  * A gallery block stored before KOL-142 — or written by a path whose schema
  * only said "an object" — may carry no `images` array at all, and `v-for` over
@@ -236,8 +250,15 @@ function makeKey() { return ++keyCounter; }
  * render.
  */
 function withEditableData(type, data) {
-  if (type === 'gallery' && !Array.isArray(data.images)) data.images = [];
-  return data;
+  const copy = { ...(data ?? {}) };
+  if (type === 'gallery') {
+    copy.images = Array.isArray(data?.images)
+      // A row that is not an object cannot be bound to; it becomes an empty
+      // row, which the save-time pruning drops exactly as it does today.
+      ? data.images.map(img => (img && typeof img === 'object' ? { ...img } : {}))
+      : [];
+  }
+  return copy;
 }
 
 function addImage(block) {
@@ -257,7 +278,7 @@ if (props.initial) {
   blocks.value = (props.initial.blocks ?? []).map(b => ({
     type: b.type,
     order: b.order,
-    data: withEditableData(b.type, { ...b.data }),
+    data: withEditableData(b.type, b.data),
     _key: makeKey(),
   }));
 }
@@ -386,7 +407,7 @@ function chooseTag(tag, source) {
 function applyDefaultBlocks() {
   if (blocks.value.length === 0 && form.category) {
     const defaults = getDefaultBlocks(form.category);
-    blocks.value = defaults.map(b => ({ ...b, _key: makeKey() }));
+    blocks.value = defaults.map(b => ({ ...b, data: withEditableData(b.type, b.data), _key: makeKey() }));
   }
 }
 
@@ -394,7 +415,7 @@ function addBlock(type) {
   blocks.value.push({
     type,
     order: blocks.value.length,
-    data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }),
+    data: withEditableData(type, BLOCK_DEFAULTS[type]),
     _key: makeKey(),
   });
   showAddMenu.value = false;
