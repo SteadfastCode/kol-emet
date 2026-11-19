@@ -1,0 +1,132 @@
+{
+  "item": "KOL-146",
+  "repo": "kol-emet",
+  "mergeSha": "2cb93eb3035d2139a83c9170f6d0bd80c6f20978",
+  "completedAtUtc": "2026-11-19T01:23:06.578Z",
+  "completeRunId": "2026-11-19T01:11:43.135Z",
+  "reviewRunId": "2026-11-19T08:01:44.088Z",
+  "reviewedAtUtc": "2026-11-19T08:05:35.677Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 30400,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/architecture.md",
+        "server/src/lib/mcpFailure.js",
+        "server/tests/http/bridge.test.js"
+      ],
+      "part": null,
+      "bytes": 10162,
+      "contextBytes": 0,
+      "promptTokens": 4174,
+      "completionTokens": 123,
+      "latencyMs": 16862,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/mcp.test.js"
+      ],
+      "part": null,
+      "bytes": 2863,
+      "contextBytes": 9351,
+      "promptTokens": 4544,
+      "completionTokens": 114,
+      "latencyMs": 15306,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/mcpFailure.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12601,
+      "contextBytes": 0,
+      "promptTokens": 4767,
+      "completionTokens": 256,
+      "latencyMs": 23722,
+      "findings": 0,
+      "needs": 8,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/mcpFailure.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4982,
+      "contextBytes": 7643,
+      "promptTokens": 4868,
+      "completionTokens": 269,
+      "latencyMs": 27596,
+      "findings": 0,
+      "needs": 9,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/mcp.js:83"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. The change appears to cap the caller-controlled values in the log record as described, and includes tests for various scenarios. · The diff adds a test to ensure that an unauthenticated POST request with a large `id` results in a small log record. The test checks the status code, response body, and log line size. However, it does not provide details on how the `mcpLogRecord` function is implemented or where it is defined. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of several symbols used in the test file. · No real defects found. Additional context and definitions are needed to fully verify the implementation.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 36182,
+    "completionTokens": 1306
+  },
+  "latencyMs": 158109
+}

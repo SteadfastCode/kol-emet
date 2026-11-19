@@ -1,0 +1,124 @@
+{
+  "item": "KOL-141",
+  "repo": "kol-emet",
+  "mergeSha": "e3c71a4219df89c7c3318780f5021bd854f35062",
+  "completedAtUtc": "2026-11-19T01:58:43.090Z",
+  "completeRunId": "2026-11-19T01:11:43.135Z",
+  "reviewRunId": "2026-11-19T08:01:44.088Z",
+  "reviewedAtUtc": "2026-11-19T08:08:15.888Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 36428,
+  "contextFiles": 5,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/ownerFloor.js"
+      ],
+      "part": null,
+      "bytes": 10919,
+      "contextBytes": 0,
+      "promptTokens": 3598,
+      "completionTokens": 93,
+      "latencyMs": 14667,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/workspace.js"
+      ],
+      "part": null,
+      "bytes": 9605,
+      "contextBytes": 0,
+      "promptTokens": 3136,
+      "completionTokens": 89,
+      "latencyMs": 13108,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/invites.test.js"
+      ],
+      "part": null,
+      "bytes": 5662,
+      "contextBytes": 8815,
+      "promptTokens": 4280,
+      "completionTokens": 253,
+      "latencyMs": 25040,
+      "findings": 0,
+      "needs": 7,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/ownerFloor.test.js"
+      ],
+      "part": null,
+      "bytes": 10242,
+      "contextBytes": 0,
+      "promptTokens": 3399,
+      "completionTokens": 90,
+      "latencyMs": 14167,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/workspace.js:341"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The change does not introduce any new defects, but there are some symbols that need to be reviewed for context. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · The diff adds new tests to ensure that a member read as an editor, promoted to the last owner in between, is refused when attempting to demote or remove them. The tests also verify that the workspace remains manageable by the surviving owner. · No real defects found, but additional context is needed to fully understand the changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 28302,
+    "completionTokens": 1064
+  },
+  "latencyMs": 132452
+}

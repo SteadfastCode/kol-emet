@@ -1,0 +1,71 @@
+{
+  "item": "KOL-148",
+  "repo": "kol-emet",
+  "mergeSha": "6d0714d28d592087f43f1febb6f2bcc64c44d408",
+  "completedAtUtc": "2026-11-19T01:31:56.097Z",
+  "completeRunId": "2026-11-19T01:11:43.135Z",
+  "reviewRunId": "2026-11-19T08:01:44.088Z",
+  "reviewedAtUtc": "2026-11-19T08:06:03.285Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 9520,
+  "contextFiles": 4,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/BlockList.test.js",
+        "client/src/components/BlockList.vue",
+        "client/src/components/EntityEditor.test.js",
+        "client/src/components/EntityEditor.vue"
+      ],
+      "part": null,
+      "bytes": 9520,
+      "contextBytes": 0,
+      "promptTokens": 3263,
+      "completionTokens": 70,
+      "latencyMs": 12629,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. However, additional context is needed to fully understand the behavior of `BLOCK_DEFAULTS`.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 6395,
+    "completionTokens": 196
+  },
+  "latencyMs": 27527
+}
