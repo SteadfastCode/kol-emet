@@ -236,6 +236,33 @@ describe('refusals are machine-readable and logged (KOL-047)', () => {
     assert.match(r.source, /did not match BRIDGE_TOKEN/);
   });
 
+  /**
+   * KOL-146. The gate refuses with the record before any credential has been
+   * accepted, so whatever an unauthenticated caller puts in `id` is what the
+   * deployed log says — up to `express.json()`'s ~100 kB default, per request.
+   * `/bridge/mcp` has the same shape as `/mcp` because it builds the same
+   * record; this is the half of that the bridge owns.
+   */
+  test('a 100 kB id from an unauthenticated caller does not become 100 kB of log (KOL-146)', async () => {
+    const huge = 'x'.repeat(100_000);
+    const { lines, value: res } = await captureBridgeLog('light', () => post('nope')
+      .set('User-Agent', 'z'.repeat(5_000))
+      .send({ jsonrpc: '2.0', id: huge, method: 'tools/call', params: { name: 'bridge_poll', arguments: { for: 'chat' } } }));
+
+    assert.equal(res.status, 401, `${res.status} ${res.text.slice(0, 200)}`);
+    // Unchanged on the wire: the client still matches the answer to its call.
+    assert.equal(res.body.id, huge, 'the refusal must echo the id the caller sent');
+
+    const found = records(lines, 'mcp_request_refused');
+    assert.equal(found.length, 1, `one record per refusal; got ${found.length}`);
+    assert.match(String(found[0].requestId), /^x{64}…\(\+99936\)$/, 'the id is cut, and marked so an operator can tell it was');
+    assert.ok(found[0].caller.ua.length < 300, `the user-agent is cut too, got ${found[0].caller.ua.length} characters`);
+    assert.equal(found[0].tool, 'bridge_poll', 'and the tool name still survives the capping');
+
+    const line = lines.find((l) => l.includes('mcp_request_refused'));
+    assert.ok(Buffer.byteLength(line, 'utf8') < 2048, `a refusal record stays small: ${Buffer.byteLength(line, 'utf8')} bytes`);
+  });
+
   test('a session id on a stateless endpoint is served, and recorded as such', async () => {
     const { lines, value: res } = await captureBridgeLog('normal', () => post(BRIDGE_TOKEN)
       .set('mcp-session-id', '00000000-dead-beef-0000-000000000000')
