@@ -110,17 +110,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-148) data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }) shallow-copies BLOCK_DEFAULTS.gallery,…**
-  Found by the grader of KOL-142 (medium, client/src/components/EntityEditor.vue:397). `data:
-  withEditableData(type, { ...BLOCK_DEFAULTS[type] })` shallow-copies `BLOCK_DEFAULTS.gallery`, so
-  every gallery block created in one editor instance shares the *same* `images` array object (the
-  spread copies the reference, and `withEditableData` leaves it alone because `Array.isArray` is
-  already true). Add two gallery blocks to one entity, click "+ Add image" in the second and type
-  a URL: the row appears in the first gallery too, and the save writes identical images into both
-  blocks. The hydration path at line 260 has the same aliasing — `{ ...b.data }` keeps
-  `props.initial.blocks[i].data.images`, so editing rows mutates the caller's object (the draft
-  item in the draft-review screen) even if the user cancels. Both tests pass only because each
-  exercises a single gallery block.
 - [ ] **(KOL-141) The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…**
   Found by the grader of KOL-134 (medium, server/src/routes/workspace.js:344). The floor filter is
   still applied conditionally on a stale read: `demotingAnOwner`/`removingAnOwner` (lines 344,
@@ -208,6 +197,17 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-148) data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }) shallow-copies BLOCK_DEFAULTS.gallery,…** (routine 2026-11-18, 6d0714d)
+  Found by the grader of KOL-142 (medium, client/src/components/EntityEditor.vue:397). `data:
+  withEditableData(type, { ...BLOCK_DEFAULTS[type] })` shallow-copies `BLOCK_DEFAULTS.gallery`, so
+  every gallery block created in one editor instance shares the *same* `images` array object (the
+  spread copies the reference, and `withEditableData` leaves it alone because `Array.isArray` is
+  already true). Add two gallery blocks to one entity, click "+ Add image" in the second and type
+  a URL: the row appears in the first gallery too, and the save writes identical images into both
+  blocks. The hydration path at line 260 has the same aliasing — `{ ...b.data }` keeps
+  `props.initial.blocks[i].data.images`, so editing rows mutates the caller's object (the draft
+  item in the draft-review screen) even if the user cancels. Both tests pass only because each
+  exercises a single gallery block.
 - [x] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time** (routine 2026-11-18, 2cb93eb)
   Found by the grader of KOL-047. `mcpLogRecord` (`server/src/lib/mcpFailure.js:152-171`) writes three
   caller-controlled values into every refusal record with no cap: `requestId` is `body.id` verbatim through

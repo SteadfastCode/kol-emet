@@ -85,7 +85,7 @@
     "KOL-148": {
       "order": 5,
       "title": "data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }) shallow-copies BLOCK_DEFAULTS.gallery,…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-148",
