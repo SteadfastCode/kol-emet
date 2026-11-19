@@ -85,7 +85,7 @@
     "KOL-139": {
       "order": 5,
       "title": "A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-139",
