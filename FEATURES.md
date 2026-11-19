@@ -110,7 +110,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-140) Dropping an entity update discards that item's own evidence span, so the client's source-coverage…**
+- [x] **(KOL-140) Dropping an entity update discards that item's own evidence span, so the client's source-coverage…**
   Found by the grader of KOL-127 (medium, server/src/lib/draftTarget.js:150). Dropping an entity
   update discards that item's own evidence span, so the client's source-coverage pane
   (client/src/lib/sourceCoverage.js) reports the dropped item's quoted passage as text the

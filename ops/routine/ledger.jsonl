@@ -727,3 +727,4 @@
 {"event":"local-review","item":"KOL-148","model":"qwen2.5-coder:14b","findings":0,"contextFiles":4,"promptVersion":"v6","mergeSha":"6d0714d28d592087f43f1febb6f2bcc64c44d408","runId":"2026-11-19T08:01:44.088Z","promptTokens":6395,"completionTokens":196,"latencyMs":27527,"chunkErrors":0,"triageTouched":[],"atUtc":"2026-11-19T08:08:16.095Z"}
 {"event":"local-review","item":"KOL-141","model":"qwen2.5-coder:14b","findings":0,"contextFiles":5,"promptVersion":"v6","mergeSha":"e3c71a4219df89c7c3318780f5021bd854f35062","runId":"2026-11-19T08:01:44.088Z","promptTokens":28302,"completionTokens":1064,"latencyMs":132452,"chunkErrors":0,"triageTouched":["destructive"],"atUtc":"2026-11-19T08:08:16.095Z"}
 {"event":"ack","items":["KOL-142"],"by":"routine","source":"auto","atUtc":"2026-11-19T16:45:25.784Z"}
+{"event":"claim","runId":"2026-11-19T16:44:43.126Z","item":"KOL-140","model":"claude-opus-5","effort":"xhigh","attempt":1,"atUtc":"2026-11-19T16:45:52.836Z"}
