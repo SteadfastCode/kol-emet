@@ -29,6 +29,10 @@
  *     floor is the write's own filter** (KOL-134), so a demotion that read two
  *     owners is still refused when another one landed in between: the last
  *     group here races the real routes against each other and the floor holds.
+ *     **And whether that filter is in the write at all is not decided by a
+ *     read** (KOL-141): a member read as an editor who is the workspace's only
+ *     owner by the time the write runs is refused too, because only the role
+ *     the body asks for — never the one a read saw — decides.
  *   - **A removed member loses access on their next request**, because
  *     `resolveWorkspace` re-reads the membership list every time: the entity
  *     they created in that workspace is 404 to them afterwards and their
@@ -50,8 +54,10 @@
  * src/routes/workspace.js and the refusal groups fail; match the invite address
  * case-sensitively and the invitee stops seeing theirs; drop the `email`
  * equality from `ownInvite()` and the third-party accept succeeds; drop
- * `anotherOwnerThan` from either member write's filter and the last-owner group
- * fails — the single-owner cases *and* the raced ones; drop
+ * `notTheLastOwner` from either member write's filter and the last-owner group
+ * fails — the single-owner cases *and* the raced ones; put that filter back
+ * behind the route's own `member.role === 'owner'` and the promoted-editor
+ * cases land, leaving a workspace nobody can ever manage again; drop
  * `MOVE_OWNER_ID_TO_AN_OWNER` and both "ownerId follows the role" cases fail,
  * as does "a demoted owner can still delete their account".
  *
@@ -728,6 +734,70 @@ describe('the floor is the write, not a check in front of it (KOL-134)', () => {
     assert.deepEqual(owners.map(m => String(m.userId)), [second.userId]);
     assert.equal(String(stored.ownerId), second.userId,
       'ownerId must name a member who holds the role, not the one the stale read saw holding it');
+  });
+
+  test('a member read as an editor, promoted to last owner in between, is refused too (KOL-141)', async () => {
+    // The hole the floor-as-a-filter left open: *whether* the filter went into
+    // the write was still decided by the route's own read. This request reads
+    // an editor, so it carried no floor — and by the time it wrote, that editor
+    // was the only owner the workspace had.
+    const { owner, coOwners: [coOwner] } = await coOwnedWorkspace(1);
+    const editor = await register('editor');
+    await accepted(owner, editor, 'editor');
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        // The co-owner promotes the editor and then clears the owner role off
+        // everyone else — three writes, every one of them legitimate, every one
+        // through the real route.
+        for (const [who, role] of [[editor, 'owner'], [owner, 'editor'], [coOwner, 'editor']]) {
+          const step = await send(coOwner, 'PATCH', `/workspace/members/${who.userId}`, { role });
+          assert.equal(step.status, 200, `${who.label} → ${role} should be legitimate: another owner remains`);
+        }
+      },
+      () => send(owner, 'PATCH', `/workspace/members/${editor.userId}`, { role: 'viewer' }),
+    );
+
+    assert.equal(res.status, 409, 'demoting the member who became the only owner would leave the workspace with none');
+    assert.equal(res.body.error, 'LAST_OWNER', 'the refusal names the floor, not a membership that is plainly still there');
+
+    const stored = await storedMembers(owner.workspaceId);
+    assert.equal(stored.members.filter(m => m.role === 'owner').length, 1,
+      'a workspace with no owner can never be renamed, invited into or managed again, by anyone');
+    assert.equal(await storedRole(owner.workspaceId, editor.userId), 'owner');
+    assert.equal(String(stored.ownerId), editor.userId);
+
+    // And the point of all of it: the workspace is still manageable, by the
+    // owner the race left it with.
+    const rename = await send(editor, 'PATCH', '/workspace', { name: 'Still manageable' });
+    assert.equal(rename.status, 200, 'the surviving owner must still be able to manage the workspace');
+    assert.equal(rename.body.name, 'Still manageable');
+  });
+
+  test('and removing that member is refused the same way, and pulls nobody (KOL-141)', async () => {
+    const { owner, coOwners: [coOwner] } = await coOwnedWorkspace(1);
+    const editor = await register('editor');
+    await accepted(owner, editor, 'editor');
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        for (const [who, role] of [[editor, 'owner'], [owner, 'editor'], [coOwner, 'editor']]) {
+          assert.equal((await send(coOwner, 'PATCH', `/workspace/members/${who.userId}`, { role })).status, 200);
+        }
+      },
+      () => send(owner, 'DELETE', `/workspace/members/${editor.userId}`),
+    );
+
+    assert.equal(res.status, 409, 'a removal takes the membership away whatever role the request read on it');
+    assert.equal(res.body.error, 'LAST_OWNER');
+
+    const stored = await storedMembers(owner.workspaceId);
+    assert.equal(stored.members.length, 3, 'the refused removal pulled a membership anyway');
+    assert.equal(await storedRole(owner.workspaceId, editor.userId), 'owner');
+    assert.equal(stored.members.filter(m => m.role === 'owner').length, 1);
+    assert.equal(String(stored.ownerId), editor.userId);
   });
 });
 
