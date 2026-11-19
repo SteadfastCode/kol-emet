@@ -85,7 +85,7 @@
     "KOL-141": {
       "order": 5,
       "title": "The floor filter is still applied conditionally on a stale read: demotingAnOwner/removingAnOwner…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-141",
