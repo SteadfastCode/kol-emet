@@ -110,7 +110,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-148) data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }) shallow-copies BLOCK_DEFAULTS.gallery,…**
+- [x] **(KOL-148) data: withEditableData(type, { ...BLOCK_DEFAULTS[type] }) shallow-copies BLOCK_DEFAULTS.gallery,…**
   Found by the grader of KOL-142 (medium, client/src/components/EntityEditor.vue:397). `data:
   withEditableData(type, { ...BLOCK_DEFAULTS[type] })` shallow-copies `BLOCK_DEFAULTS.gallery`, so
   every gallery block created in one editor instance shares the *same* `images` array object (the
