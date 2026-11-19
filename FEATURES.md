@@ -107,7 +107,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time**
+- [x] **(KOL-146) An unauthenticated caller chooses what the deployed log says, 100KB at a time**
   Found by the grader of KOL-047. `mcpLogRecord` (`server/src/lib/mcpFailure.js:152-171`) writes three
   caller-controlled values into every refusal record with no cap: `requestId` is `body.id` verbatim through
   `rpcView` (`:136-147`), and `caller.ua` / `caller.client` are the `user-agent` header and

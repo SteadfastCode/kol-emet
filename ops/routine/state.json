@@ -85,10 +85,10 @@
     "KOL-146": {
       "order": 5,
       "title": "An unauthenticated caller chooses what the deployed log says, 100KB at a time",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-146",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -96,8 +96,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-19T01:12:47.691Z",
+      "runId": "2026-11-19T01:11:43.135Z",
       "lastFail": null
     },
     "KOL-148": {
