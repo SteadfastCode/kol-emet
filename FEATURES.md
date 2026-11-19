@@ -110,7 +110,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-139) A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…**
+- [x] **(KOL-139) A go.mod's Service title is the last path segment with no handling of Go's semantic import versio…**
   Found by the grader of KOL-126 (medium, server/src/lib/producers/packageManifest.js:223). A
   go.mod's Service title is the last path segment with no handling of Go's semantic import
   versioning: `module github.com/acme/ledger-feed/v2` (the normal spelling for any Go module at
