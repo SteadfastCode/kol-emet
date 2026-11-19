@@ -928,7 +928,7 @@ is Go's, and a `.toml` is a pyproject or a Cargo manifest by the tables it decla
 
 | Manifest declares | Proposed |
 |-------------------|----------|
-| the module itself | One **Service** titled its declared name — a go.mod's last path segment, with the whole path as its *Module* attribute. `attribute` blocks: *Package*/*Module*, *Version*, *Runtime* (`Node.js >=20.11`, `Python >=3.11`, `Go 1.22`, `Rust 1.75`) and *Manifest*; the manifest's own `description` as a `text` block; tag `package-manifest`. |
+| the module itself | One **Service** titled its declared name — a go.mod's last path segment past any `/vN` semantic import version (`github.com/acme/ledger-feed/v2` is `ledger-feed`), with the whole path as its *Module* attribute. `attribute` blocks: *Package*/*Module*, *Version*, *Runtime* (`Node.js >=20.11`, `Python >=3.11`, `Go 1.22`, `Rust 1.75`) and *Manifest*; the manifest's own `description` as a `text` block; tag `package-manifest`. |
 | a direct runtime dependency | One **External Dependency** titled the package's name, with its *Version constraint* (`(any version)` when it declares none, `git <url>` or `path <dir>` for those spellings) and *Ecosystem* (`npm`, `PyPI`, `Go`, `crates.io`) as attributes, plus *Dependency kind* when it is an npm `optional` or `peer` one. |
 | each of those | `Depends on` group — Dependent, Dependency. One link per package however many groups list it; a module that depends on itself proposes none. |
 
