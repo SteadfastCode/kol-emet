@@ -132,6 +132,44 @@ export function detectFamily(text) {
 }
 
 /**
+ * A major-version path segment, as Go's own toolchain spells the rule
+ * (`golang.org/x/mod/module.SplitPathVersion`): `v` followed by a decimal with
+ * no leading zeros, 2 or greater. `v1` and `v0` are NOT suffixes — Go omits
+ * them — so a path element literally called `v1` is a directory name, and
+ * titling a module by it is what its author asked for.
+ */
+const GO_MAJOR_SUFFIX = /^v(?:[2-9]|[1-9][0-9]+)$/;
+
+/**
+ * What to call a Go module: the last path segment, past its semantic import
+ * version.
+ *
+ * Every Go module at major version 2 or above carries a `/vN` suffix on its
+ * path — `github.com/acme/ledger-feed/v2` is the normal spelling, not an
+ * unusual one, and the fixture's own dependencies (`pgx/v5`, `go-redis/v9`)
+ * are written that way. The suffix is not the module's name, and titling the
+ * Service "v2" would be wrong twice over: nobody calls the module that, and
+ * titles are the dedup key, so two unrelated v2+ modules imported into one
+ * workspace would collapse into a single entity by exact-normalized-title
+ * match. The whole path still rides along as the `Module` attribute.
+ *
+ * Only ONE suffix is stripped, and only from the end, because that is all a
+ * valid module path can carry. Go's `gopkg.in` paths put their version on the
+ * last element instead (`gopkg.in/yaml.v2`) and are left alone: "yaml.v2"
+ * names the package, which is the thing this is for.
+ *
+ * @param {string} path  the module path, as the `module` directive declares it
+ * @returns {string} the title — the path itself when it has no segment to take
+ */
+export function goModuleTitle(path) {
+  const segments = String(path ?? '').split('/').filter(Boolean);
+  // `module acme/v2` has a segment before the suffix; `module v2` and `module /`
+  // do not, and there is nothing better to call either than what it says.
+  if (segments.length > 1 && GO_MAJOR_SUFFIX.test(segments[segments.length - 1])) segments.pop();
+  return segments.length ? segments[segments.length - 1] : String(path ?? '');
+}
+
+/**
  * @param {string} text  the manifest
  * @param {object} opts
  * @param {object[]} [opts.existingEntities]  [{ _id, title, updatedAt, blocks? }] — the
@@ -219,10 +257,11 @@ export function parseManifest(text, { existingEntities = [], existingGroups = []
   }
 
   // ── entities and edges ─────────────────────────────────────────────────────
-  // A Go module is known by its path and called by its last segment, which is
-  // what a person would title the Service; the full path rides along as the
-  // `Module` attribute. Every other format's declared name IS the title.
-  const moduleTitle = (family === 'go.mod' ? module.name.split('/').filter(Boolean).pop() : module.name)
+  // A Go module is known by its path and called by its last segment past any
+  // semantic import version (goModuleTitle), which is what a person would
+  // title the Service; the full path rides along as the `Module` attribute.
+  // Every other format's declared name IS the title.
+  const moduleTitle = (family === 'go.mod' ? goModuleTitle(module.name) : module.name)
     .slice(0, MAX_TITLE_CHARS);
 
   const runtimeCount = deps.length;

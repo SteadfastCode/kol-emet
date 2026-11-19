@@ -30,6 +30,11 @@
  *                                       counts.dropped stays 3
  *   - `// indirect` ignored          -> testify and golang.org/x/sync become
  *                                       direct dependencies
+ *   - the `/vN` suffix left on a Go
+ *     module path                    -> `github.com/acme/ledger-feed/v2` is
+ *                                       titled "v2", and a second v2+ module
+ *                                       updates it instead of being its own
+ *                                       Service
  *   - the format read from a
  *     filename rather than content   -> every fixture but one refuses
  *   - the TOML comment skip removed  -> `# the only http client we ship` is
@@ -69,7 +74,7 @@ import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 
 import {
-  parseManifest, parseRequirement, detectFamily, ManifestParseError,
+  parseManifest, parseRequirement, detectFamily, goModuleTitle, ManifestParseError,
   PRODUCER, PRODUCER_VERSION, MAX_MANIFEST_CHARS, MAX_TOML_DEPTH, SERVICE, EXTERNAL_DEPENDENCY,
 } from '../../src/lib/producers/packageManifest.js';
 import { MAX_COMPOSE_CHARS } from '../../src/lib/producers/dockerCompose.js';
@@ -425,6 +430,90 @@ describe('go.mod', () => {
     assert.ok(!titles(items).includes('github.com/acme/shared'), 'a replace is not a dependency');
     assert.ok(!titles(items).includes('github.com/old/thing'), 'an exclude is the opposite of one');
     assert.ok(!JSON.stringify(items).includes('go1.22.3'), 'the toolchain is not the runtime');
+  });
+
+  // ─── semantic import versioning ──────────────────────────────────────────
+  // The fixture above is a v1 module, which is the one shape of module path
+  // that has nothing to strip. Every Go module at major version 2 or above
+  // carries a `/vN` suffix — the fixture's own dependencies (`pgx/v5`,
+  // `go-redis/v9`) are written that way — and the suffix is not its name.
+
+  /** The smallest v2 go.mod there is: a module path and the Go line. */
+  const GO_V2 = ['module github.com/acme/ledger-feed/v2', '', 'go 1.22', ''].join('\n');
+
+  test('a `/vN` module path is titled by the module, not by its major version', () => {
+    const text = GOMOD.replace('module github.com/acme/ledger-feed', 'module github.com/acme/ledger-feed/v2');
+    const { items } = parse(text, {}, 'a go.mod at major version 2');
+    const service = theService(items);
+    assert.equal(service.proposed.title, 'ledger-feed', 'what a person calls the module, not "v2"');
+    assert.equal(attribute(service, 'Module'), 'github.com/acme/ledger-feed/v2',
+      'the whole path, major version and all, is still kept');
+    assert.equal(attribute(entityNamed(items, 'github.com/jackc/pgx/v5'), 'Version constraint'), 'v5.5.0',
+      'a DEPENDENCY keeps its full path as its title: two modules differing only in path are two packages');
+    assert.match(entityNamed(items, 'github.com/gin-gonic/gin').proposed.summary,
+      /dependency of ledger-feed/, 'and the summaries name the module the same way');
+    assert.deepEqual(edges(items), [
+      'Dependent:ledger-feed → Dependency:github.com/gin-gonic/gin',
+      'Dependent:ledger-feed → Dependency:github.com/jackc/pgx/v5',
+      'Dependent:ledger-feed → Dependency:github.com/redis/go-redis/v9',
+    ]);
+  });
+
+  test('two unrelated v2+ modules are two Services, not one', () => {
+    // This is why the title matters: titles are the dedup key, so titling both
+    // "v2" made the second import an exact-normalized-title UPDATE of the
+    // first and merged two unrelated services into one entity.
+    const first = parse(GO_V2, {}, 'ledger-feed v2').items;
+    const existing = entities(first).map(i => ({
+      _id: new mongoose.Types.ObjectId(), title: i.proposed.title, updatedAt: new Date(),
+    }));
+    const { items } = parse(GO_V2.replace('ledger-feed', 'billing-api'),
+      { existingEntities: existing }, 'billing-api v2, with ledger-feed v2 already imported');
+    const service = theService(items);
+    assert.equal(service.proposed.title, 'billing-api');
+    assert.equal(service.op, 'create', 'a different module is a different Service');
+    assert.equal(service.targetEntityId, null, 'and targets nothing');
+    assert.deepEqual(service.flags, [], 'nor is it a near miss of the other one');
+
+    // The same module at the same major version IS the same module, and still
+    // becomes the update a re-import is supposed to be.
+    const again = parse(GO_V2, { existingEntities: existing }, 'ledger-feed v2 re-imported');
+    assert.equal(theService(again.items).op, 'update');
+    assert.equal(String(theService(again.items).targetEntityId), String(existing[0]._id));
+  });
+
+  test('a module path is read past the suffixes Go uses, and no others', () => {
+    assert.equal(goModuleTitle('github.com/acme/ledger-feed/v2'), 'ledger-feed');
+    assert.equal(goModuleTitle('github.com/acme/ledger-feed/v10'), 'ledger-feed', 'two digits is still a version');
+    assert.equal(goModuleTitle('github.com/acme/ledger-feed'), 'ledger-feed', 'a module below v2 carries no suffix at all');
+    assert.equal(goModuleTitle('acme/v2'), 'acme', 'one segment before the suffix is enough');
+
+    // Go's own rule (golang.org/x/mod/module.SplitPathVersion): `/v` then a
+    // decimal with no leading zeros, 2 or greater. Anything else is a
+    // directory whose name happens to start with a v.
+    assert.equal(goModuleTitle('github.com/acme/feed/v1'), 'v1', 'v1 is a directory, not a major version');
+    assert.equal(goModuleTitle('github.com/acme/feed/v0'), 'v0');
+    assert.equal(goModuleTitle('github.com/acme/feed/v02'), 'v02', 'a leading zero is not a major version');
+    assert.equal(goModuleTitle('github.com/acme/feed/v2x'), 'v2x');
+    assert.equal(goModuleTitle('gopkg.in/yaml.v2'), 'yaml.v2', 'gopkg.in versions its last element; it still names the package');
+
+    // Nothing to take a segment from, and the path itself is what is left.
+    assert.equal(goModuleTitle('v2'), 'v2', 'a bare suffix is all the module declared');
+    assert.equal(goModuleTitle('ledger-feed'), 'ledger-feed');
+    assert.equal(goModuleTitle('/'), '/', 'and a path of only separators does not crash');
+  });
+
+  test('a module path of only separators drops the Service, rather than 500ing', () => {
+    // `module.name` is `/`, which is truthy, so the no-name refusal does not
+    // catch it — and taking the last segment of a path that has none used to
+    // call `.slice` on undefined, a TypeError the route answers 500 for where
+    // it promises a 400 or a draft. The title survives as far as the usable-
+    // title check every producer shares, and is dropped there with a reason.
+    const { items, dropReasons, dropped } = parse(['module /', '', 'go 1.22', ''].join('\n'),
+      {}, 'a go.mod whose module path is a slash');
+    assert.deepEqual(items, [], 'nothing can be titled, so nothing is proposed');
+    assert.deepEqual(dropReasons, ['entity "/" has no usable title']);
+    assert.equal(dropped, 1);
   });
 });
 

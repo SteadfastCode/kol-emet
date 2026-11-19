@@ -871,3 +871,40 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   item, covering each entity line the first import located, in the response *and* in the stored
   row), and six in `client/src/components/generator/SourceCoverage.test.js`, including the
   all-dropped re-generation reading as 100% used and a draft stored before the field existed.
+- **A Go module's title is its last path segment past the major version, because `/v2` is the normal
+  spelling and titles are the dedup key (decided 2026-11-19, KOL-139)** — a KOL-126 grader finding in
+  the manifest producer. `parseManifest` titled a go.mod's Service with `module.name.split('/').pop()`
+  — right for `github.com/acme/ledger-feed`, which is what both committed fixtures declare, and wrong
+  for every Go module at major version 2 or above, which Go's *semantic import versioning* requires to
+  carry a `/vN` suffix on its path. `module github.com/acme/ledger-feed/v2` was titled **"v2"**: not a
+  name anybody calls the module, and the same spelling the fixture's own dependencies already use
+  (`jackc/pgx/v5`, `redis/go-redis/v9`). Two consequences, the second the one that costs data.
+  `normalizeTitle` is the dedup key for every producer and for the generator, so a workspace importing
+  two unrelated v2+ modules got the second as an `op: 'update'` of the first,
+  `matchedBy: 'exact-normalized-title'` — two unrelated services merged into one entity, by the dedup
+  outcome a reviewer is least likely to question, because the item reads as a routine re-import (the
+  shape KOL-144 fixed for Kubernetes namespace qualifiers). **The fix is one function,
+  `goModuleTitle`,** which strips a trailing major-version segment before taking the last one, by the
+  rule Go's own toolchain applies (`golang.org/x/mod/module.SplitPathVersion`): `v` then a decimal with
+  no leading zeros, 2 or greater. So `v1`, `v0`, `v02` and `v2x` are directory names and are left as
+  titles — Go omits the suffix below v2, so a path element called `v1` is one its author chose — and
+  `gopkg.in/yaml.v2`, which versions its last element rather than adding a segment, keeps `yaml.v2`,
+  which still names the package. The full path rides along unchanged as the `Module` attribute, which
+  is where a reviewer reads the major version. **Dependencies are deliberately untouched:** an
+  External Dependency keeps its whole module path as its title, because `pgx/v5` and `pgx/v4` are two
+  packages a module can require at once, where the Service is the one module the file declares. The
+  same function made a path of only separators (`module /`) survive as far as the usable-title check
+  every producer shares, where it is dropped with a reason; before it, `[].pop()` was `undefined` and
+  `.slice` on it threw a `TypeError`, a **500 where `fileProducerRoute` promises a 400 or a draft** —
+  the shape KOL-145 found in the TOML reader. `PRODUCER_VERSION` stays `package-manifest@1` on the
+  rule KOL-143 and KOL-144 wrote down: the version names the **mapping** — which object becomes which
+  entity and which edge joins them — and that is untouched; only the rendering of a title the mapping
+  already emitted changes, nothing branches on the recorded version, and a bump would imply a
+  re-titling of already-imported entities that this entry deliberately does not do. Covered by four
+  cases in `server/tests/unit/packageManifest.test.js` (a `/v2` fixture titled `ledger-feed` with its
+  path kept and its dependencies' titles and edges unchanged; two v2+ modules proposed as two
+  Services, with the same module re-imported still an update; `goModuleTitle` over the suffixes Go
+  uses and the ones it does not; and the all-separators path dropped rather than thrown), every one
+  but the `goModuleTitle` table — which exercises a function the pre-fix producer did not have — run
+  red against the pre-fix title rule. **Out of scope:** `normalizeTitle` itself, dependency
+  titles, retitling anything already imported, and reading a `replace` directive's target path.
