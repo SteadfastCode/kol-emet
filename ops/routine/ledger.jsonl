@@ -733,3 +733,4 @@
 {"event":"complete","runId":"2026-11-19T16:44:43.126Z","item":"KOL-139","mergeSha":"2e6cca35538bee87a3149907377ce64c02090ddb","durationMin":8,"costUsd":null,"model":"claude-opus-5","effort":"xhigh","atUtc":"2026-11-19T17:08:47.036Z"}
 {"event":"ack","items":["KOL-143"],"by":"routine","source":"auto","atUtc":"2026-11-20T13:23:19.431Z"}
 {"event":"ack","items":["KOL-144"],"by":"routine","source":"auto","atUtc":"2026-11-20T13:23:19.431Z"}
+{"event":"ack","items":["KOL-145"],"by":"routine","source":"auto","atUtc":"2026-11-20T13:50:08.030Z"}
