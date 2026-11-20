@@ -39,49 +39,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-133) Delete a workspace: the one tenancy verb the product has never had** (needs KOL-132)
-  `docs/roadmap.md:111` names it among what is still open after invites — "deleting a workspace, seat billing and
-  per-plan limits" — and it is the only one of the three that needs neither a credential nor a price.
-  `workspacesRouter` has `GET /workspaces` (`server/src/routes/workspace.js:436`), `POST /workspaces/:id/select`
-  (:474) and `POST /workspaces` (:579), and no delete — so a workspace made by a mis-click, the wrong template or an
-  abandoned import is permanent: it counts against `WORKSPACE_MAX_PER_OWNER` forever and nothing can remove what is
-  inside it short of deleting the whole account.
-  Build: `DELETE /workspaces/:id`, owner-only and hard, reusing the deletion machinery rather than copying it.
-  `WORKSPACE_SCOPED_MODELS` (`server/src/lib/accountDeleter.js:86`) is already every collection carrying a
-  `workspaceId` and is already asserted complete by `accountDeleter.test.js`, so the sweep is that list plus the
-  `Workspace` row: lift `deleteScopedContent` (`accountDeleter.js:128`) to an exported helper both callers share and
-  leave `deleteAccount`'s two-pass shape alone. Three refusals, each with its own code, in the style of `LAST_OWNER`:
-  a member who is not an owner **of that workspace** (the role comes from the named workspace's own `members` array,
-  not from `resolveWorkspace`, since the id is a parameter here); a well-formed id the caller is not a member of →
-  404 and never 403, the rule `POST /:id/select` already follows (:466-470) so the API cannot be used to learn that
-  another tenant's workspace exists; and the caller's last one → 409 `LAST_WORKSPACE`, because `resolveWorkspace`
-  answers 403 "No workspace for this user" to an account with no membership
-  (`server/src/middleware/workspace.js:238-240`) and deleting the last one would lock its owner out of the product.
-  Two things only the deletion can do: close the SSE streams watching that workspace — `broadcaster.js` has
-  `closeStreamsForSession` and `closeStreamsForUser` (:196,236) and nothing keyed by workspace, while every client row
-  already stores one (:136) — and leave `session.workspaceId` untouched, because `resolveWorkspace` documents the
-  fallback for exactly this case ("revoked, or the workspace deleted", `middleware/workspace.js:203-209`) and
-  `POST /:id/select` is its one writer.
-  One decision to make and record: `docs/generator-v1-plan.md` says hard deletion of a `Draft` "belongs only to an
-  account-deletion path", and the Decision Log settled that account deletion hard-deletes them. This is a third path
-  over the same rows. Read it as the same promise — an owner removing their own data — and write that sentence into
-  the Decision Log rather than leaving the two documents to disagree.
-  Files: `server/src/routes/workspace.js`, `server/src/lib/accountDeleter.js`, `server/src/lib/broadcaster.js`,
-  `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, a new
-  `server/tests/http/workspaceDelete.test.js`, `server/tests/lib/accountDeleter.test.js`,
-  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/data-model.md`, `docs/roadmap.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: an owner deleting a second workspace takes its entities, drafts,
-  changelog rows and pending invites with it and leaves the first untouched; an editor is refused and the workspace
-  survives; a well-formed id in another tenant is 404 and writes nothing; the caller's only workspace is 409
-  `LAST_WORKSPACE`; a collaborator's membership goes with the workspace while their own workspaces stay; an open
-  `/events` stream on the deleted workspace is closed with a named reason; and a session whose selection was the
-  deleted workspace resolves the fallback on its next request instead of 403. `cd client && yarn test --run`;
-  `cd client && yarn build`.
-  Out of scope: soft delete or an undo window (the `ChangeLog` TTL cannot carry one — KOL-019), transferring a
-  workspace to another owner, a member leaving one of their own accord, seat billing and per-plan limits, and any
-  change to `DELETE /auth/account`. It waits on KOL-132 because delete-then-create resets a workspace's AI
-  allowance, and until the grant question is settled `WORKSPACE_MAX_PER_OWNER` is the only thing bounding how many
-  grants one account can mint — a delete route turns that ceiling into a loop.
 
 
 
@@ -159,6 +116,49 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-133) Delete a workspace: the one tenancy verb the product has never had** (needs KOL-132) (routine 2026-11-20, 113bbbe)
+  `docs/roadmap.md:111` names it among what is still open after invites — "deleting a workspace, seat billing and
+  per-plan limits" — and it is the only one of the three that needs neither a credential nor a price.
+  `workspacesRouter` has `GET /workspaces` (`server/src/routes/workspace.js:436`), `POST /workspaces/:id/select`
+  (:474) and `POST /workspaces` (:579), and no delete — so a workspace made by a mis-click, the wrong template or an
+  abandoned import is permanent: it counts against `WORKSPACE_MAX_PER_OWNER` forever and nothing can remove what is
+  inside it short of deleting the whole account.
+  Build: `DELETE /workspaces/:id`, owner-only and hard, reusing the deletion machinery rather than copying it.
+  `WORKSPACE_SCOPED_MODELS` (`server/src/lib/accountDeleter.js:86`) is already every collection carrying a
+  `workspaceId` and is already asserted complete by `accountDeleter.test.js`, so the sweep is that list plus the
+  `Workspace` row: lift `deleteScopedContent` (`accountDeleter.js:128`) to an exported helper both callers share and
+  leave `deleteAccount`'s two-pass shape alone. Three refusals, each with its own code, in the style of `LAST_OWNER`:
+  a member who is not an owner **of that workspace** (the role comes from the named workspace's own `members` array,
+  not from `resolveWorkspace`, since the id is a parameter here); a well-formed id the caller is not a member of →
+  404 and never 403, the rule `POST /:id/select` already follows (:466-470) so the API cannot be used to learn that
+  another tenant's workspace exists; and the caller's last one → 409 `LAST_WORKSPACE`, because `resolveWorkspace`
+  answers 403 "No workspace for this user" to an account with no membership
+  (`server/src/middleware/workspace.js:238-240`) and deleting the last one would lock its owner out of the product.
+  Two things only the deletion can do: close the SSE streams watching that workspace — `broadcaster.js` has
+  `closeStreamsForSession` and `closeStreamsForUser` (:196,236) and nothing keyed by workspace, while every client row
+  already stores one (:136) — and leave `session.workspaceId` untouched, because `resolveWorkspace` documents the
+  fallback for exactly this case ("revoked, or the workspace deleted", `middleware/workspace.js:203-209`) and
+  `POST /:id/select` is its one writer.
+  One decision to make and record: `docs/generator-v1-plan.md` says hard deletion of a `Draft` "belongs only to an
+  account-deletion path", and the Decision Log settled that account deletion hard-deletes them. This is a third path
+  over the same rows. Read it as the same promise — an owner removing their own data — and write that sentence into
+  the Decision Log rather than leaving the two documents to disagree.
+  Files: `server/src/routes/workspace.js`, `server/src/lib/accountDeleter.js`, `server/src/lib/broadcaster.js`,
+  `client/src/api/workspace.js`, `client/src/components/WikiLayout.vue`, a new
+  `server/tests/http/workspaceDelete.test.js`, `server/tests/lib/accountDeleter.test.js`,
+  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/data-model.md`, `docs/roadmap.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: an owner deleting a second workspace takes its entities, drafts,
+  changelog rows and pending invites with it and leaves the first untouched; an editor is refused and the workspace
+  survives; a well-formed id in another tenant is 404 and writes nothing; the caller's only workspace is 409
+  `LAST_WORKSPACE`; a collaborator's membership goes with the workspace while their own workspaces stay; an open
+  `/events` stream on the deleted workspace is closed with a named reason; and a session whose selection was the
+  deleted workspace resolves the fallback on its next request instead of 403. `cd client && yarn test --run`;
+  `cd client && yarn build`.
+  Out of scope: soft delete or an undo window (the `ChangeLog` TTL cannot carry one — KOL-019), transferring a
+  workspace to another owner, a member leaving one of their own accord, seat billing and per-plan limits, and any
+  change to `DELETE /auth/account`. It waits on KOL-132 because delete-then-create resets a workspace's AI
+  allowance, and until the grant question is settled `WORKSPACE_MAX_PER_OWNER` is the only thing bounding how many
+  grants one account can mint — a delete route turns that ceiling into a loop.
 - [x] **(KOL-132) Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…** (routine 2026-11-20, c357800)
   Found by the grader of KOL-123 (medium, server/src/lib/workspaceSeeder.js:214). Every created
   workspace gets a fresh full AI allowance: `Workspace.create` sets no `aiBudget`, so the schema

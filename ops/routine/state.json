@@ -47,7 +47,7 @@
     "KOL-133": {
       "order": 3,
       "title": "Delete a workspace: the one tenancy verb the product has never had",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-133",
