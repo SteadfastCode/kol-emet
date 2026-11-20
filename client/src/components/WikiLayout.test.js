@@ -124,6 +124,7 @@ vi.mock('../api/auth.js', () => ({
 // The switcher (KOL-090) reads GET /workspaces on the same open and POSTs the choice.
 // `POST /workspaces` creates a second one (KOL-123); the form sends it and then goes through
 // selectWorkspace, since the server leaves the selection to that one route.
+// `DELETE /workspaces/:id` removes the one this session acts in (KOL-133), after a second press.
 // Collaborators (KOL-124): the member list, the pending invites and this account's own
 // invitations are three more reads on each Settings open, and the invite form writes.
 const {
@@ -143,15 +144,16 @@ const {
   setMemberRole: vi.fn(async (userId, role) => ({ userId, role })),
   withdrawInvite: vi.fn(async () => undefined),
 }));
-const { createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace } = vi.hoisted(() => ({
+const { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace } = vi.hoisted(() => ({
   createWorkspace: vi.fn(async (name) => ({ _id: 'w9', name, role: 'owner', createdAt: '2026-10-20T00:00:00.000Z' })),
+  deleteWorkspace: vi.fn(async () => undefined),
   getWorkspace: vi.fn(async () => ({ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
   listWorkspaces: vi.fn(async () => [{ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' }]),
   renameWorkspace: vi.fn(async (name) => ({ _id: 'w1', name, role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
   selectWorkspace: vi.fn(async (id) => ({ _id: id, name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' })),
 }));
 vi.mock('../api/workspace.js', () => ({
-  createWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace,
+  createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace,
   acceptInvite, declineInvite, inviteCollaborator, listMembers, listMyInvites,
   listWorkspaceInvites, removeMember, setMemberRole, withdrawInvite,
   WORKSPACE_NAME_MAX: 80, default: getWorkspace,
@@ -423,6 +425,8 @@ describe('WikiLayout workspace group', () => {
     renameWorkspace.mockReset();
     selectWorkspace.mockReset();
     createWorkspace.mockReset();
+    deleteWorkspace.mockReset();
+    deleteWorkspace.mockResolvedValue(undefined);
     getWorkspace.mockResolvedValue({ ...OWNED });
     // One membership: the ordinary case, and — since KOL-123 — one the switcher
     // is shown for anyway, because it is where a created workspace shows up.
@@ -689,6 +693,107 @@ describe('WikiLayout workspace group', () => {
 
       expect(group(wrapper).get('.settings-error').text()).toContain('1–80 characters');
       expect(selectWorkspace).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Deleting this workspace (KOL-133) — the counterpart to the form above, and the verb the
+   * product never had: a workspace made by a mis-click used to be permanent.
+   *
+   * Two presses, because the delete is hard and takes every member's content with it, so the
+   * first press is the only warning there is. Owner-only on screen because the server refuses
+   * anyone else (403 NOT_WORKSPACE_OWNER) — the client hides the control rather than deciding
+   * for itself who an owner is.
+   *
+   * Goes red if one press can delete, if the control appears for a role that may not use it, or
+   * if the server's three refusals stop being told apart on screen.
+   */
+  describe('the Delete workspace control', () => {
+    const deleteSection = (wrapper) => group(wrapper).get('.workspace-delete');
+    const buttons = (wrapper) => deleteSection(wrapper).findAll('button');
+    const byText = (wrapper, text) => buttons(wrapper).find((b) => b.text().includes(text));
+
+    async function arm(wrapper) {
+      await byText(wrapper, 'Delete this workspace').trigger('click');
+      await flushPromises();
+    }
+
+    it('takes two presses: the first only warns, and nothing is sent', async () => {
+      const wrapper = await openSettings();
+
+      await arm(wrapper);
+
+      expect(deleteWorkspace).not.toHaveBeenCalled();
+      // The warning names what goes, and says it goes for everyone.
+      expect(deleteSection(wrapper).text()).toContain('no undo');
+      expect(deleteSection(wrapper).text()).toContain(OWNED.name);
+      expect(byText(wrapper, 'Keep it')).toBeTruthy();
+    });
+
+    it('the second press sends the delete, naming the workspace and what asked', async () => {
+      const wrapper = await openSettings();
+
+      await arm(wrapper);
+      await byText(wrapper, 'Delete it permanently').trigger('click');
+      await flushPromises();
+
+      expect(deleteWorkspace).toHaveBeenCalledTimes(1);
+      expect(deleteWorkspace.mock.calls[0][0]).toBe(OWNED._id);
+      // Every light-tier line names the source of a change, not just the id.
+      expect(deleteWorkspace.mock.calls[0][1]).toMatchObject({
+        name: OWNED.name,
+        source: expect.stringContaining('Settings'),
+      });
+      expect(group(wrapper).find('.settings-error').exists()).toBe(false);
+    });
+
+    it('Keep it disarms, and the delete is not sent', async () => {
+      const wrapper = await openSettings();
+
+      await arm(wrapper);
+      await byText(wrapper, 'Keep it').trigger('click');
+      await flushPromises();
+
+      expect(byText(wrapper, 'Delete this workspace')).toBeTruthy();
+      expect(byText(wrapper, 'Delete it permanently')).toBeUndefined();
+      expect(deleteWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('is absent for a member who is not an owner', async () => {
+      getWorkspace.mockResolvedValue({ ...OWNED, role: 'editor' });
+      const wrapper = await openSettings();
+
+      expect(group(wrapper).find('.workspace-delete').exists()).toBe(false);
+    });
+
+    it('says what the floor is when the server refuses the last workspace', async () => {
+      deleteWorkspace.mockRejectedValue(Object.assign(new Error('LAST_WORKSPACE'), { status: 409 }));
+      const wrapper = await openSettings();
+
+      await arm(wrapper);
+      await byText(wrapper, 'Delete it permanently').trigger('click');
+      await flushPromises();
+
+      expect(group(wrapper).get('.settings-error').text()).toContain('only workspace');
+      // Disarmed again, and still on screen: a refused delete changes nothing.
+      expect(byText(wrapper, 'Delete this workspace')).toBeTruthy();
+      expect(group(wrapper).get('.workspace-name').text()).toBe(OWNED.name);
+    });
+
+    it('tells a 403 and a 404 apart', async () => {
+      deleteWorkspace.mockRejectedValue(Object.assign(new Error('NOT_WORKSPACE_OWNER'), { status: 403 }));
+      const wrapper = await openSettings();
+
+      await arm(wrapper);
+      await byText(wrapper, 'Delete it permanently').trigger('click');
+      await flushPromises();
+      expect(group(wrapper).get('.settings-error').text()).toContain('Only an owner');
+
+      deleteWorkspace.mockRejectedValue(Object.assign(new Error('Not found'), { status: 404 }));
+      await arm(wrapper);
+      await byText(wrapper, 'Delete it permanently').trigger('click');
+      await flushPromises();
+      expect(group(wrapper).get('.settings-error').text()).toContain('already gone');
     });
   });
 

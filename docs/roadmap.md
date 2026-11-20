@@ -117,7 +117,10 @@ a *pull request against the graph*. Build order:
   always keeps one owner. No mail is sent and no invite link is minted — an outbound mail
   credential is out of scope — so the inviter passes the word on themselves. See
   [api.md](api.md#collaborators). Workspace *creation* and the switcher shipped with KOL-090 and
-  KOL-123; deleting a workspace, seat billing and per-plan limits are still open
+  KOL-123, and **deleting one shipped 2026-11-20** (KOL-133): `DELETE /workspaces/:id`, owner-only
+  and hard, sweeping the same collections account deletion does and refusing the caller's last
+  workspace (409 `LAST_WORKSPACE`) so nobody can delete their way out of the product. Seat billing
+  and per-plan limits are still open
 - Separate product name and branding under Steadfast Code
 - Public-facing marketing site
 - Local AI support via Ollama (MCP/chat layer already provider-agnostic)

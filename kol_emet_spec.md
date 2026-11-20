@@ -944,3 +944,44 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
   drawn from the account's pot (a pricing decision, and the shape any future per-workspace allowance
   should take), charging an invited collaborator for their own use, and the deferred "trial ends,
   generation gets slower rather than stopping" fallback the 2026-09-05 entry names.
+
+- **Deleting a workspace is a hard delete, drafts included (decided 2026-11-20, KOL-133)** —
+  `DELETE /workspaces/:id` is the product's one tenancy verb that had never existed: a workspace made
+  by a mis-click, from the wrong template or for an abandoned import was permanent, counted against
+  `WORKSPACE_MAX_PER_OWNER` for the life of the account, and nothing could clear what was inside it
+  short of deleting the whole account. It is **owner-only and hard**, and it sweeps the same
+  `WORKSPACE_SCOPED_MODELS` list `DELETE /auth/account` does — lifted to a shared
+  `deleteScopedContent()` in `lib/accountDeleter.js` rather than copied, because that list is
+  asserted complete by `tests/lib/accountDeleter.test.js` and a second copy of the loop is the one
+  that gets forgotten when a model is added.
+  **Which settles a question two documents disagreed about.** `docs/generator-v1-plan.md` says hard
+  deletion of a `Draft` "belongs only to an account-deletion path", because a draft *is* the
+  training corpus and `DELETE /drafts/:id` is a soft discard; the 2026-09-05 entry above settled
+  that account deletion hard-deletes them anyway. This is a **third path over the same rows**, and
+  it is read as **the same promise rather than a new exception**: the promise was never "only this
+  one route may remove a draft", it was "a draft goes when its owner removes their own data, and
+  nothing else removes it". An owner deleting their own workspace is exactly that, one tenancy
+  smaller. The alternative — leaving drafts behind — would mean a deleted workspace's generated
+  content outliving every entity it was about, in a collection with no TTL, which is worse for the
+  user and worthless as a corpus. `generator-v1-plan.md` is amended to say so.
+  **Three refusals, each with its own code and each writing nothing.** The role comes from the
+  **named** workspace's own `members` array and not from `resolveWorkspace` (403
+  `NOT_WORKSPACE_OWNER`), since the id is a parameter here — an owner of A must not be able to
+  delete B. A well-formed id the caller is not a member of is **404 and never 403**, the rule
+  `POST /:id/select` already follows, so the API cannot be used to learn that another tenant's
+  workspace exists. And the caller's last workspace is **409 `LAST_WORKSPACE`** — the mirror of
+  `LAST_OWNER`: `resolveWorkspace` answers 403 to an account with no membership, so deleting the
+  last one would lock its owner out of every content route. Counted over memberships, not owned
+  workspaces, because the default resolution can fall back to someone else's workspace.
+  **Two things only the deletion can do.** It closes every live `/events` stream watching that
+  workspace — a new `closeStreamsForWorkspace`, since the broadcaster could close by session and by
+  user but never by the workspace every client row has always carried — and it sends
+  `{ error: 'workspace-deleted' }` rather than `session-ended`, because the client treats the latter
+  as "never come back on this credential" (KOL-112) and here the credential is fine: the reconnect is
+  what lands the stream in the fallback workspace. And it leaves `session.workspaceId` **untouched**,
+  because `resolveWorkspace` documents the fallback for exactly this case and
+  `POST /workspaces/:id/select` is its one writer; the owner's next request resolves their default,
+  as every other member's does.
+  **Out of scope:** soft delete or an undo window (there is no store to carry one — the `ChangeLog`
+  TTL cannot, KOL-019), transferring a workspace to another owner, a member leaving one of their own
+  accord, seat billing, per-plan limits, and any change to `DELETE /auth/account`.
