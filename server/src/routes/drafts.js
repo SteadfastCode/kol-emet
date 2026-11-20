@@ -116,7 +116,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /drafts/quota — remaining AI allowance for this workspace.
+// GET /drafts/quota — remaining AI allowance for the account that owns this
+// workspace. One pot per account, shared by every workspace it owns (KOL-132).
 router.get('/quota', async (req, res, next) => {
   try {
     res.json(await getBudget(req.workspaceId));
@@ -166,11 +167,13 @@ router.post('/', async (req, res, next) => {
     });
   }
 
-  // One generation at a time per workspace. Cost is only known after a run
+  // One generation at a time per ACCOUNT. Cost is only known after a run
   // finishes, so without this N simultaneous requests all pass the same budget
-  // check and spend N times the allowance.
+  // check and spend N times the allowance — and since KOL-132 the allowance
+  // being spent is the owner's, shared by every workspace they own, so a lock
+  // held per workspace would allow one overshoot per workspace.
   if (!(await reserveGeneration(req.workspaceId))) {
-    return res.status(409).json({ error: 'A generation is already running for this workspace.' });
+    return res.status(409).json({ error: 'A generation is already running on your account.' });
   }
 
   const userId = await resolveUserId(req);
@@ -190,7 +193,7 @@ router.post('/', async (req, res, next) => {
     });
   } catch (err) {
     // The lock is already held at this point; releasing it here stops a failed
-    // create from locking the workspace out until the 10-minute staleness sweep.
+    // create from locking the account out until the 10-minute staleness sweep.
     await releaseGeneration(req.workspaceId);
     // Still ahead of flushHeaders, so this is an ordinary JSON error rather
     // than a stream event — the error middleware can have it (KOL-075). What

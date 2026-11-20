@@ -36,9 +36,10 @@ import OpenQuestion from '../models/OpenQuestion.js';
  *   below. Nothing reaches the output because it was on the document — so a
  *   schema field added later (a per-entity owner, a cached secret, a billing
  *   flag) cannot leak into a user-facing file by default, which is the failure
- *   mode a `delete doc.workspaceId` pass has. Deliberately absent: the user and
- *   their credentials, the session store, the workspace's `aiBudget` and
- *   members, `workspaceId` on every document (an export is one workspace, so
+ *   mode a `delete doc.workspaceId` pass has. Deliberately absent: the user,
+ *   their credentials and their `aiBudget` (which is on the account since
+ *   KOL-132, and was on the workspace before it), the session store, the
+ *   workspace's members, `workspaceId` on every document (an export is one workspace, so
  *   the key says nothing and importing it elsewhere would be wrong), `__v`,
  *   `RelationshipGroup.entityId` (a dead legacy field), and ChangeLog and Draft
  *   entirely — history is out of scope until KOL-019 settles whether it is

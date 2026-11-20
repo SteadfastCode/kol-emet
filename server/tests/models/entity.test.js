@@ -8,9 +8,13 @@
  * is gone — stops a typo'd or deleted category from creating a category the UI
  * has no pill for.
  *
- * Workspace's AI budget default lives here too — it is the other value that is
- * only ever set implicitly, at document creation, and never asserted by any
- * caller.
+ * The AI budget default lives here too — it is the other value that is only
+ * ever set implicitly, at document creation, and never asserted by any caller.
+ * It is a default on `User` and NOT on `Workspace` (KOL-132): a pot held per
+ * workspace was minted again by every `POST /workspaces`, so an account could
+ * hold `WORKSPACE_MAX_PER_OWNER` of them. The pooling itself is
+ * tests/lib/usageMeter.test.js; what is asserted here is only the pair of
+ * schema facts the rest of it rests on.
  */
 
 import { describe, test, before, beforeEach, after } from 'node:test';
@@ -20,16 +24,17 @@ import mongoose from 'mongoose';
 
 import * as db from '../helpers/db.js';
 
-// Workspace reads AI_TRIAL_GRANT_MICROS once, when the schema is built at
-// module load, so the environment has to be in place before the import — hence
-// the dynamic imports here rather than static ones at the top of the file.
-// Entity and EntityType import Workspace too (their owner guard), and
-// config/categories.js imports EntityType (its registry lookup), so they wait
-// as well. The value is deliberately not the production default, so a test that
-// passed by coincidence would show up as a mismatch.
+// `trialGrantMicros()` reads AI_TRIAL_GRANT_MICROS per call rather than at
+// module load, but the dynamic imports stay: the environment being in place
+// before anything that could cache it is the property worth keeping, and
+// Entity and EntityType import Workspace too (their owner guard), while
+// config/categories.js imports EntityType (its registry lookup). The value is
+// deliberately not the production default, so a test that passed by
+// coincidence would show up as a mismatch.
 const TRIAL_GRANT_MICROS = 1_234_567;
 process.env.AI_TRIAL_GRANT_MICROS = String(TRIAL_GRANT_MICROS);
 const { default: Workspace } = await import('../../src/models/Workspace.js');
+const { default: User } = await import('../../src/models/User.js');
 const { default: Entity, BLOCK_TYPES } = await import('../../src/models/Entity.js');
 const { default: EntityType } = await import('../../src/models/EntityType.js');
 const { CATEGORIES } = await import('../../src/config/categories.js');
@@ -168,14 +173,29 @@ describe('Entity.blocks[].type', () => {
   });
 });
 
-describe('Workspace.aiBudget', () => {
-  test('grants a new workspace AI_TRIAL_GRANT_MICROS, spent nothing, unlocked', async () => {
-    const created = await Workspace.create({ name: 'Personal', ownerId: new mongoose.Types.ObjectId() });
-    const stored = await Workspace.findById(created._id).lean();
+describe('User.aiBudget', () => {
+  test('grants a new account AI_TRIAL_GRANT_MICROS, spent nothing, unlocked', async () => {
+    const created = await User.create({ email: 'budget@example.test', passwordHash: 'not-a-hash' });
+    const stored = await User.findById(created._id).lean();
 
     assert.equal(stored.aiBudget.grantedMicros, TRIAL_GRANT_MICROS);
     assert.equal(stored.aiBudget.spentMicros, 0);
     assert.equal(stored.aiBudget.generatingSince, null);
+  });
+
+  test('a new workspace is granted nothing of its own', async () => {
+    // The whole of KOL-132 as a schema fact: there is no per-workspace pot to
+    // mint, so `POST /workspaces` cannot hand out allowances however many
+    // times it is called. A forged one in the body is stripped for the same
+    // reason — the path is undeclared.
+    const created = await Workspace.create({
+      name: 'Personal',
+      ownerId: new mongoose.Types.ObjectId(),
+      aiBudget: { grantedMicros: 999_000_000 },
+    });
+    const raw = await Workspace.collection.findOne({ _id: created._id });
+
+    assert.equal(raw.aiBudget, undefined, 'the allowance is the account\'s, and is not stored here');
   });
 });
 

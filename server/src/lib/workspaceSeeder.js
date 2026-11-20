@@ -198,6 +198,12 @@ export async function seedWorkspace(workspaceId, templateKey = DEFAULT_TEMPLATE)
  *     `undefined` still means the default, as it always has.
  *   - **It does not touch the session.** Which workspace a session acts in is
  *     written in exactly one place, `POST /workspaces/:id/select`.
+ *   - **It mints no AI allowance** (KOL-132). There is no `aiBudget` on a
+ *     `Workspace` to set or to zero: the pot is on the owner's `User` and the
+ *     new workspace meters against it, so a second workspace is a second place
+ *     to spend one allowance and never a second allowance. This used to be a
+ *     schema default on `Workspace`, which made every create here worth a fresh
+ *     $3.50 of real provider money — see models/User.js and lib/usageMeter.js.
  *
  * @param {object} args
  * @param {string} args.name a name already through `workspaceName()` — this does not validate
@@ -217,7 +223,7 @@ export async function createWorkspace({ name, ownerId, template, source = 'unspe
     members: [{ userId: ownerId, role: 'owner' }],
     template: templateKey,
   });
-  workspaceLog('light', `created workspace ${workspace._id} named "${workspace.name}" owned by ${ownerId}, seeding from ${templateKey ? `template "${templateKey}"` : 'nothing — template: null, an empty workspace'} (source: ${source})`);
+  workspaceLog('light', `created workspace ${workspace._id} named "${workspace.name}" owned by ${ownerId}, seeding from ${templateKey ? `template "${templateKey}"` : 'nothing — template: null, an empty workspace'}; it meters AI spend against the existing allowance of account ${ownerId} and was granted none of its own (source: ${source})`);
 
   const seed = templateKey
     ? await seedWorkspace(workspace._id, templateKey)

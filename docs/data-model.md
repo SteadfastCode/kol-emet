@@ -16,7 +16,7 @@ MongoDB collections:
 | `Draft` | `drafts` | Generated changes awaiting human review; also the fine-tune corpus (**no TTL**) |
 | `Conversation` | `conversations` | Saved AI chat sessions — one user, one workspace |
 | `UserMemory` | `usermemories` | Facts the assistant remembers about a user, per workspace |
-| `Workspace` | `workspaces` | Tenancy boundary + AI allowance |
+| `Workspace` | `workspaces` | Tenancy boundary (the AI allowance is on `User`) |
 | `User` | `users` | Accounts: email + bcrypt hash + WebAuthn passkeys |
 | `Settings` | `settings` | Singleton global config (`_id: 'global'`) |
 
@@ -583,13 +583,8 @@ inserted under a `workspaceId` that has no workspace behind it.
   // unsaveable. No backfill.
   template: String | null,
 
-  // AI allowance in MICRO-DOLLARS (1_000_000 = $1.00). Integers, because this
-  // is compared and decremented on every AI call and float cents drift.
-  aiBudget: {
-    grantedMicros:   Number,      // default AI_TRIAL_GRANT_MICROS ($3.50)
-    spentMicros:     Number,
-    generatingSince: Date | null, // concurrency lock; stale after 10 min
-  },
+  // NO aiBudget. The AI allowance is on `User` and every workspace meters
+  // against its owner's (KOL-132) — see below.
   createdAt: Date,
   updatedAt: Date,
 }
@@ -597,15 +592,22 @@ inserted under a `workspaceId` that has no workspace behind it.
 
 Indexes: `{ ownerId }` and `{ 'members.userId' }` — membership lookups drive every scoped request.
 
-A **total** allowance rather than a daily rate: the audience works in bursts, and a free Saturday
-with three chapters of notes is the exact session a daily cap would block, while worst-case exposure
-is identical either way. It covers everything that calls a provider we pay for — generation, in-app
-chat, memory extraction, and self-hosted inference (cheap, but electricity is not free). It
-deliberately does **not** cover MCP: Claude.ai runs that inference on the user's own subscription, so
-it costs nothing here and stays free.
+**The AI allowance is not here.** It was, with a schema default of `AI_TRIAL_GRANT_MICROS`, and while
+`POST /auth/register` was the only thing in the product that had ever created a workspace that said
+the same thing as "one allowance per account": every account had exactly one workspace for life, and
+the IP-capped signup ceiling (KOL-050, KOL-081) bounded how many an address could mint.
+`POST /workspaces` (KOL-123) ended that silently — an authenticated create loop capped at
+`WORKSPACE_MAX_PER_OWNER` (10), whose cap was reasoned about as the cost of a template *seed* — so
+any logged-in user could mint ten full allowances with ten cheap `template: null` creates and spend
+about ten times the paid-provider money the trial exists to bound.
 
-`generatingSince` is a lock, not a timestamp for display. Cost is unknown until a run finishes, so
-simultaneous runs would each pass the same budget check; this caps the overshoot at one run.
+No per-workspace pot fixes that, which is why KOL-132 moved it rather than guarding it: whatever a
+new workspace is granted, a user may have ten of it, and copying the owner's *remaining* balance into
+each new one multiplies it just as well. So it lives on [`User`](#user), the one document an account
+has exactly one of, and `lib/usageMeter.js` does an `ownerId` hop so every call site still passes the
+`workspaceId` a request actually has. Adding a per-workspace allowance back is therefore a pricing
+decision — a per-workspace *sub-limit* drawn from the account's pot would be one — and never a
+default.
 
 ---
 
@@ -671,6 +673,16 @@ test between two stored primitives rather than a regex built from a request.
     lastUsedAt:   Date,     // the last verified assertion (sign-in, or confirming an account deletion)
   }],
   webauthnUserHandle: String,   // the account's WebAuthn `user.id`: 32 random bytes base64url, one per account
+  credentialsChangedAt: Date,   // "everything signed in before now is signed out" (KOL-076)
+
+  // AI allowance in MICRO-DOLLARS (1_000_000 = $1.00). Integers, because this
+  // is compared and decremented on every AI call and float cents drift. ONE
+  // pot per account, shared by every workspace the account owns (KOL-132).
+  aiBudget: {
+    grantedMicros:   Number,      // default AI_TRIAL_GRANT_MICROS ($3.50)
+    spentMicros:     Number,
+    generatingSince: Date | null, // concurrency lock; stale after 10 min
+  },
   createdAt:    Date,
   updatedAt:    Date,
 }
@@ -678,6 +690,35 @@ test between two stored primitives rather than a regex built from a request.
 
 Registration is **open** — anyone can create an account. Passkeys (WebAuthn) are supported alongside
 password login.
+
+### aiBudget
+
+A **total** allowance rather than a daily rate: the audience works in bursts, and a free Saturday
+with three chapters of notes is the exact session a daily cap would block, while worst-case exposure
+is identical either way. It covers everything that calls a provider we pay for — generation, in-app
+chat, memory extraction, and self-hosted inference (cheap, but electricity is not free). It
+deliberately does **not** cover MCP: Claude.ai runs that inference on the user's own subscription, so
+it costs nothing here and stays free.
+
+**On the account, not the workspace** (KOL-132 — see [Workspace](#workspace) for what a per-workspace
+pot cost). Every workspace meters against its **owner's** budget, resolved from `Workspace.ownerId`
+by [`lib/usageMeter.js`](../server/src/lib/usageMeter.js), which is why each of its functions still
+takes a `workspaceId`: the owner, not the caller, because a collaborator invited into someone else's
+workspace (KOL-124) is spending money that workspace's owner agreed to spend — and charging the
+caller would make ten accepted invitations into ten allowances, the same hole in a different shape.
+Every failure to resolve an account (no workspace, no `ownerId`, a deleted owner) reads as
+**exhausted**, never as unlimited.
+
+A **missing** `grantedMicros` reads as `AI_TRIAL_GRANT_MICROS`, not as zero: accounts created before
+the field have no `aiBudget`, and `recordSpend`'s `$inc` creates the subdocument holding nothing but
+`spentMicros`. Both are read with `.lean()`, which applies no schema default.
+`scripts/migrate-ai-budget.js` folds pre-KOL-132 per-workspace spend into the owning accounts and
+fills the stored grants in; it is dry-run by default and safe to re-run.
+
+`generatingSince` is a lock, not a timestamp for display. Cost is unknown until a run finishes, so
+simultaneous runs would each pass the same budget check; this caps the overshoot at one run — one run
+per *account*, since that is what one pot means, and a lock held per workspace would allow one
+overshoot per workspace the owner has.
 
 `credentialID` is stored as the browser's own base64url id and compared with `===`. Passkeys
 registered before KOL-024 hold that id base64url-encoded a second time. Every lookup also accepts

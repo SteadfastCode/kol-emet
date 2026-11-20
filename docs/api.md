@@ -600,7 +600,7 @@ the graph. Nothing here writes to `entities` or `relationshipgroups` except `POS
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/drafts` | List, newest first, max 50. Omits `items`, `source.text`, `diagnostics.rawOutput` and `grounding.systemPrompt` — the list view only needs counts. Excludes `discarded`. Lazily ages out runs stuck on `generating` for >10 min. |
-| GET | `/drafts/quota` | Remaining AI allowance for the workspace: `{ granted, spent, remaining, exhausted }` in micro-dollars plus display strings. |
+| GET | `/drafts/quota` | Remaining AI allowance for the **account** that owns this workspace — one pot, shared by every workspace it owns (KOL-132): `{ granted, spent, remaining, exhausted }` in micro-dollars plus display strings. |
 | POST | `/drafts` | Generate, streaming progress over **SSE**. Body: `{ text, provider?, roleStyle? }`. |
 | POST | `/drafts/compose` | Build a draft from a docker-compose file — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
 | POST | `/drafts/openapi` | Build a draft from an OpenAPI 3.x or Swagger 2.0 document (JSON or YAML) — no model, no allowance. Body: `{ text, filename? }`. Returns **201** with the full draft, already `ready`. See below. |
@@ -636,7 +636,7 @@ Pre-stream failures are ordinary JSON errors, not SSE frames:
 |--------|---------|
 | 400 | Empty text, or longer than `GENERATOR_MAX_CHARS` (25,000) |
 | 402 | Not enough AI allowance to start a run (`GENERATOR_MIN_RUN_MICROS`, default $0.015) |
-| 409 | A generation is already running for this workspace — one at a time, since cost is only known after a run finishes |
+| 409 | A generation is already running on your account — one at a time, since cost is only known after a run finishes, and the allowance is the account's (KOL-132) |
 
 **An item the graph already satisfies is dropped — its passage is not.** An entity update left
 proposing nothing (no block the target lacks, no new tag, and no summary the applier would write) is
@@ -1027,7 +1027,8 @@ signup form offers the name as an optional field.
   because collaborator invites, member removal and billing will each need exactly it. It is
   hierarchical — a gate asking for `editor` passes an owner too — and it fails closed: with no
   `req.workspaceRole` (a route mounted without `resolveWorkspace`) nothing passes.
-- **Only `name` is read from a body**, so a forged `_id`, `members`, `ownerId` or `aiBudget` there is
+- **Only `name` is read from a body**, so a forged `_id`, `members`, `ownerId` or `aiBudget` (which a
+  `Workspace` no longer has at all — KOL-132) there is
   ignored. The 80-character cap is counted in code points, so it is the same cap for a Hebrew or an
   emoji name as for an ASCII one.
 - Logging is `WORKSPACE_LOG_LEVEL` (`off | light | normal | verbose`, default `light`): the light
@@ -1071,9 +1072,15 @@ KOL-123, where a second one comes from.
   `POST /auth/register`: the `owner` membership, the `template` key stored on the document and the
   best-effort seed are the same on both paths, and a seeding failure leaves a usable workspace
   rather than failing the request.
+- **A create mints no AI allowance** (KOL-132). The allowance is on `User` and every workspace
+  meters against its owner's, so a second workspace is a second place to spend one allowance and
+  never a second allowance. It used to be a schema default on `Workspace`, which made this route a
+  way to mint `WORKSPACE_MAX_PER_OWNER` of them — see
+  [Workspace](data-model.md#workspace) in the data model.
 - **The cap counts ownership, not membership** (`WORKSPACE_MAX_PER_OWNER`, default 10): a
   membership can arrive unasked once invites land, and being invited into other people's
-  workspaces must not use up a user's own allowance. It is a count read before the write rather
+  workspaces must not use up a user's own allowance. What it bounds is storage, not spend — see
+  the bullet above. It is a count read before the write rather
   than a reservation taken with it, so creates that arrive *together* can overshoot it — bounded by
   the caller's own concurrency and once only, since every later request sees the higher count.
   Closing that needs a transaction (single mongod — see [Import](#import)) or a counter on `User`
