@@ -26,7 +26,8 @@
  *   - **A viewer's write changes nothing.** The whole graph is counted before
  *     and after the sweep — entities, relationship groups, open questions,
  *     entity types, relationship types, tags, drafts, changelog entries, the
- *     workspace's name and its `aiBudget.spentMicros` — and must be identical.
+ *     workspace's name and the owning account's `aiBudget.spentMicros` — and
+ *     must be identical.
  *   - **`POST /drafts` refuses before any allowance is read.** It is the one
  *     write that spends money, and the gate is at the mount, ahead of
  *     `checkBudget` — so `spentMicros` is unmoved and no `Draft` row exists.
@@ -484,7 +485,12 @@ async function send(who, method, url, body = {}) {
 /**
  * Everything a write could change, in one object: the row counts of every
  * collection the content routes touch, the workspace's name (PATCH /workspace)
- * and its AI spend (POST /drafts).
+ * and the AI spend of the account that owns it (POST /drafts).
+ *
+ * The spend is read from the owner's `User` and not from the workspace because
+ * that is where the allowance lives (KOL-132) — read from the workspace it
+ * would now be a constant `null`, which is a fingerprint that cannot tell a
+ * charge from no charge.
  */
 async function graphState() {
   const scope = { workspaceId: owner.workspaceId };
@@ -497,12 +503,15 @@ async function graphState() {
     Draft.countDocuments(scope),
     ChangeLog.countDocuments(scope),
   ]);
-  const workspace = await Workspace.findById(owner.workspaceId).select('name aiBudget').lean();
+  const workspace = await Workspace.findById(owner.workspaceId).select('name ownerId').lean();
+  const payer = workspace?.ownerId
+    ? await User.findById(workspace.ownerId).select('aiBudget').lean()
+    : null;
   const tagged = await Entity.find(scope).select('tags').lean();
   const state = {
     entities, groups, questions, entityTypes, relationshipTypes, drafts, changelog,
     name: workspace?.name ?? null,
-    spentMicros: workspace?.aiBudget?.spentMicros ?? null,
+    spentMicros: payer?.aiBudget?.spentMicros ?? null,
     tags: [...new Set(tagged.flatMap(e => e.tags ?? []))].sort().join(','),
   };
   log('verbose', `graph state: ${JSON.stringify(state)}`);

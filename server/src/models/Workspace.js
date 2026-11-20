@@ -48,30 +48,21 @@ const workspaceSchema = new mongoose.Schema(
     template: { type: String, default: null },
 
     /**
-     * AI spending allowance, in micro-dollars (1_000_000 = one dollar).
+     * **There is deliberately no `aiBudget` here** (KOL-132). The AI allowance
+     * lives on `User` and every workspace meters against its owner's pot —
+     * see models/User.js for the whole argument, and `lib/usageMeter.js` for
+     * the `ownerId` hop that does it.
      *
-     * Integers because this is compared and decremented on every AI call and
-     * float cents drift. A total allowance rather than a daily rate: the
-     * audience works in bursts — a free Saturday with three chapters of notes
-     * is the exact session a daily cap would block, and the worst-case
-     * exposure is identical either way.
+     * The short version: a pot attached to this document is minted again by
+     * every `POST /workspaces`, so one account could hold
+     * `WORKSPACE_MAX_PER_OWNER` full allowances and spend ten times the real
+     * provider money the trial is meant to cover. Nothing a new workspace can
+     * be *given* fixes that, since a user may have ten of whatever it is.
      *
-     * Covers generation, in-app chat and memory extraction — everything that
-     * calls a provider we pay for, self-hosted included: the steadfast-ai box
-     * is far cheaper than a cloud model but still burns electricity, so it has
-     * a derived rate rather than a zero one. It deliberately does NOT cover
-     * MCP: Claude.ai runs that inference on the user's own subscription, so it
-     * costs us nothing and stays free forever.
+     * Adding a per-workspace allowance back is therefore a pricing decision
+     * (a per-workspace *sub-limit* drawn from the account's pot would be one),
+     * never a default.
      */
-    aiBudget: {
-      grantedMicros: { type: Number, default: Number(process.env.AI_TRIAL_GRANT_MICROS ?? 3_500_000) },
-      spentMicros:   { type: Number, default: 0 },
-      // Concurrency lock for generation. Cost is unknown until a run finishes,
-      // so simultaneous runs would each pass the same budget check; this caps
-      // the overshoot at one run. Cleared on completion, and treated as stale
-      // after 10 minutes so a crash cannot lock a workspace out permanently.
-      generatingSince: { type: Date, default: null },
-    },
   },
   { timestamps: true }
 );

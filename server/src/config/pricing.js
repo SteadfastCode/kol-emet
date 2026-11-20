@@ -95,3 +95,30 @@ export function isEstimatedPrice(provider, model) {
 }
 
 export const formatMicros = (micros) => `$${(micros / MICROS).toFixed(4)}`;
+
+/**
+ * The AI allowance an **account** is granted, in micro-dollars.
+ *
+ * Lives here rather than as a literal in the schema that defaults from it
+ * because two things now read it: `User.aiBudget.grantedMicros`'s default, and
+ * `lib/usageMeter.js`, which has to read a missing grant as the trial rather
+ * than as zero — `$inc`-ing `aiBudget.spentMicros` onto an account registered
+ * before KOL-132 creates the subdocument with no `grantedMicros` in it, and a
+ * lean read of that must not come back exhausted.
+ *
+ * **Per account, not per workspace** (KOL-132). A pot held on the `Workspace`
+ * is minted again by every create: `POST /workspaces` would hand a logged-in
+ * user `WORKSPACE_MAX_PER_OWNER` fresh allowances for the price of ten cheap
+ * `template: null` creates. There is no per-workspace arrangement that fixes
+ * that — whatever a new workspace is given, it is given ten times — so the pot
+ * belongs to the one document an account has exactly one of.
+ *
+ * Read per call, not at module load, so a deployment (and a test) can set it.
+ *
+ * @returns {number} micro-dollars; the configured value when it is a
+ *   non-negative finite number, else $3.50
+ */
+export function trialGrantMicros() {
+  const configured = Number(process.env.AI_TRIAL_GRANT_MICROS);
+  return Number.isFinite(configured) && configured >= 0 ? configured : 3_500_000;
+}

@@ -21,6 +21,9 @@
  *   - **an unknown template is 400** in registration's own words and writes
  *     nothing, and an unusable name is 400 `INVALID_WORKSPACE_NAME`;
  *   - **the cap refuses the n+1-th** with its own code, writing nothing;
+ *   - **a create mints no AI allowance** (KOL-132): the account's one grant is
+ *     what every workspace it owns meters against, so the cap bounds disk and
+ *     not paid-provider spend;
  *   - **another user's workspaces stay invisible** to `GET /workspaces`, so a
  *     create cannot be a way into someone else's list;
  *   - **the new workspace is not the session's until selected**: the acting
@@ -34,7 +37,9 @@
  * which a unit test can see.
  *
  * Falsification checks: let the route select what it creates and the
- * "not the session's" group fails; drop the cap and its group fails; let the
+ * "not the session's" group fails; put `aiBudget` back on the `Workspace`
+ * schema and the allowance group fails with one grant per create; drop the cap
+ * and its group fails; let the
  * `null` template fall through `resolveTemplateKey` to the default and the
  * import group fails on 409; drop the `members` entry and the ownership
  * assertions fail (as would `PATCH /workspace` on the new workspace).
@@ -52,6 +57,7 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 
+import mongoose from 'mongoose';
 import session from 'express-session';
 import request from 'supertest';
 
@@ -63,6 +69,8 @@ import Workspace from '../../src/models/Workspace.js';
 import Entity from '../../src/models/Entity.js';
 import EntityType from '../../src/models/EntityType.js';
 import RelationshipType from '../../src/models/RelationshipType.js';
+import { getBudget } from '../../src/lib/usageMeter.js';
+import { trialGrantMicros } from '../../src/config/pricing.js';
 
 // Environment before src/app.js is imported, for the reasons in tenancy.test.js.
 process.env.NODE_ENV = 'test';
@@ -320,10 +328,19 @@ describe('POST /workspaces refusals', () => {
 
     assert.equal(res.status, 201);
     assert.notEqual(String(res.body._id), '000000000000000000000000');
-    const stored = await Workspace.findById(res.body._id).select('ownerId members aiBudget').lean();
+    const stored = await Workspace.findById(res.body._id).select('ownerId members').lean();
     assert.equal(String(stored.ownerId), alice.userId, 'the owner is the caller, not the body');
     assert.deepEqual(stored.members.map(m => String(m.userId)), [alice.userId]);
-    assert.notEqual(stored.aiBudget.grantedMicros, 999_000_000, 'the allowance is not the caller\'s to set');
+
+    // `aiBudget` is not merely ignored, it is undeclared on `Workspace`
+    // (KOL-132) — and the allowance the new workspace actually meters against
+    // is alice's own account grant, not a number out of a request body.
+    const raw = await Workspace.collection.findOne({ _id: stored._id ?? res.body._id });
+    assert.equal(raw.aiBudget, undefined, 'the allowance is not the caller\'s to set');
+    assert.equal(
+      (await getBudget(res.body._id)).grantedMicros, trialGrantMicros(),
+      'one account grant, whoever asks and whatever they send'
+    );
   });
 
   test('an unauthenticated create is 401 and writes nothing', async () => {
@@ -437,5 +454,90 @@ describe("the created workspace is not the session's until it is selected", () =
       const theirs = (await Workspace.find({ 'members.userId': who.userId }).select('_id').lean()).map(w => String(w._id));
       assert.deepEqual([...ids].sort(), [...theirs].sort(), `${who.email} sees exactly their own memberships`);
     }
+  });
+});
+
+/**
+ * The allowance a create does NOT hand out (KOL-132).
+ *
+ * `aiBudget` was a field on `Workspace` with a schema default of
+ * `AI_TRIAL_GRANT_MICROS` ($3.50), which was a fine way to say "one allowance
+ * per account" while `POST /auth/register` was the only thing that had ever
+ * created one. This route broke that without touching the budget code: it is
+ * an authenticated create loop, the cap above was reasoned about as the cost of
+ * a template *seed*, and so any logged-in user could mint
+ * `WORKSPACE_MAX_PER_OWNER` full allowances with cheap `template: null`
+ * creates — about ten times the paid-provider money the trial exists to bound,
+ * per account, through a door the IP-capped signup ceiling does not watch.
+ *
+ * The pot moved to `User` (models/User.js) and every workspace meters against
+ * its owner's (lib/usageMeter.js). The pooling itself is covered in
+ * tests/lib/usageMeter.test.js; what this group pins is the route — that a
+ * create through the real stack adds nothing to what the account may spend, and
+ * that `GET /drafts/quota` read while acting *in the new workspace* reports the
+ * one shared pot rather than a fresh one.
+ */
+describe('a create mints no AI allowance', () => {
+  /** A fresh account, so the numbers below are not alice's accumulated state. */
+  let spender;
+
+  before(async () => {
+    spender = await registerUser('spender@example.test', 'The Only Allowance');
+  });
+
+  test('creating workspaces does not add to what the account may spend', async () => {
+    const grant = trialGrantMicros();
+    const atRegistration = await getBudget(spender.workspaceId);
+    assert.equal(atRegistration.grantedMicros, grant, 'registration grants exactly one allowance');
+
+    const created = [];
+    for (let i = 1; i <= 4; i++) {
+      const res = await create(spender, { name: `Minting ${i}`, template: null }, `cheap create ${i}`);
+      assert.equal(res.status, 201, `create ${i} failed: ${res.status} ${JSON.stringify(res.body)}`);
+      created.push(String(res.body._id));
+    }
+
+    // The account: still one grant, however many workspaces it now owns.
+    const account = await User.collection.findOne({ _id: (await User.findOne({ email: spender.email }).select('_id').lean())._id });
+    assert.equal(account.aiBudget.grantedMicros, grant, 'five workspaces, one allowance');
+
+    // Each new workspace reads that same one, and none of them stores a pot.
+    for (const id of [spender.workspaceId, ...created]) {
+      const budget = await getBudget(id);
+      assert.equal(budget.grantedMicros, grant, `workspace ${id} must read the account's allowance`);
+      const raw = await Workspace.collection.findOne({ _id: new mongoose.Types.ObjectId(id) });
+      assert.equal(raw.aiBudget, undefined, `workspace ${id} must not carry a pot of its own`);
+    }
+
+    log('light', `${created.length + 1} workspace(s) owned by ${spender.email} share one grant of ${account.aiBudget.grantedMicros} micros (source: User.aiBudget)`);
+  });
+
+  test('GET /drafts/quota in a new workspace reports the shared pot, not a fresh one', async () => {
+    // Spend recorded through the account, as the generator would. Charged at
+    // the lib, because what is being asserted is the *route's* answer, and
+    // making a real provider call to move the number is not available here.
+    const payer = await User.findOne({ email: spender.email }).select('_id').lean();
+    const SPENT = 400_000;
+    await User.updateOne({ _id: payer._id }, { $set: { 'aiBudget.spentMicros': SPENT } });
+
+    const inOriginal = await get(spender, '/drafts/quota', 'quota in the registered workspace');
+    assert.equal(inOriginal.status, 200);
+    assert.equal(inOriginal.body.spentMicros, SPENT);
+
+    const fresh = await create(spender, { name: 'A Clean Slate', template: null }, 'a create after spending');
+    assert.equal(fresh.status, 201);
+    const chosen = await spender.agent.post(`/workspaces/${fresh.body._id}/select`).send({});
+    assert.equal(chosen.status, 200, `select failed: ${chosen.status} ${JSON.stringify(chosen.body)}`);
+
+    const inNew = await get(spender, '/drafts/quota', 'quota in the brand-new workspace');
+    assert.equal(inNew.status, 200);
+    assert.deepEqual(
+      inNew.body, inOriginal.body,
+      'a new workspace is a second place to spend one allowance, never a second allowance'
+    );
+
+    // Back, so nothing after this group inherits the selection.
+    const back = await spender.agent.post(`/workspaces/${spender.workspaceId}/select`).send({});
+    assert.equal(back.status, 200);
   });
 });

@@ -606,6 +606,15 @@ workspacesRouter.post('/:id/select', async (req, res, next) => {
  * error code is far cheaper to run than a quota somebody has to administer,
  * and this is a number, not a policy.
  *
+ * **What it bounds is storage, not spend.** It used to bound both by accident
+ * and neither on purpose: while the AI allowance was a schema default on
+ * `Workspace`, every create here minted a fresh $3.50 of real provider money,
+ * so this number was also the multiplier on an account's paid-provider
+ * exposure — ten cheap `template: null` creates, ten allowances. That is fixed
+ * where it belongs rather than here (KOL-132: the pot is on the owner's
+ * `User` and every workspace meters against it, see lib/usageMeter.js), which
+ * is why raising this number is a disk-space decision and safe to treat as one.
+ *
  * Owned rather than joined, because a membership can arrive unasked once
  * invites land (KOL-124) and being invited into other people's workspaces must
  * not be able to use up a user's own allowance. Read per call rather than at
@@ -637,7 +646,8 @@ function countOwned(userId) {
  *
  * What it reads from the body is `name` and `template`, and nothing else: a
  * forged `members`, `ownerId`, `aiBudget` or `_id` is ignored, as on
- * `PATCH /workspace`.
+ * `PATCH /workspace` — `aiBudget` now doubly so, since a `Workspace` has no
+ * such field to forge (KOL-132).
  *
  *   - **`name`** goes through `workspaceName()`, the one rule `PATCH /workspace`
  *     and registration's optional `workspaceName` already share, so the three
