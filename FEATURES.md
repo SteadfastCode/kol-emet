@@ -39,7 +39,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-133) Delete a workspace: the one tenancy verb the product has never had** (needs KOL-132)
+- [x] **(KOL-133) Delete a workspace: the one tenancy verb the product has never had** (needs KOL-132)
   `docs/roadmap.md:111` names it among what is still open after invites — "deleting a workspace, seat billing and
   per-plan limits" — and it is the only one of the three that needs neither a credential nor a price.
   `workspacesRouter` has `GET /workspaces` (`server/src/routes/workspace.js:436`), `POST /workspaces/:id/select`

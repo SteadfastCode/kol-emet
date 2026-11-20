@@ -47,10 +47,10 @@
     "KOL-133": {
       "order": 3,
       "title": "Delete a workspace: the one tenancy verb the product has never had",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-133",
       "dependsOn": [
         "KOL-132"
       ],
@@ -60,8 +60,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-20T23:26:06.607Z",
+      "runId": "2026-11-20T23:00:35.655Z",
       "lastFail": null
     },
     "KOL-147": {
@@ -82,26 +82,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-132": {
-      "order": 5,
-      "title": "Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-132",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-11-20T23:01:39.935Z",
-      "runId": "2026-11-20T23:00:35.655Z",
-      "lastFail": null
-    },
     "KOL-014": {
-      "order": 6,
+      "order": 5,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -119,7 +101,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 7,
+      "order": 6,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -137,7 +119,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 8,
+      "order": 7,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -155,7 +137,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 9,
+      "order": 8,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -170,6 +152,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-132": {
+      "order": null,
+      "title": "Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-132",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-20T23:01:39.935Z",
+      "runId": "2026-11-20T23:00:35.655Z",
       "lastFail": null
     },
     "KOL-139": {
