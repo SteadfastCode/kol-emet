@@ -110,7 +110,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-132) Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…**
+- [x] **(KOL-132) Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…**
   Found by the grader of KOL-123 (medium, server/src/lib/workspaceSeeder.js:214). Every created
   workspace gets a fresh full AI allowance: `Workspace.create` sets no `aiBudget`, so the schema
   default `grantedMicros = AI_TRIAL_GRANT_MICROS` ($3.50) applies and `usageMeter.js` meters per
