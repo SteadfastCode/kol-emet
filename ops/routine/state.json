@@ -85,7 +85,7 @@
     "KOL-132": {
       "order": 5,
       "title": "Every created workspace gets a fresh full AI allowance: Workspace.create sets no aiBudget, so the…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-132",
