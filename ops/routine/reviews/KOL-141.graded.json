@@ -1,0 +1,79 @@
+{
+  "item": "KOL-141",
+  "repo": "kol-emet",
+  "mergeSha": "e3c71a4219df89c7c3318780f5021bd854f35062",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-20T18:53:06.283Z",
+  "gradedAtUtc": "2026-11-20T19:15:09.471Z",
+  "independent": [
+    {
+      "file": "server/src/routes/workspace.js",
+      "line": 368,
+      "severity": "low",
+      "summary": "The PATCH no-op shortcut `if (member.role === role) return res.json({userId, role})` is still a read-derived branch in front of the write — exactly the shape KOL-141 set out to remove. A request that read the member as `owner` and asks for `owner`, racing a concurrent demotion to `editor`, returns 200 `{role:'owner'}` without writing anything, so the client is told a promotion succeeded while the member is an editor. No invariant is breached (nothing is written), but the answer is a lie taken from a stale read."
+    },
+    {
+      "file": "server/tests/lib/ownerFloor.test.js",
+      "line": 36,
+      "severity": "low",
+      "summary": "The updated falsification note is wrong about the new filter: \"drop the `$ne` on `$$o.userId` from `notTheLastOwner` and the first write stops matching\" no longer holds. Without that `$ne` the expression reduces to `$size(owners) >= 1 || $size(owners) == 0`, which is unconditionally true, so that mutant makes *every* write match and the floor never holds at all — the opposite of what the note tells a reader to expect, which defeats the file's stated purpose of naming the mutants its cases kill."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The change is entirely inside the owner/editor/viewer role-assignment and member-removal endpoints and alters the invariant that keeps a workspace holding an owner — role and privilege management is authorization, so this category is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env vars or hashing logic appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing or seat-charging code is involved; the spec explicitly leaves seat billing out of scope."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Right that it is touched — `DELETE /workspace/members/:userId` now carries the floor unconditionally, changing when a membership is actually pulled (the cited line 341 is off by ~120 lines, but the category call is correct)."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Only local MongoDB writes and in-process Express routes; no outbound calls or third-party integrations."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, migrations, deploy config or dependency changes — just route/lib code, tests and prose docs."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local model reported nothing on a change that is substantively correct, so it missed only two low-severity leftovers (the stale-read no-op shortcut and a now-false falsification note), and its triage was right except for calling auth untouched on a change that is entirely about role and privilege management.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.4842274999999998,
+  "numTurns": 17,
+  "durationMs": 183082,
+  "sessionId": "2507ee00-8262-4f04-83ef-5f95028cbfab"
+}

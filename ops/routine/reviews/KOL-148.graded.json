@@ -1,0 +1,63 @@
+{
+  "item": "KOL-148",
+  "repo": "kol-emet",
+  "mergeSha": "6d0714d28d592087f43f1febb6f2bcc64c44d408",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-20T18:53:06.283Z",
+  "gradedAtUtc": "2026-11-20T19:16:41.479Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only touches client-side block-data copying in EntityEditor/BlockList and their tests; no auth, session, or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env vars, or config secrets appear anywhere in the change."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, quota, or cost-related code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletions, migrations, or irreversible operations are added; the existing removeImage splice is untouched by the diff."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No network calls or third-party integrations are added or modified; only in-memory object copying."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, versioning, or CI configuration is touched."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no findings and marked every triage category untouched, which is correct here — the fix (fresh per-block data in withEditableData/freshBlockData, verified by two tests that genuinely fail on the old aliasing code) introduces no defects I could find, so a clean report is the right answer, albeit one that demonstrates no verification.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.9363985,
+  "numTurns": 14,
+  "durationMs": 91970,
+  "sessionId": "3417bdfe-3c3d-41ac-ad4f-2d382e65786f"
+}

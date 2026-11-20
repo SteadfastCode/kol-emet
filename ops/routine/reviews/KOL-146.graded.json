@@ -1,0 +1,72 @@
+{
+  "item": "KOL-146",
+  "repo": "kol-emet",
+  "mergeSha": "2cb93eb3035d2139a83c9170f6d0bd80c6f20978",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-20T18:53:06.283Z",
+  "gradedAtUtc": "2026-11-20T19:19:55.382Z",
+  "independent": [
+    {
+      "file": "server/src/lib/mcpFailure.js",
+      "line": 239,
+      "severity": "low",
+      "summary": "`source` is the one record field still built from caller text and it is not capped, so the new module header's and docs' claim that \"a refusal line is these plus a few hundred characters of this module's own, however large the request was\" is false: `routes/mcp.js:759` interpolates `req.body.method` verbatim into `source` on the session_missing path (the same value `rpc` now clips to 64), and the bridge's `toolFailure` detail interpolates free-string tool arguments (`routes/bridge.js:271,274,443,526`, all `z.string()` with no max). A ~100 kB `method` or `reply_to` therefore still writes a ~100 kB record line — gated behind a valid bearer on a deployed /mcp (and behind BRIDGE_TOKEN on the bridge), so the unauthenticated hole the item targeted is genuinely closed, but in the dev/open gate configuration (`MCP_TOKEN` unset, non-prod) the session_missing path is reachable unauthenticated and the record is unbounded again. Also latent: `...extra` spreads after `rpc`/`tool`/`requestId` in `mcpLogRecord`, so a future call site passing one of those keys in `extra` silently bypasses its cap (today only literals and counts are passed, so no live bug)."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change alters the record emitted by the /mcp and /bridge/mcp bearer gates and adds tests for the unauthenticated 401 path, so auth-refusal code is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "The `auth` presentation field and the verbose-only token logging are untouched; no credential handling changes."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, usage-metering or model-cost code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations or overwrites — the change only truncates strings when building a log line."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls, and the JSON-RPC response body is deliberately left byte-identical (the id is still echoed verbatim)."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only a lib file, two test files, a new test file and a docs paragraph; no deploy, env or version config."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model found nothing and so missed only a minor residual gap (uncapped `source`), while its triage was entirely correct — a clean but uninformative review of a change that does what it claims.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.7063655,
+  "numTurns": 20,
+  "durationMs": 193864,
+  "sessionId": "f3afd7d9-8900-4a09-a08e-71bb49749360"
+}
