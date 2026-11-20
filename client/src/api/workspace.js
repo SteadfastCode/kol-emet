@@ -22,6 +22,10 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '';
  * follows it with `selectWorkspace()`: that route stays the only writer of
  * which workspace a session acts in.
  *
+ * `DELETE /workspaces/:id` removes one, hard, with everything in it (KOL-133).
+ * Owners only, and never the caller's last one — the server has to have a
+ * workspace to resolve for them.
+ *
  * A refusal keeps the server's code on the error (`NOT_WORKSPACE_OWNER`,
  * `INVALID_WORKSPACE_NAME`) plus its status, because Settings says something
  * different for each.
@@ -31,8 +35,9 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '';
  * operations on its own WORKSPACE_LOG_LEVEL.
  *   light   — every rename sent from here and how it ended, naming what asked
  *             for it and the name it replaced, every workspace switch, naming
- *             the one it replaced, and every create, naming what it was seeded
- *             from — a template key, or nothing
+ *             the one it replaced, every create, naming what it was seeded
+ *             from — a template key, or nothing — and every delete, naming the
+ *             workspace it removed
  *   normal  — light, plus each read and the role it came back with
  *   verbose — normal, plus the whole response body
  */
@@ -178,6 +183,41 @@ export async function createWorkspace(name, { template, source } = {}) {
     return workspace;
   } catch (err) {
     log('light', `create of "${name}" from ${seededFrom} refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'POST /workspaces'})`);
+    throw err;
+  }
+}
+
+/**
+ * Deletes a workspace and everything in it. Owners only, and **hard** — there
+ * is no undo (KOL-133).
+ *
+ * The counterpart to `createWorkspace` above: before it, a workspace made by a
+ * mis-click or from the wrong template was permanent and kept counting against
+ * the cap `createWorkspace` refuses on.
+ *
+ * Refusals keep the server's code and status, because Settings says something
+ * different for each: 403 `NOT_WORKSPACE_OWNER` (a member who is not an owner
+ * of *that* workspace), 404 (an id that is not a membership of theirs — never
+ * a 403, which would confirm it exists) and 409 `LAST_WORKSPACE` (their only
+ * one; with none, the server has no workspace to resolve for them).
+ *
+ * It answers 204 and nothing else. What was in the workspace is gone, the other
+ * members' memberships went with it, and any `/events` stream watching it has
+ * been closed — so a caller that deleted the workspace this session was acting
+ * in reloads the page, exactly as a switch does: the server leaves the session's
+ * selection alone and falls back to another workspace on the next request.
+ *
+ * @param {string} id
+ * @param {object} [options]
+ * @param {string} [options.name] the workspace being deleted, for the log line
+ * @param {string} [options.source] what asked for it, for the log line
+ */
+export async function deleteWorkspace(id, { name, source } = {}) {
+  try {
+    await req(`/workspaces/${id}`, { method: 'DELETE' });
+    log('light', `deleted "${name ?? id}" (${id}) and everything in it; this session's selection is untouched and resolves elsewhere on the next request (source: ${source ?? 'DELETE /workspaces/:id'})`);
+  } catch (err) {
+    log('light', `delete of "${name ?? id}" (${id}) refused with ${err.status ?? 'no status'} ${err.message} (source: ${source ?? 'DELETE /workspaces/:id'})`);
     throw err;
   }
 }

@@ -46,8 +46,10 @@ registry entries — which is what the model-agnostic constraint actually demand
 
 One new model, `server/src/models/Draft.js`, with items embedded. **No TTL anywhere on it** —
 `ChangeLog` expires after 30 days because it is undo; `Draft` *is* the training corpus and must be
-permanent. `DELETE` is a soft `status: 'discarded'`; hard deletion belongs only to an
-account-deletion path.
+permanent. `DELETE` is a soft `status: 'discarded'`; hard deletion belongs only to a path on which
+an owner removes their own data — `DELETE /auth/account` (decided 2026-09-05) and, since KOL-133,
+`DELETE /workspaces/:id`, which is the same promise about one workspace rather than an account. See
+the Decision Log entry of 2026-11-20 in `kol_emet_spec.md`.
 
 `workspaceId` is `required: true` — unlike `Entity.js`, which uses `default: null` to accommodate
 pre-tenancy rows. A new collection has none, so it fails closed from row one.

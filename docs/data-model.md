@@ -544,6 +544,18 @@ role so a membership somebody else owns never uses up a user's own allowance. Cr
 change which workspace a session acts in; `POST /workspaces/:id/select` remains the only writer of
 that.
 
+**A workspace can be deleted (KOL-133).** [`DELETE /workspaces/:id`](api.md#workspaces) is
+owner-only and **hard**: the sweep is the same `WORKSPACE_SCOPED_MODELS` list account deletion uses
+— lifted to the shared `deleteScopedContent()` in
+[`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js) rather than copied, so a model added
+to the product reaches both paths — plus the `Workspace` row itself, run as the same two passes
+either side of it for the race guarantee described below. The other members' `members` entries go
+with the row they live in, so a collaborator loses access on their next request and keeps their own
+workspaces; their `User`, and the owner's AI allowance (on `User` since KOL-132), are untouched.
+There is no soft-delete store to undo from, and the [`ChangeLog`](#changelog) TTL cannot carry one
+(KOL-019). Its floor is the mirror of `LAST_OWNER` above: an account keeps **one workspace**, since
+`resolveWorkspace` refuses an account with no membership at all (409 `LAST_WORKSPACE`).
+
 **Account deletion** is a hard delete, drafts included
 ([`lib/accountDeleter.js`](../server/src/lib/accountDeleter.js), behind
 [`DELETE /auth/account`](api.md#auth)). It removes the user,

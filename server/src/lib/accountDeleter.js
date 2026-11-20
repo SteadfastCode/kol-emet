@@ -1,6 +1,13 @@
 /**
  * Account deletion: a hard delete of a user and everything their tenancy holds.
  *
+ * `WORKSPACE_SCOPED_MODELS` and `deleteScopedContent` below are shared with
+ * `DELETE /workspaces/:id` (KOL-133), which deletes one workspace rather than
+ * an account's: the list of collections a tenant can own, and the sweep over
+ * it, are the same thing in both paths and are deliberately written once.
+ * `deleteAccount` itself is not reused there — what it refuses, re-reads and
+ * sweeps by `userId` is about an *account* going away.
+ *
  * Daniel decided 2026-09-05 that deleting an account hard-deletes, drafts
  * included. `Draft` is otherwise permanent — it is the training corpus, and
  * DELETE /drafts/:id is a soft discard — so this is the only code path that
@@ -124,8 +131,29 @@ function roleIn(workspace, userId) {
   return workspace.members.find((m) => String(m.userId) === userId)?.role ?? 'owner';
 }
 
-/** One deleteMany per scoped model; adds to `deleted` and returns the pass total. */
-async function deleteScopedContent(workspaceIds, deleted, pass) {
+/**
+ * One `deleteMany` per workspace-scoped model: everything inside these
+ * workspaces, in every collection that carries a `workspaceId`.
+ *
+ * Exported because `DELETE /workspaces/:id` sweeps exactly this list (KOL-133)
+ * and a second copy of it would be the one that gets forgotten when a model is
+ * added. `WORKSPACE_SCOPED_MODELS` is asserted complete by
+ * tests/lib/accountDeleter.test.js, so both callers inherit that guarantee —
+ * which is the whole reason this is a shared helper and not a loop in each
+ * route. It deletes content only: the `Workspace` rows themselves are each
+ * caller's own business, because what counts as "the owner's workspaces"
+ * differs between deleting an account and deleting one workspace.
+ *
+ * Callers run it **twice**, either side of removing the `Workspace` row — see
+ * `deleteAccount` below and the route — which with `lib/ownerGuard.js` is what
+ * closes the window on a write that raced the deletion.
+ *
+ * @param {Array<import('mongoose').Types.ObjectId|string>} workspaceIds
+ * @param {Record<string, number>} [deleted] accumulator, added to per model
+ * @param {string} [pass] which pass this is, for the `normal` log tier
+ * @returns {Promise<number>} how many documents this pass removed
+ */
+export async function deleteScopedContent(workspaceIds, deleted = {}, pass = 'content') {
   let total = 0;
   for (const model of WORKSPACE_SCOPED_MODELS) {
     const { deletedCount } = await model.deleteMany({ workspaceId: { $in: workspaceIds } });

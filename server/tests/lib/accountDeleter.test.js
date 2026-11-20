@@ -13,6 +13,12 @@
  * tenant in every collection a tenant can own, and a guard test fails if
  * WORKSPACE_SCOPED_MODELS stops matching the models that carry workspaceId.
  *
+ * `deleteScopedContent` is exported from the same module and shared with
+ * `DELETE /workspaces/:id` (KOL-133), so there is a group for it below: what it
+ * sweeps is this file's model list, and what it leaves alone is the `Workspace`
+ * row and every other tenant. The route's own behaviour lives in
+ * tests/http/workspaceDelete.test.js.
+ *
  * Deletion logs at 'light' by default; silenced here unless
  * ACCOUNT_DELETE_LOG_LEVEL is set, for when a failure needs the trail.
  */
@@ -26,7 +32,7 @@ import { join } from 'node:path';
 import mongoose from 'mongoose';
 
 import * as db from '../helpers/db.js';
-import { deleteAccount, WORKSPACE_SCOPED_MODELS } from '../../src/lib/accountDeleter.js';
+import { deleteAccount, deleteScopedContent, WORKSPACE_SCOPED_MODELS } from '../../src/lib/accountDeleter.js';
 import { OwnerGoneError } from '../../src/lib/ownerGuard.js';
 import User from '../../src/models/User.js';
 import Workspace from '../../src/models/Workspace.js';
@@ -483,5 +489,54 @@ describe('workspace-scoped writes that race the deletion', () => {
       await insertAsProduction(model, lateDoc(model, a, b));
       assert.equal(await model.countDocuments({ workspaceId: a.workspace._id }), 2, `${model.modelName}: the seeded row and the new one`);
     }
+  });
+});
+
+/**
+ * The sweep both deletion paths share (KOL-133).
+ *
+ * `deleteAccount` above runs it twice over an account's workspaces; `DELETE
+ * /workspaces/:id` runs it twice over one. Lifted to an export rather than
+ * copied into the route because `WORKSPACE_SCOPED_MODELS` is asserted complete
+ * in this file, and a second copy of the loop is the one that would be
+ * forgotten when a model is added.
+ */
+describe('deleteScopedContent, the sweep the route shares', () => {
+  let a, b, before;
+
+  beforeEach(async () => {
+    a = await seedTenant('scoped-a');
+    b = await seedTenant('scoped-b');
+    before = await snapshot();
+  });
+
+  test('removes one workspace\'s content in every scoped model, and nobody else\'s', async () => {
+    const deleted = {};
+    const total = await deleteScopedContent([a.workspace._id], deleted, 'content');
+
+    assert.ok(total > 0, 'the fixture put nothing in the workspace being swept');
+    for (const model of WORKSPACE_SCOPED_MODELS) {
+      assert.equal(await model.countDocuments({ workspaceId: a.workspace._id }), 0, `${model.modelName} left behind`);
+      assert.ok(await model.countDocuments({ workspaceId: b.workspace._id }) > 0, `${model.modelName} of the other tenant was swept`);
+      assert.ok(deleted[model.modelName] >= 1, `${model.modelName} is missing from the per-model counts`);
+    }
+  });
+
+  test('leaves the Workspace row, the User and the user-keyed rows to its caller', async () => {
+    await deleteScopedContent([a.workspace._id]);
+
+    assert.equal(await Workspace.countDocuments({ _id: a.workspace._id }), 1,
+      'the Workspace row is the caller\'s to delete: what counts as "the owner\'s workspaces" differs between the two paths');
+    assert.equal(await User.countDocuments({ _id: a.user._id }), 1);
+    // The pre-tenancy rows carry workspaceId: null, so a workspace sweep
+    // cannot reach them — only deleteAccount's userId pass can.
+    assert.equal(await UserMemory.countDocuments({ userId: a.user._id, workspaceId: null }), 1);
+    assert.equal(await Conversation.countDocuments({ userId: a.user._id, workspaceId: null }), 1);
+  });
+
+  test('an empty list deletes nothing at all', async () => {
+    const deleted = {};
+    assert.equal(await deleteScopedContent([], deleted), 0);
+    assert.deepEqual(await snapshot(), before);
   });
 });

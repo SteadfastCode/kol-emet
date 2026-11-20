@@ -132,6 +132,7 @@ import {
   sweepClients,
   closeStreamsForSession,
   closeStreamsForUser,
+  closeStreamsForWorkspace,
   closeAllStreams,
   maxStreamsPerUser,
   DEFAULT_MAX_STREAMS_PER_USER,
@@ -821,6 +822,73 @@ describe('closing streams for a session or a user', () => {
     const res = connect('tab-1', uniqueWs(), { userId: { toString: () => hex }, sessionId: 'sid-1' });
 
     assert.equal(closeStreamsForUser(hex), 1);
+    assert.equal(res.ended, true);
+  });
+});
+
+/**
+ * Closing by *workspace* (KOL-133), which is what `DELETE /workspaces/:id`
+ * needs and neither closer above can express: the credential is fine, the
+ * sessions are all alive, and the thing that ended is what the streams were
+ * watching.
+ */
+describe('closing streams for a deleted workspace', () => {
+  test('closes every stream watching it, whoever holds them, and no others', async () => {
+    const deleted = uniqueWs();
+    const survives = uniqueWs();
+    // Two members of the deleted workspace, in different sessions, plus the
+    // owner's other tab on a workspace that is not going anywhere.
+    const owner = connect('tab-1', deleted, { userId: 'u1', sessionId: 'sid-1' });
+    const collaborator = connect('tab-2', deleted, { userId: 'u2', sessionId: 'sid-2' });
+    const elsewhere = connect('tab-3', survives, { userId: 'u1', sessionId: 'sid-1' });
+
+    const closed = closeStreamsForWorkspace(deleted, 'DELETE /workspaces/:id');
+
+    assert.equal(closed, 2, 'every member watching the deleted workspace should have been closed');
+    assert.equal(owner.ended, true);
+    assert.equal(collaborator.ended, true);
+    assert.equal(elsewhere.ended, false, 'a stream on another workspace was closed');
+
+    // The frame is the point: `workspace-deleted` is a code the client retries,
+    // where `session-ended` tells it never to come back on this credential
+    // (KOL-112) — and here the credential is untouched and the reconnect is
+    // what lands it in the fallback workspace.
+    assert.deepEqual(errors(owner), [{ error: 'workspace-deleted' }]);
+    assert.deepEqual(errors(collaborator), [{ error: 'workspace-deleted' }]);
+
+    broadcast('entity:created', { _id: 'e1' }, { workspaceId: survives });
+    assert.equal(frames(elsewhere).filter((f) => f.event === 'entity:created').length, 1,
+      'the kept stream stopped receiving updates');
+  });
+
+  test('closes a connector\'s stream too, with no flag to ask for it', async () => {
+    // A bearer stream is workspace-scoped like any other, and `includeBearer`
+    // exists on `closeStreamsForUser` because that call is about a credential
+    // ending. This one is not: the workspace the connector was reading is gone.
+    const deleted = uniqueWs();
+    const connector = connect('mcp-1', deleted, { userId: 'u1', bearer: true });
+
+    assert.equal(closeStreamsForWorkspace(deleted, 'DELETE /workspaces/:id'), 1);
+    assert.equal(connector.ended, true);
+    assert.deepEqual(errors(connector), [{ error: 'workspace-deleted' }]);
+  });
+
+  test('an id matching nothing, or a missing one, is a no-op', () => {
+    const res = connect('tab-1', uniqueWs(), { userId: 'u1', sessionId: 'sid-1' });
+
+    assert.equal(closeStreamsForWorkspace(uniqueWs()), 0);
+    assert.equal(closeStreamsForWorkspace(null), 0);
+    assert.equal(closeStreamsForWorkspace(undefined), 0);
+    assert.equal(res.ended, false, 'an unmatched close ended a live stream');
+  });
+
+  test('matches an ObjectId-shaped workspace id against its stored string form', () => {
+    // The route hands this the `_id` it read, which is an ObjectId; the stored
+    // form is a string, so the lookup has to normalise as `addClient` does.
+    const hex = '65f0000000000000000000cc';
+    const res = connect('tab-1', { toString: () => hex }, { userId: 'u1', sessionId: 'sid-1' });
+
+    assert.equal(closeStreamsForWorkspace({ toString: () => hex }), 1);
     assert.equal(res.ended, true);
   });
 });

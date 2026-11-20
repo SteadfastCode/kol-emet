@@ -1045,6 +1045,7 @@ KOL-123, where a second one comes from.
 | GET | `/workspaces` | Every workspace the caller is a member of, each `{ _id, name, role, createdAt }` — the same shape as `GET /workspace` — sorted `createdAt` then `_id`, so oldest first and the order is total. `role` is the caller's own in each. Both auth paths; a session caller with no membership gets `[]`, not 403 |
 | POST | `/workspaces/:id/select` | Make `:id` the workspace this session acts in: checks membership, writes `req.session.workspaceId`, saves the session before answering, and returns the selected workspace in the same shape. **Session only** — a bearer connector has no session to hold a choice in and is 401. 404 `{ error: 'Not found' }` for an id the caller is not a member of, writing nothing (never 403, which would confirm the row exists); 400 `INVALID_ID` for a malformed one |
 | POST | `/workspaces` | Create one, owned by the caller (KOL-123). Body `{ name, template? }`. `name` is the rule `PATCH /workspace` uses — trimmed, 1–80 code points, else 400 `INVALID_WORKSPACE_NAME` — and is not unique. `template` is a key from [`GET /templates`](#templates): absent seeds the default (`worldbuilding`), a key that names none is 400 `Unknown template` (registration's wording), and **`null` seeds nothing**, which is the only kind of workspace [`POST /import`](#import) will write into. 201 with the new workspace in the same `{ _id, name, role, createdAt }` shape, `role: 'owner'`. 409 `{ error: 'WORKSPACE_LIMIT_REACHED', limit }` once the caller already **owns** `WORKSPACE_MAX_PER_OWNER` (default 10), writing nothing. **Session only**, like `/select` and for the same reason. Only `name` and `template` are read from the body. It does **not** select what it creates |
+| DELETE | `/workspaces/:id` | **Delete it, hard, with everything in it** (KOL-133). Owner-only, judged on the **named** workspace's own `members` array and not on the one the session is acting in. Removes every document in it across every model carrying `workspaceId` (the `WORKSPACE_SCOPED_MODELS` sweep shared with `DELETE /auth/account`, drafts included) and then the `Workspace` row, which takes the other members' memberships with it; their accounts, and the owner's AI allowance (on `User` since KOL-132), are untouched. **204**, no body. Three refusals, each writing nothing: 403 `NOT_WORKSPACE_OWNER` for a member who is not an owner of it; **404** for a well-formed id the caller is not a member of (never 403, which would confirm it exists — the rule `/select` follows); 409 `LAST_WORKSPACE` for the caller's only membership, since `resolveWorkspace` answers 403 to an account with none. 400 `INVALID_ID` for a malformed id. **Session only**, like `/select` and the create. There is **no undo** — no soft-delete store exists to carry one. Every live `/events` stream watching the workspace is closed with `{ error: 'workspace-deleted' }`, and `req.session.workspaceId` is deliberately left as it was: a session that was acting in it falls back on its next request |
 
 - **The choice is session state**, server-side, not a client preference: the client cannot scope its
   own reads, so a workspace chosen in a client store while the server resolved another is exactly
@@ -1067,6 +1068,22 @@ KOL-123, where a second one comes from.
   which workspace a session acts in — and the tab has to reload either way. Creating is also the
   one thing here that is *not* done inside a workspace, which is why this mount carries no
   `resolveWorkspace`: the caller is not acting in the new one yet.
+- **A delete is not a deselect** (KOL-133), for the same reason and in the opposite direction:
+  `DELETE /workspaces/:id` writes nothing to the session either, because `resolveWorkspace`
+  documents the fallback for exactly this case ("revoked, or the workspace deleted"). The owner's
+  next request resolves their default workspace, and so does every other member's. The one thing
+  the deletion *does* reach is their live `/events` streams: those are tagged with a workspace at
+  connect time and nothing else would have closed them, so each is sent
+  `{ error: 'workspace-deleted' }` — deliberately **not** the `session-ended` the client treats as
+  final (KOL-112), because the credential is fine and the reconnect is what lands the stream in the
+  fallback workspace.
+- **The delete's floor is "an account keeps one workspace"**, the mirror of `LAST_OWNER`: with no
+  membership at all, `resolveWorkspace` refuses every content route, so the last one is 409
+  `LAST_WORKSPACE`. Counted over memberships rather than owned workspaces, because a membership of
+  someone else's workspace is something the default can fall back to. Like the create's cap it is a
+  count read before the write rather than a reservation taken with it, so simultaneous deletes can
+  both pass it; that is not a lock-out, since `GET /workspaces` and `POST /workspaces` are mounted
+  without `resolveWorkspace` precisely so an account with none can list and create one.
 - **The create-and-seed pair lives once**, in `createWorkspace()`
   ([`lib/workspaceSeeder.js`](../server/src/lib/workspaceSeeder.js)), shared with
   `POST /auth/register`: the `owner` membership, the `template` key stored on the document and the

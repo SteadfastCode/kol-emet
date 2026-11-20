@@ -48,8 +48,9 @@
  * ended, not just that the count changed.
  *   off     — nothing (the refusal to broadcast unscoped still reports; see below)
  *   light   — every connection that ends and its reason (closed by the client,
- *             session gone, over the cap, socket refused a write), plus every
- *             refused connection and every failed session lookup
+ *             session gone, workspace deleted, over the cap, socket refused a
+ *             write), plus every refused connection and every failed session
+ *             lookup
  *   normal  — light, plus connections accepted, each broadcast's fan-out, and
  *             one line per keep-alive sweep
  *   verbose — normal, plus per-client detail inside a sweep
@@ -296,6 +297,54 @@ export function closeStreamsForUser(userId, reason = 'its account was deleted', 
     closed += endStream(clientId, reason, { error: 'session-ended' }) ? 1 : 0;
   }
   log('normal', `closed ${closed} stream(s) for user ${target}${spared === null ? '' : `, keeping ${kept} on session ${spared}`}${keptBearer === 0 ? '' : `, keeping ${keptBearer} bearer stream(s) (source: includeBearer was not set, and this call ends sessions)`} — ${reason}`);
+  return closed;
+}
+
+/**
+ * Closes every stream watching one workspace, in this process.
+ *
+ * `DELETE /workspaces/:id` uses this (KOL-133), and it is the third key this
+ * module closes by: every client row has carried a `workspaceId` since the
+ * broadcaster became tenant-scoped, and nothing had ever asked about it — the
+ * two closers above are about a *credential* ending, which is not what happens
+ * here. A workspace deletion ends neither the session nor the account: it ends
+ * the thing the stream was watching, for every member of it at once, including
+ * members whose own sessions are untouched and whose other workspaces are
+ * still there.
+ *
+ * So the frame is **`{ error: 'workspace-deleted' }`, not `session-ended`**,
+ * and that difference is the whole point. `session-ended` means "do not come
+ * back on this credential": a browser told that stops retrying for the rest of
+ * its life (`client/src/composables/useEvents.js`, and the KOL-112 mistake it
+ * records). Here the credential is fine and coming back is exactly right — the
+ * reconnect resolves the caller's fallback workspace, because
+ * `DELETE /workspaces/:id` leaves `session.workspaceId` alone and
+ * `resolveWorkspace` falls back rather than refusing (middleware/workspace.js).
+ * `useEvents` retries any code it does not know, so the stream reopens on the
+ * workspace the session now acts in, which is the honest end state: a client
+ * holding a screenful of a workspace that no longer exists, streaming the one
+ * it fell back to. Should that client ever want to say something about it, the
+ * code is already named rather than indistinguishable from a dropped socket.
+ *
+ * Bearer-authenticated streams are closed too, with no flag to opt out: a
+ * connector's stream is workspace-scoped like any other (routes/events.js), and
+ * the workspace it was reading is gone. There is no credential being revoked
+ * for it to misread, so the `includeBearer` caution `closeStreamsForUser`
+ * needs does not apply.
+ *
+ * @param {any} workspaceId
+ * @param {string} [reason] what the light tier reports per closed stream
+ * @returns {number} how many were closed
+ */
+export function closeStreamsForWorkspace(workspaceId, reason = 'its workspace was deleted') {
+  if (workspaceId == null) return 0;
+  const target = String(workspaceId);
+  let closed = 0;
+  for (const [clientId, client] of clients) {
+    if (client.workspaceId !== target) continue;
+    closed += endStream(clientId, reason, { error: 'workspace-deleted' }) ? 1 : 0;
+  }
+  log('normal', `closed ${closed} stream(s) watching workspace ${target} — ${reason}; each was sent workspace-deleted rather than session-ended, so the client reconnects and resolves its fallback workspace`);
   return closed;
 }
 

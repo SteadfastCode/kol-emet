@@ -210,6 +210,32 @@
               Nothing moves across — each workspace has its own entities, types and relationships.
             </p>
           </form>
+          <!-- Deleting this workspace (KOL-133): the counterpart to the form above, and the one
+               tenancy verb the product never had. Owner-only, because the server refuses anyone
+               else (403 NOT_WORKSPACE_OWNER), and two presses rather than one: the delete is hard
+               and there is no undo, so the first press is the only warning there is. -->
+          <div v-if="workspace?.role === 'owner'" class="workspace-delete">
+            <button
+              v-if="!workspaceDeleteArmed"
+              class="btn-sm danger"
+              :disabled="workspaceDeleting"
+              @click="armWorkspaceDelete"
+            >
+              Delete this workspace
+            </button>
+            <template v-else>
+              <p class="settings-note">
+                Deleting {{ workspace.name }} removes its entities, types, relationships, drafts,
+                chats and pending invites — for every member, not just you. There is no undo.
+              </p>
+              <button class="btn-sm danger" :disabled="workspaceDeleting" @click="confirmWorkspaceDelete">
+                {{ workspaceDeleting ? 'Deleting…' : 'Delete it permanently' }}
+              </button>
+              <button class="btn-sm" :disabled="workspaceDeleting" @click="workspaceDeleteArmed = false">
+                Keep it
+              </button>
+            </template>
+          </div>
           <p v-if="workspaceError" class="settings-error" role="alert">{{ workspaceError }}</p>
         </div>
         <!-- Invitations waiting for this account (KOL-124). Above the collaborator list because
@@ -546,7 +572,7 @@ import {
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport, importWorkspaceFile } from '../api/export.js';
 import {
-  acceptInvite, createWorkspace, declineInvite, getWorkspace, inviteCollaborator, listMembers,
+  acceptInvite, createWorkspace, declineInvite, deleteWorkspace, getWorkspace, inviteCollaborator, listMembers,
   listMyInvites, listWorkspaces, listWorkspaceInvites, removeMember, renameWorkspace,
   selectWorkspace, setMemberRole, withdrawInvite, WORKSPACE_NAME_MAX,
 } from '../api/workspace.js';
@@ -909,6 +935,61 @@ async function createNewWorkspace() {
     // its own refusal rather than throwing, so a select that failed would
     // otherwise leave this form disabled for good.
     workspaceCreating.value = false;
+  }
+}
+
+/**
+ * Deleting this workspace (KOL-133).
+ *
+ * The counterpart to the form above: until this existed, a workspace created
+ * from the wrong template or by a mis-click was permanent — it kept counting
+ * against the cap the create is refused on, and nothing could clear what was
+ * inside it short of deleting the whole account.
+ *
+ * It deletes the workspace this session is **acting in**, which is the one this
+ * group is about — its name is at the top of it and the switcher beside it is
+ * how you get to another. Two presses: arming says what goes, because the
+ * server's delete is hard (there is no soft-delete store to undo from) and it
+ * takes every member's content with it, not only this user's.
+ *
+ * Then the page reloads, for the reason a switch does: everything on screen —
+ * the entity list, the type registry, the filters and the `/events` stream —
+ * belongs to the workspace that no longer exists. The server leaves the
+ * session's selection alone and falls back to another membership on the next
+ * request, so the reload lands in a workspace that is really there, and the
+ * stream the server just closed reconnects into it.
+ */
+const workspaceDeleteArmed = ref(false);
+const workspaceDeleting = ref(false);
+
+function armWorkspaceDelete() {
+  workspaceDeleteArmed.value = true;
+  workspaceError.value = '';
+}
+
+async function confirmWorkspaceDelete() {
+  if (workspaceDeleting.value || !workspace.value) return;
+  const { _id: id, name } = workspace.value;
+  workspaceDeleting.value = true;
+  workspaceError.value = '';
+  try {
+    await deleteWorkspace(id, { name, source: 'Settings → Workspace → Delete this workspace' });
+    reloadAfterSwitch();
+    // Deliberately still deleting, as the switcher is: the page is on its way
+    // out, and a button re-enabled for the half-second before it goes is a
+    // second delete of a workspace that is already gone.
+  } catch (err) {
+    // 409 is the floor that keeps an account able to resolve a workspace at
+    // all; 404 means it went somewhere else first — another tab, or a co-owner.
+    workspaceError.value = err.status === 409
+      ? 'This is your only workspace, so it cannot be deleted. Create another one first.'
+      : err.status === 403
+      ? 'Only an owner can delete this workspace.'
+      : err.status === 404
+      ? 'That workspace is already gone.'
+      : 'Could not delete this workspace.';
+    workspaceDeleteArmed.value = false;
+    workspaceDeleting.value = false;
   }
 }
 
@@ -1880,6 +1961,20 @@ provide('openSnapshot', openSnapshot);
   margin-top: 6px;
   align-self: flex-start;
 }
+
+/* The delete, below the create and separated from it the same way: the two are
+   opposite verbs on the same thing, and this one is irreversible. */
+.workspace-delete {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.workspace-delete .settings-note { margin: 0; }
 
 .settings-error {
   margin: 8px 0 0;

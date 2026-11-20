@@ -6,6 +6,10 @@ import { objectIdParam } from '../middleware/objectId.js';
 import { hasTemplate } from '../config/templates.js';
 import { createWorkspace } from '../lib/workspaceSeeder.js';
 import { MOVE_OWNER_ID_TO_AN_OWNER, notTheLastOwner } from '../lib/ownerFloor.js';
+// The deletion machinery, shared with DELETE /auth/account rather than copied:
+// one list of the collections a tenant can own, swept the same way (KOL-133).
+import { deleteScopedContent } from '../lib/accountDeleter.js';
+import { closeStreamsForWorkspace } from '../lib/broadcaster.js';
 import {
   WORKSPACE_NAME_MAX,
   defaultWorkspace,
@@ -60,6 +64,10 @@ import {
  *     template or left empty. Until it existed, `POST /auth/register` was the
  *     only thing in the product that had ever created one, so the list and the
  *     choice above were a switcher with nothing to switch between.
+ *   - **`DELETE /workspaces/:id`** (KOL-133) — a hard delete of one workspace
+ *     and everything in it, owner-only. The counterpart to the create: without
+ *     it a workspace made by a mis-click was permanent, and counted against
+ *     the cap for the life of the account.
  *
  * It deliberately does *not* sit behind `resolveWorkspace`: a membership list is
  * not content inside one workspace, the choice must not be gated on the role the
@@ -729,6 +737,143 @@ workspacesRouter.post('/', async (req, res, next) => {
     res.status(201).json(workspaceBody(workspace, 'owner'));
   } catch (err) {
     log('light', `failed to create workspace "${name}" for user ${userId} (source: POST /workspaces): ${err.message}`);
+    next(err);
+  }
+});
+
+/**
+ * DELETE /workspaces/:id — the workspace, and everything inside it (KOL-133).
+ *
+ * The one tenancy verb the product had never had. A workspace made by a
+ * mis-click, from the wrong template, or for an import that was abandoned was
+ * permanent: it counted against `WORKSPACE_MAX_PER_OWNER` for the life of the
+ * account, and nothing could remove what was in it short of deleting the whole
+ * account. **Hard**, like account deletion and for the same reason — there is
+ * no soft-delete machinery to carry an undo (the `ChangeLog` TTL cannot, KOL-019)
+ * — so what goes, goes.
+ *
+ * What it removes is `WORKSPACE_SCOPED_MODELS` plus the `Workspace` row:
+ * entities, types, relationships, open questions, drafts, conversations,
+ * memories, changelog rows, pending invites. That list and the sweep over it
+ * are `lib/accountDeleter.js`'s, imported rather than copied, because a model
+ * added to the product has to reach both paths or one of them starts leaving
+ * rows behind — and that file's test is what asserts the list is every
+ * collection carrying a `workspaceId`. The members' *memberships* go with the
+ * row they live in, so a collaborator loses access on their next request and
+ * keeps their own workspaces; their `User` is untouched, and so is the
+ * account's AI allowance, which since KOL-132 is the owner's and not the
+ * workspace's.
+ *
+ * The two passes either side of the row delete are `deleteAccount`'s shape,
+ * for the guarantee described there: content, then the workspace, then a sweep.
+ * Every scoped model looks its workspace up after each insert
+ * (`lib/ownerGuard.js`), so a write that resolved this workspace before it was
+ * deleted is either caught by the sweep or deletes itself. Not transactional,
+ * for the reason in that file — the deployment is a single mongod — and ordered
+ * so that a failure part-way leaves a workspace a re-run can finish.
+ *
+ * **Three refusals, each with its own code, and each writing nothing:**
+ *
+ *   - **403 `NOT_WORKSPACE_OWNER`** for a member who is not an owner *of this
+ *     workspace*. The role is read from the named workspace's own `members`
+ *     array and **not** from `resolveWorkspace`: the id is a parameter here, so
+ *     the role that matters is the caller's role in *it*, not in whatever
+ *     workspace their session happens to be acting in. That is also why this
+ *     route cannot use `requireWorkspaceRole('owner')`, which judges the
+ *     resolved workspace — an owner of A could otherwise delete B.
+ *   - **404** for a well-formed id the caller is not a member of — never 403,
+ *     which would confirm it exists. The same rule `POST /:id/select` follows,
+ *     enforced the same way: the membership *is* the lookup, so there is no
+ *     code path on which another tenant's workspace is read at all.
+ *   - **409 `LAST_WORKSPACE`** for the caller's only membership.
+ *     `resolveWorkspace` answers `403 No workspace for this user` to an account
+ *     with none (middleware/workspace.js), so deleting the last one would lock
+ *     its owner out of the product's entire content surface. Counted over
+ *     memberships rather than owned workspaces, because a membership of
+ *     someone else's workspace is something `resolveWorkspace` can fall back
+ *     to. The owner check comes first: a non-owner's only workspace is refused
+ *     for the reason that is true whatever else is the case.
+ *
+ * Like the create's cap, the floor is a count read before the write rather than
+ * a reservation taken with it, so two deletions that arrive together can both
+ * pass it. The overshoot is bounded by the caller's own concurrency and is not
+ * a lock-out: `GET /workspaces` and `POST /workspaces` are mounted without
+ * `resolveWorkspace` precisely so an account with no workspace can list and
+ * create one, which is what the client tells them to do.
+ *
+ * **Session only**, like `POST /workspaces` and `POST /:id/select`: the bearer
+ * identity `requireAuth` also admits is one shared secret mapped to a single
+ * wiki user (lib/mcpUserStore.js), and an irreversible delete of a whole
+ * tenancy is not something a shared credential gets to do on a person's behalf.
+ *
+ * **`req.session.workspaceId` is left exactly as it was**, deliberately.
+ * `resolveWorkspace` documents the fallback for this case ("revoked, or the
+ * workspace deleted") and `POST /:id/select` is the only writer of that field,
+ * so a session whose selection was the deleted workspace resolves its default
+ * on the next request instead of being refused — including sessions of other
+ * members, which this request could not reach anyway.
+ *
+ * What it does reach is their **live `/events` streams**: every stream watching
+ * this workspace is closed, in this process, with `workspace-deleted` rather
+ * than `session-ended` — see `closeStreamsForWorkspace` for why the distinction
+ * is load-bearing. Nothing else would have closed them: a stream is tagged with
+ * its workspace when it connects, and the keep-alive sweep only asks after
+ * sessions, which are all still alive.
+ *
+ * **204**, with no body: there is nothing left to describe. The counts go to
+ * the log, under `ACCOUNT_DELETE_LOG_LEVEL` for the sweep and
+ * `WORKSPACE_LOG_LEVEL` for this route's own lines.
+ */
+workspacesRouter.delete('/:id', async (req, res, next) => {
+  const userId = req.session?.userId;
+  if (!userId) {
+    log('light', `refused DELETE /workspaces/${req.params.id} with 401 (source: a caller with no login session; deleting a tenancy is a person's decision, and the bearer identity is one shared secret mapped to a single user)`);
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    // One query that both finds the workspace and proves the caller is in it,
+    // as on `POST /:id/select`: an id belonging to someone else is never read.
+    const workspace = await Workspace.findOne({ _id: req.params.id, 'members.userId': userId })
+      .select('_id name ownerId members')
+      .lean();
+
+    if (!workspace) {
+      log('light', `refused DELETE /workspaces/${req.params.id} with 404 and deleted nothing (source: user ${userId}, which is not a membership of theirs; a 403 here would confirm another tenant's workspace exists)`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    // From *this* workspace's members, not from req.workspaceRole: the id is a
+    // parameter, and the role that authorizes is the caller's role in it.
+    const role = membershipOf(workspace, userId)?.role ?? null;
+    if (role !== 'owner') {
+      log('light', `refused DELETE /workspaces/${workspace._id} "${workspace.name}" with 403 NOT_WORKSPACE_OWNER and deleted nothing (source: user ${userId}, whose role in that workspace's own members array is ${role ?? 'none'})`);
+      return res.status(403).json({ error: 'NOT_WORKSPACE_OWNER' });
+    }
+
+    // Memberships, not owned workspaces: a membership of someone else's
+    // workspace is something resolveWorkspace can fall back to.
+    const memberships = await Workspace.countDocuments({ 'members.userId': userId });
+    if (memberships <= 1) {
+      log('light', `refused DELETE /workspaces/${workspace._id} "${workspace.name}" with 409 LAST_WORKSPACE and deleted nothing (source: user ${userId}, a member of ${memberships} workspace(s); resolveWorkspace answers 403 to an account with none, so this would lock its owner out)`);
+      return res.status(409).json({ error: 'LAST_WORKSPACE' });
+    }
+
+    const others = workspace.members.filter(m => String(m.userId) !== String(userId));
+    const deleted = {};
+    const content = await deleteScopedContent([workspace._id], deleted, 'content');
+    deleted.Workspace = (await Workspace.deleteOne({ _id: workspace._id })).deletedCount;
+    const swept = await deleteScopedContent([workspace._id], deleted, 'sweep');
+    if (swept) log('light', `DELETE /workspaces/${workspace._id}: the sweep removed ${swept} document(s) written while the deletion ran (source: lib/accountDeleter.js deleteScopedContent, second pass)`);
+
+    const closedStreams = closeStreamsForWorkspace(workspace._id, `DELETE /workspaces/${workspace._id}`);
+
+    log('light', `deleted workspace ${workspace._id} "${workspace.name}" and ${content + swept} document(s) in it, plus ${others.length} other membership(s)${closedStreams ? `, and closed ${closedStreams} live /events stream(s) watching it` : ''}; no session's selection was changed, so a session that was acting in it falls back on its next request (source: DELETE /workspaces/:id by user ${userId}, its owner)`);
+    log('normal', `  per model: ${JSON.stringify(deleted)}`);
+    log('verbose', `members whose membership went with it: ${others.map(m => `${m.userId} (${m.role})`).join(', ') || '(none)'}`);
+    res.status(204).end();
+  } catch (err) {
+    log('light', `failed to delete workspace ${req.params.id} (source: DELETE /workspaces/:id by user ${userId}): ${err.message}`);
     next(err);
   }
 });
