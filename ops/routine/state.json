@@ -47,10 +47,10 @@
     "KOL-147": {
       "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-147",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -58,8 +58,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-21T09:31:21.767Z",
+      "runId": "2026-11-21T09:30:34.608Z",
       "lastFail": null
     },
     "KOL-014": {
