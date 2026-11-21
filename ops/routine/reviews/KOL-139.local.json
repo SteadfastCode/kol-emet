@@ -1,0 +1,88 @@
+{
+  "item": "KOL-139",
+  "repo": "kol-emet",
+  "mergeSha": "2e6cca35538bee87a3149907377ce64c02090ddb",
+  "completedAtUtc": "2026-11-19T17:08:47.036Z",
+  "completeRunId": "2026-11-19T16:44:43.126Z",
+  "reviewRunId": "2026-11-21T08:01:15.507Z",
+  "reviewedAtUtc": "2026-11-21T08:38:25.663Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 16498,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md",
+        "server/src/lib/producers/packageManifest.js"
+      ],
+      "part": null,
+      "bytes": 9223,
+      "contextBytes": 4832,
+      "promptTokens": 4560,
+      "completionTokens": 79,
+      "latencyMs": 17407,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/packageManifest.test.js"
+      ],
+      "part": null,
+      "bytes": 7275,
+      "contextBytes": 0,
+      "promptTokens": 2595,
+      "completionTokens": 71,
+      "latencyMs": 10922,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional context or code is needed to fully understand and verify the implementation of `goModuleTitle`. · No real defects found. However, additional context is needed to fully understand the implementation of `goModuleTitle`.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 14048,
+    "completionTokens": 402
+  },
+  "latencyMs": 60328
+}

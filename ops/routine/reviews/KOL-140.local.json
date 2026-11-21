@@ -1,0 +1,131 @@
+{
+  "item": "KOL-140",
+  "repo": "kol-emet",
+  "mergeSha": "b1ab0c037a47d9ba6fba62b8bd7afe149921ed50",
+  "completedAtUtc": "2026-11-19T16:59:36.638Z",
+  "completeRunId": "2026-11-19T16:44:43.126Z",
+  "reviewRunId": "2026-11-21T08:01:15.507Z",
+  "reviewedAtUtc": "2026-11-21T08:37:25.230Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 46004,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/generator/SourceCoverage.test.js",
+        "client/src/components/generator/SourceCoverage.vue"
+      ],
+      "part": null,
+      "bytes": 8883,
+      "contextBytes": 0,
+      "promptTokens": 3081,
+      "completionTokens": 107,
+      "latencyMs": 13842,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/lib/sourceCoverage.js",
+        "docs/api.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 10322,
+      "contextBytes": 0,
+      "promptTokens": 3407,
+      "completionTokens": 110,
+      "latencyMs": 15005,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/scripts/try-generate.js",
+        "server/src/lib/draftTarget.js",
+        "server/src/lib/generator.js"
+      ],
+      "part": null,
+      "bytes": 12942,
+      "contextBytes": 0,
+      "promptTokens": 4124,
+      "completionTokens": 68,
+      "latencyMs": 15199,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/Draft.js",
+        "server/src/routes/drafts.js",
+        "server/tests/http/composeDraft.test.js",
+        "server/tests/unit/draftTarget.test.js"
+      ],
+      "part": null,
+      "bytes": 13857,
+      "contextBytes": 0,
+      "promptTokens": 4342,
+      "completionTokens": 96,
+      "latencyMs": 17546,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional context is needed to fully understand the behavior of `coverageOf` and `paneFor` functions. · The change introduces handling for `droppedSpans` in the source coverage calculation, but it is unclear how `pruneAgainstTargets` interacts with this logic. Further investigation into `pruneAgainstTargets` is needed to ensure that the dropped spans are correctly managed and do not lead to any unintended behavior. · No real defects found. However, additional context is needed to fully understand the implementation of `locatedSpan`. · The change introduces a new schema for `droppedSpans` and updates the code to handle these spans. However, without seeing the implementation of `pruneAgainstTargets`, it's unclear if the dropped spans are correctly calculated and stored.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 29384,
+    "completionTokens": 885
+  },
+  "latencyMs": 127786
+}

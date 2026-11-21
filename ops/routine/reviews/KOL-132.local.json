@@ -1,0 +1,230 @@
+{
+  "item": "KOL-132",
+  "repo": "kol-emet",
+  "mergeSha": "c3578006335576f1c8648b780fe5d16fb585bbd4",
+  "completedAtUtc": "2026-11-20T23:16:29.995Z",
+  "completeRunId": "2026-11-20T23:00:35.655Z",
+  "reviewRunId": "2026-11-21T08:01:15.507Z",
+  "reviewedAtUtc": "2026-11-21T08:43:50.038Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 92207,
+  "contextFiles": 17,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 11714,
+      "contextBytes": 0,
+      "promptTokens": 3843,
+      "completionTokens": 77,
+      "latencyMs": 14668,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/.env.example",
+        "server/package.json"
+      ],
+      "part": null,
+      "bytes": 13865,
+      "contextBytes": 0,
+      "promptTokens": 4247,
+      "completionTokens": 94,
+      "latencyMs": 17006,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/scripts/migrate-ai-budget.js",
+        "server/src/config/pricing.js",
+        "server/src/lib/graphExporter.js"
+      ],
+      "part": null,
+      "bytes": 9793,
+      "contextBytes": 4745,
+      "promptTokens": 4656,
+      "completionTokens": 101,
+      "latencyMs": 18917,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/lib/usageMeter.js",
+        "server/src/lib/workspaceSeeder.js"
+      ],
+      "part": null,
+      "bytes": 12355,
+      "contextBytes": 0,
+      "promptTokens": 3952,
+      "completionTokens": 96,
+      "latencyMs": 16228,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/models/User.js",
+        "server/src/models/Workspace.js",
+        "server/src/routes/drafts.js",
+        "server/src/routes/workspace.js"
+      ],
+      "part": null,
+      "bytes": 10346,
+      "contextBytes": 0,
+      "promptTokens": 3465,
+      "completionTokens": 64,
+      "latencyMs": 12952,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/workspaceCreate.test.js",
+        "server/tests/http/writeRole.test.js"
+      ],
+      "part": null,
+      "bytes": 10771,
+      "contextBytes": 0,
+      "promptTokens": 3552,
+      "completionTokens": 151,
+      "latencyMs": 17411,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/usageMeter.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 14596,
+      "contextBytes": 0,
+      "promptTokens": 4625,
+      "completionTokens": 78,
+      "latencyMs": 17487,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/lib/usageMeter.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4666,
+      "contextBytes": 7090,
+      "promptTokens": 3750,
+      "completionTokens": 393,
+      "latencyMs": 30213,
+      "findings": 0,
+      "needs": 13,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/models/entity.test.js"
+      ],
+      "part": null,
+      "bytes": 4307,
+      "contextBytes": 9567,
+      "promptTokens": 4009,
+      "completionTokens": 100,
+      "latencyMs": 16591,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": true,
+      "evidence": "docs/api.md:602"
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/scripts/migrate-ai-budget.js:124"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found, but additional information is needed to fully understand the implementation of `recordSpend` in `lib/usageMeter.js`. · The change introduces a new AI allowance per account instead of per workspace. The diff updates the documentation and configuration files accordingly, but it does not provide enough context to determine if the logic in `createWorkspace` has been updated to reflect this change. · No real defects found in the provided diff. However, additional context is needed to fully understand the impact of the changes. · No real defects found, but additional context is needed to fully understand the implications of the changes. · No real defects found. However, additional information is needed to fully understand the change. · No real defects found in the provided diff. The changes seem to be related to ensuring that workspaces do not mint AI allowances, and the tests cover this behavior. · No real defects found in the provided diff. However, additional information about `createWorkspace` is needed to fully understand the context and ensure there are no hidden issues. · The diff introduces a new test file `server/tests/lib/usageMeter.test.js` with various tests for the usage meter functionality. The context provided includes parts of the same test file, and the needs list contains symbols that are used in the tests but not defined within the diff. · No real defects found in the provided diff. However, additional context is needed to fully understand the behavior of `Workspace.create` and `User.create` methods.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 71019,
+    "completionTokens": 2395
+  },
+  "latencyMs": 324117
+}
