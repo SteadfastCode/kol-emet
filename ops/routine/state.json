@@ -44,28 +44,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-133": {
-      "order": 3,
-      "title": "Delete a workspace: the one tenancy verb the product has never had",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-133",
-      "dependsOn": [
-        "KOL-132"
-      ],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-11-20T23:26:06.607Z",
-      "runId": "2026-11-20T23:00:35.655Z",
-      "lastFail": null
-    },
     "KOL-147": {
-      "order": 4,
+      "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -77,13 +57,13 @@
       "priority": false,
       "distribute": null,
       "coldReview": false,
-      "notBefore": "2026-11-21",
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
     },
     "KOL-014": {
-      "order": 5,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -101,7 +81,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 6,
+      "order": 5,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -119,7 +99,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 7,
+      "order": 6,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -137,7 +117,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 8,
+      "order": 7,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -152,6 +132,26 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-133": {
+      "order": null,
+      "title": "Delete a workspace: the one tenancy verb the product has never had",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-133",
+      "dependsOn": [
+        "KOL-132"
+      ],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-20T23:26:06.607Z",
+      "runId": "2026-11-20T23:00:35.655Z",
       "lastFail": null
     },
     "KOL-132": {
