@@ -1,0 +1,72 @@
+{
+  "item": "KOL-132",
+  "repo": "kol-emet",
+  "mergeSha": "c3578006335576f1c8648b780fe5d16fb585bbd4",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-22T07:08:51.323Z",
+  "gradedAtUtc": "2026-11-22T07:25:13.394Z",
+  "independent": [
+    {
+      "file": "server/src/lib/usageMeter.js",
+      "line": 205,
+      "severity": "low",
+      "summary": "reserveGeneration claims the lock on the account it resolved at claim time, but releaseGeneration (and the end-of-run recordSpend) re-resolve the owner from the workspace instead of being handed the id that was claimed. If the workspace is deleted while the run is in flight — DELETE /workspaces/:id has no running-generation guard, and generation deliberately continues after disconnect — ownerOf returns null, the finally-block release is a no-op, and the owner's now account-wide lock stays held until the 10-minute staleness sweep, blocking generation in every other workspace they own (before KOL-132 the lock died with the deleted workspace document). If ownerId instead moves mid-run (PATCH /workspace/members/:userId demotes the owner and the update pipeline moves ownerId), the release clears the *new* owner's lock — potentially freeing a lock a different run of theirs is holding, allowing two concurrent runs against one pot, the exact overshoot the lock exists to prevent — while the original owner stays locked, and the final recordSpend charges the new owner for tokens the old one's run spent. Capturing the ownerId once per run and passing it to release/record would close all three."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No authentication or authorization logic changes — routes/auth.js and the role gates are untouched; only a budget field is added to the User model."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential, token, or secret handling changes; AI_TRIAL_GRANT_MICROS is an ordinary tunable, not a secret."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "The whole change relocates the paid-provider AI allowance from workspace to account — squarely money, and docs/api.md:602 is the quota endpoint it re-documents."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "server/scripts/migrate-ai-budget.js $incs account balances and $unsets aiBudget from workspace documents, an irreversible data migration."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No provider/API call sites change — pricing.js only gains a local config reader and the four metering call sites are unchanged."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, changelog, or release/deploy config changed; package.json gains only a migration script, and the migration itself is covered by the destructive category."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model reported nothing and so missed the one real defect, but its triage was fully accurate, correctly flagging money and the destructive migration.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.2773495,
+  "numTurns": 18,
+  "durationMs": 285890,
+  "sessionId": "6c3d24ed-bbb5-4bf5-b0d0-b45366bdb1cb"
+}

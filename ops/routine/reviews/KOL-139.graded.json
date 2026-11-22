@@ -1,0 +1,63 @@
+{
+  "item": "KOL-139",
+  "repo": "kol-emet",
+  "mergeSha": "2e6cca35538bee87a3149907377ce64c02090ddb",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-22T07:08:51.323Z",
+  "gradedAtUtc": "2026-11-22T07:27:09.430Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff touches only a Go module-path title helper, its call site, tests and docs — no session, passkey, OAuth or permission code."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env vars or key handling appear anywhere in the change."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No allowance, pricing or model-cost path is involved; this producer is deterministic and makes no model call."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change adds a pure string function and changes one title expression; it performs no delete or overwrite, and only affects how a draft item is proposed for review."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Nothing in the diff makes a network call or talks to an outside service; it parses text already in hand."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "`PRODUCER_VERSION` is deliberately left at `package-manifest@1` and no version, deploy or migration artifact is modified."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects, which matches my own cold read of this small, well-tested fix, and its six triage answers are all right — though correct-by-default on a change that plainly touches none of those categories, so it demonstrates little discrimination.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.0408635,
+  "numTurns": 12,
+  "durationMs": 115992,
+  "sessionId": "aab063f2-7d54-4a1b-a557-7412dbf69230"
+}

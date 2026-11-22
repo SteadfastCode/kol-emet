@@ -1,0 +1,63 @@
+{
+  "item": "KOL-140",
+  "repo": "kol-emet",
+  "mergeSha": "b1ab0c037a47d9ba6fba62b8bd7afe149921ed50",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-22T07:08:51.323Z",
+  "gradedAtUtc": "2026-11-22T07:30:22.754Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No session, passkey, OAuth, or permission code is touched; the diff only adds a span field through draft creation paths that already enforce workspace scope."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credential handling changes — redactSecrets is only read around, not modified, and droppedSpans stores offsets with no quote copy."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Budget/allowance and recordSpend logic in POST /drafts is untouched; only draft.source.droppedSpans is assigned."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The Draft schema addition is additive with a default [] and no migration, deletion, or overwrite of existing data."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Provider routing and model calls in generator.js are unchanged; only the returned droppedSpans field and a log line were added."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No build, deploy, version, or config/release files in the diff — only lib/route/model/test/doc changes."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported nothing, which matches my own cold read: the span-preservation change is behavior-preserving in mergeSpans, consistently wired through both draft-creating paths, and its triage answers are all correct — though with no evidence that the silence was earned rather than vacuous.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.8474864999999998,
+  "numTurns": 23,
+  "durationMs": 193271,
+  "sessionId": "86de60ed-3bf4-4a0e-bfbd-31daf609cb12"
+}
