@@ -758,3 +758,4 @@
 {"event":"local-review","item":"KOL-147","model":"qwen2.5-coder:14b","findings":0,"contextFiles":0,"promptVersion":"v6","mergeSha":"c662efcdde71561e5747d7de1b890591c2752429","runId":"2026-11-22T08:01:58.233Z","promptTokens":16975,"completionTokens":769,"latencyMs":81859,"chunkErrors":0,"triageTouched":[],"atUtc":"2026-11-22T08:41:05.724Z"}
 {"event":"ack","items":["KOL-140"],"by":"routine","source":"auto","atUtc":"2026-11-22T15:48:21.101Z"}
 {"event":"ack","items":["KOL-139"],"by":"routine","source":"auto","atUtc":"2026-11-22T16:16:08.760Z"}
+{"event":"review-grade","item":"KOL-147","grader":"claude-opus-5","grades":{"findings":0,"confirmed":0,"falsePositive":0,"duplicate":0,"unverifiable":0,"missed":0,"independent":0,"triageChecked":6,"triageCorrect":6},"localPromptVersion":"v6","localModel":"qwen2.5-coder:14b","mergeSha":"c662efcdde71561e5747d7de1b890591c2752429","runId":"2026-11-23T05:00:54.817Z","costUsd":0.948349,"atUtc":"2026-11-23T05:23:03.886Z"}

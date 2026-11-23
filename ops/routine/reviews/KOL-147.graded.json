@@ -1,0 +1,63 @@
+{
+  "item": "KOL-147",
+  "repo": "kol-emet",
+  "mergeSha": "c662efcdde71561e5747d7de1b890591c2752429",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-23T05:00:54.817Z",
+  "gradedAtUtc": "2026-11-23T05:23:03.679Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff only adds backlog prose to FEATURES.md; no auth middleware, session, or role code is modified (the items merely describe future auth work)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or env files are added or changed — only env var names mentioned inside item descriptions."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing, metering, or budget code is touched; the filed items explicitly exclude paid generator runs."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff is purely additive markdown — no deletions, migrations, or data-touching code."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No HTTP client, MCP transport, or third-party integration code is changed by this documentation-only diff."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No CI workflow, deploy config, or version/packaging file is touched; FEATURES.md is a backlog queue, not release machinery."
+    }
+  ],
+  "missed": [],
+  "summary": "Correct but uninformative: reporting zero findings was the right call for this documentation-only backlog diff (ids are fresh, the not-before date and renewal placement are right, and every code claim in the six filed items — relationshipGroups.js having nine unbroadcast writes, the unused canWrite prop and uncaught write handlers, entityTypes relabel's unbounded updateMany, the unused getOpenQuestionPage, the uncapped mcpFailure `source`, and the read-derived no-op role branch — checks out against the tree), and the triage categories were all judged correctly.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.948349,
+  "numTurns": 16,
+  "durationMs": 85689,
+  "sessionId": "a18ae6a0-4f65-4d99-a6be-562e8a4fc941"
+}
