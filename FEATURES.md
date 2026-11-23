@@ -61,10 +61,179 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing**
+  KOL-116 found this exact hole in `/open-questions` and closed it; the sibling collection still has it.
+  `server/src/routes/relationshipGroups.js` has nine write routes — create (`:204`), relabel (`:242`), add members
+  (`:260`), reorder (`:305`), relabel a member (`:336`), remove a member (`:359`), add and remove a subgroup
+  (`:393`, `:426`) and delete a group (`:469`) — and the file imports neither `broadcaster` nor `changeLogger`, so
+  nothing it writes reaches another client. The browser has sent `X-SSE-Client-Id` on every one of those requests
+  since KOL-104 (`client/src/api/relationshipGroups.js:8`), and the header is inert because no frame ever carries
+  an exclusion. What the other viewer sees: `RelationshipsSection.vue` refetches only the tab that wrote
+  (`emit('refresh')`, `:442`–`:707`) and `GraphView.vue` builds its nodes and edges once on mount (`:401-403`), so
+  a group created, relabelled, reordered or deleted elsewhere leaves every other tab drawing edges that no longer
+  exist — the one view whose entire content is relationships is the one view that never updates.
+  Build `server/src/lib/relationshipEvents.js` as the changeLogger's equivalent for groups, modelled on
+  `lib/questionEvents.js`, which is the same shape minus the audit row. Three frames mirroring the entity
+  vocabulary — `group:created`, `group:updated`, `group:deleted` — each carrying the group as a panel renders it
+  (`_id`, `label`, populated `members`) plus `entityIds`: **always plain string ids**, the flattened set of entity
+  members reachable through the group including nested subgroups, which is what lets a listening tab decide
+  whether the entity it is showing is affected without a refetch. One `group:updated` for every write that changes
+  a group's own row (membership, order, label, subgroups), so there is one vocabulary and not nine. Every emit is
+  workspace-scoped through `broadcast` (which delivers to nobody rather than everybody when a caller forgets) and
+  excludes the writing client. Tiered logging, `RELATIONSHIP_SSE_LOG_LEVEL` default light, saying for every frame
+  which write asked for it and which client was excluded — a frame that is never sent and a frame sent to nobody
+  are indistinguishable from the other tab, which just goes on showing a stale edge.
+  Client: the three `onFrame` handlers beside the `question:*` ones (`client/src/composables/useEvents.js:254-259`),
+  `WikiLayout` refetching the open entity when a frame names it, and `GraphView` reloading without remounting.
+  Files: new `server/src/lib/relationshipEvents.js`, `server/src/routes/relationshipGroups.js`,
+  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/GraphView.vue`, new `server/tests/http/relationshipEvents.test.js`,
+  `client/src/composables/useEvents.test.js`, `client/src/components/GraphView.test.js`, `docs/api.md` (the
+  `/events` frame list), `docs/architecture.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: each of the nine writes emitting exactly one frame of the right
+  name; `entityIds` flattening a subgroup's members and never carrying a populated document; a frame delivered to
+  a second client in the same workspace and to nobody in another one; the writer excluded by the
+  `X-SSE-Client-Id` it echoed; and a group delete still naming the entities it held, so a listener knows what to
+  refresh. `cd client && yarn test --run` with cases for the three handlers and for a graph reload on a frame.
+  `cd client && yarn build`.
+  Out of scope: a `ChangeLog` trail and rollback for relationship writes — that needs a `changeType` vocabulary
+  the model does not have and is its own item, exactly as `questionEvents.js` records for questions;
+  `Last-Event-ID` resumption; relationship-*type* writes; and any change to what `GET /relationship-groups`
+  returns.
 
+- [ ] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word**
+  Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
+  non-owner member possible.
+  First, nothing in the client reads the role it already holds. `requireWriteRole`
+  (`server/src/middleware/workspace.js:320`) refuses every unsafe method from a `viewer` with
+  `403 NOT_WORKSPACE_EDITOR`, and its own comment calls that "the same refusal the client already branches on" —
+  the client does not. `canWrite` is a prop defaulting to `true` (`client/src/components/EntityDetail.vue:153`,
+  `EntityHeader.vue:226`) and the only caller that ever passes it is the read-only snapshot panel
+  (`WikiLayout.vue:58`); `workspace.role` is read for exactly two owner-only controls (`:135`, `:217`). So a viewer
+  is shown Edit, Delete, `+ New` (`EntitySidebar.vue:8`), the block editor, the open-question form and every
+  relationship control, and discovers what they may do by clicking.
+  Second, when a write is refused the refusal is swallowed. `onEntitySaved`, `onEntityUpdated` and
+  `onEntityDeleted` (`WikiLayout.vue:1414`, `:1420`, `:1424`) `await` the API with no `catch`, while
+  `api/entities.js:15-27` deliberately throws an error carrying the status and the parsed body — so a 403, a 400
+  from `blockDataError` (a gallery row whose URL has no scheme is the reproducible one), a 409 or a 413 becomes an
+  unhandled promise rejection: `EntityEditor`'s `finally` clears `isSaving` (`:461`), the panel stays open, and
+  nothing on screen says the save did not happen. The surface for saying it already exists — `useToasts` is what
+  `composables/useFilters.js:214` uses to report a failed search while keeping the rows it has.
+  Build: derive `canWrite` once in `WikiLayout` from `workspace.role` (hierarchical, so an editor and an owner
+  pass; `viewer` false; unknown-while-loading stays permissive, because a blank panel on a slow `GET /workspace`
+  is a worse failure than a 403) and pass it to the components that already take the prop plus the sidebar's `+ New`
+  and `RelationshipsSection`; and give the three write handlers a `catch` that raises one toast naming what the
+  server said, leaves the editor open with the user's input intact, and logs at light tier with the status and
+  which write was refused.
+  Files: `client/src/components/WikiLayout.vue`, `client/src/components/EntitySidebar.vue`,
+  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.test.js`,
+  `client/src/components/EntityDetail.test.js`, `client/src/components/EntityHeader.test.js`,
+  `client/src/components/EntitySidebar.test.js`, `docs/api.md` (the client half of `NOT_WORKSPACE_EDITOR`), the
+  Decision Log.
+  Verify: `cd client && yarn test --run` with cases for: a `viewer` workspace rendering no Edit, Delete or `+ New`
+  control while an `editor` and an `owner` render all three; the controls present while the role is still unknown
+  rather than a dead panel; a 403 on save raising a toast that names the refusal and leaving the editor open with
+  its fields; a 400 whose body carries `error` showing that message rather than "400 Bad Request"; a failed delete
+  leaving the panel open instead of closing it; and a successful save still closing the panel and opening the new
+  entity. `cd client && yarn build`; `cd server && yarn test` unchanged — no server file is touched.
+  Out of scope: role-gating the settings panels (tags, entity types, import, export — each has its own role story
+  and its own refusals); the server's codes and copy; a retry affordance on the toast; and client-side URL
+  validation that would stop the gallery 400 before it is sent, which is a different item.
 
+- [ ] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame**
+  `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
+  `Entity.category`, then `RelationshipType.sourceCategory` and `targetCategory` — and writes nothing else. No
+  `ChangeLog` entry, so the largest single write the product can make to a workspace's entities leaves no trail
+  and nothing to roll back, and `GET /entities/:id/history` shows each rewritten entity as untouched. No broadcast
+  either, so the new name never reaches another client: `useEntityTypes` loads once ("WikiLayout loads it when it
+  mounts; nothing else fetches", `client/src/composables/useEntityTypes.js:9`), so the other tab goes on rendering
+  the old pill and filtering on a category name no entity has any more — the pill matches nothing and the sidebar
+  silently empties. The browser sends `X-SSE-Client-Id` on the write (`client/src/api/entityTypes.js:8`) and
+  nothing reads it. KOL-053 settled the shape for the same problem on the same documents: the tag
+  rename/merge/delete cascade writes one `ChangeLog` entry and one `entity:updated` per entity through `logEach`
+  (`server/src/routes/tags.js:97-116`), awaited so the response is sent only once the trail exists, and bounds the
+  batch at `MAX_AFFECTED = 200` with a 413 past it (`:53`, `:75-81`).
+  Build the same three parts for a type rename: a bounded cascade (413 naming the count and the limit, so an
+  unbounded `updateMany` can never be the answer), one `ChangeLog` row per moved entity through the existing
+  `logUpdate`, and the frames that follow from it — the per-entity `entity:updated` the logger already emits, plus
+  one `entity-type:updated` frame so a listening tab can refresh its pills, filters and pickers without refetching
+  the workspace. Relationship-type ends keep moving as they do today (they have no history of their own), and the
+  rename stays ordered rather than transactional, as the route's header already records.
+  Files: `server/src/routes/entityTypes.js`, `client/src/composables/useEntityTypes.js`,
+  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
+  `server/tests/http/entityTypes.test.js`, `client/src/composables/useEvents.test.js`, `docs/api.md` (the
+  `/entity-types` rename contract and the `/events` frame list), `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a rename writing one `ChangeLog` entry per moved entity, each
+  pairing the old category with the new; the entry readable through `GET /entities/:id/history` with a snapshot
+  that rolls the category back; a rename over the cap refused 413 with the type and every entity unchanged; one
+  `entity:updated` frame per entity plus one `entity-type:updated`, all workspace-scoped and excluding the writer;
+  a rename that moves no entity still renaming the type and emitting the type frame alone; and a case-only rename
+  (which the route already treats as a rename) cascading like any other. `cd client && yarn test --run` with a
+  case for a tab refreshing its types on the frame. `cd client && yarn build`.
+  Out of scope: a `changeType` of its own for the cascade (it is an `updated` per entity, which is what rollback
+  already understands); history for the `EntityType` and `RelationshipType` documents themselves; colour and icon
+  edits, which move no entity; deleting an in-use type, still refused 409; and the same stale-name failure when an
+  old draft item is applied, which the Decision Log deliberately leaves alone.
 
+- [ ] **(KOL-152) The workspace's open questions have a paged API and no screen**
+  `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
+  bare-id cursor (`server/src/routes/openQuestions.js:85`, KOL-092), and `client/src/api/openQuestions.js` wraps it
+  as `getOpenQuestionPage` (`:64`) with `QUESTION_PAGE_SIZE` — and **nothing in the client calls it**: grep
+  `getOpenQuestionPage` across `client/src` and the only hit is its own definition. Questions are reachable one
+  entity at a time, through the list inside `EntityHeader.vue`, which renders the `open_questions` that arrive
+  populated on `GET /entities/:id`. So the product's answer to "what is still unanswered in here" is to open every
+  entity in turn, and the Decision Log's note from KOL-104 — "the workspace-wide view and its paging stay
+  unclaimed" (`kol_emet_spec.md`) — has been true since the route was paged. On a graph an agent maintains, the
+  list of what the graph does not know yet is a first-class view, not a per-entity footnote.
+  Build a workspace-wide question panel, opened from the sidebar and from a binding registered in the existing
+  `useKeyboardShortcuts` map so the `?` cheatsheet picks it up for free: rows of question text, status and the
+  entities each is attached to, paged with `getOpenQuestionPage` exactly as the sidebar pages entities, filtered by
+  status on the server rather than in the browser, each row opening its entity through the existing `openEntry`.
+  Resolve and reopen in place with `setOpenQuestionStatus`, which already exists, gated by the write role, and live
+  through the `question:*` frames KOL-116 already broadcasts, so a question answered in another tab moves here
+  without a refetch. A workspace with no questions reads as an empty state, not an empty list.
+  Files: new `client/src/components/OpenQuestionPanel.vue`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/EntitySidebar.vue`, new `client/src/components/OpenQuestionPanel.test.js`,
+  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/wishlist.md`, the Decision Log (the KOL-104
+  entry's unclaimed half).
+  Verify: `cd client && yarn test --run` with cases for: a first page rendered from `getOpenQuestionPage` and a
+  second appended at the end of the list with no row repeated or dropped across the boundary; the status filter
+  re-querying the server rather than filtering the page already in the browser; a `question:updated` frame moving a
+  row with no refetch and a `question:deleted` removing it; a row click opening that entity's panel; the empty
+  state; and no resolve control for a viewer. `cd client && yarn build`; `cd server && yarn test` unchanged — the
+  route is already covered by `tests/http/openQuestionList.test.js`.
+  Out of scope: the `Open Questions` *entity category* and any reconciliation between the two; creating a question
+  from this panel (every question is attached to at least one entity, so it needs an entity picker); editing
+  question text here; a question's own history; and any sort other than the newest-first the route answers.
 
+- [ ] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes**
+  KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
+  "these plus a few hundred characters of this module's own, however large the request was"
+  (`server/src/lib/mcpFailure.js:54-61`). It is not: `source` is passed through verbatim (`:239`) while `rpc`,
+  `tool` and `requestId` are clipped against `MCP_RECORD_LIMITS` (`:143-150`), and `source` is built from caller
+  text at two call sites. `routes/mcp.js:760` interpolates `req.body.method` into it — the same value `rpc` clips
+  to 64 — on the `session_missing` path, so a ~100 kB `method` writes a ~100 kB log line; and the bridge's
+  `toolFailure` (`routes/bridge.js:228-234`) puts free-string tool arguments in it (`:271`, `:274`, `:443`, `:526`,
+  all `z.string()` with no `max`). On a deployed box both paths sit behind a bearer, so the unauthenticated hole
+  KOL-146 targeted is genuinely closed; in the dev/open gate configuration (`MCP_TOKEN` unset, non-production,
+  which is the configuration the gate's own Decision Log entry blesses) `session_missing` is reachable with no
+  credential and the record is unbounded again. Latent beside it: `...extra` spreads *after* `rpc`, `tool` and
+  `requestId` (`:240`), so a future call site that passes one of those keys in `extra` silently replaces the capped
+  value with an uncapped one — no live bug today, since every caller passes literals and counts.
+  Build: a `source` limit in `MCP_RECORD_LIMITS` (generous — `source` is a sentence, not an identifier — and clipped
+  with the same `…(+N)` marker, so an operator can tell a value this module shortened from one that arrived short),
+  and `...extra` spread *before* the capped fields so a key collision cannot uncap one. The cap belongs in
+  `mcpLogRecord` where the record is built, not at the call sites, which is the rule the module header already
+  states.
+  Files: `server/src/lib/mcpFailure.js`, `server/tests/unit/mcpFailure.test.js`.
+  Verify: `cd server && yarn test` with cases for: a 100 kB `source` producing a record bounded by the limit and
+  carrying the `…(+N)` marker with the right count; a short `source` passing through byte-identical; `extra`
+  carrying `rpc`/`tool`/`requestId` no longer overriding the capped field; and the existing caps unchanged.
+  Then `node --check src/index.js`. `cd client && yarn build` and `cd client && yarn test --run` unchanged — no
+  client file is touched.
+  Out of scope: `z.string().max()` on the bridge's tool arguments (the arguments are the bridge's contract, and
+  capping the record is what bounds the log); the JSON-RPC error body, which still echoes the caller's `id`
+  verbatim on purpose; and any change to which requests are refused.
 
 ## Proposed
 
@@ -112,180 +281,6 @@ registration, or removes a feature.
   `cd client && yarn build`.
   Out of scope: shipping, packaging or pulling models for Ollama; a per-workspace default provider (it is per request
   today); the Responses-API/MCP relay path (Ollama advertises no `responsesApi`); and any change to what `steadfast` is.
-
-- [ ] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing** [proposed]
-  KOL-116 found this exact hole in `/open-questions` and closed it; the sibling collection still has it.
-  `server/src/routes/relationshipGroups.js` has nine write routes — create (`:204`), relabel (`:242`), add members
-  (`:260`), reorder (`:305`), relabel a member (`:336`), remove a member (`:359`), add and remove a subgroup
-  (`:393`, `:426`) and delete a group (`:469`) — and the file imports neither `broadcaster` nor `changeLogger`, so
-  nothing it writes reaches another client. The browser has sent `X-SSE-Client-Id` on every one of those requests
-  since KOL-104 (`client/src/api/relationshipGroups.js:8`), and the header is inert because no frame ever carries
-  an exclusion. What the other viewer sees: `RelationshipsSection.vue` refetches only the tab that wrote
-  (`emit('refresh')`, `:442`–`:707`) and `GraphView.vue` builds its nodes and edges once on mount (`:401-403`), so
-  a group created, relabelled, reordered or deleted elsewhere leaves every other tab drawing edges that no longer
-  exist — the one view whose entire content is relationships is the one view that never updates.
-  Build `server/src/lib/relationshipEvents.js` as the changeLogger's equivalent for groups, modelled on
-  `lib/questionEvents.js`, which is the same shape minus the audit row. Three frames mirroring the entity
-  vocabulary — `group:created`, `group:updated`, `group:deleted` — each carrying the group as a panel renders it
-  (`_id`, `label`, populated `members`) plus `entityIds`: **always plain string ids**, the flattened set of entity
-  members reachable through the group including nested subgroups, which is what lets a listening tab decide
-  whether the entity it is showing is affected without a refetch. One `group:updated` for every write that changes
-  a group's own row (membership, order, label, subgroups), so there is one vocabulary and not nine. Every emit is
-  workspace-scoped through `broadcast` (which delivers to nobody rather than everybody when a caller forgets) and
-  excludes the writing client. Tiered logging, `RELATIONSHIP_SSE_LOG_LEVEL` default light, saying for every frame
-  which write asked for it and which client was excluded — a frame that is never sent and a frame sent to nobody
-  are indistinguishable from the other tab, which just goes on showing a stale edge.
-  Client: the three `onFrame` handlers beside the `question:*` ones (`client/src/composables/useEvents.js:254-259`),
-  `WikiLayout` refetching the open entity when a frame names it, and `GraphView` reloading without remounting.
-  Files: new `server/src/lib/relationshipEvents.js`, `server/src/routes/relationshipGroups.js`,
-  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
-  `client/src/components/GraphView.vue`, new `server/tests/http/relationshipEvents.test.js`,
-  `client/src/composables/useEvents.test.js`, `client/src/components/GraphView.test.js`, `docs/api.md` (the
-  `/events` frame list), `docs/architecture.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: each of the nine writes emitting exactly one frame of the right
-  name; `entityIds` flattening a subgroup's members and never carrying a populated document; a frame delivered to
-  a second client in the same workspace and to nobody in another one; the writer excluded by the
-  `X-SSE-Client-Id` it echoed; and a group delete still naming the entities it held, so a listener knows what to
-  refresh. `cd client && yarn test --run` with cases for the three handlers and for a graph reload on a frame.
-  `cd client && yarn build`.
-  Out of scope: a `ChangeLog` trail and rollback for relationship writes — that needs a `changeType` vocabulary
-  the model does not have and is its own item, exactly as `questionEvents.js` records for questions;
-  `Last-Event-ID` resumption; relationship-*type* writes; and any change to what `GET /relationship-groups`
-  returns.
-
-- [ ] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word** [proposed]
-  Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
-  non-owner member possible.
-  First, nothing in the client reads the role it already holds. `requireWriteRole`
-  (`server/src/middleware/workspace.js:320`) refuses every unsafe method from a `viewer` with
-  `403 NOT_WORKSPACE_EDITOR`, and its own comment calls that "the same refusal the client already branches on" —
-  the client does not. `canWrite` is a prop defaulting to `true` (`client/src/components/EntityDetail.vue:153`,
-  `EntityHeader.vue:226`) and the only caller that ever passes it is the read-only snapshot panel
-  (`WikiLayout.vue:58`); `workspace.role` is read for exactly two owner-only controls (`:135`, `:217`). So a viewer
-  is shown Edit, Delete, `+ New` (`EntitySidebar.vue:8`), the block editor, the open-question form and every
-  relationship control, and discovers what they may do by clicking.
-  Second, when a write is refused the refusal is swallowed. `onEntitySaved`, `onEntityUpdated` and
-  `onEntityDeleted` (`WikiLayout.vue:1414`, `:1420`, `:1424`) `await` the API with no `catch`, while
-  `api/entities.js:15-27` deliberately throws an error carrying the status and the parsed body — so a 403, a 400
-  from `blockDataError` (a gallery row whose URL has no scheme is the reproducible one), a 409 or a 413 becomes an
-  unhandled promise rejection: `EntityEditor`'s `finally` clears `isSaving` (`:461`), the panel stays open, and
-  nothing on screen says the save did not happen. The surface for saying it already exists — `useToasts` is what
-  `composables/useFilters.js:214` uses to report a failed search while keeping the rows it has.
-  Build: derive `canWrite` once in `WikiLayout` from `workspace.role` (hierarchical, so an editor and an owner
-  pass; `viewer` false; unknown-while-loading stays permissive, because a blank panel on a slow `GET /workspace`
-  is a worse failure than a 403) and pass it to the components that already take the prop plus the sidebar's `+ New`
-  and `RelationshipsSection`; and give the three write handlers a `catch` that raises one toast naming what the
-  server said, leaves the editor open with the user's input intact, and logs at light tier with the status and
-  which write was refused.
-  Files: `client/src/components/WikiLayout.vue`, `client/src/components/EntitySidebar.vue`,
-  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.test.js`,
-  `client/src/components/EntityDetail.test.js`, `client/src/components/EntityHeader.test.js`,
-  `client/src/components/EntitySidebar.test.js`, `docs/api.md` (the client half of `NOT_WORKSPACE_EDITOR`), the
-  Decision Log.
-  Verify: `cd client && yarn test --run` with cases for: a `viewer` workspace rendering no Edit, Delete or `+ New`
-  control while an `editor` and an `owner` render all three; the controls present while the role is still unknown
-  rather than a dead panel; a 403 on save raising a toast that names the refusal and leaving the editor open with
-  its fields; a 400 whose body carries `error` showing that message rather than "400 Bad Request"; a failed delete
-  leaving the panel open instead of closing it; and a successful save still closing the panel and opening the new
-  entity. `cd client && yarn build`; `cd server && yarn test` unchanged — no server file is touched.
-  Out of scope: role-gating the settings panels (tags, entity types, import, export — each has its own role story
-  and its own refusals); the server's codes and copy; a retry affordance on the toast; and client-side URL
-  validation that would stop the gallery 400 before it is sent, which is a different item.
-
-- [ ] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame** [proposed]
-  `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
-  `Entity.category`, then `RelationshipType.sourceCategory` and `targetCategory` — and writes nothing else. No
-  `ChangeLog` entry, so the largest single write the product can make to a workspace's entities leaves no trail
-  and nothing to roll back, and `GET /entities/:id/history` shows each rewritten entity as untouched. No broadcast
-  either, so the new name never reaches another client: `useEntityTypes` loads once ("WikiLayout loads it when it
-  mounts; nothing else fetches", `client/src/composables/useEntityTypes.js:9`), so the other tab goes on rendering
-  the old pill and filtering on a category name no entity has any more — the pill matches nothing and the sidebar
-  silently empties. The browser sends `X-SSE-Client-Id` on the write (`client/src/api/entityTypes.js:8`) and
-  nothing reads it. KOL-053 settled the shape for the same problem on the same documents: the tag
-  rename/merge/delete cascade writes one `ChangeLog` entry and one `entity:updated` per entity through `logEach`
-  (`server/src/routes/tags.js:97-116`), awaited so the response is sent only once the trail exists, and bounds the
-  batch at `MAX_AFFECTED = 200` with a 413 past it (`:53`, `:75-81`).
-  Build the same three parts for a type rename: a bounded cascade (413 naming the count and the limit, so an
-  unbounded `updateMany` can never be the answer), one `ChangeLog` row per moved entity through the existing
-  `logUpdate`, and the frames that follow from it — the per-entity `entity:updated` the logger already emits, plus
-  one `entity-type:updated` frame so a listening tab can refresh its pills, filters and pickers without refetching
-  the workspace. Relationship-type ends keep moving as they do today (they have no history of their own), and the
-  rename stays ordered rather than transactional, as the route's header already records.
-  Files: `server/src/routes/entityTypes.js`, `client/src/composables/useEntityTypes.js`,
-  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
-  `server/tests/http/entityTypes.test.js`, `client/src/composables/useEvents.test.js`, `docs/api.md` (the
-  `/entity-types` rename contract and the `/events` frame list), `docs/data-model.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a rename writing one `ChangeLog` entry per moved entity, each
-  pairing the old category with the new; the entry readable through `GET /entities/:id/history` with a snapshot
-  that rolls the category back; a rename over the cap refused 413 with the type and every entity unchanged; one
-  `entity:updated` frame per entity plus one `entity-type:updated`, all workspace-scoped and excluding the writer;
-  a rename that moves no entity still renaming the type and emitting the type frame alone; and a case-only rename
-  (which the route already treats as a rename) cascading like any other. `cd client && yarn test --run` with a
-  case for a tab refreshing its types on the frame. `cd client && yarn build`.
-  Out of scope: a `changeType` of its own for the cascade (it is an `updated` per entity, which is what rollback
-  already understands); history for the `EntityType` and `RelationshipType` documents themselves; colour and icon
-  edits, which move no entity; deleting an in-use type, still refused 409; and the same stale-name failure when an
-  old draft item is applied, which the Decision Log deliberately leaves alone.
-
-- [ ] **(KOL-152) The workspace's open questions have a paged API and no screen** [proposed]
-  `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
-  bare-id cursor (`server/src/routes/openQuestions.js:85`, KOL-092), and `client/src/api/openQuestions.js` wraps it
-  as `getOpenQuestionPage` (`:64`) with `QUESTION_PAGE_SIZE` — and **nothing in the client calls it**: grep
-  `getOpenQuestionPage` across `client/src` and the only hit is its own definition. Questions are reachable one
-  entity at a time, through the list inside `EntityHeader.vue`, which renders the `open_questions` that arrive
-  populated on `GET /entities/:id`. So the product's answer to "what is still unanswered in here" is to open every
-  entity in turn, and the Decision Log's note from KOL-104 — "the workspace-wide view and its paging stay
-  unclaimed" (`kol_emet_spec.md`) — has been true since the route was paged. On a graph an agent maintains, the
-  list of what the graph does not know yet is a first-class view, not a per-entity footnote.
-  Build a workspace-wide question panel, opened from the sidebar and from a binding registered in the existing
-  `useKeyboardShortcuts` map so the `?` cheatsheet picks it up for free: rows of question text, status and the
-  entities each is attached to, paged with `getOpenQuestionPage` exactly as the sidebar pages entities, filtered by
-  status on the server rather than in the browser, each row opening its entity through the existing `openEntry`.
-  Resolve and reopen in place with `setOpenQuestionStatus`, which already exists, gated by the write role, and live
-  through the `question:*` frames KOL-116 already broadcasts, so a question answered in another tab moves here
-  without a refetch. A workspace with no questions reads as an empty state, not an empty list.
-  Files: new `client/src/components/OpenQuestionPanel.vue`, `client/src/components/WikiLayout.vue`,
-  `client/src/components/EntitySidebar.vue`, new `client/src/components/OpenQuestionPanel.test.js`,
-  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/wishlist.md`, the Decision Log (the KOL-104
-  entry's unclaimed half).
-  Verify: `cd client && yarn test --run` with cases for: a first page rendered from `getOpenQuestionPage` and a
-  second appended at the end of the list with no row repeated or dropped across the boundary; the status filter
-  re-querying the server rather than filtering the page already in the browser; a `question:updated` frame moving a
-  row with no refetch and a `question:deleted` removing it; a row click opening that entity's panel; the empty
-  state; and no resolve control for a viewer. `cd client && yarn build`; `cd server && yarn test` unchanged — the
-  route is already covered by `tests/http/openQuestionList.test.js`.
-  Out of scope: the `Open Questions` *entity category* and any reconciliation between the two; creating a question
-  from this panel (every question is attached to at least one entity, so it needs an entity picker); editing
-  question text here; a question's own history; and any sort other than the newest-first the route answers.
-
-- [ ] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes** [proposed]
-  KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
-  "these plus a few hundred characters of this module's own, however large the request was"
-  (`server/src/lib/mcpFailure.js:54-61`). It is not: `source` is passed through verbatim (`:239`) while `rpc`,
-  `tool` and `requestId` are clipped against `MCP_RECORD_LIMITS` (`:143-150`), and `source` is built from caller
-  text at two call sites. `routes/mcp.js:760` interpolates `req.body.method` into it — the same value `rpc` clips
-  to 64 — on the `session_missing` path, so a ~100 kB `method` writes a ~100 kB log line; and the bridge's
-  `toolFailure` (`routes/bridge.js:228-234`) puts free-string tool arguments in it (`:271`, `:274`, `:443`, `:526`,
-  all `z.string()` with no `max`). On a deployed box both paths sit behind a bearer, so the unauthenticated hole
-  KOL-146 targeted is genuinely closed; in the dev/open gate configuration (`MCP_TOKEN` unset, non-production,
-  which is the configuration the gate's own Decision Log entry blesses) `session_missing` is reachable with no
-  credential and the record is unbounded again. Latent beside it: `...extra` spreads *after* `rpc`, `tool` and
-  `requestId` (`:240`), so a future call site that passes one of those keys in `extra` silently replaces the capped
-  value with an uncapped one — no live bug today, since every caller passes literals and counts.
-  Build: a `source` limit in `MCP_RECORD_LIMITS` (generous — `source` is a sentence, not an identifier — and clipped
-  with the same `…(+N)` marker, so an operator can tell a value this module shortened from one that arrived short),
-  and `...extra` spread *before* the capped fields so a key collision cannot uncap one. The cap belongs in
-  `mcpLogRecord` where the record is built, not at the call sites, which is the rule the module header already
-  states.
-  Files: `server/src/lib/mcpFailure.js`, `server/tests/unit/mcpFailure.test.js`.
-  Verify: `cd server && yarn test` with cases for: a 100 kB `source` producing a record bounded by the limit and
-  carrying the `…(+N)` marker with the right count; a short `source` passing through byte-identical; `extra`
-  carrying `rpc`/`tool`/`requestId` no longer overriding the capped field; and the existing caps unchanged.
-  Then `node --check src/index.js`. `cd client && yarn build` and `cd client && yarn test --run` unchanged — no
-  client file is touched.
-  Out of scope: `z.string().max()` on the bridge's tool arguments (the arguments are the bridge's contract, and
-  capping the record is what bounds the log); the JSON-RPC error body, which still echoes the caller's `id`
-  verbatim on purpose; and any change to which requests are refused.
 
 - [ ] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write** [proposed]
   KOL-134 and KOL-141 moved the last-owner floor into the write filter precisely so no membership answer comes
