@@ -61,45 +61,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing**
-  KOL-116 found this exact hole in `/open-questions` and closed it; the sibling collection still has it.
-  `server/src/routes/relationshipGroups.js` has nine write routes — create (`:204`), relabel (`:242`), add members
-  (`:260`), reorder (`:305`), relabel a member (`:336`), remove a member (`:359`), add and remove a subgroup
-  (`:393`, `:426`) and delete a group (`:469`) — and the file imports neither `broadcaster` nor `changeLogger`, so
-  nothing it writes reaches another client. The browser has sent `X-SSE-Client-Id` on every one of those requests
-  since KOL-104 (`client/src/api/relationshipGroups.js:8`), and the header is inert because no frame ever carries
-  an exclusion. What the other viewer sees: `RelationshipsSection.vue` refetches only the tab that wrote
-  (`emit('refresh')`, `:442`–`:707`) and `GraphView.vue` builds its nodes and edges once on mount (`:401-403`), so
-  a group created, relabelled, reordered or deleted elsewhere leaves every other tab drawing edges that no longer
-  exist — the one view whose entire content is relationships is the one view that never updates.
-  Build `server/src/lib/relationshipEvents.js` as the changeLogger's equivalent for groups, modelled on
-  `lib/questionEvents.js`, which is the same shape minus the audit row. Three frames mirroring the entity
-  vocabulary — `group:created`, `group:updated`, `group:deleted` — each carrying the group as a panel renders it
-  (`_id`, `label`, populated `members`) plus `entityIds`: **always plain string ids**, the flattened set of entity
-  members reachable through the group including nested subgroups, which is what lets a listening tab decide
-  whether the entity it is showing is affected without a refetch. One `group:updated` for every write that changes
-  a group's own row (membership, order, label, subgroups), so there is one vocabulary and not nine. Every emit is
-  workspace-scoped through `broadcast` (which delivers to nobody rather than everybody when a caller forgets) and
-  excludes the writing client. Tiered logging, `RELATIONSHIP_SSE_LOG_LEVEL` default light, saying for every frame
-  which write asked for it and which client was excluded — a frame that is never sent and a frame sent to nobody
-  are indistinguishable from the other tab, which just goes on showing a stale edge.
-  Client: the three `onFrame` handlers beside the `question:*` ones (`client/src/composables/useEvents.js:254-259`),
-  `WikiLayout` refetching the open entity when a frame names it, and `GraphView` reloading without remounting.
-  Files: new `server/src/lib/relationshipEvents.js`, `server/src/routes/relationshipGroups.js`,
-  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
-  `client/src/components/GraphView.vue`, new `server/tests/http/relationshipEvents.test.js`,
-  `client/src/composables/useEvents.test.js`, `client/src/components/GraphView.test.js`, `docs/api.md` (the
-  `/events` frame list), `docs/architecture.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: each of the nine writes emitting exactly one frame of the right
-  name; `entityIds` flattening a subgroup's members and never carrying a populated document; a frame delivered to
-  a second client in the same workspace and to nobody in another one; the writer excluded by the
-  `X-SSE-Client-Id` it echoed; and a group delete still naming the entities it held, so a listener knows what to
-  refresh. `cd client && yarn test --run` with cases for the three handlers and for a graph reload on a frame.
-  `cd client && yarn build`.
-  Out of scope: a `ChangeLog` trail and rollback for relationship writes — that needs a `changeType` vocabulary
-  the model does not have and is its own item, exactly as `questionEvents.js` records for questions;
-  `Last-Event-ID` resumption; relationship-*type* writes; and any change to what `GET /relationship-groups`
-  returns.
 
 - [ ] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word**
   Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
@@ -316,6 +277,45 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing** (routine 2026-11-23, c58a8a1)
+  KOL-116 found this exact hole in `/open-questions` and closed it; the sibling collection still has it.
+  `server/src/routes/relationshipGroups.js` has nine write routes — create (`:204`), relabel (`:242`), add members
+  (`:260`), reorder (`:305`), relabel a member (`:336`), remove a member (`:359`), add and remove a subgroup
+  (`:393`, `:426`) and delete a group (`:469`) — and the file imports neither `broadcaster` nor `changeLogger`, so
+  nothing it writes reaches another client. The browser has sent `X-SSE-Client-Id` on every one of those requests
+  since KOL-104 (`client/src/api/relationshipGroups.js:8`), and the header is inert because no frame ever carries
+  an exclusion. What the other viewer sees: `RelationshipsSection.vue` refetches only the tab that wrote
+  (`emit('refresh')`, `:442`–`:707`) and `GraphView.vue` builds its nodes and edges once on mount (`:401-403`), so
+  a group created, relabelled, reordered or deleted elsewhere leaves every other tab drawing edges that no longer
+  exist — the one view whose entire content is relationships is the one view that never updates.
+  Build `server/src/lib/relationshipEvents.js` as the changeLogger's equivalent for groups, modelled on
+  `lib/questionEvents.js`, which is the same shape minus the audit row. Three frames mirroring the entity
+  vocabulary — `group:created`, `group:updated`, `group:deleted` — each carrying the group as a panel renders it
+  (`_id`, `label`, populated `members`) plus `entityIds`: **always plain string ids**, the flattened set of entity
+  members reachable through the group including nested subgroups, which is what lets a listening tab decide
+  whether the entity it is showing is affected without a refetch. One `group:updated` for every write that changes
+  a group's own row (membership, order, label, subgroups), so there is one vocabulary and not nine. Every emit is
+  workspace-scoped through `broadcast` (which delivers to nobody rather than everybody when a caller forgets) and
+  excludes the writing client. Tiered logging, `RELATIONSHIP_SSE_LOG_LEVEL` default light, saying for every frame
+  which write asked for it and which client was excluded — a frame that is never sent and a frame sent to nobody
+  are indistinguishable from the other tab, which just goes on showing a stale edge.
+  Client: the three `onFrame` handlers beside the `question:*` ones (`client/src/composables/useEvents.js:254-259`),
+  `WikiLayout` refetching the open entity when a frame names it, and `GraphView` reloading without remounting.
+  Files: new `server/src/lib/relationshipEvents.js`, `server/src/routes/relationshipGroups.js`,
+  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/GraphView.vue`, new `server/tests/http/relationshipEvents.test.js`,
+  `client/src/composables/useEvents.test.js`, `client/src/components/GraphView.test.js`, `docs/api.md` (the
+  `/events` frame list), `docs/architecture.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: each of the nine writes emitting exactly one frame of the right
+  name; `entityIds` flattening a subgroup's members and never carrying a populated document; a frame delivered to
+  a second client in the same workspace and to nobody in another one; the writer excluded by the
+  `X-SSE-Client-Id` it echoed; and a group delete still naming the entities it held, so a listener knows what to
+  refresh. `cd client && yarn test --run` with cases for the three handlers and for a graph reload on a frame.
+  `cd client && yarn build`.
+  Out of scope: a `ChangeLog` trail and rollback for relationship writes — that needs a `changeType` vocabulary
+  the model does not have and is its own item, exactly as `questionEvents.js` records for questions;
+  `Last-Event-ID` resumption; relationship-*type* writes; and any change to what `GET /relationship-groups`
+  returns.
 - [x] **(KOL-147) Backlog audit: file new candidates under Proposed** (routine 2026-11-21, c662efc)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
