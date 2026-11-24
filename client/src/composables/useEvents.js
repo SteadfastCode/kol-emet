@@ -20,8 +20,9 @@ export let sseClientId = null;
  *   if nothing listens: `draft:applied` and `workspace:imported` are therefore
  *   first-class here, each reloading the list rather than patching it, because
  *   one frame cannot say which rows moved. The same rule brought the three
- *   `question:*` frames here (KOL-116): an open question is its own document on
- *   its own route, so nothing about it rides along with an entity's frame.
+ *   `question:*` frames here (KOL-116), and the three `group:*` ones (KOL-149):
+ *   an open question and a relationship group are each their own document on
+ *   their own route, so nothing about either rides along with an entity's frame.
  *
  *   **A frame the server wrote is a stop, not a retry.** An `EventSource`
  *   reports two unrelated things as `error`: a transport failure (no `data`),
@@ -119,6 +120,9 @@ export const STOP_REASONS = Object.freeze({
  * @param {(payload: object) => void} [handlers.onQuestionCreated]   `{ question, entry_ids }`
  * @param {(payload: object) => void} [handlers.onQuestionUpdated]   `{ question, entry_ids }`
  * @param {(payload: object) => void} [handlers.onQuestionDeleted]   `{ questionId, question, entry_ids }`
+ * @param {(payload: object) => void} [handlers.onGroupCreated]      `{ group, entityIds }`
+ * @param {(payload: object) => void} [handlers.onGroupUpdated]      `{ group, entityIds }`
+ * @param {(payload: object) => void} [handlers.onGroupDeleted]      `{ groupId, group, entityIds }`
  * @param {(ended: {reason: string, message: string, limit: number|null}) => void} [handlers.onStreamEnded]
  *   the server ended this stream for good; nothing will reconnect
  */
@@ -131,6 +135,9 @@ export function useEvents({
   onQuestionCreated,
   onQuestionUpdated,
   onQuestionDeleted,
+  onGroupCreated,
+  onGroupUpdated,
+  onGroupDeleted,
   onStreamEnded,
 } = {}) {
   let es = null;
@@ -257,6 +264,20 @@ export function useEvents({
       (p) => onQuestionUpdated?.(p));
     onFrame('question:deleted', (p) => `question ${p.questionId}`,
       (p) => onQuestionDeleted?.(p));
+
+    // Relationship groups (KOL-149). The same shape one collection over: their
+    // own route, no `ChangeLog`, so these frames come from the route rather
+    // than riding along with an entity's. `entityIds` is the flattened set of
+    // entity members the group reaches, nested subgroups included — which is
+    // how a listener decides whether the panel it is showing is affected, and
+    // the graph is redrawn from every one of them, since relationships are the
+    // whole of what it draws.
+    onFrame('group:created', (p) => `group ${p.group?._id} over ${p.entityIds?.length ?? 0} entity(ies)`,
+      (p) => onGroupCreated?.(p));
+    onFrame('group:updated', (p) => `group ${p.group?._id} over ${p.entityIds?.length ?? 0} entity(ies)`,
+      (p) => onGroupUpdated?.(p));
+    onFrame('group:deleted', (p) => `group ${p.groupId}`,
+      (p) => onGroupDeleted?.(p));
 
     socket.addEventListener('error', (e) => handleError(e, socket));
   }

@@ -1474,6 +1474,89 @@ describe('WikiLayout live sync', () => {
     expect(addToast).not.toHaveBeenCalled();
   });
 
+  /**
+   * The relationship-group frames (KOL-149). Two listeners, and they are not the same shape: the
+   * graph redraws on *every* frame, because relationships are the whole of what it draws and it
+   * read the group list once on mount, while the panel refetches only when the frame touches it.
+   *
+   * Falsification: drop any one `onGroup*` handler from the `useEvents` call and that case fails;
+   * gate the graph reload on the frame touching the panel and the "no panel" case fails; look only
+   * at `entityIds` and the deleted-group case fails (a group the panel renders through a parent is
+   * not in them).
+   */
+  const graphReload = vi.fn();
+  const GraphStub = { name: 'GraphView', methods: { reload: graphReload }, template: '<div class="graph-stub" />' };
+  const GROUP_FRAME = {
+    group: { _id: 'g1', label: 'Runs through', members: [] },
+    entityIds: ['e1', 'e2'],
+  };
+
+  /** The layout with the graph overlay open, so a frame has a graph to reload. */
+  async function withGraphOpen() {
+    graphReload.mockClear();
+    const wrapper = shallowMount(WikiLayout, { global: { stubs: { GraphView: GraphStub } } });
+    wrapper.findComponent(EntitySidebar).vm.$emit('graph');
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  }
+
+  it('redraws the graph and refetches the open entity when another client changes a relationship on it', async () => {
+    const wrapper = await withGraphOpen();
+    onScreen({ ...PANEL, relationships: [] });
+    selectEntity.mockClear();
+
+    sseHandlers().onGroupUpdated(GROUP_FRAME);
+    await wrapper.vm.$nextTick();
+
+    // In place, not a remount: the viewer keeps their zoom, pan and layout.
+    expect(graphReload).toHaveBeenCalledTimes(1);
+    expect(graphReload.mock.calls[0][0]).toMatch(/group:updated/);
+    expect(selectEntity).toHaveBeenCalledWith('e1');
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0]).toMatchObject({ entityId: 'e1', entityTitle: 'Boiler Room' });
+    expect(addToast.mock.calls[0][0].message).toMatch(/relationship/i);
+  });
+
+  it('redraws the graph for a frame about entities nobody is looking at', async () => {
+    // The sidebar shows no relationships, so there is nothing to refetch — but the graph is
+    // drawing the edge that just changed, whoever it belongs to.
+    const wrapper = await withGraphOpen();
+    onScreen(null);
+
+    sseHandlers().onGroupCreated(GROUP_FRAME);
+    await wrapper.vm.$nextTick();
+
+    expect(graphReload).toHaveBeenCalledTimes(1);
+    expect(selectEntity).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
+  });
+
+  it('refetches when the panel is showing the group that was deleted, though it names no entity', async () => {
+    // A group reached through a *parent* is rendered on this panel without the entity being one of
+    // the ids the frame carries, and the panel is holding a row the server no longer has.
+    const wrapper = await withGraphOpen();
+    onScreen({ ...PANEL, _id: 'e9', relationships: [{ _id: 'g1' }] });
+    selectEntity.mockClear();
+
+    sseHandlers().onGroupDeleted({ groupId: 'g1', group: GROUP_FRAME.group, entityIds: [] });
+    await wrapper.vm.$nextTick();
+
+    expect(graphReload).toHaveBeenCalledTimes(1);
+    expect(selectEntity).toHaveBeenCalledWith('e9');
+  });
+
+  it('ignores a relationship frame for another entity when the graph is closed', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    onScreen({ ...PANEL, relationships: [] });
+    selectEntity.mockClear();
+
+    sseHandlers().onGroupUpdated({ ...GROUP_FRAME, entityIds: ['e2', 'e3'] });
+    await wrapper.vm.$nextTick();
+
+    expect(selectEntity).not.toHaveBeenCalled();
+    expect(addToast).not.toHaveBeenCalled();
+  });
+
   it('says so when the server ends the stream for good', () => {
     // Nothing will reconnect, so the sidebar is a snapshot from here on and the
     // only thing left to do is tell the user.

@@ -17,11 +17,21 @@
  *   incomplete one, and "No relationships yet" is withheld, because the server
  *   never said that.
  *
+ *   It redraws **in place** when a relationship frame says the groups moved
+ *   (KOL-149). The graph read the group list once on mount, so a group created,
+ *   relabelled, reordered or deleted in another tab left it drawing edges that
+ *   no longer exist — the one view whose entire content is relationships was the
+ *   one view that never updated. The layout calls `reload` on every `group:*`
+ *   frame (components/WikiLayout.vue), and it has to rebuild without remounting:
+ *   a remount would throw away the zoom, the pan and the force layout the viewer
+ *   is reading.
+ *
  * Falsification: stop walking after the first page and the first case's edge
  * count drops; drop the `loadWarning` strip and the partial cases fail; roll the
  * partial groups back to nothing on a failed page and the "keeps what arrived"
  * assertions fail; leave the "No relationships yet" overlay unconditional and
- * the first-page-failure case shows it.
+ * the first-page-failure case shows it; drop `defineExpose({ reload })` or leave
+ * the load inside `onMounted` and the reload group fails.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
@@ -151,6 +161,59 @@ describe('GraphView group loading', () => {
     const wrapper = await mountGraph();
 
     expect(warning(wrapper).exists()).toBe(false);
+    expect(wrapper.find('.graph-overlay.muted').exists()).toBe(true);
+  });
+
+  it('reloads in place on demand, redrawing from the groups that arrive', async () => {
+    groupPages.push({ body: PAGE_1 });
+    const wrapper = await mountGraph();
+    expect(stats(wrapper)).toContain('4 nodes · 1 edges');
+    const svgBefore = wrapper.find('svg').element;
+    const requestsBefore = requestedGroupQueries.length;
+
+    // What a `group:created` frame in another tab means: there is a second
+    // group now, and this graph has never heard of it.
+    groupPages.push({
+      body: {
+        items: [group('g1', 'Runs through', ['e1', 'e2']), group('g2', 'Feeds', ['e3', 'e4'])],
+        nextAfter: null,
+      },
+    });
+    await wrapper.vm.reload('a group:created frame');
+    await flushPromises();
+
+    expect(stats(wrapper)).toContain('4 nodes · 2 edges');
+    expect(requestedGroupQueries.length).toBeGreaterThan(requestsBefore);
+    // The same element, so the component was not remounted: the viewer's zoom,
+    // pan and layout survive the redraw.
+    expect(wrapper.find('svg').element).toBe(svgBefore);
+  });
+
+  it('a reload that succeeds clears the warning a failed page left', async () => {
+    groupPages.push({ status: 500, body: { error: 'INTERNAL' } });
+    const wrapper = await mountGraph();
+    expect(warning(wrapper).exists()).toBe(true);
+
+    groupPages.push({ body: PAGE_2 });
+    await wrapper.vm.reload('a group:updated frame');
+    await flushPromises();
+
+    expect(warning(wrapper).exists()).toBe(false);
+    expect(stats(wrapper)).toContain('4 nodes · 1 edges');
+  });
+
+  it('a reload that finds nothing left draws no edges', async () => {
+    // What a `group:deleted` frame means when it was the only group: the edge
+    // has to go, which is the whole point of listening for one.
+    groupPages.push({ body: PAGE_1 });
+    const wrapper = await mountGraph();
+    expect(stats(wrapper)).toContain('1 edges');
+
+    groupPages.push({ body: { items: [], nextAfter: null } });
+    await wrapper.vm.reload('a group:deleted frame');
+    await flushPromises();
+
+    expect(stats(wrapper)).toContain('0 edges');
     expect(wrapper.find('.graph-overlay.muted').exists()).toBe(true);
   });
 

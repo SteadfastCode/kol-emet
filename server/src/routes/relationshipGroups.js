@@ -4,8 +4,22 @@ import Entity from '../models/Entity.js';
 import { requireActor } from '../middleware/auth.js';
 import { objectIdParam } from '../middleware/objectId.js';
 import { boundedInteger, idCursor } from '../lib/searchFilter.js';
+import {
+  broadcastGroupCreated,
+  broadcastGroupUpdated,
+  broadcastGroupDeleted,
+} from '../lib/relationshipEvents.js';
 
 const router = Router();
+
+/**
+ * The tab that asked for a write, so its own frame is not echoed back to it —
+ * read exactly as the entity and open-question routes read it: the browser
+ * echoes the `client:id` the SSE stream gave it
+ * (`client/src/api/relationshipGroups.js`, since KOL-104), and a caller with no
+ * stream — curl, the MCP tools, the API's own tests — simply sends none.
+ */
+const writingClient = (req) => req.headers['x-sse-client-id'] ?? null;
 
 /**
  * ─── Tiered debug logging ───────────────────────────────────────────────────
@@ -232,6 +246,16 @@ router.post('/', requireActor, async (req, res, next) => {
     );
 
     const populated = await fetchPopulated(group._id, req.workspaceId);
+
+    // Every other open tab in the workspace, so a relationship made here is
+    // drawn there without a reload (KOL-149). After the back-links, so a
+    // listener that does refetch an entity reads the finished write.
+    await broadcastGroupCreated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: 'POST /relationship-groups',
+    });
+
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -249,6 +273,16 @@ router.patch('/:id', requireActor, async (req, res, next) => {
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Not found' });
     const populated = await populateMembers(updated, req.workspaceId);
+
+    // A relabel changes the group's own row, so it is a `group:updated` like
+    // every other write that does (lib/relationshipEvents.js): the label is an
+    // edge's label in the graph.
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `PATCH /relationship-groups/${req.params.id}`,
+    });
+
     res.json(populated);
   } catch (err) {
     next(err);
@@ -293,6 +327,13 @@ router.post('/:id/members', requireActor, async (req, res, next) => {
     );
 
     const populated = await fetchPopulated(group._id, req.workspaceId);
+
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `POST /relationship-groups/${req.params.id}/members`,
+    });
+
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -326,6 +367,15 @@ router.patch('/:id/members/reorder', requireActor, async (req, res, next) => {
     await group.save();
 
     const populated = await fetchPopulated(group._id, req.workspaceId);
+
+    // Array position is the display order (the dual-array decision), so a
+    // reorder is a change to the row every other tab is rendering.
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `PATCH /relationship-groups/${req.params.id}/members/reorder`,
+    });
+
     res.json(populated);
   } catch (err) {
     next(err);
@@ -349,6 +399,13 @@ router.patch('/:id/members/:entityId', requireActor, async (req, res, next) => {
     await group.save();
 
     const populated = await fetchPopulated(group._id, req.workspaceId);
+
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `PATCH /relationship-groups/${req.params.id}/members/${req.params.entityId}`,
+    });
+
     res.json(populated);
   } catch (err) {
     next(err);
@@ -371,17 +428,44 @@ router.delete('/:id/members/:entityId', requireActor, async (req, res, next) => 
 
     const entityMembers = group.members.filter(m => m.refModel === 'Entity');
 
+    // The entity that just left is as affected as the ones that stayed, and it
+    // is no longer in the row the frame is built from — so it rides along as
+    // `alsoTouched` on both branches below (lib/relationshipEvents.js).
+    const removed = [req.params.entityId];
+
     // If fewer than 2 entity members remain, the group is orphaned — delete it and clean up
     if (entityMembers.length < 2) {
       await Entity.updateMany(
         { _id: { $in: entityMembers.map(m => m.refId) }, workspaceId: req.workspaceId },
         { $pull: { relationships: group._id } }
       );
+      // Populated before the delete, while the group is still readable: a 204
+      // carries nothing and this collection keeps no snapshot anywhere else.
+      const snapshot = await populateMembers(group.toObject(), req.workspaceId);
       await RelationshipGroup.findOneAndDelete({ _id: group._id, workspaceId: req.workspaceId });
+
+      // `group:deleted`, not `group:updated`: the group is gone, so a listening
+      // tab has edges to drop rather than a row to re-read.
+      await broadcastGroupDeleted(snapshot, {
+        workspaceId: req.workspaceId,
+        excludeClientId: writingClient(req),
+        source: `DELETE /relationship-groups/${req.params.id}/members/${req.params.entityId} (the group was left with fewer than 2 entity members)`,
+        alsoTouched: removed,
+      });
+
       return res.status(204).send();
     }
 
     await group.save();
+
+    const populated = await fetchPopulated(group._id, req.workspaceId);
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `DELETE /relationship-groups/${req.params.id}/members/${req.params.entityId}`,
+      alsoTouched: removed,
+    });
+
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -415,6 +499,16 @@ router.post('/:id/subgroups', requireActor, async (req, res, next) => {
     await parent.save();
 
     const populated = await fetchPopulated(parent._id, req.workspaceId);
+
+    // The parent's row changed; the child's did not. The frame's `entityIds`
+    // walks into the child, which is how a listener learns that entities the
+    // parent does not name directly are now reachable through it.
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `POST /relationship-groups/${req.params.id}/subgroups`,
+    });
+
     res.status(201).json(populated);
   } catch (err) {
     next(err);
@@ -459,6 +553,17 @@ router.delete('/:id/subgroups/:subGroupId', requireActor, async (req, res, next)
     }
 
     await parent.save();
+
+    // The unlink promotes the sub-group's entity members into the parent, so
+    // the parent's row is what changed and nothing is left unreachable: the
+    // members that were not already there have just been added to it.
+    const populated = await fetchPopulated(parent._id, req.workspaceId);
+    await broadcastGroupUpdated(populated, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `DELETE /relationship-groups/${req.params.id}/subgroups/${req.params.subGroupId}`,
+    });
+
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -479,6 +584,17 @@ router.delete('/:id', requireActor, async (req, res, next) => {
       { _id: { $in: entityIds }, workspaceId: req.workspaceId },
       { $pull: { relationships: group._id } }
     );
+
+    // The row as it was, so another tab can drop its edges and name the group
+    // in a toast; `entityIds` is the set it held, which is what a listener
+    // refreshes from. The members' entities are still there, so the populate
+    // resolves even though the group itself is gone.
+    const snapshot = await populateMembers(group.toObject(), req.workspaceId);
+    await broadcastGroupDeleted(snapshot, {
+      workspaceId: req.workspaceId,
+      excludeClientId: writingClient(req),
+      source: `DELETE /relationship-groups/${req.params.id}`,
+    });
 
     res.status(204).send();
   } catch (err) {
