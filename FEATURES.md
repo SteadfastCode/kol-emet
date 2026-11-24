@@ -61,7 +61,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing**
+- [x] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing**
   KOL-116 found this exact hole in `/open-questions` and closed it; the sibling collection still has it.
   `server/src/routes/relationshipGroups.js` has nine write routes — create (`:204`), relabel (`:242`), add members
   (`:260`), reorder (`:305`), relabel a member (`:336`), remove a member (`:359`), add and remove a subgroup

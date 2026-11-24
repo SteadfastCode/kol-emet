@@ -65,10 +65,10 @@
     "KOL-149": {
       "order": 4,
       "title": "Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-149",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -76,8 +76,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-24T01:02:02.332Z",
+      "runId": "2026-11-24T01:00:43.148Z",
       "lastFail": null
     },
     "KOL-150": {
