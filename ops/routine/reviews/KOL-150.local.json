@@ -1,0 +1,239 @@
+{
+  "item": "KOL-150",
+  "repo": "kol-emet",
+  "mergeSha": "998c6024b7e1abf19e107f8d825df0be33b49e22",
+  "completedAtUtc": "2026-11-24T01:38:20.048Z",
+  "completeRunId": "2026-11-24T01:00:43.148Z",
+  "reviewRunId": "2026-11-24T08:02:11.042Z",
+  "reviewedAtUtc": "2026-11-24T08:12:56.379Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 63531,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/workspace.js",
+        "client/src/components/BlockList.vue",
+        "client/src/components/EntityDetail.test.js"
+      ],
+      "part": null,
+      "bytes": 9903,
+      "contextBytes": 0,
+      "promptTokens": 3992,
+      "completionTokens": 81,
+      "latencyMs": 15326,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityDetail.vue",
+        "client/src/components/EntityHeader.test.js",
+        "client/src/components/EntityHeader.vue",
+        "client/src/components/EntitySidebar.test.js"
+      ],
+      "part": null,
+      "bytes": 11584,
+      "contextBytes": 0,
+      "promptTokens": 4413,
+      "completionTokens": 145,
+      "latencyMs": 17038,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntitySidebar.vue",
+        "client/src/components/RelationshipsSection.vue"
+      ],
+      "part": null,
+      "bytes": 4244,
+      "contextBytes": 7386,
+      "promptTokens": 4505,
+      "completionTokens": 171,
+      "latencyMs": 18807,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 3862,
+      "contextBytes": 7814,
+      "promptTokens": 4478,
+      "completionTokens": 195,
+      "latencyMs": 19928,
+      "findings": 0,
+      "needs": 6,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 11683,
+      "contextBytes": 0,
+      "promptTokens": 4449,
+      "completionTokens": 413,
+      "latencyMs": 30886,
+      "findings": 0,
+      "needs": 13,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1897,
+      "contextBytes": 4378,
+      "promptTokens": 2910,
+      "completionTokens": 78,
+      "latencyMs": 8962,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10388,
+      "contextBytes": 0,
+      "promptTokens": 4166,
+      "completionTokens": 102,
+      "latencyMs": 13818,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 2010,
+      "contextBytes": 6280,
+      "promptTokens": 3608,
+      "completionTokens": 164,
+      "latencyMs": 15299,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 8676,
+      "contextBytes": 2966,
+      "promptTokens": 4273,
+      "completionTokens": 216,
+      "latencyMs": 20124,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/api/workspace.js:54"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "client/src/components/WikiLayout.vue:1420"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional information about `requireWriteRole` from `server/src/middleware/workspace.js` is needed to ensure complete understanding. · No real defects found in the provided diff. However, additional context is needed to fully verify the changes. · No real defects found in the provided diff. However, additional context is needed to verify the implementation of `requireWriteRole` and the error handling in `onEntitySaved`, `onEntityUpdated`, and `onEntityDeleted`. · No real defects found in the provided diff. However, additional information is needed to fully assess the changes. · The diff adds tests for the write gate and refused entity writes in WikiLayout. It ensures that the role is correctly read on mount, controls are shown or hidden based on the user's role, and that refused writes raise toasts and leave the editor open with the user's input intact. · No real defects found in the provided diff. However, additional information about the `refusal` function is needed to fully understand and verify the test cases. · No real defects found in the provided diff. However, additional information is needed to verify the behavior of `requireWriteRole` and `roleCanWrite`. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `reportWriteRefused`, `addEntity`, `editEntity`, and `removeEntity` functions. · The change aims to address two issues: ensuring that viewers do not see write controls and handling refused writes gracefully. The diff includes updates to the documentation and a decision log, but no actual code changes are provided for the client-side logic. To verify the implementation, additional code changes are needed in `WikiLayout.vue` and related components.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 72409,
+    "completionTokens": 2837
+  },
+  "latencyMs": 303520
+}
