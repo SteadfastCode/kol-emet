@@ -318,7 +318,23 @@
 import { ref, computed, inject } from 'vue';
 import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, reorderMembers, deleteGroup, addSubGroup, removeSubGroup } from '../api/relationshipGroups.js';
 
-const props = defineProps({ entity: Object, canEdit: Boolean });
+const props = defineProps({
+  entity: Object,
+  /**
+   * Whether the relationship graph can be written from here. Every control in
+   * this section is behind it — `+ Add`, the group-label row, the per-member
+   * pencil and ✕, drag-to-reorder, the sub-group chips and both add forms —
+   * and nothing that reads is: the groups, their members and their labels
+   * render either way.
+   *
+   * `EntityDetail` passes the page's `canWrite` (KOL-150), which is false for a
+   * `viewer` — the nine `/relationship-groups` writes are unsafe methods, so
+   * `requireWriteRole` refuses each of them with `403 NOT_WORKSPACE_EDITOR` —
+   * and for a deleted entity's snapshot. It was hardcoded `true` until then,
+   * which is why a viewer was shown all of it.
+   */
+  canEdit: Boolean,
+});
 const emit = defineEmits(['refresh']);
 
 const entities = inject('entities', ref([]));

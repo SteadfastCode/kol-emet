@@ -224,3 +224,57 @@ describe('EntitySidebar failed load', () => {
     expect(wrapper.get('.empty-title').text()).toBe('Your wiki is empty');
   });
 });
+
+/**
+ * `+ New`, under the role gate (KOL-150).
+ *
+ * `POST /entities` is refused for a `viewer` with `403 NOT_WORKSPACE_EDITOR`, so the two ways in to
+ * a new entity — the header's `+ New` and the empty state's "Create your first entity" — opened an
+ * editor whose Save could not land. `WikiLayout` derives `can-write` from the role and hands it
+ * here; the default is true, so a caller that does not know the role shows them.
+ *
+ * Nothing that *reads* is gated: the search box, the pills, the count and every card stay, and so
+ * does the retry on a failed load.
+ *
+ * Falsification: drop either `v-if` and the viewer case fails on the control it still renders.
+ */
+describe('EntitySidebar write controls', () => {
+  const newEntity = (wrapper) => wrapper.findAll('.header-actions button').find((b) => b.text() === '+ New');
+
+  it('offers + New by default, and to an editor or an owner', async () => {
+    for (const props of [{}, { canWrite: true }]) {
+      const wrapper = mountSidebar(props);
+      await flushPromises();
+
+      expect(newEntity(wrapper)).toBeTruthy();
+      await newEntity(wrapper).trigger('click');
+      expect(wrapper.emitted('new-entry')).toHaveLength(1);
+      wrapper.unmount();
+    }
+  });
+
+  it('offers no + New to a viewer, and leaves everything that reads alone', async () => {
+    const wrapper = mountSidebar({ canWrite: false });
+    await flushPromises();
+
+    expect(newEntity(wrapper)).toBeUndefined();
+    expect(wrapper.find('.search-input').exists()).toBe(true);
+    expect(wrapper.findAll('.cat-pills .pill').map((p) => p.text())).toEqual(['All', 'Worlds', 'Characters', 'Starships']);
+    expect(wrapper.findAll('.sidebar-card')).toHaveLength(ENTITIES.length);
+  });
+
+  it('tells a viewer why an empty workspace is empty instead of offering to fill it', async () => {
+    const wrapper = mountSidebar({ entities: [], loadError: null, canWrite: false });
+    await flushPromises();
+
+    expect(wrapper.get('.empty-title').text()).toBe('Your wiki is empty');
+    expect(wrapper.find('.empty-actions').exists()).toBe(false);
+    expect(wrapper.get('.empty-body').text()).toContain('read-only');
+
+    // And still offers both to anyone who can act on them.
+    const writable = mountSidebar({ entities: [], loadError: null });
+    await flushPromises();
+    expect(writable.findAll('.empty-actions button').map((b) => b.text()))
+      .toEqual(['Create your first entity', 'Or paste in some notes']);
+  });
+});

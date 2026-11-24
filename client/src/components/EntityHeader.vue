@@ -7,7 +7,10 @@
           <h2 class="entity-title">{{ entity.title }}</h2>
           <div class="header-right">
             <span class="entity-cat" :style="catStyle">{{ entity.category }}</span>
-            <button class="icon-btn" title="Edit header" @click="startEdit"><PencilIcon /></button>
+            <!-- The one write control up here, and the one a viewer used to be
+                 shown (KOL-150): the form behind it saves through
+                 `PUT /entities/:id`. -->
+            <button v-if="canWrite" class="icon-btn" title="Edit header" @click="startEdit"><PencilIcon /></button>
           </div>
         </div>
         <p class="entity-summary">{{ entity.summary }}</p>
@@ -201,10 +204,13 @@ import PencilIcon from './icons/PencilIcon.vue';
  * was asked about a row that has just changed underneath it. A *different*
  * entity arriving in the panel is not a re-seed and keeps none of it.
  *
- * `canWrite` false renders the list as it always was, with no controls: the
+ * `canWrite` false renders the list as it always was, with no controls, and
+ * takes the header's own Edit with it (KOL-150). Two things ask for that: the
  * panel also shows deleted entities' snapshots, and a question written against
  * one would be stored with no link to anything (the entity is gone, so the
- * server drops its id from `entry_ids`).
+ * server drops its id from `entry_ids`); and a `viewer` is refused every write
+ * in the workspace by `requireWriteRole` (403 `NOT_WORKSPACE_EDITOR`), so the
+ * title, the type, the summary and the tags are read-only for them too.
  *
  * Tiered debug logging: set localStorage.OPEN_QUESTION_LOG_LEVEL to
  * off | light | normal | verbose (default light).
@@ -222,7 +228,7 @@ import PencilIcon from './icons/PencilIcon.vue';
 
 const props = defineProps({
   entity: Object,
-  /** Whether this entity's open questions can be written. See above. */
+  /** Whether this entity can be written — its header and its open questions. See above. */
   canWrite: { type: Boolean, default: true },
 });
 const emit = defineEmits(['save', 'set-tag']);

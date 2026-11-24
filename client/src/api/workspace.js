@@ -54,6 +54,33 @@ function log(level, msg) {
 /** The longest name `PATCH /workspace` accepts, mirroring the server's rule. */
 export const WORKSPACE_NAME_MAX = 80;
 
+/**
+ * The role ladder, mirroring `ROLE_RANK` in server/src/middleware/workspace.js.
+ *
+ * Here so the client can hide a control the server would refuse (KOL-150)
+ * rather than offering every write to a viewer and letting them find out by
+ * clicking. A copy of the server's rule, and *only* that: the server re-reads
+ * the caller's own membership on every request and never trusts this one
+ * (`docs/api.md` → Roles), so a stale or tampered copy costs a 403 and not an
+ * unauthorized write.
+ */
+export const ROLE_RANK = Object.freeze({ viewer: 1, editor: 2, owner: 3 });
+
+/** Whether `value` is one of the roles this client knows about. */
+export const isRole = (value) => typeof value === 'string' && Object.hasOwn(ROLE_RANK, value);
+
+/** The role a write needs — `requireWriteRole`'s floor, which an owner clears too. */
+export const WRITE_ROLE = 'editor';
+
+/**
+ * Whether `role` clears the write floor. Hierarchical, like the server's gate:
+ * an owner passes an `editor` check because a role is a floor and not an exact
+ * match. A role this client does not know is **not** a yes — callers decide
+ * what to do about an unknown one, and `WikiLayout` deliberately treats it the
+ * same as a role it has not read yet (see `canWrite` there).
+ */
+export const roleCanWrite = (role) => isRole(role) && ROLE_RANK[role] >= ROLE_RANK[WRITE_ROLE];
+
 async function req(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,

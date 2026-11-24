@@ -15,6 +15,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import EntityDetail from './EntityDetail.vue';
+import BlockList from './BlockList.vue';
+import RelationshipsSection from './RelationshipsSection.vue';
 
 const ENTITY = {
   _id: 'e1',
@@ -482,5 +484,76 @@ describe('EntityDetail open questions', () => {
     expect(rows(snapshot).map((r) => r.text)).toEqual(QUESTIONS.map((q) => q.question));
     expect(snapshot.findAll('.oq-badge-btn')).toHaveLength(0);
     expect(snapshot.find('form.oq-add').exists()).toBe(false);
+  });
+});
+
+/**
+ * The role gate on an entity's page (KOL-150).
+ *
+ * `canWrite` has been a prop since KOL-104 and gated exactly one thing — the open-question
+ * section — while the block editor and every relationship control were handed a hardcoded
+ * `:can-edit="true"` and Edit, Delete entity and Restore were gated on nothing at all. So a
+ * `viewer`, whose every unsafe method the server refuses with `403 NOT_WORKSPACE_EDITOR`, was shown
+ * the whole page as writable. `WikiLayout` derives the flag from the role once and hands it down
+ * (WikiLayout.test.js); what is pinned here is that the page obeys it.
+ *
+ * The other half of the promise matters as much: a viewer is a *reader*. Everything those controls
+ * act on — the header, the blocks, the relationships, the questions, the history — still renders.
+ *
+ * Falsification: put either `:can-edit="true"` back and the read-only case fails; gate the history
+ * *list* instead of the Restore button on it and the last case fails.
+ */
+describe('EntityDetail write controls', () => {
+  const PAGE = { ...ENTITY, open_questions: QUESTIONS };
+
+  async function mountPage(props = {}) {
+    const { loadEntityTypes } = await import('../composables/useEntityTypes.js').then((m) => m.useEntityTypes());
+    await loadEntityTypes('EntityDetail.test.js');
+
+    const wrapper = mount(EntityDetail, {
+      props: { entity: PAGE, loading: false, breadcrumbs: [], ...props },
+      global: { stubs: { BreadcrumbBar: true, BlockList: true, RelationshipsSection: true } },
+    });
+    await flushPromises();
+    return wrapper;
+  }
+
+  const editHeader = (wrapper) => wrapper.find('button[title="Edit header"]');
+  const deleteEntity = (wrapper) => wrapper.findAll('button').find((b) => b.text() === 'Delete entity');
+
+  it('offers every write control when the page can be written', async () => {
+    const wrapper = await mountPage();           // the prop defaults to true
+
+    expect(editHeader(wrapper).exists()).toBe(true);
+    expect(deleteEntity(wrapper)).toBeTruthy();
+    expect(wrapper.find('form.oq-add').exists()).toBe(true);
+    expect(wrapper.findComponent(BlockList).props('canEdit')).toBe(true);
+    expect(wrapper.findComponent(RelationshipsSection).props('canEdit')).toBe(true);
+  });
+
+  it('offers none of them when it cannot, and still renders everything they act on', async () => {
+    const wrapper = await mountPage({ canWrite: false });
+
+    expect(editHeader(wrapper).exists()).toBe(false);
+    expect(deleteEntity(wrapper)).toBeUndefined();
+    expect(wrapper.find('form.oq-add').exists()).toBe(false);
+    expect(wrapper.findComponent(BlockList).props('canEdit')).toBe(false);
+    expect(wrapper.findComponent(RelationshipsSection).props('canEdit')).toBe(false);
+
+    // A reader still reads: the title, the questions, the blocks and the relationships are all here.
+    expect(wrapper.get('.entity-title').text()).toBe(ENTITY.title);
+    expect(rows(wrapper).map((r) => r.text)).toEqual(QUESTIONS.map((q) => q.question));
+    expect(wrapper.findComponent(BlockList).props('blocks')).toEqual(PAGE.blocks);
+    expect(wrapper.findComponent(RelationshipsSection).props('entity')).toMatchObject({ _id: PAGE._id });
+  });
+
+  it('keeps the history list for a reader and takes the Restore off its rows', async () => {
+    const wrapper = await openHistory({ canWrite: false });
+
+    // The list is a read (`GET /entities/:id/history`) and stays, both rows of it.
+    expect(wrapper.findAll('.history-item')).toHaveLength(2);
+    // The restore is a write (`POST .../rollback/:logId`), and so is the picker that feeds it.
+    expect(wrapper.findAll('button').filter((b) => b.text() === 'Restore')).toHaveLength(0);
+    expect(wrapper.find('.history-category').exists()).toBe(false);
   });
 });

@@ -285,3 +285,41 @@ describe('EntityHeader open questions — logging', () => {
     expect(line).toContain(`dropped the delete confirmation on ${WHERE._id}`);
   });
 });
+
+/**
+ * The header's own Edit, under the role gate (KOL-150).
+ *
+ * `canWrite` already hid every open-question control; the pencil beside the entity type was gated on
+ * nothing, so a `viewer` — whose `PUT /entities/:id` the server refuses with
+ * `403 NOT_WORKSPACE_EDITOR` — was offered the form that saves the title, the type, the summary and
+ * the tags, and found out by pressing Save. The flag now covers both.
+ *
+ * Falsification: drop the `v-if` on the pencil and the read-only case fails on the editor it opens.
+ */
+describe('EntityHeader write controls', () => {
+  const pencil = (wrapper) => wrapper.find('button[title="Edit header"]');
+
+  it('offers Edit when the entity can be written', async () => {
+    const wrapper = mountHeader([WHO]);
+    await flushPromises();
+
+    expect(pencil(wrapper).exists()).toBe(true);
+
+    await pencil(wrapper).trigger('click');
+    expect(wrapper.get('input.edit-title').element.value).toBe('The Brakeman');
+  });
+
+  it('offers no Edit when it cannot, and still shows what the form would have edited', async () => {
+    const wrapper = mountHeader([WHO], { canWrite: false });
+    await flushPromises();
+
+    expect(pencil(wrapper).exists()).toBe(false);
+    expect(wrapper.find('input.edit-title').exists()).toBe(false);
+    // The header is a read either way: title, type, summary and the question itself.
+    expect(wrapper.get('.entity-title').text()).toBe('The Brakeman');
+    expect(wrapper.get('.entity-cat').text()).toBe('Characters');
+    expect(wrapper.get('.entity-summary').text()).toBe('fixture');
+    expect(rows(wrapper).map((r) => r.get('.oq-text').text())).toEqual([WHO.question]);
+    expect(calls).toEqual([]);
+  });
+});

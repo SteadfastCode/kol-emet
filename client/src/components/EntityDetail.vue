@@ -18,7 +18,7 @@
       <div class="blocks-section">
         <BlockList
           :blocks="entity.blocks"
-          :can-edit="true"
+          :can-edit="canWrite"
           @save-block="saveBlock"
           @delete-block="deleteBlock"
           @add-block="addBlock"
@@ -27,7 +27,7 @@
 
       <RelationshipsSection
         :entity="entity"
-        :can-edit="true"
+        :can-edit="canWrite"
         @refresh="$emit('refresh')"
       />
 
@@ -58,7 +58,7 @@
               <!-- An entry whose snapshot names an entity type the workspace no
                    longer has cannot be restored as recorded, so the row asks
                    which type to restore it under before the click. -->
-              <div v-if="entry.snapshotCategoryMissing" class="history-choice">
+              <div v-if="canWrite && entry.snapshotCategoryMissing" class="history-choice">
                 <p class="history-stale">
                   Saved under “{{ entry.snapshot?.category }}”, which is no longer an entity
                   type here. Choose one to restore it under:
@@ -83,8 +83,11 @@
                   {{ busy === entry._id ? 'Restoring…' : 'Restore' }}
                 </button>
               </div>
+              <!-- A restore is a write (`POST .../rollback/:logId`), so the
+                   button goes with the rest of them; the list itself is a read
+                   and stays. -->
               <button
-                v-else-if="entry.snapshot"
+                v-else-if="canWrite && entry.snapshot"
                 type="button"
                 class="btn-sm"
                 :disabled="busy === entry._id"
@@ -97,7 +100,7 @@
         </template>
       </section>
 
-      <div class="entity-footer">
+      <div v-if="canWrite" class="entity-footer">
         <button class="btn-sm danger" @click="confirmDelete">Delete entity</button>
       </div>
     </template>
@@ -129,7 +132,9 @@ import { useEntityTypes } from '../composables/useEntityTypes.js';
  * turns that row into the same picker, from the types the refusal named.
  *
  * The open-question section in the header writes to its own routes and logs on
- * its own OPEN_QUESTION_LOG_LEVEL (KOL-104); `canWrite` below gates it.
+ * its own OPEN_QUESTION_LOG_LEVEL (KOL-104); `canWrite` below gates it, along
+ * with every other write control on the page (KOL-150) — the history *list* is
+ * a read and stays for a viewer, while the Restore that acts on a row does not.
  *
  * Tiered debug logging: set localStorage.HISTORY_LOG_LEVEL to
  * off | light | normal | verbose (default light). The server logs its side on
@@ -145,10 +150,20 @@ const props = defineProps({
   loading: Boolean,
   breadcrumbs: Array,
   /**
-   * Whether this entity's open questions can be written (KOL-104). False for a
-   * deleted entity's snapshot, which this panel also renders: the open-question
-   * section writes straight to `/open-questions`, and a question written
-   * against an entity that no longer exists would be stored linked to nothing.
+   * Whether anything on this page can be written. False for two reasons, and
+   * the page cannot tell them apart because it does not need to:
+   *   - a **deleted entity's snapshot**, which this panel also renders
+   *     (KOL-104): the open-question section writes straight to
+   *     `/open-questions`, and a question written against an entity that no
+   *     longer exists would be stored linked to nothing;
+   *   - a **viewer**, whose every unsafe method the server refuses with
+   *     `403 NOT_WORKSPACE_EDITOR` (KOL-150). `WikiLayout` derives it from the
+   *     role once and hands it down; true while the role is unknown.
+   *
+   * It gates every write control on the page — the header's Edit, the block
+   * editor, the relationship controls, Restore and Delete entity — and nothing
+   * that reads. The history list, the blocks and the relationships are all
+   * still there to be read.
    */
   canWrite: { type: Boolean, default: true },
 });

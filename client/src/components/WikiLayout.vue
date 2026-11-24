@@ -14,6 +14,7 @@
         :search-truncation="searchTruncation"
         :load-error="loadError"
         :graph-open="graphOpen"
+        :can-write="canWrite"
         @search="searchQuery = $event"
         @set-cat="setCat"
         @set-tag="setTag"
@@ -58,11 +59,15 @@
               :can-write="false"
             />
           </template>
+          <!-- `can-write` is this session's role in the workspace (KOL-150):
+               false for a viewer, true for an editor or an owner, and true
+               while the role is still unknown. -->
           <EntityDetail
             v-else-if="selectedEntity"
             :entity="selectedEntity"
             :loading="detailLoading"
             :breadcrumbs="breadcrumbs"
+            :can-write="canWrite"
             @crumb-click="onCrumbClick"
             @follow-link="followLink"
             @set-tag="setTag"
@@ -573,8 +578,8 @@ import {
 import { searchEntities } from '../api/entities.js';
 import { downloadWorkspaceExport, importWorkspaceFile } from '../api/export.js';
 import {
-  acceptInvite, createWorkspace, declineInvite, deleteWorkspace, getWorkspace, inviteCollaborator, listMembers,
-  listMyInvites, listWorkspaces, listWorkspaceInvites, removeMember, renameWorkspace,
+  acceptInvite, createWorkspace, declineInvite, deleteWorkspace, getWorkspace, inviteCollaborator, isRole, listMembers,
+  listMyInvites, listWorkspaces, listWorkspaceInvites, removeMember, renameWorkspace, roleCanWrite,
   selectWorkspace, setMemberRole, withdrawInvite, WORKSPACE_NAME_MAX,
 } from '../api/workspace.js';
 import { useEntities } from '../composables/useEntities.js';
@@ -741,11 +746,13 @@ async function importWorkspace(event) {
  * The Workspace group (KOL-071): the name of the workspace this session is in,
  * and a rename for its owner.
  *
- * Fetched on each Settings open rather than on page load — the name is only
- * ever shown here, and another session may have renamed it since. `role` comes
- * from the server's reading of this user's own membership, so the rename field
- * is hidden for an editor or a viewer; the server refuses it for them anyway
- * (403 NOT_WORKSPACE_OWNER), which is what the error branch below says.
+ * The *name* is refetched on each Settings open — it is only ever shown there,
+ * and another session may have renamed it since. The *role* is wanted before
+ * anything is on screen, so `loadRole()` below reads the same route on mount
+ * (KOL-150): `role` comes from the server's reading of this user's own
+ * membership, so the rename field is hidden for an editor or a viewer; the
+ * server refuses it for them anyway (403 NOT_WORKSPACE_OWNER), which is what
+ * the error branch below says.
  */
 const workspace = ref(null);        // { _id, name, role, createdAt } from GET /workspace
 const workspaces = ref([]);         // every membership, from GET /workspaces (KOL-090)
@@ -758,6 +765,119 @@ const workspaceRenameReady = computed(() => {
   const next = workspaceDraft.value.trim();
   return !!next && next !== workspace.value?.name;
 });
+
+/**
+ * ─── The write gate, client side (KOL-150) ───────────────────────────────────
+ *
+ * `requireWriteRole` on the server refuses every unsafe method from a `viewer`
+ * with `403 NOT_WORKSPACE_EDITOR`, and until this item nothing in the client
+ * read the role it already had: `canWrite` was a prop defaulting to `true` and
+ * the only caller that ever passed it was the read-only snapshot panel. So a
+ * viewer — possible in the shipped product since collaborator invites
+ * (KOL-124) — was shown Edit, Delete, `+ New`, the block editor, the
+ * open-question form and every relationship control, and found out what they
+ * could do by clicking.
+ *
+ * Derived **once, here**, and passed down. The alternative — each component
+ * reading the role for itself — is a second request per panel and a gate that
+ * gets forgotten on the next control somebody adds.
+ *
+ * Hierarchical, so an editor and an owner both pass (`roleCanWrite`).
+ *
+ * **An unknown role is permissive.** Not yet read, a failed `GET /workspace`,
+ * or a role string this client version does not know: all three leave the
+ * controls on screen. A blank panel while a read is in flight is a worse
+ * failure than a 403 — it is indistinguishable from a workspace you have been
+ * locked out of, and it would be *every* user's first paint — and the server
+ * is the gate either way. The refusal handling below is what makes that safe:
+ * a write that should not have been offered is at least now said out loud.
+ */
+const canWrite = computed(() => {
+  const role = workspace.value?.role;
+  return !isRole(role) || roleCanWrite(role);
+});
+
+/**
+ * Tiered debug logging for the gate and for refused entity writes: set
+ * localStorage.ENTITY_WRITE_LOG_LEVEL to off | light | normal | verbose
+ * (default light). The server logs its half of a refusal on
+ * WORKSPACE_LOG_LEVEL (`refused PUT /entities/… role read as viewer`).
+ *   light   — the role as read and what it did to the write controls, naming
+ *             what asked for the read; and every refused write, naming which
+ *             write it was, its status and what the server said. A refusal
+ *             used to be an unhandled promise rejection and a panel that just
+ *             sat there, so "which write, refused why" is the whole question
+ *   normal  — light, plus every entity write that landed
+ *   verbose — normal, plus the refusal body as the server sent it
+ */
+const WRITE_LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function writeLog(level, msg) {
+  let configured = null;
+  try { configured = localStorage.getItem('ENTITY_WRITE_LOG_LEVEL'); } catch { /* storage blocked */ }
+  if ((WRITE_LEVELS[configured] ?? WRITE_LEVELS.light) >= WRITE_LEVELS[level]) {
+    console.log(`[entityWrite:${level}] ${msg}`);
+  }
+}
+
+/**
+ * The role, read on mount so the first paint already knows it. Only `role` is
+ * wanted here — the name is Settings' business — but it is the same route and
+ * the same document, so `workspace` is filled in and Settings refetches it on
+ * open anyway.
+ *
+ * A failure is deliberately *not* written to `workspaceError`: that message
+ * belongs to a Settings panel nobody has opened, and the one visible effect of
+ * not knowing the role is that the controls stay on screen.
+ */
+async function loadRole(source) {
+  try {
+    workspace.value = await getWorkspace({ source });
+    workspaceDraft.value = workspace.value.name;
+    writeLog('light', `role in "${workspace.value.name}" read as ${workspace.value.role} → write controls ${canWrite.value ? 'shown' : 'hidden'} (source: ${source})`);
+  } catch (err) {
+    writeLog('light', `could not read this session's role: ${err.status ?? 'no status'} ${err.message}; write controls stay shown because an unknown role is permissive (source: ${source})`);
+  }
+}
+
+/**
+ * What a refused entity write says, from the error api/entities.js throws —
+ * which carries the status and the parsed body rather than just a message.
+ *
+ * The server's codes are not copy (`docs/api.md` → Roles), so the three a
+ * person can actually act on get a sentence; everything else shows what the
+ * server said verbatim, because a 400 from the block validator *is* the
+ * explanation ("gallery block: data.images[0].url is not a URL") and no
+ * paraphrase of it would be as useful.
+ */
+function writeRefusalReason(err) {
+  if (err.message === 'NOT_WORKSPACE_EDITOR') return 'you have read-only access to this workspace';
+  if (err.status === 401) return 'your session has ended — sign in again';
+  if (err.status === 413) return 'it is too large for the server to accept';
+  return err.message || `the server answered ${err.status ?? 'nothing'}`;
+}
+
+/**
+ * Says that a write did not happen, in the one place that can: a toast.
+ *
+ * Before this the three handlers below awaited the API with no `catch`, so a
+ * 403, a 400, a 409 or a 413 became an unhandled promise rejection — the
+ * editor's `finally` cleared its spinner, the panel stayed open, and nothing on
+ * screen said the save had been refused. `useToasts` is the same surface
+ * `useFilters` reports a failed search on.
+ *
+ * The caller keeps its panel and its input: there is nothing to retype, and the
+ * message says what to fix.
+ */
+function reportWriteRefused({ what, source }, err) {
+  addToast({
+    actorType: 'system',
+    actorLabel: 'Not saved',
+    message: `${what} — ${writeRefusalReason(err)}`,
+  });
+  writeLog('light', `refused with ${err.status ?? 'no status'} "${err.message}"; the role here is ${workspace.value?.role ?? 'unknown'} (source: ${source})`);
+  writeLog('verbose', `refusal body: ${JSON.stringify(err.body ?? null)}`);
+}
 
 async function loadWorkspace() {
   workspaceError.value = '';
@@ -1347,6 +1467,10 @@ const minimizedPanels = computed(() =>
 onMounted(() => {
   loadEntities('WikiLayout mount');
   loadEntityTypes('WikiLayout mount');
+  // The role, which decides whether a write control is on screen at all
+  // (KOL-150). Not awaited: the layout renders while it is in flight, and an
+  // unread role is permissive on purpose — see `canWrite`.
+  loadRole('WikiLayout mount');
 });
 
 function openEntry(id, title) {
@@ -1374,6 +1498,15 @@ function openSnapshot(snapshot) {
 }
 
 function openEditor() {
+  // The sidebar and the empty state hide `+ New` for a viewer, and the `n` key
+  // is the one way in that cannot be hidden — the cheatsheet renders the
+  // binding map, so a key removed from it for one role would have to be
+  // removed from the list too. Refused here instead, rather than opening an
+  // editor whose Save is a 403 (KOL-150).
+  if (!canWrite.value) {
+    writeLog('light', `refused to open the editor: the role here is ${workspace.value?.role ?? 'unknown'} (source: the "n" shortcut or a caller that is not the sidebar)`);
+    return;
+  }
   const existing = panels.value.find(p => p.id === EDITOR_ID);
   if (!existing) {
     panels.value.push({ id: EDITOR_ID, title: 'New Entity', mode: 'editor' });
@@ -1418,18 +1551,47 @@ function onCrumbClick(index) {
   selectEntity(crumb.id);
 }
 
+/**
+ * The three entity writes the detail panel and the editor ask for (KOL-150).
+ *
+ * Each one catches, because each one is a request that can be refused — and a
+ * refusal here used to be silent. The catch does three things and no more: it
+ * raises the toast, it leaves the panel exactly as it was (the editor keeps the
+ * fields the user typed; a failed delete does not close the entity it failed to
+ * delete), and it does not rethrow — there is nobody above to handle it, and a
+ * rejection is what this was.
+ */
 async function onEntitySaved(data) {
-  const entity = await addEntity(data);
+  let entity;
+  try {
+    entity = await addEntity(data);
+  } catch (err) {
+    reportWriteRefused({ what: 'Your new entity was not created', source: 'the editor’s Save → POST /entities' }, err);
+    return;
+  }
+  writeLog('normal', `created ${entity._id} "${entity.title}" (source: the editor’s Save)`);
   closePanel(EDITOR_ID);
   openEntry(entity._id, entity.title);
 }
 
 async function onEntityUpdated(id, data) {
-  await editEntity(id, data);
+  try {
+    await editEntity(id, data);
+  } catch (err) {
+    reportWriteRefused({ what: 'Your change was not saved', source: `an edit of ${id} → PUT /entities/:id` }, err);
+    return;
+  }
+  writeLog('normal', `updated ${id} (source: an edit in the detail panel)`);
 }
 
 async function onEntityDeleted(id) {
-  await removeEntity(id);
+  try {
+    await removeEntity(id);
+  } catch (err) {
+    reportWriteRefused({ what: 'That entity was not deleted', source: `a delete of ${id} → DELETE /entities/:id` }, err);
+    return;
+  }
+  writeLog('normal', `deleted ${id} (source: Delete entity in the detail panel)`);
   closePanel(id);
 }
 
