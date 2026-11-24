@@ -69,8 +69,10 @@ const emit = defineEmits(['close', 'open-entry']);
  * that should be there and is not looks the same whether a page failed, a group
  * holds a member from another workspace, or the two entities are simply not
  * related.
- *   light   — a walk that stopped partway: which page failed, how many groups
- *             had arrived, and the status it failed with
+ *   light   — every graph drawn and what asked for it (a mount, or a `group:*`
+ *             frame in another tab — KOL-149), every load dropped for a newer
+ *             one, and a walk that stopped partway: which page failed, how many
+ *             groups had arrived, and the status it failed with
  *   normal  — light, plus the load that landed, with its group and entity counts
  *   verbose — normal, plus the page size asked for and the edge count built
  */
@@ -152,6 +154,14 @@ function getNodeStroke(category) {
 function initGraph() {
   const container = containerRef.value;
   if (!container) return;
+
+  // Idempotent, because a frame redraws this graph in place (KOL-149): the
+  // previous simulation holds a timer and the previous observer a listener, and
+  // each call below makes new ones. Without this a tab left open through a
+  // dozen relationship writes would be running a dozen force simulations over
+  // the same SVG.
+  if (simulation) { simulation.stop(); simulation = null; }
+  if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
 
   const { width, height } = container.getBoundingClientRect();
   // Subtract toolbar height (~42px)
@@ -389,18 +399,46 @@ async function loadGroups() {
   try {
     const groups = await getAllGroups();
     log('verbose', `group walk asked for pages of ${GROUP_PAGE_SIZE} and brought ${groups.length} group(s)`);
-    return groups;
+    return { groups, warning: null };
   } catch (err) {
     const partial = err.partial ?? [];
-    loadWarning.value = err.status === 401 ? SESSION_EXPIRED : PARTIAL_GRAPH;
     log('light', `group walk stopped on page ${err.page ?? '?'} with ${partial.length} group(s) loaded (source: getAllGroups, status ${err.status ?? 'none'}): ${err.message}`);
-    return partial;
+    return { groups: partial, warning: err.status === 401 ? SESSION_EXPIRED : PARTIAL_GRAPH };
   }
 }
 
-onMounted(async () => {
+/**
+ * Which load is the current one. A relationship write in another tab can land
+ * while a load is still in flight (KOL-149), and the newest answer is the one
+ * that must be drawn — so every load takes a number and a load whose number is
+ * no longer the latest throws its own result away rather than overwriting a
+ * fresher graph with a staler one.
+ */
+let loadSeq = 0;
+
+/**
+ * Builds the whole graph from the server: the entity list is the nodes, the
+ * group list the edges.
+ *
+ * Callable more than once (KOL-149) — `reload` below is what a relationship
+ * frame in another tab reaches, and it redraws this graph in place rather than
+ * remounting the component, which would throw away the zoom, the pan and the
+ * force layout the viewer is reading. `source` says what asked, because a
+ * reload that never happened and a reload that drew the same thing are the same
+ * picture from the outside.
+ */
+async function loadGraph(source) {
+  const seq = (loadSeq += 1);
   try {
-    const [entities, groups] = await Promise.all([getEntities(), loadGroups()]);
+    const [entities, { groups, warning }] = await Promise.all([getEntities(), loadGroups()]);
+    if (seq !== loadSeq) {
+      log('light', `dropped a graph load (source: ${source}) — a newer one started while it was in flight`);
+      return;
+    }
+    // Cleared first: a reload after a failed page must not keep saying the
+    // graph is short when it no longer is.
+    fetchError.value = null;
+    loadWarning.value = warning;
 
     nodeData.value = entities.map(e => ({
       id: String(e._id),
@@ -461,16 +499,39 @@ onMounted(async () => {
 
     linkData.value = Array.from(edgeMap.values());
     loading.value = false;
+    log('light', `graph drawn from ${nodeData.value.length} node(s) and ${linkData.value.length} edge(s) (source: ${source})${loadWarning.value ? ' — the group walk stopped partway' : ''}`);
     log('normal', `graph built from ${nodeData.value.length} entity node(s) and ${groups.length} group(s)${loadWarning.value ? ' — the group walk stopped partway' : ''}`);
     log('verbose', `edges: ${linkData.value.length}`);
 
     await nextTick();
+    if (seq !== loadSeq) {
+      log('light', `did not draw a graph load (source: ${source}) — a newer one started while it was rendering`);
+      return;
+    }
     initGraph();
   } catch (err) {
+    if (seq !== loadSeq) return;
     fetchError.value = err.message;
     loading.value = false;
   }
-});
+}
+
+onMounted(() => loadGraph('the graph was opened'));
+
+/**
+ * Rebuilds the graph in place. The layout calls this on a `group:*` frame
+ * (components/WikiLayout.vue): relationships are the whole of what this view
+ * draws, so a group created, relabelled, reordered or deleted in another tab
+ * left this one drawing edges that no longer exist — and it is the one view
+ * with no other way to notice, since it read the group list once on mount.
+ *
+ * Awaitable, and exposed to the parent through `defineExpose`.
+ */
+function reload(source = 'a reload') {
+  return loadGraph(source);
+}
+
+defineExpose({ reload });
 
 onBeforeUnmount(() => {
   if (simulation) simulation.stop();

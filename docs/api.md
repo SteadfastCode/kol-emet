@@ -285,6 +285,13 @@ re-densified server-side.
 | DELETE | `/relationship-groups/:id/subgroups/:subGroupId` | Un-nest a subgroup |
 | DELETE | `/relationship-groups/:id` | Delete the group |
 
+Every one of those nine writes broadcasts one frame to the workspace's other tabs (KOL-149):
+[`group:created`](#the-frames) for the create, [`group:deleted`](#the-frames) for the delete *and*
+for the member removal that leaves a group with fewer than two entity members (that path deletes the
+group), and [`group:updated`](#the-frames) for the other seven — see the frame list for what the
+payload carries and why there is one update name rather than seven. A refused write broadcasts
+nothing, and the tab that asked is excluded by its `x-sse-client-id`.
+
 ## Relationship types
 
 | Method | Route | Description |
@@ -1313,6 +1320,9 @@ non-empty workspace are each their own item.
 | `question:created` | `POST /open-questions`, and the MCP `add_open_question` | `{ question, entry_ids }` | refetches the entity on screen if `entry_ids` names it |
 | `question:updated` | `PUT /open-questions/:id` | `{ question, entry_ids }` | as above |
 | `question:deleted` | `DELETE /open-questions/:id` | `{ questionId, question, entry_ids }` | as above, or if the panel is showing that question |
+| `group:created` | `POST /relationship-groups` | `{ group, entityIds }` | redraws the graph; refetches the entity on screen if `entityIds` names it |
+| `group:updated` | every `/relationship-groups` write that changes a group's own row — label, members, order, a member's label, a subgroup link | `{ group, entityIds }` | as above |
+| `group:deleted` | `DELETE /relationship-groups/:id`, and the member removal that leaves a group with fewer than 2 entity members | `{ groupId, group, entityIds }` | as above, or if the panel is showing that group |
 | `draft:applied` | `POST /drafts/:id/apply` | `{ draftId, applied, failed, blocked, skipped, actor }` | refetches the list |
 | `workspace:imported` | `POST /import` | `{ version, imported, actor }` | refetches the list |
 | `error` | the server, before it closes a stream | `{ error, limit? }` | see *Ending a stream* below |
@@ -1336,9 +1346,29 @@ without a refetch. The MCP `add_open_question` tool emits `question:created` its
 the collection directly rather than through the route, and excludes no client (an MCP session holds
 no `/events` stream). No actor is named on these frames: the route resolves none.
 
-Not broadcast yet, and deliberately: relationship-group writes (they have no `ChangeLog` and so
-need an event vocabulary of their own) and anything on `/chat`, which is a separate SSE channel with
-its own client.
+The three `group:*` frames (KOL-149) are the relationship collection's own vocabulary, on the same
+terms one collection over: nine write routes, no `ChangeLog` to hang a broadcast on, and so nothing
+at all reaching another client — while the browser had echoed `x-sse-client-id` on every one of
+those writes since KOL-104. `group` is the row as a panel renders it (`_id`, `label`, and `members`
+with each member's populated `ref`) and `entityIds` is **always bare string ids**: the flattened set
+of entity members the group reaches, *nested subgroups included*. That flattening is the part a
+listener cannot do for itself — a subgroup is a reference, so the entities it contributes are not in
+the row the frame carries, and they are exactly the entities whose edges the write moved. Two
+writes name an entity the row no longer holds: both member removals carry the member that left,
+whose panel is as affected as the ones that stayed. **One `group:updated` for all eight writes that
+change a group's own row**, rather than eight names: an edge is a pair drawn from the whole member
+set, so nothing here can be patched from a diff anyway — the graph redraws (in place, keeping the
+viewer's zoom and layout) and the open panel refetches. No actor is named on these frames: the route
+resolves none.
+
+Not broadcast yet, and deliberately: the **MCP** relationship tools (`add_relationship`,
+`add_member_to_relationship`, `update_group_label`, `remove_relationship`,
+`update_relationship_label`, `add_subgroup_to_relationship`,
+`remove_subgroup_from_relationship`), which write the collection directly rather than through the
+route and so emit nothing — the gap `add_open_question` closes for questions by broadcasting
+itself; a `ChangeLog` trail and a rollback for relationship writes, which need a `changeType`
+vocabulary the model does not have; `Last-Event-ID` resumption; relationship-*type* writes; and
+anything on `/chat`, which is a separate SSE channel with its own client.
 
 ### Ending a stream
 

@@ -96,6 +96,7 @@
     <Transition name="graph-fade">
       <GraphView
         v-if="graphOpen"
+        ref="graphRef"
         @close="graphOpen = false"
         @open-entry="onGraphOpenEntry"
       />
@@ -633,6 +634,12 @@ const panels = ref([]);
 const activePanelId = ref(null);
 const chatOpen = ref(false);
 const graphOpen = ref(false);
+/**
+ * The graph, while it is open, so a relationship frame can tell it to redraw
+ * (KOL-149). Null whenever it is closed, which is also the right answer: a view
+ * nobody is looking at refetches nothing, and it loads on mount when it reopens.
+ */
+const graphRef = ref(null);
 const generatorOpen = ref(false);
 const cheatsheetOpen = ref(false);
 const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
@@ -1536,6 +1543,56 @@ function refreshQuestions(payload, message) {
   });
 }
 
+// ─── Relationship-group frames (KOL-149) ──────────────────────────────────────
+
+/**
+ * Whether a `group:*` frame changes what the open detail panel is showing.
+ *
+ * Two ways it can, the same two a `question:*` frame has: the frame's
+ * `entityIds` names the entity on screen — the flattened member set, nested
+ * subgroups included, which is why the payload carries it — or the panel is
+ * showing the group that just changed, which is the case a removal makes
+ * (`entityIds` carries the member that left, but a group the panel renders
+ * through a *parent* of it would not be named at all).
+ */
+function groupTouchesPanel({ group, groupId, entityIds }) {
+  const shown = selectedEntity.value;
+  if (!shown) return false;
+  if ((entityIds ?? []).some(id => String(id) === String(shown._id))) return true;
+  const id = String(groupId ?? group?._id);
+  return (shown.relationships ?? []).some(g => String(g._id) === id);
+}
+
+/**
+ * The layout's answer to a relationship write in another tab.
+ *
+ * Two listeners, and they are not the same shape. **The graph redraws on every
+ * frame**, because relationships are the whole of what it draws and it read the
+ * group list once on mount — a group created, relabelled, reordered or deleted
+ * elsewhere left it drawing edges that no longer exist, with nothing on screen
+ * to say so. It reloads itself rather than being remounted, so the viewer keeps
+ * their zoom, pan and layout. **The panel refetches only when the frame touches
+ * it**: `RelationshipsSection` renders the groups the server resolved for that
+ * one entity (`GET /entities/:id`), so the refresh is a refetch of the entity
+ * on screen, and a frame about entities nobody is looking at has nothing to
+ * update — the sidebar shows no relationships.
+ */
+function refreshRelationships(payload, frame, message) {
+  graphRef.value?.reload?.(`a ${frame} frame`);
+
+  if (!groupTouchesPanel(payload)) return;
+  const shown = selectedEntity.value;
+  selectEntity(shown._id);
+  addToast({
+    actorLabel:  'Relationships',
+    actorType:   'system',
+    message,
+    entityId:    shown._id,
+    entityTitle: shown.title,
+    changeType:  'updated',
+  });
+}
+
 // ─── SSE event handlers ───────────────────────────────────────────────────────
 
 useEvents({
@@ -1638,6 +1695,23 @@ useEvents({
 
   onQuestionDeleted(payload) {
     refreshQuestions(payload, 'removed a question from');
+  },
+
+  // ── Relationship groups (KOL-149) ──
+  // One `group:updated` stands for every write that changes a group's own row
+  // (server/src/lib/relationshipEvents.js says why), so none of these can be
+  // patched from the payload: the graph reloads and the open panel refetches.
+
+  onGroupCreated(payload) {
+    refreshRelationships(payload, 'group:created', 'added a relationship to');
+  },
+
+  onGroupUpdated(payload) {
+    refreshRelationships(payload, 'group:updated', 'changed a relationship on');
+  },
+
+  onGroupDeleted(payload) {
+    refreshRelationships(payload, 'group:deleted', 'removed a relationship from');
   },
 
   // The server ended this stream for good — a session signed out elsewhere, or

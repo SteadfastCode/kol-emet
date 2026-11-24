@@ -33,11 +33,22 @@
  *   layout decides whether the panel on screen is affected
  *   (components/WikiLayout.test.js pins that half).
  *
+ *   **A relationship-group write reaches this tab** (KOL-149). The same hole one
+ *   collection over: `/relationship-groups` has nine write routes and imported
+ *   no broadcaster at all, so a group created, relabelled, reordered or deleted
+ *   elsewhere left every other tab drawing edges that no longer exist — and the
+ *   graph, whose entire content is relationships, built its nodes and edges once
+ *   on mount. The three `group:*` frames each have to call their handler once
+ *   with the payload, `entityIds` included: that flattened member set is how the
+ *   layout decides whether the panel on screen is affected, and every frame
+ *   redraws the graph (components/WikiLayout.vue pins that half).
+ *
  * Falsification: drop the two bulk-write `onFrame` registrations and the first
  * group fails; drop the three `question:*` ones and the open-question group
- * fails; read `es.readyState` instead of `e.data` on the error path and the
- * stop cases reconnect; keep the fixed 3000 ms and the backoff case fails; log
- * `e.data` at the light tier and the last case fails.
+ * fails; drop the three `group:*` ones and the relationship group fails; read
+ * `es.readyState` instead of `e.data` on the error path and the stop cases
+ * reconnect; keep the fixed 3000 ms and the backoff case fails; log `e.data` at
+ * the light tier and the last case fails.
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -237,6 +248,70 @@ describe('an open-question write', () => {
     latest().frame('question:created', { question: QUESTION, entry_ids: ['e1'] });
 
     expect(logged.join('\n')).not.toContain('night run');
+  });
+});
+
+describe('a relationship-group write', () => {
+  const GROUP = {
+    _id: 'g1',
+    label: 'Runs through',
+    members: [
+      { refId: 'e1', refModel: 'Entity', label: null, notes: null, ref: { _id: 'e1', title: 'Alder Street' } },
+      { refId: 'e2', refModel: 'Entity', label: null, notes: null, ref: { _id: 'e2', title: 'Boiler Room' } },
+    ],
+  };
+
+  it('reaches this tab through group:created, once, with the row and its entityIds', () => {
+    const onGroupCreated = vi.fn();
+    wrapper = connected({ onGroupCreated });
+
+    latest().frame('group:created', { group: GROUP, entityIds: ['e1', 'e2'] });
+
+    expect(onGroupCreated).toHaveBeenCalledTimes(1);
+    expect(onGroupCreated.mock.calls[0][0]).toEqual({ group: GROUP, entityIds: ['e1', 'e2'] });
+  });
+
+  it('reaches this tab through group:updated, once — the one name all nine writes share', () => {
+    // Membership, order, a label, a subgroup link: one vocabulary, so this
+    // handler is the only thing a listener needs for eight of the nine writes.
+    const onGroupUpdated = vi.fn();
+    wrapper = connected({ onGroupUpdated });
+
+    latest().frame('group:updated', {
+      group: { ...GROUP, label: 'Signalled by' }, entityIds: ['e1', 'e2', 'e3'],
+    });
+
+    expect(onGroupUpdated).toHaveBeenCalledTimes(1);
+    expect(onGroupUpdated.mock.calls[0][0].group.label).toBe('Signalled by');
+    // The flattened set, nested subgroups included: `e3` is reachable through a
+    // subgroup the row itself does not name.
+    expect(onGroupUpdated.mock.calls[0][0].entityIds).toEqual(['e1', 'e2', 'e3']);
+  });
+
+  it('reaches this tab through group:deleted, once, naming the id that is gone', () => {
+    const onGroupDeleted = vi.fn();
+    wrapper = connected({ onGroupDeleted });
+
+    latest().frame('group:deleted', { groupId: 'g1', group: GROUP, entityIds: ['e1', 'e2'] });
+
+    expect(onGroupDeleted).toHaveBeenCalledTimes(1);
+    expect(onGroupDeleted.mock.calls[0][0].groupId).toBe('g1');
+    // A 204 carries nothing and this collection keeps no snapshot anywhere
+    // else, so the frame is the only account of which entities just changed.
+    expect(onGroupDeleted.mock.calls[0][0].entityIds).toEqual(['e1', 'e2']);
+  });
+
+  it('carries no payload at the default log tier', () => {
+    // The same rule the entity frames follow: the light tier says *which* row a
+    // frame was about, never what it said. A group's label is content, and so
+    // is a member's title.
+    wrapper = connected({ onGroupUpdated: vi.fn() });
+    logged = [];
+
+    latest().frame('group:updated', { group: GROUP, entityIds: ['e1'] });
+
+    expect(logged.join('\n')).not.toContain('Alder Street');
+    expect(logged.join('\n')).not.toContain('Runs through');
   });
 });
 

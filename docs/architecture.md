@@ -38,8 +38,11 @@ Single-page app. `LoginView` gates an authenticated `WikiLayout` shell. Key piec
 ### Backend — `server/` (Node + Express)
 REST API over MongoDB (Mongoose). Cross-cutting libs in [`server/src/lib/`](../server/src/lib):
 
-- `changeLogger.js` — writes `ChangeLog` entries on entity create/update/delete.
+- `changeLogger.js` — writes `ChangeLog` entries on entity create/update/delete, and broadcasts the
+  `entity:*` frames from the same call.
 - `broadcaster.js` — fans out live updates to connected SSE clients (`/events`).
+- `questionEvents.js`, `relationshipEvents.js` — the `question:*` and `group:*` frames: the
+  collections with no `ChangeLog` broadcast their own vocabulary (see *Live sync*).
 - `relationshipResolver.js` — resolves group member labels for an entity's relationship view.
 - `aiProviders.js` — provider registry + OpenAI-compatible client factory.
 - `mcpUserStore.js` — reads/writes `Settings.mcpUserId` (the account MCP writes are attributed to).
@@ -189,6 +192,22 @@ inside the bridge router.
 `/events` is an SSE channel. On connect the server sends the client a `clientId`; clients tag their
 writes with `x-sse-client-id` so the broadcaster can echo changes to every *other* tab/device without
 bouncing them back to the originator.
+
+**Each collection broadcasts its own vocabulary.** The `entity:*` frames come out of
+[`lib/changeLogger.js`](../server/src/lib/changeLogger.js), where the audit row and the broadcast are
+one call — so a collection with no `ChangeLog` had no live sync at all, silently, and its writes were
+invisible in every other open tab however faithfully the browser echoed `x-sse-client-id`. Those
+collections therefore emit from a module of their own, shaped like the changeLogger minus the audit
+row: [`lib/questionEvents.js`](../server/src/lib/questionEvents.js) for `question:*` (KOL-116) and
+[`lib/relationshipEvents.js`](../server/src/lib/relationshipEvents.js) for `group:*` (KOL-149). Both
+follow the same two rules: the payload carries the row **and the ids it links to** — `entry_ids` for
+a question, `entityIds` for a group — so a listener decides whether what it is showing is affected
+without a refetch, and those ids are always bare strings, never the populated rows one write happens
+to answer with. For a group the id list is *flattened through nested subgroups*, which is the part a
+listener cannot compute: a subgroup is a reference, so the entities it contributes are not in the row
+the frame carries. `GraphView` is the client that needs them most — relationships are the whole of
+what it draws — and it redraws in place on a frame rather than being remounted. Frame names, payloads
+and the writes that send them are listed in [api.md](api.md#the-frames).
 
 ## Shutdown
 A host sends SIGTERM at every deploy, so `index.js` wires SIGTERM and SIGINT to the sequence in
