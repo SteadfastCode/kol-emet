@@ -62,44 +62,6 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [x] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word**
-  Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
-  non-owner member possible.
-  First, nothing in the client reads the role it already holds. `requireWriteRole`
-  (`server/src/middleware/workspace.js:320`) refuses every unsafe method from a `viewer` with
-  `403 NOT_WORKSPACE_EDITOR`, and its own comment calls that "the same refusal the client already branches on" —
-  the client does not. `canWrite` is a prop defaulting to `true` (`client/src/components/EntityDetail.vue:153`,
-  `EntityHeader.vue:226`) and the only caller that ever passes it is the read-only snapshot panel
-  (`WikiLayout.vue:58`); `workspace.role` is read for exactly two owner-only controls (`:135`, `:217`). So a viewer
-  is shown Edit, Delete, `+ New` (`EntitySidebar.vue:8`), the block editor, the open-question form and every
-  relationship control, and discovers what they may do by clicking.
-  Second, when a write is refused the refusal is swallowed. `onEntitySaved`, `onEntityUpdated` and
-  `onEntityDeleted` (`WikiLayout.vue:1414`, `:1420`, `:1424`) `await` the API with no `catch`, while
-  `api/entities.js:15-27` deliberately throws an error carrying the status and the parsed body — so a 403, a 400
-  from `blockDataError` (a gallery row whose URL has no scheme is the reproducible one), a 409 or a 413 becomes an
-  unhandled promise rejection: `EntityEditor`'s `finally` clears `isSaving` (`:461`), the panel stays open, and
-  nothing on screen says the save did not happen. The surface for saying it already exists — `useToasts` is what
-  `composables/useFilters.js:214` uses to report a failed search while keeping the rows it has.
-  Build: derive `canWrite` once in `WikiLayout` from `workspace.role` (hierarchical, so an editor and an owner
-  pass; `viewer` false; unknown-while-loading stays permissive, because a blank panel on a slow `GET /workspace`
-  is a worse failure than a 403) and pass it to the components that already take the prop plus the sidebar's `+ New`
-  and `RelationshipsSection`; and give the three write handlers a `catch` that raises one toast naming what the
-  server said, leaves the editor open with the user's input intact, and logs at light tier with the status and
-  which write was refused.
-  Files: `client/src/components/WikiLayout.vue`, `client/src/components/EntitySidebar.vue`,
-  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.test.js`,
-  `client/src/components/EntityDetail.test.js`, `client/src/components/EntityHeader.test.js`,
-  `client/src/components/EntitySidebar.test.js`, `docs/api.md` (the client half of `NOT_WORKSPACE_EDITOR`), the
-  Decision Log.
-  Verify: `cd client && yarn test --run` with cases for: a `viewer` workspace rendering no Edit, Delete or `+ New`
-  control while an `editor` and an `owner` render all three; the controls present while the role is still unknown
-  rather than a dead panel; a 403 on save raising a toast that names the refusal and leaving the editor open with
-  its fields; a 400 whose body carries `error` showing that message rather than "400 Bad Request"; a failed delete
-  leaving the panel open instead of closing it; and a successful save still closing the panel and opening the new
-  entity. `cd client && yarn build`; `cd server && yarn test` unchanged — no server file is touched.
-  Out of scope: role-gating the settings panels (tags, entity types, import, export — each has its own role story
-  and its own refusals); the server's codes and copy; a retry affordance on the toast; and client-side URL
-  validation that would stop the gallery 400 before it is sent, which is a different item.
 
 - [ ] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame**
   `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
@@ -277,6 +239,44 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word** (routine 2026-11-23, 998c602)
+  Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
+  non-owner member possible.
+  First, nothing in the client reads the role it already holds. `requireWriteRole`
+  (`server/src/middleware/workspace.js:320`) refuses every unsafe method from a `viewer` with
+  `403 NOT_WORKSPACE_EDITOR`, and its own comment calls that "the same refusal the client already branches on" —
+  the client does not. `canWrite` is a prop defaulting to `true` (`client/src/components/EntityDetail.vue:153`,
+  `EntityHeader.vue:226`) and the only caller that ever passes it is the read-only snapshot panel
+  (`WikiLayout.vue:58`); `workspace.role` is read for exactly two owner-only controls (`:135`, `:217`). So a viewer
+  is shown Edit, Delete, `+ New` (`EntitySidebar.vue:8`), the block editor, the open-question form and every
+  relationship control, and discovers what they may do by clicking.
+  Second, when a write is refused the refusal is swallowed. `onEntitySaved`, `onEntityUpdated` and
+  `onEntityDeleted` (`WikiLayout.vue:1414`, `:1420`, `:1424`) `await` the API with no `catch`, while
+  `api/entities.js:15-27` deliberately throws an error carrying the status and the parsed body — so a 403, a 400
+  from `blockDataError` (a gallery row whose URL has no scheme is the reproducible one), a 409 or a 413 becomes an
+  unhandled promise rejection: `EntityEditor`'s `finally` clears `isSaving` (`:461`), the panel stays open, and
+  nothing on screen says the save did not happen. The surface for saying it already exists — `useToasts` is what
+  `composables/useFilters.js:214` uses to report a failed search while keeping the rows it has.
+  Build: derive `canWrite` once in `WikiLayout` from `workspace.role` (hierarchical, so an editor and an owner
+  pass; `viewer` false; unknown-while-loading stays permissive, because a blank panel on a slow `GET /workspace`
+  is a worse failure than a 403) and pass it to the components that already take the prop plus the sidebar's `+ New`
+  and `RelationshipsSection`; and give the three write handlers a `catch` that raises one toast naming what the
+  server said, leaves the editor open with the user's input intact, and logs at light tier with the status and
+  which write was refused.
+  Files: `client/src/components/WikiLayout.vue`, `client/src/components/EntitySidebar.vue`,
+  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.test.js`,
+  `client/src/components/EntityDetail.test.js`, `client/src/components/EntityHeader.test.js`,
+  `client/src/components/EntitySidebar.test.js`, `docs/api.md` (the client half of `NOT_WORKSPACE_EDITOR`), the
+  Decision Log.
+  Verify: `cd client && yarn test --run` with cases for: a `viewer` workspace rendering no Edit, Delete or `+ New`
+  control while an `editor` and an `owner` render all three; the controls present while the role is still unknown
+  rather than a dead panel; a 403 on save raising a toast that names the refusal and leaving the editor open with
+  its fields; a 400 whose body carries `error` showing that message rather than "400 Bad Request"; a failed delete
+  leaving the panel open instead of closing it; and a successful save still closing the panel and opening the new
+  entity. `cd client && yarn build`; `cd server && yarn test` unchanged — no server file is touched.
+  Out of scope: role-gating the settings panels (tags, entity types, import, export — each has its own role story
+  and its own refusals); the server's codes and copy; a retry affordance on the toast; and client-side URL
+  validation that would stop the gallery 400 before it is sent, which is a different item.
 - [x] **(KOL-149) Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing** (routine 2026-11-23, c58a8a1)
   KOL-116 found this exact hole in `/open-questions` and closed it; the sibling collection still has it.
   `server/src/routes/relationshipGroups.js` has nine write routes — create (`:204`), relabel (`:242`), add members

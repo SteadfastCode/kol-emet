@@ -65,7 +65,7 @@
     "KOL-150": {
       "order": 4,
       "title": "A viewer sees every write control, and a refused write disappears without a word",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-150",
