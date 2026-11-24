@@ -25,6 +25,7 @@ import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import EntitySidebar from './EntitySidebar.vue';
+import EntityDetail from './EntityDetail.vue';
 import EntityEditor from './EntityEditor.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
@@ -35,6 +36,13 @@ import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts.js';
 // The layout now holds a window-level keydown listener (KOL-063), so a wrapper
 // left mounted keeps answering keys for the rest of the file. Unmount them all.
 enableAutoUnmount(afterEach);
+
+// The write gate and the refused-write handling log at the light tier by default (KOL-150). Off
+// here, as in every other file that drives a logging component: the role group below asserts the
+// controls, not the console.
+beforeEach(() => {
+  localStorage.setItem('ENTITY_WRITE_LOG_LEVEL', 'off');
+});
 
 const { entities, loadEntities, selectEntity, realEntities, stubbedEntities } = vi.hoisted(() => ({
   entities: [], loadEntities: vi.fn(), selectEntity: vi.fn(),
@@ -152,11 +160,16 @@ const { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, renameWo
   renameWorkspace: vi.fn(async (name) => ({ _id: 'w1', name, role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' })),
   selectWorkspace: vi.fn(async (id) => ({ _id: id, name: 'The Shared Compendium', role: 'editor', createdAt: '2026-10-09T00:00:00.000Z' })),
 }));
-vi.mock('../api/workspace.js', () => ({
+// The requests are stubs; everything else in the module is the real thing. `ROLE_RANK`,
+// `isRole` and `roleCanWrite` are the write floor (KOL-150) — the rule the role group below
+// asserts the layout applies — and a second copy of a rule here is a copy that can agree with
+// the test while disagreeing with the client.
+vi.mock('../api/workspace.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, renameWorkspace, selectWorkspace,
   acceptInvite, declineInvite, inviteCollaborator, listMembers, listMyInvites,
   listWorkspaceInvites, removeMember, setMemberRole, withdrawInvite,
-  WORKSPACE_NAME_MAX: 80, default: getWorkspace,
+  default: getWorkspace,
 }));
 // One Escape case below mounts the generator overlay for real (KOL-084), and the overlay asks for
 // the AI allowance as it opens; nothing in a test should fetch. The rest of the module is mocked
@@ -442,13 +455,20 @@ describe('WikiLayout workspace group', () => {
 
   async function openSettings() {
     const wrapper = shallowMount(WikiLayout);
-    expect(getWorkspace).not.toHaveBeenCalled();   // nothing is fetched on page load
+    // One read on page load, and only one: the role decides whether a write control is on
+    // screen at all (KOL-150), so it cannot wait for a Settings open that may never come.
+    // Nothing else in the group is fetched until the panel opens.
+    await flushPromises();
+    expect(getWorkspace).toHaveBeenCalledTimes(1);
+    expect(getWorkspace.mock.calls[0][0]).toMatchObject({ source: 'WikiLayout mount' });
+    expect(listWorkspaces).not.toHaveBeenCalled();
+    getWorkspace.mockClear();
     await settingsTab(wrapper).trigger('click');
     await flushPromises();
     return wrapper;
   }
 
-  it('shows the workspace name, fetched when Settings opens', async () => {
+  it('shows the workspace name, refetched when Settings opens', async () => {
     const wrapper = await openSettings();
 
     expect(getWorkspace).toHaveBeenCalledTimes(1);
@@ -2153,5 +2173,303 @@ describe('WikiLayout paged entity load', () => {
 
     expect(cards(wrapper)).toEqual(['Aqueduct', 'Brakeman', 'Coupling']);
     expect(wrapper.find('.load-failed').exists()).toBe(false);
+  });
+});
+
+/**
+ * The write gate, client side (KOL-150).
+ *
+ * `requireWriteRole` on the server refuses every unsafe method from a `viewer` with
+ * `403 NOT_WORKSPACE_EDITOR`, and nothing in the client read the role it already had: `canWrite`
+ * was a prop defaulting to `true` whose only caller was the read-only snapshot panel. So a viewer
+ * — possible in the shipped product since collaborator invites (KOL-124) — was shown `+ New`, Edit,
+ * Delete, the block editor, the open-question form and every relationship control, and found out
+ * what they could do by clicking.
+ *
+ * What is pinned here is the layout's half: the role is read on mount, `canWrite` is derived from
+ * it once, and it reaches the sidebar and the detail panel. What each of those *renders* for a
+ * false `can-write` is pinned where it lives — EntitySidebar.test.js, EntityDetail.test.js and
+ * EntityHeader.test.js — because the prop is the contract between them.
+ *
+ * The unknown-role cases are not an edge: a role that has not answered yet is *every* user's first
+ * paint, and the layout is deliberately permissive there. A blank panel on a slow `GET /workspace`
+ * is indistinguishable from being locked out, the server is the gate either way, and a refusal is
+ * now said out loud (the group below this one).
+ *
+ * Falsification: default `canWrite` to `true` again and the viewer cases fail; make an unknown role
+ * restrictive and the in-flight and failed-read cases fail.
+ */
+describe('WikiLayout write gate', () => {
+  const WORKSPACE = { _id: 'w1', name: 'Alice’s Bible', createdAt: '2026-10-10T00:00:00.000Z' };
+  const PANEL_ENTITY = {
+    _id: 'e1', title: 'Engine', category: 'Worlds', summary: 'fixture',
+    tags: [], blocks: [], relationships: [], open_questions: [],
+  };
+
+  const asRole = (role) => getWorkspace.mockResolvedValue({ ...WORKSPACE, role });
+
+  beforeEach(() => {
+    entities.length = 0;
+    entities.push({ _id: 'e1', title: 'Engine', category: 'Worlds', summary: 'fixture', tags: [] });
+    getWorkspace.mockReset();
+    asRole('owner');
+  });
+
+  // The hoisted default, back for anything that runs after this file's groups.
+  afterEach(() => {
+    getWorkspace.mockReset();
+    asRole('owner');
+  });
+
+  const newEntityButton = (wrapper) =>
+    wrapper.findAll('.header-actions button').find((b) => b.text() === '+ New');
+
+  /** Opens an entity in the detail panel. `selectEntity` is stubbed, so the panel is handed its entity here. */
+  const openPanel = async (wrapper) => {
+    wrapper.findComponent(EntitySidebar).vm.$emit('select', PANEL_ENTITY._id, PANEL_ENTITY.title);
+    stubbedEntities.last.selectedEntity.value = { ...PANEL_ENTITY };
+    await flushPromises();
+  };
+
+  it('reads the role on mount — before anything asks for Settings', async () => {
+    mountList();
+    await flushPromises();
+
+    expect(getWorkspace).toHaveBeenCalledTimes(1);
+    expect(getWorkspace.mock.calls[0][0]).toMatchObject({ source: 'WikiLayout mount' });
+  });
+
+  it('shows + New and a writable panel to an owner and to an editor, and neither to a viewer', async () => {
+    for (const role of ['owner', 'editor']) {
+      asRole(role);
+      const wrapper = mountList();
+      await openPanel(wrapper);
+
+      expect(newEntityButton(wrapper), `+ New for ${role}`).toBeTruthy();
+      expect(wrapper.findComponent(EntityDetail).props('canWrite'), `can-write for ${role}`).toBe(true);
+      wrapper.unmount();
+    }
+
+    asRole('viewer');
+    const wrapper = mountList();
+    await openPanel(wrapper);
+
+    expect(newEntityButton(wrapper)).toBeUndefined();
+    expect(wrapper.findComponent(EntityDetail).props('canWrite')).toBe(false);
+    // The panel is still there to read — a viewer is a reader, not a locked door.
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+    expect(wrapper.findComponent(EntityDetail).props('entity')).toMatchObject({ title: 'Engine' });
+  });
+
+  it('keeps the controls while the read is still in flight, and hides them when it answers viewer', async () => {
+    let answer;
+    getWorkspace.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+
+    const wrapper = mountList();
+    await openPanel(wrapper);
+
+    // Nothing is known yet, and this is every user's first paint.
+    expect(newEntityButton(wrapper)).toBeTruthy();
+    expect(wrapper.findComponent(EntityDetail).props('canWrite')).toBe(true);
+
+    answer({ ...WORKSPACE, role: 'viewer' });
+    await flushPromises();
+
+    expect(newEntityButton(wrapper)).toBeUndefined();
+    expect(wrapper.findComponent(EntityDetail).props('canWrite')).toBe(false);
+  });
+
+  it('keeps them when GET /workspace fails: an unread role is not a refusal', async () => {
+    getWorkspace.mockRejectedValue(Object.assign(new Error('500'), { status: 500 }));
+
+    const wrapper = mountList();
+    await openPanel(wrapper);
+
+    expect(newEntityButton(wrapper)).toBeTruthy();
+    expect(wrapper.findComponent(EntityDetail).props('canWrite')).toBe(true);
+    // And it stays out of Settings, which nobody has opened.
+    expect(wrapper.find('.settings-error').exists()).toBe(false);
+  });
+
+  it('keeps them for a role this client version does not know', async () => {
+    asRole('auditor');
+
+    const wrapper = mountList();
+    await openPanel(wrapper);
+
+    expect(newEntityButton(wrapper)).toBeTruthy();
+    expect(wrapper.findComponent(EntityDetail).props('canWrite')).toBe(true);
+  });
+
+  it('refuses the "n" shortcut for a viewer — the one way in that cannot be hidden', async () => {
+    asRole('viewer');
+    const wrapper = mountShell();
+    await flushPromises();
+
+    press('n');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(EntityEditor).exists()).toBe(false);
+
+    wrapper.unmount();
+    asRole('editor');
+    const editorWrapper = mountShell();
+    await flushPromises();
+
+    press('n');
+    await editorWrapper.vm.$nextTick();
+    expect(editorWrapper.findComponent(EntityEditor).exists()).toBe(true);
+  });
+});
+
+/**
+ * A refused entity write says so (KOL-150).
+ *
+ * `onEntitySaved`, `onEntityUpdated` and `onEntityDeleted` awaited the API with no `catch`, while
+ * `api/entities.js` deliberately throws an error carrying the status and the parsed body — so a
+ * 403, a 400 from the block validator, a 409 or a 413 became an unhandled promise rejection: the
+ * editor's `finally` cleared its spinner, the panel stayed open, and nothing on screen said the
+ * save had not happened.
+ *
+ * The role is an owner's in every case here, on purpose: the client's copy of it can be stale (a
+ * role changed in another tab, or by the owner while this panel was open), the server is the gate,
+ * and these are the refusals that reach a user who was *correctly* shown the control.
+ *
+ * Falsification: drop any one `catch` and that case fails on the toast it never raised; close the
+ * panel in the catch and the "left open" assertions fail.
+ */
+describe('WikiLayout refused entity writes', () => {
+  /** The error api/entities.js throws: the server's message, its status and its parsed body. */
+  const refusal = (status, error) => Object.assign(new Error(error), { status, body: { error } });
+
+  const PANEL_ENTITY = {
+    _id: 'e1', title: 'Engine', category: 'Worlds', summary: 'fixture',
+    tags: [], blocks: [], relationships: [], open_questions: [],
+  };
+
+  beforeEach(() => {
+    entities.length = 0;
+    entities.push({ _id: 'e1', title: 'Engine', category: 'Worlds', summary: 'fixture', tags: [] });
+    addToast.mockClear();
+    selectEntity.mockClear();
+  });
+
+  /** The real editor, over a stubbed `GET /tags` — its fields are the point of the first case. */
+  const withRealEditor = () => {
+    const stubs = { ...SHELL_STUBS };
+    delete stubs.EntityEditor;
+    return stubs;
+  };
+
+  async function openEditor() {
+    localStorage.setItem('TAG_SUGGEST_LOG_LEVEL', 'off');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    const wrapper = mount(WikiLayout, { global: { stubs: withRealEditor() } });
+    await flushPromises();
+    wrapper.findComponent(EntitySidebar).vm.$emit('new-entry');
+    await flushPromises();
+    return wrapper;
+  }
+
+  const createButton = (wrapper) => wrapper.findAll('button').find((b) => b.text() === 'Create entity');
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('a refused save raises one toast naming the refusal and leaves the editor open with what was typed', async () => {
+    const wrapper = await openEditor();
+    await wrapper.get('input.title-input').setValue('Rolling Stock');
+    stubbedEntities.last.addEntity.mockRejectedValue(refusal(403, 'NOT_WORKSPACE_EDITOR'));
+
+    await createButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    const { message, actorLabel } = addToast.mock.calls[0][0];
+    expect(actorLabel).toBe('Not saved');
+    expect(message).toContain('not created');
+    // The server's code is not copy: this is the one refusal a person can act on.
+    expect(message).toContain('read-only');
+    expect(message).not.toContain('NOT_WORKSPACE_EDITOR');
+
+    // Still open, still holding the entity nobody wants to type twice.
+    expect(wrapper.findComponent(EntityEditor).exists()).toBe(true);
+    expect(wrapper.get('input.title-input').element.value).toBe('Rolling Stock');
+  });
+
+  it('shows what the server said about a 400 rather than its status line', async () => {
+    const wrapper = await openEditor();
+    await wrapper.get('input.title-input').setValue('Rolling Stock');
+    // The reproducible one: a gallery row whose URL has no scheme.
+    const said = 'gallery block: data.images[0].url is not a URL';
+    stubbedEntities.last.addEntity.mockRejectedValue(refusal(400, said));
+
+    await createButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toContain(said);
+    expect(addToast.mock.calls[0][0].message).not.toContain('400');
+  });
+
+  it('a save that lands closes the editor, opens the new entity and says nothing', async () => {
+    const wrapper = await openEditor();
+    await wrapper.get('input.title-input').setValue('Rolling Stock');
+    stubbedEntities.last.addEntity.mockResolvedValue({ _id: 'e2', title: 'Rolling Stock' });
+
+    await createButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findComponent(EntityEditor).exists()).toBe(false);
+    expect(wrapper.get('.panel-title').text()).toBe('Rolling Stock');
+    expect(selectEntity).toHaveBeenCalledWith('e2');
+    expect(addToast).not.toHaveBeenCalled();
+  });
+
+  /** An entity in the panel, with the stubbed composable's writes under the test's control. */
+  async function openPanel() {
+    const wrapper = shallowMount(WikiLayout);
+    await flushPromises();
+    wrapper.findComponent(EntitySidebar).vm.$emit('select', PANEL_ENTITY._id, PANEL_ENTITY.title);
+    stubbedEntities.last.selectedEntity.value = { ...PANEL_ENTITY };
+    await flushPromises();
+    return wrapper;
+  }
+
+  it('a refused delete leaves the entity open instead of closing the panel', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.removeEntity.mockRejectedValue(refusal(403, 'NOT_WORKSPACE_EDITOR'));
+
+    wrapper.findComponent(EntityDetail).vm.$emit('deleted', PANEL_ENTITY._id);
+    await flushPromises();
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toContain('not deleted');
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+    expect(wrapper.get('.panel-title').text()).toBe('Engine');
+  });
+
+  it('a refused edit says so and the panel stays as it was', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.editEntity.mockRejectedValue(refusal(409, 'DUPLICATE'));
+
+    wrapper.findComponent(EntityDetail).vm.$emit('saved', PANEL_ENTITY._id, { summary: 'changed' });
+    await flushPromises();
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toContain('not saved');
+    expect(addToast.mock.calls[0][0].message).toContain('DUPLICATE');
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+  });
+
+  it('a delete that lands still closes the panel', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.removeEntity.mockResolvedValue(undefined);
+
+    wrapper.findComponent(EntityDetail).vm.$emit('deleted', PANEL_ENTITY._id);
+    await flushPromises();
+
+    expect(addToast).not.toHaveBeenCalled();
+    expect(wrapper.find('.detail-panel').exists()).toBe(false);
   });
 });

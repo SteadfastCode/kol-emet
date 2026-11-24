@@ -5,7 +5,10 @@
       <div class="header-top">
         <span class="site-title">Kol Emet</span>
         <div class="header-actions">
-          <button class="btn-sm primary" @click="$emit('new-entry')">+ New</button>
+          <!-- Hidden for a viewer (KOL-150): `POST /entities` is refused with
+               403 NOT_WORKSPACE_EDITOR, so this used to open an editor whose
+               Save could not land. -->
+          <button v-if="canWrite" class="btn-sm primary" @click="$emit('new-entry')">+ New</button>
           <button
             class="btn-sm btn-icon"
             :class="{ active: graphOpen }"
@@ -132,13 +135,20 @@
       <p class="empty-body">{{ loadError.message }}</p>
       <button class="btn-sm primary" @click="$emit('retry-load')">Try again</button>
     </div>
+    <!-- An empty workspace a reader cannot fill is a different screen (KOL-150):
+         "create one" is advice a viewer cannot take, and both buttons below
+         lead to a write the server refuses. -->
     <div v-else class="list-empty">
       <p class="empty-title">Your wiki is empty</p>
-      <p class="empty-body">
+      <p v-if="canWrite" class="empty-body">
         Entities are the nodes of your graph — characters, worlds, organizations.
         Create one, then link them together to build the map.
       </p>
-      <div class="empty-actions">
+      <p v-else class="empty-body">
+        Nothing has been added here yet. Your role in this workspace is read-only,
+        so whoever invited you is the one to ask.
+      </p>
+      <div v-if="canWrite" class="empty-actions">
         <button class="btn-sm primary" @click="$emit('new-entry')">Create your first entity</button>
         <button class="btn-sm" @click="$emit('generate')">Or paste in some notes</button>
       </div>
@@ -174,6 +184,17 @@ const props = defineProps({
    */
   loadError: Object,
   graphOpen: Boolean,
+  /**
+   * Whether this session may write in the workspace (KOL-150). `WikiLayout`
+   * derives it from the role on `GET /workspace`; true while that is still
+   * unknown, false for a `viewer`. It gates the two ways in to a new entity —
+   * `+ New` and the empty state's "Create your first entity" — and nothing
+   * that reads: the search, the pills and every card stay.
+   *
+   * Default true, so a caller that does not know the role shows the controls
+   * rather than hiding them; the server is the gate either way.
+   */
+  canWrite: { type: Boolean, default: true },
 });
 
 // The workspace's entity types, in registry order; WikiLayout loads them.

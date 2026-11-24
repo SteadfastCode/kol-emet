@@ -12,7 +12,7 @@
         <div class="block-wrap" v-for="block in timelineEvents" :key="block._id">
           <TimelineEventBlock
             :block="block"
-            :can-edit="!editingBlockId || editingBlockId === block._id"
+            :can-edit="blockEditable(block)"
             @save="data => saveBlock(block, data)"
           />
         </div>
@@ -32,7 +32,7 @@
         <TextBlock
           v-if="block.type === 'text'"
           :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
+          :can-edit="blockEditable(block)"
           @save="data => saveBlock(block, data)"
           @edit-start="editingBlockId = block._id"
           @edit-end="editingBlockId = null"
@@ -40,25 +40,25 @@
         <TimelineEventBlock
           v-else-if="block.type === 'timeline_event'"
           :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
+          :can-edit="blockEditable(block)"
           @save="data => saveBlock(block, data)"
         />
         <AttributeBlock
           v-else-if="block.type === 'attribute'"
           :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
+          :can-edit="blockEditable(block)"
           @save="data => saveBlock(block, data)"
         />
         <QuoteBlock
           v-else-if="block.type === 'quote'"
           :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
+          :can-edit="blockEditable(block)"
           @save="data => saveBlock(block, data)"
         />
         <GalleryBlock
           v-else-if="block.type === 'gallery'"
           :block="block"
-          :can-edit="!editingBlockId || editingBlockId === block._id"
+          :can-edit="blockEditable(block)"
           @save="data => saveBlock(block, data)"
         />
       </div>
@@ -110,6 +110,12 @@ const BLOCK_DEFAULTS = {
 
 const props = defineProps({
   blocks: Array,
+  /**
+   * Whether this entity's blocks can be written at all: false for a viewer,
+   * whose writes the server refuses with `403 NOT_WORKSPACE_EDITOR`, and for a
+   * deleted entity's snapshot (KOL-150). It already gated the ✕ and
+   * "+ Add block"; see `blockEditable` for the part it did not.
+   */
   canEdit: Boolean,
 });
 const emit = defineEmits(['save-block', 'delete-block', 'add-block']);
@@ -117,6 +123,19 @@ const emit = defineEmits(['save-block', 'delete-block', 'add-block']);
 const editingBlockId = ref(null);
 const showAddMenu = ref(false);
 const isEditingTimeline = ref(false);
+
+/**
+ * Whether one block's own editor may be opened. Two gates, and they say
+ * different things: `canEdit` is whether this page may be written at all, and
+ * the rest is the one-at-a-time rule that keeps every *other* block read-only
+ * while one is open.
+ *
+ * Until KOL-150 each block was handed the second clause alone, so a list
+ * mounted `can-edit="false"` still rendered a pencil on every block in it —
+ * the parent flag reached the delete ✕ and the add menu and stopped there.
+ */
+const blockEditable = (block) =>
+  props.canEdit && (!editingBlockId.value || editingBlockId.value === block._id);
 
 const sorted = computed(() => [...(props.blocks ?? [])].sort((a, b) => a.order - b.order));
 const timelineEvents = computed(() => sorted.value.filter(b => b.type === 'timeline_event'));

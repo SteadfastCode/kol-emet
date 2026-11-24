@@ -76,6 +76,20 @@ than per route, so a route added to one of them later inherits the gate; the one
 changelog router, which is mounted at `/` (a gate there would judge every request on its way to a
 later mount), so its single write carries the gate on the route itself.
 
+**The client's half of that refusal (KOL-150).** The browser reads the role from `GET /workspace`
+**once, on mount**, and `WikiLayout` derives a single `canWrite` from it that every write control is
+behind: `+ New`, the header's Edit, the block editor, Delete entity, Restore, the open-question form
+and all nine relationship controls. An `editor` and an `owner` pass (the floor is hierarchical here
+too); a `viewer` sees the same page with the controls gone and nothing else taken away. **An unknown
+role is permissive** — not yet answered, a failed `GET /workspace`, or a role string that client
+version does not know — because a blank panel on a slow read is indistinguishable from being locked
+out and would be every user's first paint, while the server refuses the write either way. That copy
+is a *hint*, never the gate: it can be stale the moment an owner changes a role in another tab, so
+the three entity writes also report what the server said rather than swallowing it — a refused
+`POST`/`PUT`/`DELETE /entities` raises one toast carrying `error` from the body verbatim (the block
+validator's "gallery block: data.images[0].url is not a URL" is its own best explanation) and leaves
+the editor open with the user's input.
+
 The membership writes of [Collaborators](#collaborators) ask for `owner` too, and so do `PATCH /workspace` and
 `POST /import`. Three content routes deliberately have no write gate — `GET /export` (a read),
 `/chat` and `/conversations` (asking the assistant a question reads the graph and writes nothing to
