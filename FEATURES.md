@@ -62,7 +62,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word**
+- [x] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word**
   Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
   non-owner member possible.
   First, nothing in the client reads the role it already holds. `requireWriteRole`

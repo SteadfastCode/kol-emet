@@ -62,13 +62,13 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-149": {
+    "KOL-150": {
       "order": 4,
-      "title": "Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing",
-      "status": "done",
+      "title": "A viewer sees every write control, and a refused write disappears without a word",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-149",
+      "branch": "routine/item/KOL-150",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -76,30 +76,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-11-24T01:02:02.332Z",
+      "claimedAtUtc": "2026-11-24T01:19:44.906Z",
       "runId": "2026-11-24T01:00:43.148Z",
       "lastFail": null
     },
-    "KOL-150": {
-      "order": 5,
-      "title": "A viewer sees every write control, and a refused write disappears without a word",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-151": {
-      "order": 6,
+      "order": 5,
       "title": "A renamed entity type rewrites every entity in the workspace, with no audit row and no frame",
       "status": "pending",
       "attempts": 0,
@@ -117,7 +99,7 @@
       "lastFail": null
     },
     "KOL-152": {
-      "order": 7,
+      "order": 6,
       "title": "The workspace's open questions have a paged API and no screen",
       "status": "pending",
       "attempts": 0,
@@ -135,7 +117,7 @@
       "lastFail": null
     },
     "KOL-153": {
-      "order": 8,
+      "order": 7,
       "title": "`source` is the one field in an MCP refusal record that is still as long as the caller likes",
       "status": "pending",
       "attempts": 0,
@@ -153,7 +135,7 @@
       "lastFail": null
     },
     "KOL-154": {
-      "order": 9,
+      "order": 8,
       "title": "A role change that changes nothing answers 200 with a role read before the write",
       "status": "pending",
       "attempts": 0,
@@ -171,7 +153,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 10,
+      "order": 9,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -189,7 +171,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 11,
+      "order": 10,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -207,7 +189,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 12,
+      "order": 11,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -225,7 +207,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 13,
+      "order": 12,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -240,6 +222,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-149": {
+      "order": null,
+      "title": "Relationship-group writes reach no other tab: `/relationship-groups` broadcasts nothing",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-149",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-24T01:02:02.332Z",
+      "runId": "2026-11-24T01:00:43.148Z",
       "lastFail": null
     },
     "KOL-147": {
