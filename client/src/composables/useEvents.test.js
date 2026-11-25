@@ -43,9 +43,20 @@
  *   layout decides whether the panel on screen is affected, and every frame
  *   redraws the graph (components/WikiLayout.vue pins that half).
  *
+ *   **A renamed entity type reaches this tab** (KOL-151). A type rename moves
+ *   every entity that held the old name, and the per-entity `entity:updated`
+ *   frames it also sends say the rows moved without ever saying where the *name*
+ *   went — so a tab that heard only those kept rendering the old pill and
+ *   filtering on a category name no entity had any more. `useEntityTypes` loads
+ *   the registry once on mount and nothing else fetched it, so the one
+ *   `entity-type:updated` frame is the only thing that can tell it: it has to
+ *   call its handler once with the whole row and both names
+ *   (components/WikiLayout.test.js pins what the layout then does with them).
+ *
  * Falsification: drop the two bulk-write `onFrame` registrations and the first
  * group fails; drop the three `question:*` ones and the open-question group
- * fails; drop the three `group:*` ones and the relationship group fails; read
+ * fails; drop the three `group:*` ones and the relationship group fails; drop
+ * the `entity-type:updated` one and the entity-type group fails; read
  * `es.readyState` instead of `e.data` on the error path and the stop cases
  * reconnect; keep the fixed 3000 ms and the backoff case fails; log `e.data` at
  * the light tier and the last case fails.
@@ -312,6 +323,66 @@ describe('a relationship-group write', () => {
 
     expect(logged.join('\n')).not.toContain('Alder Street');
     expect(logged.join('\n')).not.toContain('Runs through');
+  });
+});
+
+describe('a renamed entity type', () => {
+  const TYPE = {
+    _id: 't1',
+    name: 'People',
+    icon: null,
+    color: { bg: '#B5D4F4', text: '#0C447C' },
+    order: 0,
+  };
+
+  it('reaches this tab through entity-type:updated, once, with the row and both names', () => {
+    const onEntityTypeUpdated = vi.fn();
+    wrapper = connected({ onEntityTypeUpdated });
+
+    latest().frame('entity-type:updated', {
+      entityType: TYPE,
+      from: 'Characters',
+      to: 'People',
+      relabelled: { entities: 3, sourceCategories: 1, targetCategories: 0 },
+      actor: { label: 'alice@example.test', type: 'user' },
+    });
+
+    expect(onEntityTypeUpdated).toHaveBeenCalledTimes(1);
+    const payload = onEntityTypeUpdated.mock.calls[0][0];
+    // The whole row, so the shared registry is patched rather than refetched.
+    expect(payload.entityType).toEqual(TYPE);
+    // And the *old* name, which is what this tab has on screen: a pill, and
+    // possibly the category filter it is set to.
+    expect(payload.from).toBe('Characters');
+    expect(payload.to).toBe('People');
+    expect(payload.relabelled.entities).toBe(3);
+  });
+
+  it('is delivered beside the per-entity frames the same rename sends', () => {
+    // One write, two vocabularies: the rows that moved, and the name they moved
+    // to. Neither stands in for the other.
+    const onEntityUpdated = vi.fn();
+    const onEntityTypeUpdated = vi.fn();
+    wrapper = connected({ onEntityUpdated, onEntityTypeUpdated });
+
+    latest().frame('entity:updated', { entity: { _id: 'e1', title: 'The Conductor' }, actor: {}, changes: {} });
+    latest().frame('entity:updated', { entity: { _id: 'e2', title: 'The Stoker' }, actor: {}, changes: {} });
+    latest().frame('entity-type:updated', { entityType: TYPE, from: 'Characters', to: 'People' });
+
+    expect(onEntityUpdated).toHaveBeenCalledTimes(2);
+    expect(onEntityTypeUpdated).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries no payload at the default log tier', () => {
+    // The same rule every other frame follows: the light tier says *which* row a
+    // frame was about, never what it said. A type's name is a user's own word.
+    wrapper = connected({ onEntityTypeUpdated: vi.fn() });
+    logged = [];
+
+    latest().frame('entity-type:updated', { entityType: TYPE, from: 'Characters', to: 'People' });
+
+    expect(logged.join('\n')).not.toContain('People');
+    expect(logged.join('\n')).not.toContain('Characters');
   });
 });
 

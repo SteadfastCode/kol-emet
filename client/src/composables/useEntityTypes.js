@@ -6,10 +6,18 @@ import { getEntityTypes } from '../api/entityTypes.js';
  * the pickers and the category colours read, in place of a hardcoded list.
  *
  * State is module-level, like useToasts, so every component shares the one
- * list. WikiLayout loads it when it mounts; nothing else fetches. Each load
- * clears the list first, so a different account signing in on the same tab
- * never sees the previous workspace's types, and a load overtaken by a newer
- * one is discarded.
+ * list. WikiLayout loads it when it mounts, and `entity-type:updated` on
+ * `/events` keeps it honest after that (KOL-151) — before that frame existed
+ * nothing else ever fetched, so a type renamed in another tab left this one
+ * rendering a pill no entity carried any more: it matched nothing, and
+ * filtering on it silently emptied the sidebar. Each load clears the list
+ * first, so a different account signing in on the same tab never sees the
+ * previous workspace's types, and a load overtaken by a newer one is discarded.
+ *
+ * `applyEntityTypeUpdate` is the frame's half of that: the payload carries the
+ * whole row, so the shared list is **patched rather than refetched** — the
+ * pills, the pickers and the category colours all read this one list, and a
+ * request per frame would buy nothing the frame has not already said.
  *
  * An empty registry (a workspace that predates it and was never backfilled with
  * server/scripts/seed-entity-types.js) leaves the pills and pickers empty: the
@@ -19,8 +27,10 @@ import { getEntityTypes } from '../api/entityTypes.js';
  * Tiered debug logging: set localStorage.ENTITY_TYPE_LOG_LEVEL to
  * off | light | normal | verbose (default light). The server logs its side on
  * its own ENTITY_TYPE_LOG_LEVEL.
- *   light   — a failed load, or one that found no types, naming what asked
- *   normal  — light, plus each load and how many types it brought
+ *   light   — a failed load, or one that found no types, naming what asked; and
+ *             every frame that could not be applied, with why
+ *   normal  — light, plus each load and how many types it brought, and each
+ *             frame applied: which row changed, from what source
  *   verbose — normal, plus the names in order
  */
 
@@ -62,6 +72,30 @@ async function loadEntityTypes(source = 'unknown') {
   }
 }
 
+/**
+ * Replaces one row in the shared list from an `entity-type:updated` frame, or
+ * appends it when this tab has never seen it (a type created while the tab was
+ * open, then renamed). Re-sorted on the server's own key — `order`, then name —
+ * so the pills keep the order `GET /entity-types` would have given them.
+ *
+ * `source` names the caller, for the log. Returns whether anything changed.
+ */
+function applyEntityTypeUpdate(row, source = 'unknown') {
+  if (!row?._id) {
+    log('light', `ignored an entity type update with no _id (source: ${source})`);
+    return false;
+  }
+
+  const id = String(row._id);
+  const idx = types.value.findIndex(t => String(t._id) === id);
+  const was = idx === -1 ? null : types.value[idx].name;
+  const next = idx === -1 ? [...types.value, row] : types.value.map((t, i) => (i === idx ? row : t));
+
+  types.value = next.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name).localeCompare(String(b.name)));
+  log('normal', `applied an entity type update: ${id} ${was === null ? 'was not in this tab\'s list, appended' : `"${was}" →`} "${row.name}" (source: ${source})`);
+  return true;
+}
+
 export function useEntityTypes() {
   const names = computed(() => types.value.map(t => t.name));
 
@@ -74,5 +108,5 @@ export function useEntityTypes() {
     return { bg: c?.bg || fallback.bg, color: c?.text || fallback.color };
   }
 
-  return { types, names, styleFor, loadEntityTypes };
+  return { types, names, styleFor, loadEntityTypes, applyEntityTypeUpdate };
 }

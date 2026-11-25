@@ -23,6 +23,13 @@ export let sseClientId = null;
  *   `question:*` frames here (KOL-116), and the three `group:*` ones (KOL-149):
  *   an open question and a relationship group are each their own document on
  *   their own route, so nothing about either rides along with an entity's frame.
+ *   `entity-type:updated` (KOL-151) is the same rule for the one write that
+ *   changes what a *category name means*: a type rename moves every entity that
+ *   held it, and the per-entity `entity:updated` frames say the rows moved
+ *   without ever saying where the name went — so a tab that heard only those
+ *   kept rendering the old pill, filtering on a name no entity had any more.
+ *   `useEntityTypes` loads the registry once on mount and nothing else fetched
+ *   it, so this frame is the only thing that can tell it.
  *
  *   **A frame the server wrote is a stop, not a retry.** An `EventSource`
  *   reports two unrelated things as `error`: a transport failure (no `data`),
@@ -123,6 +130,8 @@ export const STOP_REASONS = Object.freeze({
  * @param {(payload: object) => void} [handlers.onGroupCreated]      `{ group, entityIds }`
  * @param {(payload: object) => void} [handlers.onGroupUpdated]      `{ group, entityIds }`
  * @param {(payload: object) => void} [handlers.onGroupDeleted]      `{ groupId, group, entityIds }`
+ * @param {(payload: object) => void} [handlers.onEntityTypeUpdated] a type was renamed:
+ *   `{ entityType, from, to, relabelled, actor }`
  * @param {(ended: {reason: string, message: string, limit: number|null}) => void} [handlers.onStreamEnded]
  *   the server ended this stream for good; nothing will reconnect
  */
@@ -138,6 +147,7 @@ export function useEvents({
   onGroupCreated,
   onGroupUpdated,
   onGroupDeleted,
+  onEntityTypeUpdated,
   onStreamEnded,
 } = {}) {
   let es = null;
@@ -278,6 +288,13 @@ export function useEvents({
       (p) => onGroupUpdated?.(p));
     onFrame('group:deleted', (p) => `group ${p.groupId}`,
       (p) => onGroupDeleted?.(p));
+
+    // Entity types (KOL-151). One frame for the rename cascade's own subject —
+    // the type — beside the per-entity `entity:updated` the same write sends.
+    // The old name is in the payload because that is what this tab has on
+    // screen: a pill, and possibly the category filter it is set to.
+    onFrame('entity-type:updated', (p) => `entity type ${p.entityType?._id}, ${p.relabelled?.entities ?? 0} entity(ies) moved`,
+      (p) => onEntityTypeUpdated?.(p));
 
     socket.addEventListener('error', (e) => handleError(e, socket));
   }
