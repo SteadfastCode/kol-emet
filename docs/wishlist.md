@@ -18,6 +18,11 @@ Unordered backlog of ideas and nice-to-haves. Not committed to, just captured.
 - ✅ Tag autocomplete on entry editor — shipped 2026-09-18 (KOL-041)
 - ✅ Bulk tag operations — workspace-wide tag rename, merge and delete, shipped 2026-10-06 (KOL-053);
   tagging several entities at once in one action is still open
+- ✅ Workspace-wide open questions — the panel behind the sidebar's *Questions* button and the `q`
+  key, shipped 2026-11-25 (KOL-152): paged from `GET /open-questions`, filtered by status on the
+  server, resolve/reopen in place, live on the `question:*` frames. **Creating a question from it
+  is still open** — every question is attached to an entity, so that needs an entity picker — as
+  are editing a question's text there and any sort other than newest-first
 - Soft delete (archive instead of hard delete)
 - ✅ Entry revision history — the `ChangeLog` API shipped with Phase 3; the per-entity history list
   with snapshot rollback in the detail panel shipped 2026-10-07 (KOL-059), as did restoring a

@@ -25,6 +25,14 @@
               <line x1="12" y1="10" x2="14" y2="15"/>
             </svg>
           </button>
+          <!-- The workspace's open questions (KOL-152): what the graph does not know yet, in one
+               place rather than one entity at a time. The `q` key opens the same panel. -->
+          <button
+            class="btn-sm"
+            :class="{ active: questionsOpen }"
+            title="Open questions in this workspace ( q )"
+            @click="$emit('questions')"
+          >Questions</button>
           <button class="btn-sm" title="Generate a draft from notes" @click="$emit('generate')">Draft</button>
           <button class="btn-sm" title="AI Chat" @click="$emit('chat')">AI</button>
           <button class="btn-sm" @click="$emit('settings')">Settings</button>
@@ -184,6 +192,8 @@ const props = defineProps({
    */
   loadError: Object,
   graphOpen: Boolean,
+  /** Whether the open-question panel is the overlay on screen (KOL-152). */
+  questionsOpen: Boolean,
   /**
    * Whether this session may write in the workspace (KOL-150). `WikiLayout`
    * derives it from the role on `GET /workspace`; true while that is still
@@ -208,7 +218,7 @@ const isFiltered = computed(() =>
   (props.activeCat && props.activeCat !== 'All')
 );
 
-defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'reset-filters', 'generate', 'shortcuts', 'retry-load']);
+defineEmits(['search', 'set-cat', 'set-tag', 'clear-tag', 'select', 'new-entry', 'logout', 'settings', 'chat', 'graph', 'questions', 'reset-filters', 'generate', 'shortcuts', 'retry-load']);
 
 // The `/` shortcut lives in the layout (one global key listener for the app),
 // so it needs a way in here. Exposing the move rather than the element keeps
@@ -252,8 +262,12 @@ defineExpose({ focusSearch });
   letter-spacing: 0.01em;
 }
 
+/* Wraps rather than overflowing: the row holds seven controls once Questions is
+   among them, and the list view is 320px wide while a detail panel is open. */
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 
