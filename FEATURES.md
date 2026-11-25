@@ -64,36 +64,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-152) The workspace's open questions have a paged API and no screen**
-  `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
-  bare-id cursor (`server/src/routes/openQuestions.js:85`, KOL-092), and `client/src/api/openQuestions.js` wraps it
-  as `getOpenQuestionPage` (`:64`) with `QUESTION_PAGE_SIZE` — and **nothing in the client calls it**: grep
-  `getOpenQuestionPage` across `client/src` and the only hit is its own definition. Questions are reachable one
-  entity at a time, through the list inside `EntityHeader.vue`, which renders the `open_questions` that arrive
-  populated on `GET /entities/:id`. So the product's answer to "what is still unanswered in here" is to open every
-  entity in turn, and the Decision Log's note from KOL-104 — "the workspace-wide view and its paging stay
-  unclaimed" (`kol_emet_spec.md`) — has been true since the route was paged. On a graph an agent maintains, the
-  list of what the graph does not know yet is a first-class view, not a per-entity footnote.
-  Build a workspace-wide question panel, opened from the sidebar and from a binding registered in the existing
-  `useKeyboardShortcuts` map so the `?` cheatsheet picks it up for free: rows of question text, status and the
-  entities each is attached to, paged with `getOpenQuestionPage` exactly as the sidebar pages entities, filtered by
-  status on the server rather than in the browser, each row opening its entity through the existing `openEntry`.
-  Resolve and reopen in place with `setOpenQuestionStatus`, which already exists, gated by the write role, and live
-  through the `question:*` frames KOL-116 already broadcasts, so a question answered in another tab moves here
-  without a refetch. A workspace with no questions reads as an empty state, not an empty list.
-  Files: new `client/src/components/OpenQuestionPanel.vue`, `client/src/components/WikiLayout.vue`,
-  `client/src/components/EntitySidebar.vue`, new `client/src/components/OpenQuestionPanel.test.js`,
-  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/wishlist.md`, the Decision Log (the KOL-104
-  entry's unclaimed half).
-  Verify: `cd client && yarn test --run` with cases for: a first page rendered from `getOpenQuestionPage` and a
-  second appended at the end of the list with no row repeated or dropped across the boundary; the status filter
-  re-querying the server rather than filtering the page already in the browser; a `question:updated` frame moving a
-  row with no refetch and a `question:deleted` removing it; a row click opening that entity's panel; the empty
-  state; and no resolve control for a viewer. `cd client && yarn build`; `cd server && yarn test` unchanged — the
-  route is already covered by `tests/http/openQuestionList.test.js`.
-  Out of scope: the `Open Questions` *entity category* and any reconciliation between the two; creating a question
-  from this panel (every question is attached to at least one entity, so it needs an entity picker); editing
-  question text here; a question's own history; and any sort other than the newest-first the route answers.
 
 - [ ] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes**
   KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
@@ -228,6 +198,36 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-152) The workspace's open questions have a paged API and no screen** (routine 2026-11-25, f2023a6)
+  `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
+  bare-id cursor (`server/src/routes/openQuestions.js:85`, KOL-092), and `client/src/api/openQuestions.js` wraps it
+  as `getOpenQuestionPage` (`:64`) with `QUESTION_PAGE_SIZE` — and **nothing in the client calls it**: grep
+  `getOpenQuestionPage` across `client/src` and the only hit is its own definition. Questions are reachable one
+  entity at a time, through the list inside `EntityHeader.vue`, which renders the `open_questions` that arrive
+  populated on `GET /entities/:id`. So the product's answer to "what is still unanswered in here" is to open every
+  entity in turn, and the Decision Log's note from KOL-104 — "the workspace-wide view and its paging stay
+  unclaimed" (`kol_emet_spec.md`) — has been true since the route was paged. On a graph an agent maintains, the
+  list of what the graph does not know yet is a first-class view, not a per-entity footnote.
+  Build a workspace-wide question panel, opened from the sidebar and from a binding registered in the existing
+  `useKeyboardShortcuts` map so the `?` cheatsheet picks it up for free: rows of question text, status and the
+  entities each is attached to, paged with `getOpenQuestionPage` exactly as the sidebar pages entities, filtered by
+  status on the server rather than in the browser, each row opening its entity through the existing `openEntry`.
+  Resolve and reopen in place with `setOpenQuestionStatus`, which already exists, gated by the write role, and live
+  through the `question:*` frames KOL-116 already broadcasts, so a question answered in another tab moves here
+  without a refetch. A workspace with no questions reads as an empty state, not an empty list.
+  Files: new `client/src/components/OpenQuestionPanel.vue`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/EntitySidebar.vue`, new `client/src/components/OpenQuestionPanel.test.js`,
+  `client/src/components/WikiLayout.test.js`, `docs/api.md`, `docs/wishlist.md`, the Decision Log (the KOL-104
+  entry's unclaimed half).
+  Verify: `cd client && yarn test --run` with cases for: a first page rendered from `getOpenQuestionPage` and a
+  second appended at the end of the list with no row repeated or dropped across the boundary; the status filter
+  re-querying the server rather than filtering the page already in the browser; a `question:updated` frame moving a
+  row with no refetch and a `question:deleted` removing it; a row click opening that entity's panel; the empty
+  state; and no resolve control for a viewer. `cd client && yarn build`; `cd server && yarn test` unchanged — the
+  route is already covered by `tests/http/openQuestionList.test.js`.
+  Out of scope: the `Open Questions` *entity category* and any reconciliation between the two; creating a question
+  from this panel (every question is attached to at least one entity, so it needs an entity picker); editing
+  question text here; a question's own history; and any sort other than the newest-first the route answers.
 - [x] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame** (routine 2026-11-25, 8a342cf)
   `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
   `Entity.category`, then `RelationshipType.sourceCategory` and `targetCategory` — and writes nothing else. No

@@ -65,7 +65,7 @@
     "KOL-152": {
       "order": 4,
       "title": "The workspace's open questions have a paged API and no screen",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-152",
