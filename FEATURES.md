@@ -65,7 +65,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes**
+- [x] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes**
   KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
   "these plus a few hundred characters of this module's own, however large the request was"
   (`server/src/lib/mcpFailure.js:54-61`). It is not: `source` is passed through verbatim (`:239`) while `rpc`,
