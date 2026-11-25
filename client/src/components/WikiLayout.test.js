@@ -222,12 +222,16 @@ vi.mock('../composables/useNavigation.js', async () => {
 const { useEvents, addToast } = vi.hoisted(() => ({ useEvents: vi.fn(), addToast: vi.fn() }));
 vi.mock('../composables/useEvents.js', () => ({ useEvents }));
 vi.mock('../composables/useToasts.js', () => ({ useToasts: () => ({ addToast }) }));
-const { loadEntityTypes } = vi.hoisted(() => ({ loadEntityTypes: vi.fn() }));
+const { loadEntityTypes, applyEntityTypeUpdate } = vi.hoisted(() => ({
+  loadEntityTypes: vi.fn(), applyEntityTypeUpdate: vi.fn(),
+}));
 vi.mock('../composables/useEntityTypes.js', async () => {
   const { ref } = await import('vue');
   return {
     useEntityTypes: () => ({
-      types: ref([]), names: ref([]), styleFor: () => ({ bg: '#333', color: '#aaa' }), loadEntityTypes,
+      types: ref([]), names: ref(['Characters', 'Worlds']),
+      styleFor: () => ({ bg: '#333', color: '#aaa' }),
+      loadEntityTypes, applyEntityTypeUpdate,
     }),
   };
 });
@@ -1575,6 +1579,69 @@ describe('WikiLayout live sync', () => {
 
     expect(selectEntity).not.toHaveBeenCalled();
     expect(addToast).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The entity-type frame (KOL-151). A rename is the largest write the product makes to a
+   * workspace's entities, and the per-entity frames beside this one cannot say where the *name*
+   * went — so two things have to happen here and only one of them is a repaint: the shared
+   * registry is patched from the payload, and a category filter standing on the old name is moved
+   * to the new one. Without the second, the pill the user is on matches nothing and the sidebar
+   * silently empties, which looks exactly like a workspace that lost its entities.
+   *
+   * Falsification: drop the `onEntityTypeUpdated` handler and both cases fail; drop the
+   * `setCat(to)` line and the filter case leaves the sidebar filtering on a name no entity holds.
+   */
+  const TYPE_FRAME = {
+    entityType: { _id: 't1', name: 'People', icon: null, color: { bg: '#B5D4F4', text: '#0C447C' }, order: 0 },
+    from: 'Characters',
+    to: 'People',
+    relabelled: { entities: 3, sourceCategories: 0, targetCategories: 0 },
+    actor: { label: 'alice@example.test', type: 'user' },
+  };
+
+  it('repaints its pills from the frame, with no second request for the registry', async () => {
+    applyEntityTypeUpdate.mockClear();
+    loadEntityTypes.mockClear();
+    const wrapper = shallowMount(WikiLayout);
+    loadEntityTypes.mockClear();   // the mount's own load
+
+    sseHandlers().onEntityTypeUpdated(TYPE_FRAME);
+    await wrapper.vm.$nextTick();
+
+    expect(applyEntityTypeUpdate).toHaveBeenCalledTimes(1);
+    expect(applyEntityTypeUpdate.mock.calls[0][0]).toEqual(TYPE_FRAME.entityType);
+    // The reason names the source, as every other load here does.
+    expect(applyEntityTypeUpdate.mock.calls[0][1]).toMatch(/entity-type:updated/);
+    expect(loadEntityTypes).not.toHaveBeenCalled();
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0]).toMatchObject({ actorLabel: 'alice@example.test' });
+    expect(addToast.mock.calls[0][0].message).toContain('People');
+  });
+
+  it('moves a category filter standing on the old name to the new one', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    const sidebar = wrapper.findComponent(EntitySidebar);
+    sidebar.vm.$emit('set-cat', 'Characters');
+    await wrapper.vm.$nextTick();
+    expect(sidebar.props('activeCat')).toBe('Characters');
+
+    sseHandlers().onEntityTypeUpdated(TYPE_FRAME);
+    await wrapper.vm.$nextTick();
+
+    expect(sidebar.props('activeCat')).toBe('People');
+  });
+
+  it('leaves a filter on another type alone', async () => {
+    const wrapper = shallowMount(WikiLayout);
+    const sidebar = wrapper.findComponent(EntitySidebar);
+    sidebar.vm.$emit('set-cat', 'Worlds');
+    await wrapper.vm.$nextTick();
+
+    sseHandlers().onEntityTypeUpdated(TYPE_FRAME);
+    await wrapper.vm.$nextTick();
+
+    expect(sidebar.props('activeCat')).toBe('Worlds');
   });
 
   it('says so when the server ends the stream for good', () => {

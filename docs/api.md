@@ -327,10 +327,34 @@ The client and the MCP/chat category lists move onto the registry in later Phase
 |--------|-------|-------------|
 | GET | `/entity-types` | List the workspace's types, sorted by `order` then `name`. `?q=` fuzzy-filters by name. |
 | POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. Any non-blank `name` (trimmed) is allowed, and entities can use it at once; a blank one is 400. 409 on an existing name (case-insensitive). A near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
-| PUT | `/entity-types/:id` | Update any of `name` (non-blank, trimmed), `icon`, `color` (either half), `order`. 409 if another type has the new name (case-insensitive). A rename, including a change of case alone, cascades: every entity `category` and relationship type `sourceCategory`/`targetCategory` in the workspace that held the old name takes the new one, and the response adds `relabelled: { entities, sourceCategories, targetCategories }`. The steps are ordered, not transactional; if the cascade fails the type keeps its new name and the answer is 500, and renaming it back repairs the data. |
+| PUT | `/entity-types/:id` | Update any of `name` (non-blank, trimmed), `icon`, `color` (either half), `order`. 409 if another type has the new name (case-insensitive). A rename, including a change of case alone, cascades: every entity `category` and relationship type `sourceCategory`/`targetCategory` in the workspace that held the old name takes the new one, and the response adds `relabelled: { entities, sourceCategories, targetCategories }`. **413** past `MAX_AFFECTED` moved entities (see below). The steps are ordered, not transactional; if the cascade fails the type keeps its new name and the answer is 500, and renaming it back repairs the data. |
 | DELETE | `/entity-types/:id` | Delete. 409 with the same counts while anything names the type, and 409 for the workspace's last type. |
 
 A foreign or malformed id is 404.
+
+### A rename leaves a trail, and it is bounded
+
+A type rename is the largest single write the product can make to a workspace's entities, so `PUT`
+takes `requireActor` and records **one `ChangeLog` entry per moved entity**, written before the
+response — the same `logUpdate` a single edit goes through, so each entity rolls back individually
+through [`/entities/:id/rollback/:logId`](#changelog--history) and each entry's snapshot holds
+the category as it was spelled before. No `changeType` of its own: every row of the cascade *is* an
+`updated`. The cost is bounded exactly as the [tag](#tags) cascade's is: a rename moving more than
+**200** entities is refused with **413** and `{ error, affected, limit }`, naming the count and the
+limit, and **writes nothing at all** — not the type, not an entity, not a changelog row, not an
+`icon` or `color` sent in the same body.
+
+Two frames follow from the trail (KOL-151): the per-entity
+[`entity:updated`](#the-frames) the logger already emits, plus one
+[`entity-type:updated`](#the-frames) for the type itself, so a listening tab can repaint its pills,
+filters and category pickers from the payload without refetching anything. Both are workspace-scoped
+and both exclude the tab that asked, by its `x-sse-client-id`.
+
+Relationship-type ends keep moving with no entry of their own — that collection has no history
+anywhere. The *old* name is now absent from the registry, so a history entry whose snapshot names it
+is flagged `snapshotCategoryMissing` and its rollback answers 409 until the caller picks a category
+that exists; that is the pre-existing [KOL-059 contract](#changelog--history), reached by this
+trail rather than changed by it.
 
 ## Tags
 
@@ -384,8 +408,12 @@ an open question's history is not recorded and a deleted one cannot be rolled ba
 | GET | `/deleted` | The deleted entities this workspace can still put back — see below |
 
 A snapshot records the category name as it was spelled then, and a type rename
-cascades to entities without writing a `ChangeLog` — so a snapshot can name a
-type the workspace no longer has. The rollback checks before it writes:
+moves every entity that held the old name — so a snapshot can name a type the
+workspace no longer has. Since KOL-151 the rename writes its own entry per moved
+entity ([`/entity-types`](#entity-types)), which is itself one of those
+snapshots: the entry *records* the old name and the registry no longer has it.
+Snapshots are never rewritten to keep up (KOL-059), so the rollback checks
+before it writes:
 
 - **409** `{ error, snapshotCategory, availableCategories }` when the snapshot's
   category is not a type in the workspace (renamed or deleted since). Nothing is
@@ -1337,6 +1365,7 @@ non-empty workspace are each their own item.
 | `group:created` | `POST /relationship-groups` | `{ group, entityIds }` | redraws the graph; refetches the entity on screen if `entityIds` names it |
 | `group:updated` | every `/relationship-groups` write that changes a group's own row — label, members, order, a member's label, a subgroup link | `{ group, entityIds }` | as above |
 | `group:deleted` | `DELETE /relationship-groups/:id`, and the member removal that leaves a group with fewer than 2 entity members | `{ groupId, group, entityIds }` | as above, or if the panel is showing that group |
+| `entity-type:updated` | the rename half of `PUT /entity-types/:id` | `{ entityType, from, to, relabelled, actor }` | patches its copy of the registry, and moves a category filter standing on `from` to `to` |
 | `draft:applied` | `POST /drafts/:id/apply` | `{ draftId, applied, failed, blocked, skipped, actor }` | refetches the list |
 | `workspace:imported` | `POST /import` | `{ version, imported, actor }` | refetches the list |
 | `error` | the server, before it closes a stream | `{ error, limit? }` | see *Ending a stream* below |
@@ -1374,6 +1403,19 @@ change a group's own row**, rather than eight names: an edge is a pair drawn fro
 set, so nothing here can be patched from a diff anyway — the graph redraws (in place, keeping the
 viewer's zoom and layout) and the open panel refetches. No actor is named on these frames: the route
 resolves none.
+
+`entity-type:updated` (KOL-151) is the one frame about a *registry* row rather than about content,
+and it exists because the rename it reports changes what a category **name** means. The rename also
+sends one `entity:updated` per moved entity, and those say the rows moved without ever saying where
+the name went — so a tab that heard only them went on rendering the old pill and filtering on a
+category name no entity had any more: the pill matched nothing and the sidebar silently emptied.
+`client/src/composables/useEntityTypes.js` loads the registry once when the layout mounts and
+nothing else ever fetched it, so this frame is the only thing that can tell it. The payload carries
+the **whole row** (`_id`, `name`, `icon`, `color`, `order`), so the client patches rather than
+refetches, and **both names**, because the old one is what the other tab has on screen. Sent for a
+rename only: an icon or colour edit moves no entity and changes no name, and `relabelled` is the
+same count the response carries. No frame for a create or a delete of a type yet — neither can
+strand a name a tab is filtering on.
 
 Not broadcast yet, and deliberately: the **MCP** relationship tools (`add_relationship`,
 `add_member_to_relationship`, `update_group_label`, `remove_relationship`,

@@ -609,7 +609,7 @@ const {
 } = useFilters(entities, { search: searchEntities });
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
-const { loadEntityTypes } = useEntityTypes();
+const { loadEntityTypes, applyEntityTypeUpdate } = useEntityTypes();
 
 // Applying is the only point at which a draft reaches the graph, so this is
 // where the entity list has to be refetched.
@@ -1874,6 +1874,29 @@ useEvents({
 
   onGroupDeleted(payload) {
     refreshRelationships(payload, 'group:deleted', 'removed a relationship from');
+  },
+
+  // ── Entity types (KOL-151) ──
+  // A type rename is the largest write the product makes to a workspace's
+  // entities, and the per-entity `entity:updated` frames it also sends cannot
+  // say where the *name* went. Two things have to follow here, and only one of
+  // them is a repaint: the shared registry is patched from the frame (the pills,
+  // the pickers and every category colour read that one list), and a category
+  // filter set to the old name is moved to the new one — otherwise the pill the
+  // user is standing on matches nothing and the sidebar silently empties, which
+  // is indistinguishable from a workspace that lost its entities.
+
+  onEntityTypeUpdated({ entityType, from, to, relabelled, actor }) {
+    applyEntityTypeUpdate(entityType, 'an entity-type:updated frame');
+    if (from && to && activeCat.value === from) setCat(to);
+
+    const moved = relabelled?.entities ?? 0;
+    addToast({
+      actorLabel: actor?.label ?? 'Entity types',
+      actorType:  actor?.type ?? 'system',
+      message:    `renamed the "${from}" type to "${to}"${moved ? `, moving ${moved} entit${moved === 1 ? 'y' : 'ies'}` : ''}`,
+      changeType: 'updated',
+    });
   },
 
   // The server ended this stream for good — a session signed out elsewhere, or

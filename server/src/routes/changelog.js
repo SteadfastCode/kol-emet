@@ -4,11 +4,17 @@
  * ─── Snapshots hold the category name as it was spelled then ────────────────
  *
  * `Entity.category` names an entity type by name, and renaming a type cascades
- * to everything that used it (routes/entityTypes.js) but writes no `ChangeLog`:
- * every snapshot taken before the rename still holds the old name, and the
- * registry no longer has it. That is deliberate — a snapshot is the audit
- * trail, and rewriting history so a restore succeeds is the wrong trade (see
- * the KOL-059 Decision Log entry) — so the restore is what has to cope.
+ * to everything that used it (routes/entityTypes.js): every snapshot taken
+ * before the rename still holds the old name, and the registry no longer has
+ * it. That is deliberate — a snapshot is the audit trail, and rewriting history
+ * so a restore succeeds is the wrong trade (see the KOL-059 Decision Log entry)
+ * — so the restore is what has to cope.
+ *
+ * Since KOL-151 that cascade writes its own `ChangeLog` entry per moved entity,
+ * which does not change the rule above so much as make it routine: the rename's
+ * own entry is a snapshot holding the name the rename just retired, so it
+ * arrives flagged by the history route below and its rollback asks for a
+ * category the way any other stale snapshot's does.
  *
  * It does so by asking rather than failing. `POST .../rollback/:logId` checks
  * the snapshot's category against the registry before the write: a name that is

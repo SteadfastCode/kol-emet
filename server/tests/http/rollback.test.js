@@ -2,11 +2,16 @@
  * Rolling an entity back to a snapshot whose entity type is gone (KOL-059).
  *
  * `Entity.category` names a type by name and snapshots record the name as it
- * was spelled then. Renaming a type cascades to the entities using it but
- * writes no `ChangeLog`, so every earlier snapshot keeps the old name — and the
- * registry, which is the only gate on category names, no longer has it. The
- * restore used to die in the `categoryValidator` and come back as a 500: a
- * permanent failure reported as a server fault, with the version unreachable.
+ * was spelled then. Renaming a type cascades to the entities using it, so every
+ * earlier snapshot keeps the old name — and the registry, which is the only
+ * gate on category names, no longer has it. The restore used to die in the
+ * `categoryValidator` and come back as a 500: a permanent failure reported as a
+ * server fault, with the version unreachable.
+ *
+ * Since KOL-151 the cascade writes a `ChangeLog` entry per moved entity, which
+ * does not change that condition so much as add one more snapshot holding the
+ * retired name — the rename's own. The fixtures below therefore pick the entry
+ * they mean rather than the newest `updated`, and their counts include it.
  *
  * What is pinned here is the answer instead: a **409** naming the stale type and
  * the workspace's current ones, writing nothing, and a 200 for the same call
@@ -159,8 +164,16 @@ async function staleSnapshot({ from = 'Characters', to = 'People' } = {}) {
   await renameType(who, from, to);
 
   const entries = await history(who, entity._id);
-  const update = entries.find(e => e.changeType === 'updated');
-  assert.ok(update, 'the update should be in the history');
+  // Three entries now, newest first: the rename's own, the title edit's, and
+  // the 'created'. The rename logs one `updated` per moved entity (KOL-151),
+  // and its snapshot is as stale as any other taken before it — but restoring
+  // it would restore the title the entity already has, so the entry these
+  // cases use is the title edit's: the oldest `updated`, and the one whose
+  // restore is visible.
+  const updates = entries.filter(e => e.changeType === 'updated');
+  assert.equal(updates.length, 2, `the title edit and the rename cascade should each be in the history: ${JSON.stringify(entries.map(e => e.changeType))}`);
+  const update = updates.at(-1);
+  assert.equal(update.snapshot.title, 'Original', 'the oldest update is the title edit, which is the version worth restoring');
   assert.equal(update.snapshot.category, from, 'the snapshot must still hold the pre-rename name — that is the bug being handled');
   return { who, entity, update, entries, from, to };
 }
@@ -190,7 +203,9 @@ describe('rollback to a snapshot whose entity type was renamed', () => {
     const unchanged = await Entity.findById(entity._id).lean();
     assert.equal(unchanged.title, 'Current', 'a refused rollback must not restore anything');
     assert.equal(unchanged.category, to, 'and must not move the entity off the type the rename gave it');
-    assert.equal(await ChangeLog.countDocuments({ entityId: entity._id }), 2, 'and must not record a change of its own');
+    // 'created', the title edit, and the rename cascade's own entry — and no
+    // fourth: a refused rollback records nothing.
+    assert.equal(await ChangeLog.countDocuments({ entityId: entity._id }), 3, 'and must not record a change of its own');
   });
 
   test('restores under the type the caller names, with the rest of the snapshot as recorded', async () => {
@@ -205,7 +220,8 @@ describe('rollback to a snapshot whose entity type was renamed', () => {
     const stored = await Entity.findById(entity._id).lean();
     assert.equal(stored.title, 'Original');
     assert.equal(stored.category, to);
-    await waitForLogs(entity._id, 3);
+    // 'created', the title edit, the rename cascade's entry, and the restore's.
+    await waitForLogs(entity._id, 4);
     log('normal', `the restore recorded its own entry, so it is itself reversible`);
   });
 

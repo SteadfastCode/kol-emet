@@ -262,6 +262,21 @@ it as an ordinary user edit would make a 30-item apply indistinguishable from th
 `origin` carries the back-reference, so any generated change in the history can be traced to the
 draft item it came from. Both are set by the applier.
 
+**A workspace-wide write is one `updated` entry per entity, not one entry for the write.** Three
+routes change many entities at once — a [tag](api.md#tags) rename or removal (KOL-053), and an
+[entity-type](api.md#entity-types) rename (KOL-151), whose cascade moves the `category` of every
+entity that held the old name. Each writes one entry per entity it changed, through the same
+`logUpdate` a single hand edit goes through, so each of those entities rolls back individually from
+its own snapshot and no new `changeType` has to be invented for a bulk write — every row of such a
+cascade *is* an update. That is also why both routes bound their batch (**200** entities, 413 past
+it): an unbounded workspace-wide write would mean an unbounded burst of these documents, each
+carrying a whole entity in `snapshot`, plus an SSE frame each.
+
+A rename's own entries are the clearest case of a snapshot naming a type the registry no longer
+has: the entry records the name the rename just retired. Snapshots are never rewritten to keep up
+(Decision Log, KOL-059), so the rollback route asks the caller for a category instead — see
+[Changelog / history](api.md#changelog--history).
+
 ---
 
 ## Draft

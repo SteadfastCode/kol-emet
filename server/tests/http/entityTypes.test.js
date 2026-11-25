@@ -19,6 +19,36 @@
  * that used the old. With the Entity enum gone (Phase 6 step 2), the registry
  * is the only gate, so any name a type is given is one an entity can use.
  *
+ * The last group covers what a rename *leaves behind* (KOL-151), which for six
+ * months was nothing: three unbounded `updateMany`s, no `ChangeLog` and no
+ * broadcast. A rename is the largest single write the product can make to a
+ * workspace's entities, so what is asserted there is the shape KOL-053 settled
+ * for the same problem on the same documents (tests/http/tags.test.js):
+ *
+ *   **One `ChangeLog` entry per moved entity, written before the response**, so
+ *   a rename is as reversible as the single edit it replaces — the count is
+ *   asserted exactly, because a route that logged once for the whole cascade,
+ *   or not at all, would still answer 200 with the right categories. Each entry
+ *   pairs the old category with the new, is readable through
+ *   `GET /entities/:id/history`, and its snapshot really does put the category
+ *   back.
+ *
+ *   **The bound.** Past `MAX_AFFECTED` moved entities the rename is 413 naming
+ *   the count and the limit, and writes nothing at all — not the type, not an
+ *   entity, not a changelog row, not the icon in the same body.
+ *
+ *   **The frames.** One `entity:updated` per moved entity (the logger's own)
+ *   plus one `entity-type:updated` for the type, both workspace-scoped and
+ *   both excluding the tab that asked. Without the second one the other tab
+ *   went on rendering a pill no entity carried any more.
+ *
+ * Falsification for that group: drop `logEach` and the per-entity counts go to
+ * zero; make it fire-and-forget and they go flaky; drop the `movedBy` bound and
+ * the 413 case fails; drop `broadcastTypeRenamed` and the frame cases fail with
+ * no type frame; drop `excludeClientId` and the writing tab receives its own
+ * write; drop `workspaceId` from either broadcast and every frame case fails,
+ * since the broadcaster then delivers to nobody.
+ *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_ENTITY_TYPES_LOG_LEVEL = off | light | normal | verbose (default light)
  *   off     — nothing
@@ -29,7 +59,7 @@
  *   verbose — normal, plus the names returned by every list read
  */
 
-import { describe, test, before, after } from 'node:test';
+import { describe, test, before, beforeEach, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import mongoose from 'mongoose';
@@ -51,6 +81,7 @@ import Entity from '../../src/models/Entity.js';
 import RelationshipType from '../../src/models/RelationshipType.js';
 import RelationshipGroup from '../../src/models/RelationshipGroup.js';
 import OpenQuestion from '../../src/models/OpenQuestion.js';
+import ChangeLog from '../../src/models/ChangeLog.js';
 import { CATEGORIES } from '../../src/config/categories.js';
 import { seedEntityTypes } from '../../src/lib/workspaceSeeder.js';
 
@@ -63,8 +94,17 @@ process.env.CLIENT_ORIGIN = CLIENT_ORIGIN;
 process.env.ORIGIN_GUARD_LOG_LEVEL ??= 'off';
 delete process.env.BEARER_TOKEN;
 process.env.SEED_LOG_LEVEL ??= 'off';
+process.env.CHANGELOG_LOG_LEVEL ??= 'off';
+// The rename group below drives real broadcasts; this narrates every one of
+// them, which is readable when a frame is being chased and noise here.
+process.env.SSE_LOG_LEVEL ??= 'off';
 
 const { createApp } = await import('../../src/app.js');
+const { MAX_AFFECTED } = await import('../../src/routes/entityTypes.js');
+// The same module instance the app broadcasts through — one process, one client
+// map — so a connection registered here really is a listener on the route's
+// fan-out, as tests/http/relationshipEvents.test.js explains at more length.
+const { addClient, removeClient } = await import('../../src/lib/broadcaster.js');
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -502,5 +542,291 @@ describe('types in use by entities', () => {
     // The drift this guards against: a deleted type must not come back through an entity.
     assert.equal((await postEntity(bob, 'Timeline', "Bob's Second Epoch")).status, 201, 'bob still has it');
     assert.equal((await postEntity(alice, 'Timeline')).status, 400, 'alice deleted Timeline, so her entities cannot use it');
+  });
+});
+
+describe("a rename's audit trail and frames (KOL-151)", () => {
+  /** Fresh accounts: the groups above rename bob's types out from under him. */
+  let renamer;
+  let stranger;
+
+  /** Three entities on one type, and a fourth on another that must not move. */
+  const MOVED = ['The Conductor', 'The Stoker', 'The Signaller'];
+  const STAYS = 'The Yard';
+
+  /** Every client registered by the current test, dropped in afterEach. */
+  let connected = [];
+  let clientCounter = 0;
+
+  /** One SSE frame as the broadcaster wrote it. */
+  function parseFrame(chunk) {
+    const event = /^event: (.*)$/m.exec(chunk)?.[1] ?? null;
+    const raw = /^data: (.*)$/m.exec(chunk)?.[1] ?? null;
+    let data = null;
+    try { data = raw === null ? null : JSON.parse(raw); } catch { data = raw; }
+    return { event, data };
+  }
+
+  /**
+   * A listener in `who`'s workspace, collecting what it receives. The returned
+   * `clientId` is what a browser would echo back as `X-SSE-Client-Id`.
+   *
+   * `named` reads one frame name only, never "received nothing at all": the
+   * fixture entities are created through `POST /entities`, which logs and
+   * broadcasts `entity:created` fire-and-forget, so one of those can still land
+   * at any point after.
+   */
+  function listen(label, who) {
+    const received = [];
+    const clientId = `${label}-${(clientCounter += 1)}`;
+    const added = addClient(clientId, { write: (chunk) => received.push(parseFrame(chunk)) },
+      who.workspaceId, { userId: who.userId });
+    assert.ok(added.accepted, `the broadcaster refused a listener for ${label}: ${JSON.stringify(added)}`);
+    connected.push(clientId);
+    log('normal', `listening as ${clientId} in workspace ${who.workspaceId} (source: addClient)`);
+    return {
+      clientId,
+      named: (event) => {
+        const frames = received.filter(f => f.event === event);
+        for (const frame of frames) log('verbose', `${clientId} received ${frame.event}: ${JSON.stringify(frame.data)}`);
+        return frames;
+      },
+    };
+  }
+
+  /** The 'updated' entries in `renamer`'s workspace, by entity title, sorted. */
+  async function updatedTitles() {
+    const docs = await ChangeLog.find({ workspaceId: renamer.workspaceId, changeType: 'updated' })
+      .select('entityTitle').lean();
+    return docs.map(d => d.entityTitle).sort();
+  }
+
+  /** PUTs a rename as `renamer`, optionally echoing a client id. */
+  function rename(typeId, body, clientId = null) {
+    const req = renamer.agent.put(`/entity-types/${typeId}`);
+    if (clientId) req.set('X-SSE-Client-Id', clientId);
+    return req.send(body);
+  }
+
+  before(async () => {
+    renamer = await registerUser('renamer@example.test');
+    stranger = await registerUser('rename-stranger@example.test');
+    // registerUser reads the workspace back but not the user; this group needs
+    // the id to register a listener the broadcaster will count.
+    for (const who of [renamer, stranger]) {
+      who.userId = String((await User.findOne({ email: who.email }).select('_id').lean())._id);
+    }
+    assert.notEqual(renamer.workspaceId, stranger.workspaceId);
+  });
+
+  // The whole point of these cases is a count, so the registry, the entities
+  // and the audit trail are all rebuilt per test — each of these tests renames
+  // a type out from under the next one, which is exactly the drift the route
+  // exists to cascade. The two accounts and their workspaces are not rebuilt,
+  // and the starter content the template seeded is cleared with the rest, so
+  // every count below is of fixtures this group made.
+  //
+  // The seeded relationship vocabulary goes too: a relationship type's
+  // source/target category moves in the same cascade, and the group above
+  // already asserts that half. Clearing it keeps `relabelled`'s two other
+  // counts at zero here, so what these cases read is the entity half.
+  beforeEach(async () => {
+    await Entity.deleteMany({ workspaceId: renamer.workspaceId });
+    await RelationshipType.deleteMany({ workspaceId: renamer.workspaceId });
+    await EntityType.deleteMany({ workspaceId: renamer.workspaceId });
+    await seedEntityTypes(renamer.workspaceId);
+    await ChangeLog.deleteMany({ workspaceId: renamer.workspaceId });
+    for (const title of MOVED) {
+      assert.equal((await postEntity(renamer, 'Characters', title)).status, 201);
+    }
+    assert.equal((await postEntity(renamer, 'Worlds', STAYS)).status, 201);
+  });
+
+  afterEach(() => {
+    for (const clientId of connected) removeClient(clientId);
+    connected = [];
+  });
+
+  test('writes one ChangeLog entry per moved entity, pairing the old category with the new', async () => {
+    const characters = await typeNamed(renamer, 'Characters');
+
+    const res = probed(renamer, 'PUT rename "Characters" → "People"', await rename(characters._id, { name: 'People' }));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.relabelled.entities, MOVED.length);
+
+    // No wait and no retry: the route awaits the trail, so it exists by now.
+    assert.deepEqual(await updatedTitles(), [...MOVED].sort(),
+      'one entry per moved entity, and none for the entity on another type');
+
+    for (const title of MOVED) {
+      const entry = await ChangeLog.findOne({
+        workspaceId: renamer.workspaceId, changeType: 'updated', entityTitle: title,
+      }).lean();
+      assert.deepEqual(entry.changes.fieldsChanged, ['category'], `${title}: the diff should name the field that moved`);
+      assert.equal(entry.snapshot.category, 'Characters', `${title}: the snapshot holds the name as it was spelled`);
+      assert.equal(entry.actorLabel, renamer.email, 'the session user is the actor, per requireActor');
+      assert.equal(entry.actorType, 'user');
+    }
+
+    const stayed = await Entity.findOne({ workspaceId: renamer.workspaceId, title: STAYS }).lean();
+    assert.equal(stayed.category, 'Worlds', 'an entity on another type is untouched');
+  });
+
+  test("the entry is readable through GET /entities/:id/history, and its snapshot puts the category back", async () => {
+    const characters = await typeNamed(renamer, 'Characters');
+    const conductor = await Entity.findOne({ workspaceId: renamer.workspaceId, title: MOVED[0] }).select('_id').lean();
+
+    assert.equal((await rename(characters._id, { name: 'People' })).status, 200);
+
+    const history = await renamer.agent.get(`/entities/${conductor._id}/history`);
+    assert.equal(history.status, 200, JSON.stringify(history.body));
+    const entry = history.body.find(e => e.changeType === 'updated');
+    assert.ok(entry, `the rename must appear in the entity's own history: ${JSON.stringify(history.body.map(e => e.changeType))}`);
+    assert.deepEqual(entry.changes.fieldsChanged, ['category']);
+    assert.equal(entry.snapshot.category, 'Characters');
+    // The old name is gone from the registry, so the history route flags the
+    // entry ahead of the click, exactly as it does for any stale snapshot.
+    assert.equal(entry.snapshotCategoryMissing, true,
+      'the page should mark a snapshot naming a type the workspace no longer has');
+
+    // And the rollback asks rather than failing — the KOL-059 contract, which
+    // this trail now reaches: 409 naming the type that is gone.
+    const refused = probed(renamer, `POST rollback to "Characters"`,
+      await renamer.agent.post(`/entities/${conductor._id}/rollback/${entry._id}`));
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.snapshotCategory, 'Characters');
+    assert.ok(refused.body.availableCategories.includes('People'));
+
+    // Give the workspace a "Characters" again and the same entry restores the
+    // category it recorded, with no choice needed.
+    await createType(renamer, { name: 'Characters' });
+    const rolled = probed(renamer, 'POST rollback once "Characters" exists again',
+      await renamer.agent.post(`/entities/${conductor._id}/rollback/${entry._id}`));
+    assert.equal(rolled.status, 200, JSON.stringify(rolled.body));
+    assert.equal(rolled.body.category, 'Characters', 'the snapshot is what puts the category back');
+    assert.equal((await Entity.findById(conductor._id).lean()).category, 'Characters');
+  });
+
+  test(`a rename moving more than ${MAX_AFFECTED} entities is 413, and writes nothing at all`, async () => {
+    const timeline = await typeNamed(renamer, 'Timeline');
+    // Straight through the driver: MAX_AFFECTED + 1 POSTs would make this suite
+    // minutes long, and what is under test is the route's count.
+    const now = new Date();
+    await Entity.collection.insertMany(
+      Array.from({ length: MAX_AFFECTED + 1 }, (_, i) => ({
+        title: `Epoch ${i}`, category: 'Timeline', summary: '', tags: [],
+        blocks: [], relationships: [], open_questions: [],
+        workspaceId: new mongoose.Types.ObjectId(renamer.workspaceId), createdAt: now, updatedAt: now,
+      })),
+    );
+    log('light', `seeded ${MAX_AFFECTED + 1} entities on "Timeline" (source: Entity.collection.insertMany, bypassing the route)`);
+    await ChangeLog.deleteMany({ workspaceId: renamer.workspaceId });
+    const other = listen('renamer/other-tab', renamer);
+
+    // An icon rides along in the same body: a 413 means nothing happened.
+    const res = probed(renamer, 'PUT rename "Timeline" past the bound',
+      await rename(timeline._id, { name: 'Epochs', icon: '🕰️' }));
+
+    assert.equal(res.status, 413, JSON.stringify(res.body));
+    assert.equal(res.body.affected, MAX_AFFECTED + 1);
+    assert.equal(res.body.limit, MAX_AFFECTED);
+    assert.match(res.body.error, new RegExp(String(MAX_AFFECTED + 1)), `the refusal should name the count: ${res.body.error}`);
+    assert.match(res.body.error, new RegExp(String(MAX_AFFECTED)), `and the limit: ${res.body.error}`);
+
+    const after = await EntityType.findById(timeline._id).lean();
+    assert.equal(after.name, 'Timeline', 'the type keeps its name');
+    assert.equal(after.icon, timeline.icon ?? null, 'and the icon in the same body is refused with the rename');
+    assert.equal(await Entity.countDocuments({ workspaceId: renamer.workspaceId, category: 'Timeline' }), MAX_AFFECTED + 1);
+    assert.equal(await Entity.countDocuments({ workspaceId: renamer.workspaceId, category: 'Epochs' }), 0);
+    assert.equal(await ChangeLog.countDocuments({ workspaceId: renamer.workspaceId, changeType: 'updated' }), 0,
+      'a refused rename writes no history');
+    assert.equal(other.named('entity-type:updated').length, 0, 'and no frame');
+  });
+
+  test(`a rename moving exactly ${MAX_AFFECTED} entities is allowed, and still logs one entry each`, async () => {
+    const timeline = await typeNamed(renamer, 'Timeline');
+    const now = new Date();
+    await Entity.collection.insertMany(
+      Array.from({ length: MAX_AFFECTED }, (_, i) => ({
+        title: `Epoch ${i}`, category: 'Timeline', summary: '', tags: [],
+        blocks: [], relationships: [], open_questions: [],
+        workspaceId: new mongoose.Types.ObjectId(renamer.workspaceId), createdAt: now, updatedAt: now,
+      })),
+    );
+    await ChangeLog.deleteMany({ workspaceId: renamer.workspaceId });
+
+    const res = await rename(timeline._id, { name: 'Epochs' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.relabelled.entities, MAX_AFFECTED);
+    assert.equal(await ChangeLog.countDocuments({ workspaceId: renamer.workspaceId, changeType: 'updated' }), MAX_AFFECTED,
+      'one entry per moved entity, still, at the limit');
+  });
+
+  test('sends one entity:updated per moved entity and one entity-type:updated, scoped to the workspace and never to the writer', async () => {
+    const characters = await typeNamed(renamer, 'Characters');
+    const writer = listen('renamer/writing-tab', renamer);
+    const other = listen('renamer/other-tab', renamer);
+    const outside = listen('stranger/tab', stranger);
+
+    const res = await rename(characters._id, { name: 'People' }, writer.clientId);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+
+    assert.equal(other.named('entity:updated').length, MOVED.length, 'one per moved entity');
+    const typeFrames = other.named('entity-type:updated');
+    assert.equal(typeFrames.length, 1, 'and exactly one for the type');
+    assert.deepEqual(typeFrames[0].data.entityType, {
+      _id: String(characters._id),
+      name: 'People',
+      icon: characters.icon ?? null,
+      color: characters.color,
+      order: characters.order,
+    }, 'the frame carries the whole row, so a tab can repaint its pills without a refetch');
+    assert.equal(typeFrames[0].data.from, 'Characters', 'the old name is what the other tab has on screen');
+    assert.equal(typeFrames[0].data.to, 'People');
+    assert.equal(typeFrames[0].data.relabelled.entities, MOVED.length);
+    assert.deepEqual(typeFrames[0].data.actor, { label: renamer.email, type: 'user' });
+
+    assert.equal(writer.named('entity:updated').length, 0, 'the writing tab has the response');
+    assert.equal(writer.named('entity-type:updated').length, 0);
+    assert.equal(outside.named('entity:updated').length, 0, 'another workspace sees nothing');
+    assert.equal(outside.named('entity-type:updated').length, 0);
+  });
+
+  test('a rename that moves no entity still renames the type and sends the type frame alone', async () => {
+    // Seeded, and nothing in this workspace uses it.
+    const unused = await typeNamed(renamer, 'Open Questions');
+    const other = listen('renamer/other-tab', renamer);
+
+    const res = probed(renamer, 'PUT rename unused "Open Questions"', await rename(unused._id, { name: 'Loose Ends' }));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.deepEqual(res.body.relabelled, { entities: 0, sourceCategories: 0, targetCategories: 0 });
+    assert.equal((await typeNamed(renamer, 'Loose Ends'))._id, String(unused._id));
+
+    assert.equal(other.named('entity-type:updated').length, 1, 'the type frame is sent for the type, not for the cascade');
+    assert.equal(other.named('entity:updated').length, 0, 'no entity moved, so no entity frame');
+    assert.deepEqual(await updatedTitles(), [], 'and no history: nothing changed to have a before-state');
+  });
+
+  test('a case-only rename cascades, logs and broadcasts like any other', async () => {
+    const characters = await typeNamed(renamer, 'Characters');
+    const other = listen('renamer/other-tab', renamer);
+
+    const res = probed(renamer, 'PUT recase "Characters" → "CHARACTERS"', await rename(characters._id, { name: 'CHARACTERS' }));
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.relabelled.entities, MOVED.length);
+
+    assert.deepEqual(await updatedTitles(), [...MOVED].sort());
+    const entry = await ChangeLog.findOne({
+      workspaceId: renamer.workspaceId, changeType: 'updated', entityTitle: MOVED[0],
+    }).lean();
+    assert.equal(entry.snapshot.category, 'Characters', 'the snapshot keeps the old spelling');
+    assert.deepEqual(entry.changes.fieldsChanged, ['category']);
+    assert.equal((await Entity.findOne({ workspaceId: renamer.workspaceId, title: MOVED[0] }).lean()).category, 'CHARACTERS');
+
+    const typeFrames = other.named('entity-type:updated');
+    assert.equal(typeFrames.length, 1);
+    assert.equal(typeFrames[0].data.from, 'Characters');
+    assert.equal(typeFrames[0].data.to, 'CHARACTERS');
+    assert.equal(other.named('entity:updated').length, MOVED.length);
   });
 });
