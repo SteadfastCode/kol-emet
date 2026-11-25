@@ -65,10 +65,10 @@
     "KOL-151": {
       "order": 4,
       "title": "A renamed entity type rewrites every entity in the workspace, with no audit row and no frame",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-151",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -76,8 +76,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-25T15:14:51.610Z",
+      "runId": "2026-11-25T15:13:43.132Z",
       "lastFail": null
     },
     "KOL-152": {

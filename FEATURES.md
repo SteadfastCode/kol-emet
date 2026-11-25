@@ -63,7 +63,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame**
+- [x] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame**
   `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
   `Entity.category`, then `RelationshipType.sourceCategory` and `targetCategory` — and writes nothing else. No
   `ChangeLog` entry, so the largest single write the product can make to a workspace's entities leaves no trail
