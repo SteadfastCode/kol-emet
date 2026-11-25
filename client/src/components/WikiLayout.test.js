@@ -29,6 +29,7 @@ import EntityDetail from './EntityDetail.vue';
 import EntityEditor from './EntityEditor.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
+import OpenQuestionPanel from './OpenQuestionPanel.vue';
 import ShortcutCheatsheet from './ShortcutCheatsheet.vue';
 import { SEARCH_DEBOUNCE_MS } from '../composables/useFilters.js';
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts.js';
@@ -1722,6 +1723,7 @@ const SHELL_STUBS = {
   EntityDetail: true, EntityEditor: true, ChatPanel: true, GraphView: true,
   GeneratorOverlay: true, ToastNotification: true, AccountDeletion: true,
   PasskeySettings: true, RecentlyDeleted: true, TagSettings: true,
+  OpenQuestionPanel: true,
 };
 
 const mountList = () => mount(WikiLayout, { global: { stubs: SHELL_STUBS } });
@@ -2069,7 +2071,7 @@ describe('WikiLayout shortcut cheatsheet', () => {
     // Every one of them says something; an empty sentence is a row nobody can read.
     expect(rows.every((r) => r.label.trim().length > 0)).toBe(true);
     // And the keys that work today are all on it.
-    expect(rows.map((r) => r.key)).toEqual(expect.arrayContaining(['/', 'Escape', 'n', '?']));
+    expect(rows.map((r) => r.key)).toEqual(expect.arrayContaining(['/', 'Escape', 'n', 'q', '?']));
   });
 
   it('treats `?` as its own key, not a modifier press, when it arrives with shift held', async () => {
@@ -2538,5 +2540,200 @@ describe('WikiLayout refused entity writes', () => {
 
     expect(addToast).not.toHaveBeenCalled();
     expect(wrapper.find('.detail-panel').exists()).toBe(false);
+  });
+});
+
+/**
+ * The workspace-wide open-question panel (KOL-152). What the panel itself does with a page, a
+ * filter or a frame is pinned in OpenQuestionPanel.test.js; what is pinned here is the layout's
+ * half of it, which is four things:
+ *
+ *   It is reachable — from the sidebar's Questions button and from the `q` key, which the `?`
+ *   cheatsheet therefore lists for free (the group above asserts that).
+ *
+ *   It is a *layer*, so Escape closes it one press at a time in stacking order: over the graph,
+ *   under settings and the generator.
+ *
+ *   Every `question:*` frame reaches it, whether or not a detail panel is open — it lists the
+ *   whole workspace, not one entity's questions — and reaches it as a frame to apply, not as a
+ *   refetch.
+ *
+ *   A row's entity opens through the same `openEntry` every other view uses.
+ *
+ * Falsification: drop the `applyFrame` call from any one `onQuestion*` handler and that case
+ * fails; gate it on `questionTouchesPanel` and the no-detail-panel case fails; put the panel below
+ * the graph in `closeTopLayer` and the Escape case does.
+ */
+describe('WikiLayout open-question panel', () => {
+  const applyFrame = vi.fn();
+  const QuestionPanelStub = {
+    name: 'OpenQuestionPanel',
+    methods: { applyFrame },
+    template: '<div class="oqp-stub" />',
+  };
+
+  const questionsButton = (wrapper) =>
+    wrapper.findAll('.header-actions button').find((b) => b.text() === 'Questions');
+
+  /** The layout with the panel open, so a frame has a list to move. */
+  const withPanelOpen = async (stubs = {}) => {
+    applyFrame.mockClear();
+    const wrapper = shallowMount(WikiLayout, {
+      global: { stubs: { OpenQuestionPanel: QuestionPanelStub, ...stubs } },
+    });
+    wrapper.findComponent(EntitySidebar).vm.$emit('questions');
+    await wrapper.vm.$nextTick();
+    return wrapper;
+  };
+
+  beforeEach(() => {
+    entities.length = 0;
+    entities.push(...BLOCKLESS.map((e) => ({ ...e })));
+    useEvents.mockClear();
+    selectEntity.mockClear();
+    loadEntities.mockClear();
+    addToast.mockClear();
+  });
+
+  it('opens from the sidebar button, and the same button closes it', async () => {
+    const wrapper = mountShell();
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
+
+    await questionsButton(wrapper).trigger('click');
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(true);
+
+    await questionsButton(wrapper).trigger('click');
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
+  });
+
+  it('opens on `q`, and `q` again closes it', async () => {
+    const wrapper = mountShell();
+
+    press('q');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(true);
+
+    press('q');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
+  });
+
+  it('types a `q` into the search box instead of opening, once the box has focus', async () => {
+    const wrapper = mountShell();
+    const input = wrapper.get('.search-input').element;
+    input.focus();
+
+    const event = press('q', { from: input });
+    await wrapper.vm.$nextTick();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('closes on Escape before the graph and the detail panel', async () => {
+    const wrapper = mountShell();
+    const sidebar = wrapper.findComponent(EntitySidebar);
+    sidebar.vm.$emit('select', 'e1', 'Boiler Room');
+    sidebar.vm.$emit('graph');
+    sidebar.vm.$emit('questions');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(true);
+
+    press('Escape');
+    await wrapper.vm.$nextTick();
+    // One press, one layer: the graph it was over is still open.
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
+    expect(wrapper.findComponent(GraphView).exists()).toBe(true);
+    expect(wrapper.find('.detail-panel').exists()).toBe(true);
+  });
+
+  it('hands it this session’s role and the entity list the layout already holds', async () => {
+    getWorkspace.mockResolvedValue({ _id: 'w1', name: 'Alice’s Bible', role: 'viewer', createdAt: '2026-10-10T00:00:00.000Z' });
+    const wrapper = shallowMount(WikiLayout);
+    await flushPromises();
+    wrapper.findComponent(EntitySidebar).vm.$emit('questions');
+    await wrapper.vm.$nextTick();
+
+    const panel = wrapper.findComponent(OpenQuestionPanel);
+    // A viewer, so the panel's resolve control is gated — the prop is the contract, and what the
+    // panel renders for it is pinned in OpenQuestionPanel.test.js.
+    expect(panel.props('canWrite')).toBe(false);
+    // The entity list, because a `question:*` frame names its entities as bare ids (KOL-116) and
+    // this is where their titles come from. Not a second request.
+    expect(panel.props('entities')).toEqual(entities);
+    getWorkspace.mockResolvedValue({ _id: 'w1', name: 'Alice’s Bible', role: 'owner', createdAt: '2026-10-10T00:00:00.000Z' });
+  });
+
+  it('hands each question frame to the open panel, with no refetch of anything', async () => {
+    const wrapper = await withPanelOpen();
+    loadEntities.mockClear();   // the mount's own load
+
+    const created = { question: { _id: 'q2', question: 'And how fast?', status: 'open' }, entry_ids: ['e1'] };
+    const updated = { question: { _id: 'q1', question: 'Who stokes it?', status: 'resolved' }, entry_ids: ['e1'] };
+    const deleted = { questionId: 'q1', question: { _id: 'q1', question: 'Who stokes it?', status: 'open' }, entry_ids: [] };
+
+    sseHandlers().onQuestionCreated(created);
+    sseHandlers().onQuestionUpdated(updated);
+    sseHandlers().onQuestionDeleted(deleted);
+    await wrapper.vm.$nextTick();
+
+    expect(applyFrame.mock.calls).toEqual([
+      ['question:created', created],
+      ['question:updated', updated],
+      ['question:deleted', deleted],
+    ]);
+    // Nothing was refetched: the payload is enough to move the list, and no detail panel is open.
+    expect(selectEntity).not.toHaveBeenCalled();
+    expect(loadEntities).not.toHaveBeenCalled();
+  });
+
+  it('hands it a frame about an entity nobody has open — it lists the workspace, not one entity', async () => {
+    const wrapper = await withPanelOpen();
+    stubbedEntities.last.selectedEntity.value = { _id: 'e1', title: 'Boiler Room', open_questions: [] };
+    selectEntity.mockClear();
+
+    sseHandlers().onQuestionCreated({
+      question: { _id: 'q9', question: 'Whose shed?', status: 'open' }, entry_ids: ['e2'],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(applyFrame).toHaveBeenCalledTimes(1);
+    // And the detail panel still only refetches for a frame that touches it.
+    expect(selectEntity).not.toHaveBeenCalled();
+  });
+
+  it('drops a frame harmlessly when the panel is closed', async () => {
+    const wrapper = shallowMount(WikiLayout, { global: { stubs: { OpenQuestionPanel: QuestionPanelStub } } });
+    applyFrame.mockClear();
+
+    sseHandlers().onQuestionUpdated({
+      question: { _id: 'q1', question: 'Who stokes it?', status: 'resolved' }, entry_ids: ['e1'],
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(applyFrame).not.toHaveBeenCalled();
+  });
+
+  it('opens the entity a question row names, and closes the overlay with it', async () => {
+    const wrapper = await withPanelOpen();
+
+    wrapper.findComponent(OpenQuestionPanel).vm.$emit('open-entry', 'e1', 'Boiler Room');
+    await wrapper.vm.$nextTick();
+
+    // The same way in every other view uses: a panel, by id, with its breadcrumbs started.
+    expect(selectEntity).toHaveBeenCalledWith('e1');
+    expect(wrapper.get('.panel-title').text()).toBe('Boiler Room');
+    // The overlay closes with the click: the panel it opened is underneath it.
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
+  });
+
+  it('closes on its own ✕', async () => {
+    const wrapper = await withPanelOpen();
+
+    wrapper.findComponent(OpenQuestionPanel).vm.$emit('close');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.findComponent(OpenQuestionPanel).exists()).toBe(false);
   });
 });

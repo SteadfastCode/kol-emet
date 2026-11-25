@@ -389,11 +389,20 @@ different tag and is never touched. `:tag` is a URL path segment — percent-enc
 
 Open questions are *read* on the entity as well: `GET /entities` and `GET /entities/:id` populate
 each entity's `open_questions` with `question` and `status` (workspace-scoped —
-[`lib/scopedPopulate.js`](../server/src/lib/scopedPopulate.js)), which is how the browser
+[`lib/scopedPopulate.js`](../server/src/lib/scopedPopulate.js)), which is how the entity panel
 renders them without touching this route. The browser's client is
 [`client/src/api/openQuestions.js`](../client/src/api/openQuestions.js); it splits a resolve from a
 rename into two single-field `PUT`s on purpose, so neither write can carry a stale copy of the
 other's field.
+
+The **list** route has one caller, and it is the only view of the whole collection:
+[`client/src/components/OpenQuestionPanel.vue`](../client/src/components/OpenQuestionPanel.vue)
+(KOL-152), the workspace-wide panel the sidebar's *Questions* button and the `q` key open. It walks
+pages of `QUESTION_PAGE_SIZE` (200) through `getOpenQuestionPage`, appending and painting after the
+first one, sends `?status=` rather than filtering the rows it holds — the pills *are* the query —
+and tolerates the unpaged bare array an API from before the cap answers with, since the client and
+the API deploy independently. It writes `status` only; the three `question:*` frames below move its
+rows with no refetch.
 
 These routes take `requireAuth` + `resolveWorkspace` + `requireWriteRole`, and — unlike
 `/entities`, `/tags` and `/relationship-groups` — **no `requireActor` and no `ChangeLog` trail**:
@@ -1359,9 +1368,9 @@ non-empty workspace are each their own item.
 | `entity:created` | every entity create | `{ entity, actor, changes }` | inserts the row |
 | `entity:updated` | every entity update | `{ entity, actor, changes }` | replaces the row |
 | `entity:deleted` | every entity delete | `{ entityId, entityTitle, actor, snapshot, deletedAt }` | drops the row |
-| `question:created` | `POST /open-questions`, and the MCP `add_open_question` | `{ question, entry_ids }` | refetches the entity on screen if `entry_ids` names it |
-| `question:updated` | `PUT /open-questions/:id` | `{ question, entry_ids }` | as above |
-| `question:deleted` | `DELETE /open-questions/:id` | `{ questionId, question, entry_ids }` | as above, or if the panel is showing that question |
+| `question:created` | `POST /open-questions`, and the MCP `add_open_question` | `{ question, entry_ids }` | refetches the entity on screen if `entry_ids` names it; inserts the row in the question panel |
+| `question:updated` | `PUT /open-questions/:id` | `{ question, entry_ids }` | as above, moving (or dropping, under a status filter) the panel's row |
+| `question:deleted` | `DELETE /open-questions/:id` | `{ questionId, question, entry_ids }` | as above, or if the panel is showing that question; drops the row |
 | `group:created` | `POST /relationship-groups` | `{ group, entityIds }` | redraws the graph; refetches the entity on screen if `entityIds` names it |
 | `group:updated` | every `/relationship-groups` write that changes a group's own row — label, members, order, a member's label, a subgroup link | `{ group, entityIds }` | as above |
 | `group:deleted` | `DELETE /relationship-groups/:id`, and the member removal that leaves a group with fewer than 2 entity members | `{ groupId, group, entityIds }` | as above, or if the panel is showing that group |
@@ -1385,7 +1394,9 @@ nothing at all: a second tab went on rendering a question that had been renamed,
 deleted. `question` is the row as the panel renders it (`_id`, `question`, `status`, timestamps) and
 `entry_ids` is **always bare string ids**, never the populated `{ title, category }` rows `PUT`
 answers with — they are what lets a listener decide whether the entity it is showing is affected
-without a refetch. The MCP `add_open_question` tool emits `question:created` itself, since it writes
+without a refetch — the workspace-wide question panel (KOL-152) patches its list from them and
+never refetches, while the entity panel refetches the one entity on screen. The MCP
+`add_open_question` tool emits `question:created` itself, since it writes
 the collection directly rather than through the route, and excludes no client (an MCP session holds
 no `/events` stream). No actor is named on these frames: the route resolves none.
 

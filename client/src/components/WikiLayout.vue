@@ -14,6 +14,7 @@
         :search-truncation="searchTruncation"
         :load-error="loadError"
         :graph-open="graphOpen"
+        :questions-open="questionsOpen"
         :can-write="canWrite"
         @search="searchQuery = $event"
         @set-cat="setCat"
@@ -27,6 +28,7 @@
         @settings="openSettings"
         @chat="chatOpen = !chatOpen"
         @graph="graphOpen = !graphOpen"
+        @questions="toggleQuestions"
         @generate="generatorOpen = true"
         @shortcuts="showShortcuts"
       />
@@ -104,6 +106,20 @@
         ref="graphRef"
         @close="graphOpen = false"
         @open-entry="onGraphOpenEntry"
+      />
+    </Transition>
+
+    <!-- The workspace's open questions (KOL-152). Over the graph, under settings; the Escape
+         order below is this stacking order. It takes the entity list the layout already holds,
+         because a `question:*` frame names its entities as bare ids. -->
+    <Transition name="graph-fade">
+      <OpenQuestionPanel
+        v-if="questionsOpen"
+        ref="questionsRef"
+        :can-write="canWrite"
+        :entities="entities"
+        @close="questionsOpen = false"
+        @open-entry="onQuestionOpenEntry"
       />
     </Transition>
 
@@ -560,6 +576,7 @@ import EntityEditor from './EntityEditor.vue';
 import ToastNotification from './ToastNotification.vue';
 import ChatPanel from './ChatPanel.vue';
 import GraphView from './GraphView.vue';
+import OpenQuestionPanel from './OpenQuestionPanel.vue';
 import GeneratorOverlay from './generator/GeneratorOverlay.vue';
 import ShortcutCheatsheet from './ShortcutCheatsheet.vue';
 import AccountDeletion from './AccountDeletion.vue';
@@ -645,6 +662,14 @@ const graphOpen = ref(false);
  * nobody is looking at refetches nothing, and it loads on mount when it reopens.
  */
 const graphRef = ref(null);
+/**
+ * The open-question panel (KOL-152), and the panel itself while it is open so a
+ * `question:*` frame can be handed to it. Null whenever it is closed, which is
+ * the right answer too: a list nobody is looking at has nothing to move, and it
+ * loads its first page when it reopens.
+ */
+const questionsOpen = ref(false);
+const questionsRef = ref(null);
 const generatorOpen = ref(false);
 const cheatsheetOpen = ref(false);
 const mobileTab = ref('list'); // 'list' | 'detail' | 'chat' | 'settings'
@@ -1456,6 +1481,16 @@ function onGraphOpenEntry(id, title) {
   openEntry(id, title);
 }
 
+/**
+ * A question row's way in to the entity it is attached to. The panel closes
+ * with the click, as the graph does: the panel it opens is underneath this
+ * overlay, and a question is read in its entity's context.
+ */
+function onQuestionOpenEntry(id, title) {
+  questionsOpen.value = false;
+  openEntry(id, title);
+}
+
 const activePanel = computed(() =>
   panels.value.find(p => p.id === activePanelId.value) ?? null
 );
@@ -1623,6 +1658,7 @@ function closeTopLayer() {
   if (cheatsheetOpen.value)  { cheatsheetOpen.value = false; return; }
   if (settingsVisible.value) { closeSettings(); return; }
   if (generatorOpen.value)   { generatorOpen.value = false; return; }
+  if (questionsOpen.value)   { questionsOpen.value = false; return; }
   if (graphOpen.value)       { graphOpen.value = false; return; }
   if (chatOpen.value)        { onChatClose(); return; }
   if (activePanelId.value)   { closePanel(activePanelId.value); return; }
@@ -1630,6 +1666,13 @@ function closeTopLayer() {
 
 function openNewEntity() {
   openEditor();
+}
+
+// Also the sidebar's Questions button. A toggle, like the graph and the chat:
+// the key that opened the panel is the obvious way back out of it, and Escape
+// closes it either way.
+function toggleQuestions() {
+  questionsOpen.value = !questionsOpen.value;
 }
 
 // Also the sidebar's `?` button, for anyone who would never guess the key.
@@ -1644,6 +1687,7 @@ const { shortcuts } = useKeyboardShortcuts({
   '/': { handler: focusSearch, label: 'Jump to the search box' },
   Escape: { handler: closeTopLayer, label: 'Close the topmost panel or overlay' },
   n: { handler: openNewEntity, label: 'Start a new entity' },
+  q: { handler: toggleQuestions, label: 'Open the workspace’s open questions' },
   '?': { handler: showShortcuts, label: 'Open this list of shortcuts' },
 });
 
@@ -1689,7 +1733,9 @@ function questionTouchesPanel({ question, questionId, entry_ids }) {
  *
  * A frame for an entity nobody is looking at is dropped on purpose — the
  * sidebar does not show questions, so there would be nothing to update and a
- * toast about an entity off screen is noise.
+ * toast about an entity off screen is noise. The workspace-wide question panel
+ * is the one view that *does* care about every frame, and it is handed them
+ * directly (KOL-152), not through here.
  */
 function refreshQuestions(payload, message) {
   if (!questionTouchesPanel(payload)) return;
@@ -1842,20 +1888,28 @@ useEvents({
 
   // ── Open questions (KOL-116) ──
   // Their own collection on their own route, so none of this rides along with
-  // an entity frame. The panel renders a question from the populated
-  // `entity.open_questions` it was given (components/EntityHeader.vue), so the
-  // refresh is a refetch of the entity on screen — and only when the frame
-  // actually touches it, which the payload's `entry_ids` is there to say.
+  // an entity frame. Two listeners per frame, and they are not the same shape.
+  // **The detail panel refetches**, and only when the frame touches the entity
+  // it is showing (the payload's `entry_ids` is there to say): that section
+  // renders questions from the populated `entity.open_questions` it was handed
+  // (components/EntityHeader.vue), so the server is what re-seeds it. **The
+  // question panel patches its own list** from the frame, with no request at
+  // all (KOL-152) — the payload carries the row and its links, which is enough
+  // to move, drop or insert a row — and it takes *every* frame, because it
+  // lists the whole workspace rather than one entity's questions.
 
   onQuestionCreated(payload) {
+    questionsRef.value?.applyFrame?.('question:created', payload);
     refreshQuestions(payload, 'added a question to');
   },
 
   onQuestionUpdated(payload) {
+    questionsRef.value?.applyFrame?.('question:updated', payload);
     refreshQuestions(payload, 'changed a question on');
   },
 
   onQuestionDeleted(payload) {
+    questionsRef.value?.applyFrame?.('question:deleted', payload);
     refreshQuestions(payload, 'removed a question from');
   },
 
