@@ -1,0 +1,86 @@
+{
+  "item": "KOL-149",
+  "repo": "kol-emet",
+  "mergeSha": "c58a8a149f45c3cbcc6c62c685b036aed4f7744f",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-25T00:42:51.170Z",
+  "gradedAtUtc": "2026-11-25T00:54:04.540Z",
+  "independent": [
+    {
+      "file": "client/src/components/GraphView.vue",
+      "line": 195,
+      "severity": "medium",
+      "summary": "The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent. `initGraph` runs `svg.selectAll('*').remove()` and rebuilds a fresh `<g>` with no transform, while d3-zoom's `defaultTransform` (`this.__zoom || identity`, d3-zoom/src/zoom.js:30,74) keeps the previous gesture state on the same `<svg>` element across the new `svg.call(zoom)`. So after any `group:*` frame the drawing snaps back to identity, yet the zoom behaviour still believes the old transform, and the viewer's next wheel/drag jumps by the stale delta. Node positions are also re-copied from `nodeData` without x/y, so the force layout restarts from scratch. The component docs (GraphView.vue:422-428, 521-528), WikiLayout.vue:1736, docs/architecture.md and the Decision Log all state that the reload keeps \"the zoom, the pan and the force layout the viewer is reading\" — only the non-remount part of that is true."
+    },
+    {
+      "file": "client/src/components/GraphView.test.js",
+      "line": 189,
+      "severity": "low",
+      "summary": "The reload test's only evidence for its headline claim is an assertion that cannot fail. `expect(wrapper.find('svg').element).toBe(svgBefore)` is commented \"the component was not remounted: the viewer's zoom, pan and layout survive the redraw\", but `<svg ref=\"svgRef\">` is static template markup under the same root, so the element identity holds even though `initGraph` wipes every child, re-creates the zoom target with no transform and restarts the simulation from scratch. The test would pass unchanged if zoom, pan and layout were all discarded — which is what the code does."
+    },
+    {
+      "file": "server/src/lib/relationshipEvents.js",
+      "line": 149,
+      "severity": "low",
+      "summary": "`entityIds` is flattened downward only, so a write to a nested subgroup leaves the panels that render it stale. `relationshipResolver.resolveGroupLabels` traverses upward and `processGroup` emits `expandedSubGroups`, so an entity that is a member only of parent P has the entity members of child C rendered on its detail panel. A write to C (add/remove/relabel/reorder a member) emits `group:updated` whose `entityIds` is C's subtree, which does not name P's other members, and `groupTouchesPanel` fails its second branch too because that entity's `relationships` holds P, not C. The graph still reloads (it reloads on every frame), but the open detail panel keeps showing the pre-write subgroup membership with no toast — the one thing `entityIds` exists to decide."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds a new path by which workspace documents reach other clients, guarded only by `broadcast`'s workspace scoping and the `x-sse-client-id` exclusion (and its tests assert cross-tenant isolation), so access-control surface is touched — the cited line 4 is pre-existing and unchanged, but weak evidence does not make the category wrong."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or secret handling anywhere in the diff; the only new env var is a log-level knob."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing touches the AI allowance, model calls, billing or metering."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff does change delete paths — `DELETE /relationship-groups/:id` and the member removal that deletes an orphaned group both gain a pre-delete snapshot and a `group:deleted` broadcast — so touched is right, even though line 480 points at the subgroups-POST validation instead."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound HTTP or third-party service is involved; the SSE fan-out is internal to this process."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, build, CI, migration or deploy config changes; only server/client source, tests and docs."
+    }
+  ],
+  "missed": [
+    1,
+    2,
+    3
+  ],
+  "summary": "The local model reported nothing on a change that ships a real behavioural mismatch in GraphView's in-place redraw plus a test whose key assertion cannot fail, so it caught nothing; its triage verdicts were all defensible, though two of the three evidence pointers are stale lines the diff never touches.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 3,
+    "independent": 3,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.6941105,
+  "numTurns": 17,
+  "durationMs": 263661,
+  "sessionId": "f6b1d335-0837-46b4-8795-09ab213cbb32"
+}

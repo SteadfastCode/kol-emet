@@ -190,7 +190,30 @@ registration, or removes a feature.
 
 ## Proposed
 
-
+- [ ] **(KOL-156) Inline block and header editors close and discard the user's typed input on a refused write.**
+  Found by the grader of KOL-150 (medium, client/src/components/blocks/TextBlock.vue:78). Inline
+  block and header editors close and discard the user's typed input on a refused write. `await
+  emit('save', …)` awaits `undefined` (Vue's `emit` returns no handler result), so
+  `isEditing.value = false` runs before `onEntityUpdated`'s `await editEntity(...)` settles — same
+  pattern at `client/src/components/EntityHeader.vue:498`. After this change a refused block or
+  header save (403 NOT_WORKSPACE_EDITOR when the role answered `viewer` after first paint, a 400
+  from `blockDataError` on a gallery URL, a 409) raises the new toast, but the
+  markdown/title/summary the user typed is already gone and the block reverts to the stored
+  content. Pre-existing, and the item's "leaves the editor open with the user's input intact"
+  holds only for the new-entity panel; the new tests cover only that panel, so nothing pins the
+  block/header case.
+- [ ] **(KOL-157) The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.**
+  Found by the grader of KOL-149 (medium, client/src/components/GraphView.vue:195). The in-place
+  reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent. `initGraph`
+  runs `svg.selectAll('*').remove()` and rebuilds a fresh `<g>` with no transform, while d3-zoom's
+  `defaultTransform` (`this.__zoom || identity`, d3-zoom/src/zoom.js:30,74) keeps the previous
+  gesture state on the same `<svg>` element across the new `svg.call(zoom)`. So after any
+  `group:*` frame the drawing snaps back to identity, yet the zoom behaviour still believes the
+  old transform, and the viewer's next wheel/drag jumps by the stale delta. Node positions are
+  also re-copied from `nodeData` without x/y, so the force layout restarts from scratch. The
+  component docs (GraphView.vue:422-428, 521-528), WikiLayout.vue:1736, docs/architecture.md and
+  the Decision Log all state that the reload keeps "the zoom, the pan and the force layout the
+  viewer is reading" — only the non-remount part of that is true.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

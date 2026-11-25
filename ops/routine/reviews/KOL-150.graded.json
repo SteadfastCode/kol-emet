@@ -1,0 +1,79 @@
+{
+  "item": "KOL-150",
+  "repo": "kol-emet",
+  "mergeSha": "998c6024b7e1abf19e107f8d825df0be33b49e22",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-25T00:42:51.170Z",
+  "gradedAtUtc": "2026-11-25T00:49:40.834Z",
+  "independent": [
+    {
+      "file": "client/src/components/blocks/TextBlock.vue",
+      "line": 78,
+      "severity": "medium",
+      "summary": "Inline block and header editors close and discard the user's typed input on a refused write. `await emit('save', …)` awaits `undefined` (Vue's `emit` returns no handler result), so `isEditing.value = false` runs before `onEntityUpdated`'s `await editEntity(...)` settles — same pattern at `client/src/components/EntityHeader.vue:498`. After this change a refused block or header save (403 NOT_WORKSPACE_EDITOR when the role answered `viewer` after first paint, a 400 from `blockDataError` on a gallery URL, a 409) raises the new toast, but the markdown/title/summary the user typed is already gone and the block reverts to the stored content. Pre-existing, and the item's \"leaves the editor open with the user's input intact\" holds only for the new-entity panel; the new tests cover only that panel, so nothing pins the block/header case."
+    },
+    {
+      "file": "client/src/components/EntitySidebar.vue",
+      "line": 28,
+      "severity": "low",
+      "summary": "The sidebar header's \"Draft\" button (generator) is left ungated for a viewer while this change gates its twin, \"Or paste in some notes\", inside the gated `.empty-actions` block. `/drafts` is mounted behind `requireWriteRole` (server/src/app.js:206), so a viewer who opens the generator and submits notes gets the refusal in the overlay's error slot as the raw code `NOT_WORKSPACE_EDITOR` — the same \"find out by clicking\" failure the item removes elsewhere, and the gate is now inconsistent within the one file that hides the other entry point to the same flow."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change is entirely client-side authorization: a mirrored role ladder in api/workspace.js plus a derived `canWrite` gating every write control."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing or AI-allowance code is touched; the generator's allowance read is pre-existing and unmodified."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "Right that it is touched — `onEntityDeleted` (DELETE /entities/:id) gains a catch and the Delete entity / Restore controls become role-gated; the cited line number is from the pre-change file but the category call is correct."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "Only this app's own REST routes are called; no third-party service is involved."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No package manifests, build config, migrations or deploy settings in the diff."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local model reported no findings and got all six triage categories right, but missed two real issues — the optimistic close that discards typed input on a refused block/header save, and the still-ungated generator entry point beside the `+ New` it did gate.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.2582659999999994,
+  "numTurns": 28,
+  "durationMs": 234118,
+  "sessionId": "9bf5d1f6-3a91-4e51-9215-8a8c5f732197"
+}
