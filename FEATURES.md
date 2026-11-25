@@ -63,40 +63,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame**
-  `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
-  `Entity.category`, then `RelationshipType.sourceCategory` and `targetCategory` — and writes nothing else. No
-  `ChangeLog` entry, so the largest single write the product can make to a workspace's entities leaves no trail
-  and nothing to roll back, and `GET /entities/:id/history` shows each rewritten entity as untouched. No broadcast
-  either, so the new name never reaches another client: `useEntityTypes` loads once ("WikiLayout loads it when it
-  mounts; nothing else fetches", `client/src/composables/useEntityTypes.js:9`), so the other tab goes on rendering
-  the old pill and filtering on a category name no entity has any more — the pill matches nothing and the sidebar
-  silently empties. The browser sends `X-SSE-Client-Id` on the write (`client/src/api/entityTypes.js:8`) and
-  nothing reads it. KOL-053 settled the shape for the same problem on the same documents: the tag
-  rename/merge/delete cascade writes one `ChangeLog` entry and one `entity:updated` per entity through `logEach`
-  (`server/src/routes/tags.js:97-116`), awaited so the response is sent only once the trail exists, and bounds the
-  batch at `MAX_AFFECTED = 200` with a 413 past it (`:53`, `:75-81`).
-  Build the same three parts for a type rename: a bounded cascade (413 naming the count and the limit, so an
-  unbounded `updateMany` can never be the answer), one `ChangeLog` row per moved entity through the existing
-  `logUpdate`, and the frames that follow from it — the per-entity `entity:updated` the logger already emits, plus
-  one `entity-type:updated` frame so a listening tab can refresh its pills, filters and pickers without refetching
-  the workspace. Relationship-type ends keep moving as they do today (they have no history of their own), and the
-  rename stays ordered rather than transactional, as the route's header already records.
-  Files: `server/src/routes/entityTypes.js`, `client/src/composables/useEntityTypes.js`,
-  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
-  `server/tests/http/entityTypes.test.js`, `client/src/composables/useEvents.test.js`, `docs/api.md` (the
-  `/entity-types` rename contract and the `/events` frame list), `docs/data-model.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a rename writing one `ChangeLog` entry per moved entity, each
-  pairing the old category with the new; the entry readable through `GET /entities/:id/history` with a snapshot
-  that rolls the category back; a rename over the cap refused 413 with the type and every entity unchanged; one
-  `entity:updated` frame per entity plus one `entity-type:updated`, all workspace-scoped and excluding the writer;
-  a rename that moves no entity still renaming the type and emitting the type frame alone; and a case-only rename
-  (which the route already treats as a rename) cascading like any other. `cd client && yarn test --run` with a
-  case for a tab refreshing its types on the frame. `cd client && yarn build`.
-  Out of scope: a `changeType` of its own for the cascade (it is an `updated` per entity, which is what rollback
-  already understands); history for the `EntityType` and `RelationshipType` documents themselves; colour and icon
-  edits, which move no entity; deleting an in-use type, still refused 409; and the same stale-name failure when an
-  old draft item is applied, which the Decision Log deliberately leaves alone.
 
 - [ ] **(KOL-152) The workspace's open questions have a paged API and no screen**
   `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
@@ -262,6 +228,40 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-151) A renamed entity type rewrites every entity in the workspace, with no audit row and no frame** (routine 2026-11-25, 8a342cf)
+  `relabel()` (`server/src/routes/entityTypes.js:96-106`) answers a rename with three unbounded `updateMany`s —
+  `Entity.category`, then `RelationshipType.sourceCategory` and `targetCategory` — and writes nothing else. No
+  `ChangeLog` entry, so the largest single write the product can make to a workspace's entities leaves no trail
+  and nothing to roll back, and `GET /entities/:id/history` shows each rewritten entity as untouched. No broadcast
+  either, so the new name never reaches another client: `useEntityTypes` loads once ("WikiLayout loads it when it
+  mounts; nothing else fetches", `client/src/composables/useEntityTypes.js:9`), so the other tab goes on rendering
+  the old pill and filtering on a category name no entity has any more — the pill matches nothing and the sidebar
+  silently empties. The browser sends `X-SSE-Client-Id` on the write (`client/src/api/entityTypes.js:8`) and
+  nothing reads it. KOL-053 settled the shape for the same problem on the same documents: the tag
+  rename/merge/delete cascade writes one `ChangeLog` entry and one `entity:updated` per entity through `logEach`
+  (`server/src/routes/tags.js:97-116`), awaited so the response is sent only once the trail exists, and bounds the
+  batch at `MAX_AFFECTED = 200` with a 413 past it (`:53`, `:75-81`).
+  Build the same three parts for a type rename: a bounded cascade (413 naming the count and the limit, so an
+  unbounded `updateMany` can never be the answer), one `ChangeLog` row per moved entity through the existing
+  `logUpdate`, and the frames that follow from it — the per-entity `entity:updated` the logger already emits, plus
+  one `entity-type:updated` frame so a listening tab can refresh its pills, filters and pickers without refetching
+  the workspace. Relationship-type ends keep moving as they do today (they have no history of their own), and the
+  rename stays ordered rather than transactional, as the route's header already records.
+  Files: `server/src/routes/entityTypes.js`, `client/src/composables/useEntityTypes.js`,
+  `client/src/composables/useEvents.js`, `client/src/components/WikiLayout.vue`,
+  `server/tests/http/entityTypes.test.js`, `client/src/composables/useEvents.test.js`, `docs/api.md` (the
+  `/entity-types` rename contract and the `/events` frame list), `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a rename writing one `ChangeLog` entry per moved entity, each
+  pairing the old category with the new; the entry readable through `GET /entities/:id/history` with a snapshot
+  that rolls the category back; a rename over the cap refused 413 with the type and every entity unchanged; one
+  `entity:updated` frame per entity plus one `entity-type:updated`, all workspace-scoped and excluding the writer;
+  a rename that moves no entity still renaming the type and emitting the type frame alone; and a case-only rename
+  (which the route already treats as a rename) cascading like any other. `cd client && yarn test --run` with a
+  case for a tab refreshing its types on the frame. `cd client && yarn build`.
+  Out of scope: a `changeType` of its own for the cascade (it is an `updated` per entity, which is what rollback
+  already understands); history for the `EntityType` and `RelationshipType` documents themselves; colour and icon
+  edits, which move no entity; deleting an in-use type, still refused 409; and the same stale-name failure when an
+  old draft item is applied, which the Decision Log deliberately leaves alone.
 - [x] **(KOL-150) A viewer sees every write control, and a refused write disappears without a word** (routine 2026-11-23, 998c602)
   Two halves of one failure, both reachable in the shipped product since collaborator invites (KOL-124) made a
   non-owner member possible.
