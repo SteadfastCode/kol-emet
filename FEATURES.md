@@ -64,7 +64,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-152) The workspace's open questions have a paged API and no screen**
+- [x] **(KOL-152) The workspace's open questions have a paged API and no screen**
   `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
   bare-id cursor (`server/src/routes/openQuestions.js:85`, KOL-092), and `client/src/api/openQuestions.js` wraps it
   as `getOpenQuestionPage` (`:64`) with `QUESTION_PAGE_SIZE` — and **nothing in the client calls it**: grep
