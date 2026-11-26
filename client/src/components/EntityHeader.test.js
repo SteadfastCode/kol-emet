@@ -323,3 +323,101 @@ describe('EntityHeader write controls', () => {
     expect(calls).toEqual([]);
   });
 });
+
+/**
+ * The header's own form, against a save the server refused (KOL-156).
+ *
+ * `await emit('save', …)` awaited `undefined` — Vue's `emit` returns no handler
+ * result — so the form closed in the same tick the request was sent. A refusal
+ * (a role that answered `viewer` after the first paint, a 409 on the title, a
+ * 400 from the block validator over the blocks sent with it) then arrived as a
+ * toast over a header that had already reverted to the stored title, type,
+ * summary and tags. The page's save is a function prop now, it reports whether
+ * the entity was written, and nothing less than `true` closes the form.
+ *
+ * The open-question writes above are a different path — their own routes, and
+ * they already kept a refused row's text where it was typed (KOL-104).
+ *
+ * Falsification: close the form unconditionally after the await and the refused
+ * case fails on the title it no longer holds.
+ */
+describe('EntityHeader editor against a refused save', () => {
+  const pencil = (wrapper) => wrapper.get('button[title="Edit header"]');
+  const saveButton = (wrapper) => wrapper.get('.edit-actions .primary');
+  const editing = (wrapper) => wrapper.find('.header-edit').exists();
+
+  /** Opens the form and rewrites every field in it. */
+  async function rewrite(onSave) {
+    localStorage.setItem('INLINE_EDIT_LOG_LEVEL', 'off');
+    const wrapper = mount(EntityHeader, { props: { entity: entityWith([WHO]), onSave } });
+    await flushPromises();
+    await pencil(wrapper).trigger('click');
+    await wrapper.get('input.edit-title').setValue('The Brakewoman');
+    await wrapper.get('input[placeholder="Summary"]').setValue('Rewritten, and not yet saved.');
+    await wrapper.get('input[placeholder="Tags (comma separated)"]').setValue('crew, brakes');
+    return wrapper;
+  }
+
+  it('sends the whole header and keeps the form, and what was typed in it, when the write is refused', async () => {
+    const onSave = vi.fn(async () => false);
+    const wrapper = await rewrite(onSave);
+
+    await saveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(onSave).toHaveBeenCalledWith({
+      title: 'The Brakewoman',
+      category: 'Characters',
+      summary: 'Rewritten, and not yet saved.',
+      tags: ['crew', 'brakes'],
+    });
+
+    expect(editing(wrapper)).toBe(true);
+    expect(wrapper.get('input.edit-title').element.value).toBe('The Brakewoman');
+    expect(wrapper.get('input[placeholder="Summary"]').element.value).toBe('Rewritten, and not yet saved.');
+    expect(wrapper.get('input[placeholder="Tags (comma separated)"]').element.value).toBe('crew, brakes');
+    // Nothing of the stored header is on screen to be mistaken for a save.
+    expect(wrapper.find('.entity-title').exists()).toBe(false);
+    // And Save works again rather than spinning on a finished request.
+    expect(saveButton(wrapper).attributes('disabled')).toBeUndefined();
+    expect(calls).toEqual([]);                 // the header's save is not an open-question route
+  });
+
+  it('closes the form when the write lands', async () => {
+    const wrapper = await rewrite(vi.fn(async () => true));
+
+    await saveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(editing(wrapper)).toBe(false);
+    // The read is back — of the entity as it stands, which the page replaces
+    // with the server's answer to the write just made.
+    expect(wrapper.get('.entity-title').text()).toBe('The Brakeman');
+  });
+
+  it('holds the form open while the write is in flight', async () => {
+    const { promise, settle } = deferred();
+    const wrapper = await rewrite(() => promise);
+
+    await saveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(editing(wrapper)).toBe(true);
+    expect(saveButton(wrapper).attributes('disabled')).toBeDefined();
+    expect(wrapper.find('.edit-actions .spinner').exists()).toBe(true);
+
+    settle(true);
+    await flushPromises();
+    expect(editing(wrapper)).toBe(false);
+  });
+
+  it('keeps what was typed when nothing is listening for the save', async () => {
+    const wrapper = await rewrite(undefined);
+
+    await saveButton(wrapper).trigger('click');
+    await flushPromises();
+
+    expect(editing(wrapper)).toBe(true);
+    expect(wrapper.get('input.edit-title').element.value).toBe('The Brakewoman');
+  });
+});

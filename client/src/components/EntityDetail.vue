@@ -166,9 +166,20 @@ const props = defineProps({
    * still there to be read.
    */
   canWrite: { type: Boolean, default: true },
+  /**
+   * The layout's entity save (`PUT /entities/:id`), as a function prop rather
+   * than an emit (KOL-156). Every write on this page that is an entity update
+   * goes through it: the header's form, a block editor, a deleted block, an
+   * added one. `@saved="…"` on this component still fills it in — WikiLayout's
+   * template is unchanged — and it resolves `true` when the entity was
+   * written, `false` when the server refused it. The two editors that own
+   * their own open/closed state need that answer to decide whether to close,
+   * and an emit cannot carry it back. See lib/inlineEdit.js.
+   */
+  onSaved: Function,
 });
 
-const emit = defineEmits(['crumb-click', 'follow-link', 'set-tag', 'saved', 'deleted', 'refresh']);
+const emit = defineEmits(['crumb-click', 'follow-link', 'set-tag', 'deleted', 'refresh']);
 
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -271,28 +282,34 @@ function describe(entry) {
   return parts.length ? parts.join(' · ') : 'updated';
 }
 
-async function saveHeader(headerData) {
-  emit('saved', props.entity._id, {
+/**
+ * The four entity updates this page asks for. Each one hands the layout the
+ * whole new value of what it changed and **returns its answer** — `true` only
+ * if the entity was written (KOL-156) — because the header's form and a
+ * block's editor close themselves and must not do so on a refusal.
+ */
+function saveHeader(headerData) {
+  return props.onSaved?.(props.entity._id, {
     ...headerData,
     blocks: props.entity.blocks,
   });
 }
 
-async function saveBlock(updatedBlock) {
+function saveBlock(updatedBlock) {
   const blocks = props.entity.blocks.map(b =>
     b._id === updatedBlock._id ? updatedBlock : b
   );
-  emit('saved', props.entity._id, { blocks });
+  return props.onSaved?.(props.entity._id, { blocks });
 }
 
-async function deleteBlock(blockId) {
+function deleteBlock(blockId) {
   const blocks = props.entity.blocks.filter(b => b._id !== blockId);
-  emit('saved', props.entity._id, { blocks });
+  return props.onSaved?.(props.entity._id, { blocks });
 }
 
-async function addBlock(newBlock) {
+function addBlock(newBlock) {
   const blocks = [...props.entity.blocks, newBlock];
-  emit('saved', props.entity._id, { blocks });
+  return props.onSaved?.(props.entity._id, { blocks });
 }
 
 function confirmDelete() {

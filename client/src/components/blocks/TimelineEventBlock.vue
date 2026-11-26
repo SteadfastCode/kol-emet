@@ -38,9 +38,20 @@
 <script setup>
 import { ref, computed, inject, reactive } from 'vue';
 import PencilIcon from '../icons/PencilIcon.vue';
+import { commitInlineEdit } from '../../lib/inlineEdit.js';
 
-const props = defineProps({ block: Object, canEdit: Boolean });
-const emit = defineEmits(['save']);
+const props = defineProps({
+  block: Object,
+  canEdit: Boolean,
+  /**
+   * The page's save for this block, as a function prop rather than an emit
+   * (KOL-156): this editor may only close if the write actually landed, and
+   * `emit` returns no handler result to tell it. `@save="…"` on this component
+   * still fills it in. Resolves `true` when the entity was written; anything
+   * else leaves the editor open with the draft. See lib/inlineEdit.js.
+   */
+  onSave: Function,
+});
 
 const entries = inject('entries', ref([]));
 const followLink = inject('followLink', () => {});
@@ -68,8 +79,10 @@ function cancel() { isEditing.value = false; }
 async function save() {
   isSaving.value = true;
   try {
-    await emit('save', { ...props.block.data, ...form });
-    isEditing.value = false;
+    // Only a write that landed closes this editor: a refused save keeps the
+    // fields and what was typed into them (KOL-156).
+    const landed = await commitInlineEdit(props.onSave, { ...props.block.data, ...form }, `timeline event block ${props.block?._id ?? '(unsaved)'}`);
+    if (landed) isEditing.value = false;
   } finally { isSaving.value = false; }
 }
 </script>

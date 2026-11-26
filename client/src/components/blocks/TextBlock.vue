@@ -30,14 +30,23 @@
 import { ref, computed, inject } from 'vue';
 import PencilIcon from '../icons/PencilIcon.vue';
 import { marked } from 'marked';
+import { commitInlineEdit } from '../../lib/inlineEdit.js';
 
 marked.use({ breaks: true, gfm: true });
 
 const props = defineProps({
   block: Object,
   canEdit: Boolean,
+  /**
+   * The page's save for this block, as a function prop rather than an emit
+   * (KOL-156): this editor may only close if the write actually landed, and
+   * `emit` returns no handler result to tell it. `@save="…"` on this component
+   * still fills it in — the parent's template is unchanged. Resolves `true`
+   * when the entity was written; anything else leaves the editor open with the
+   * draft. See lib/inlineEdit.js.
+   */
+  onSave: Function,
 });
-const emit = defineEmits(['save']);
 
 const entities = inject('entities', ref([]));
 const followLink = inject('followLink', () => {});
@@ -75,8 +84,14 @@ function cancel() {
 async function save() {
   isSaving.value = true;
   try {
-    await emit('save', { ...props.block.data, markdown: draft.value });
-    isEditing.value = false;
+    const landed = await commitInlineEdit(
+      props.onSave,
+      { ...props.block.data, markdown: draft.value },
+      `text block ${props.block?._id ?? '(unsaved)'}`,
+    );
+    // Only a write that landed closes this editor: a refused save keeps the
+    // textarea and the markdown in it, which is the only copy there is.
+    if (landed) isEditing.value = false;
   } finally {
     isSaving.value = false;
   }

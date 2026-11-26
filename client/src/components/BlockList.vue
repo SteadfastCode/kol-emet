@@ -117,8 +117,16 @@ const props = defineProps({
    * "+ Add block"; see `blockEditable` for the part it did not.
    */
   canEdit: Boolean,
+  /**
+   * The page's save for one block, as a function prop rather than an emit
+   * (KOL-156): each block's own editor closes only if the write landed, and
+   * only this handler knows whether it did. `@save-block="…"` on this
+   * component still fills it in — the parent's template is unchanged — and it
+   * resolves `true` when the entity was written. See lib/inlineEdit.js.
+   */
+  onSaveBlock: Function,
 });
-const emit = defineEmits(['save-block', 'delete-block', 'add-block']);
+const emit = defineEmits(['delete-block', 'add-block']);
 
 const editingBlockId = ref(null);
 const showAddMenu = ref(false);
@@ -145,9 +153,18 @@ const nonTimelineBlocks = computed(() =>
     : sorted.value
 );
 
+/**
+ * Passes one block's edited data up to the page and reports back whether the
+ * entity was written — the block's own editor closes on nothing less (KOL-156).
+ *
+ * The one-at-a-time rule has to agree with that: a block whose editor is still
+ * open because its save was refused is still the block being edited, so
+ * `editingBlockId` is cleared only when the write landed.
+ */
 async function saveBlock(block, newData) {
-  await emit('save-block', { ...block, data: newData });
-  editingBlockId.value = null;
+  const landed = (await props.onSaveBlock?.({ ...block, data: newData })) === true;
+  if (landed) editingBlockId.value = null;
+  return landed;
 }
 
 /**
