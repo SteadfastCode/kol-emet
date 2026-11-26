@@ -61,6 +61,22 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-164) Backlog audit: file new candidates under Proposed** [not-before: 2026-12-02]
+  A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
+  order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,
+  the Decision Log in `kol_emet_spec.md`, the outcomes under Completed Items and the review files under
+  `ops/routine/reviews/`, and TODO/FIXME comments. For every candidate grep the code and `git log` and confirm it
+  is NOT built before filing it; re-proposing a shipped feature is the failure this item exists to prevent. File
+  3–8 items under `## Proposed` in this file's exact format (next free ids, never reuse one): a one-line title,
+  then an indented body with what to build, the files involved, the verify commands, and what is out of scope.
+  Every item must serve the public multi-tenant product (CLAUDE.md). Tag every filed item `[proposed]` — Daniel
+  promotes one by deleting the tag, and the daily update lists them. Skip anything needing a credential, a paid
+  generator run, an Atlas index change or a product decision unless the item IS that decision. Then renew this
+  item: append a copy of this block at the bottom of `## Workqueue Items` with the next free id and the tag
+  `[not-before: <today + 7 days as YYYY-MM-DD>]`, so it runs weekly. The PR touches only FEATURES.md. Verify:
+  `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
+  for `diff-policy`).
+
 
 
 
@@ -112,6 +128,218 @@ registration, or removes a feature.
   `cd client && yarn build`.
   Out of scope: shipping, packaging or pulling models for Ollama; a per-workspace default provider (it is per request
   today); the Responses-API/MCP relay path (Ollama advertises no `responsesApi`); and any change to what `steadfast` is.
+
+- [ ] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen** [proposed]
+  Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
+  "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
+  `?q=` fuzzy filter (`server/src/routes/entityTypes.js:263`), creates with an exact-name 409 and a near-duplicate
+  `warning` that still creates (`:284`), updates name, icon, colour and order with KOL-151's per-entity `ChangeLog`
+  cascade behind it (`:325`), and deletes with a 409 while anything names the type plus a second 409 that keeps a
+  workspace's last type (`:425`). `client/src/api/entityTypes.js` exports exactly one function — `getEntityTypes`
+  (`:21`) — and `useEntityTypes` reads it once per mount (`client/src/components/WikiLayout.vue:1507`). So a
+  workspace's vocabulary is whatever its template seeded, and a user who wants a vertical of their own, which is
+  the entire reason the hardcoded enum was dropped, can neither add a type, rename one, recolour a pill, reorder
+  them, nor remove one nothing uses. The only client that can change a type today is an MCP connector.
+  Build: the three missing verbs in `client/src/api/entityTypes.js`, and an `EntityTypeSettings.vue` beside
+  `TagSettings.vue` in the settings panel — rows of name, icon, colour swatch and order, an add form, inline
+  rename, delete — with every refusal shown where it happened rather than swallowed (KOL-150's rule): the in-use
+  409 names the entities still holding the type, the last-type 409 says why, and the create `warning` reads as a
+  warning beside a row that *was* created. Gated on `canWrite` (`WikiLayout.vue:820`). Plus the two frames the
+  screen needs and the routes do not send: create and delete broadcast nothing, where a rename emits
+  `entity-type:updated` (`broadcastTypeRenamed`, `server/src/routes/entityTypes.js:239`, called only from `:407`),
+  so a type added or removed in another tab leaves exactly the stale-pill failure KOL-151 closed for renames. Add
+  `entity-type:created` and `entity-type:deleted` on the same terms — workspace-scoped, writer excluded — and the
+  handlers beside `applyEntityTypeUpdate` (`client/src/composables/useEntityTypes.js:83`).
+  Files: `client/src/api/entityTypes.js`, new `client/src/components/EntityTypeSettings.vue`,
+  `client/src/components/WikiLayout.vue`, `client/src/composables/useEntityTypes.js`,
+  `client/src/composables/useEvents.js`, `server/src/routes/entityTypes.js`, new
+  `client/src/components/EntityTypeSettings.test.js`, `client/src/composables/useEntityTypes.test.js`,
+  `client/src/composables/useEvents.test.js`, `server/tests/http/entityTypes.test.js`, `docs/api.md` (the
+  `/entity-types` table and the `/events` frame list), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a create emitting one `entity-type:created` and a delete one
+  `entity-type:deleted`, both workspace-scoped and excluding the writing client; no frame at all from a refused
+  write (409 duplicate name, 409 in use, 409 last type); and the rename frame unchanged. `cd client && yarn test
+  --run` with cases for: the list in `order` then name; an add posting the trimmed name and appending the row; a
+  rename refused 409 leaving the old name on screen with the server's sentence beside it; a delete refused while
+  in use naming the count; the near-duplicate `warning` rendered as a warning, not an error; the two frames adding
+  and removing a row with no refetch; and no write control for a viewer. `cd client && yarn build`.
+  Out of scope: a field schema per type (the roadmap keeps it as "an optional light field-schema later");
+  reassigning entities when a type is deleted (the 409 stands); drag-to-reorder, since the `order` number is
+  editable; icon artwork; and the `?q=` filter, which a registry this size does not need.
+
+- [ ] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody** [proposed]
+  `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
+  "These matter most: without them the relationship picker is empty and the core feature of the product looks
+  broken on first use." There is no picker. `/relationship-types` has all four verbs with a `?q=` fuzzy filter and
+  a near-duplicate warning (`server/src/routes/relationshipTypes.js:8`, `:32`, `:62`, `:85`) and **no client
+  caller at all**: there is no `client/src/api/relationshipTypes.js`, and the string `relationship-types` does not
+  appear anywhere under `client/src`. Every label is typed free-hand into one of six inputs that offer an example
+  placeholder and nothing else — the group label on an existing group (`RelationshipsSection.vue:14`) and on a new
+  one (`:295`), the two ends of a new relationship (`:285`, `:289`), a member added to a group (`:231`), and a
+  subgroup link (`:191`), all in `client/src/components/RelationshipsSection.vue`. So the Software Architecture template's
+  *depends-on*, *owned-by* and *calls* sit in the database where nobody can read them, and a graph accumulates
+  `owns`, `Owns` and `owned by` as three unrelated labels. The model is built for the picker that is missing:
+  `scope` ∈ `group` | `member` exists because "a relationship carries labels in two places, and they are different
+  vocabularies" (`server/src/models/RelationshipType.js:9-23`), and the generator already splits the two to name
+  its edges (`server/src/lib/generator.js:184-186`) — the vocabulary shapes generated output while the user who
+  owns it cannot see it.
+  Build: `client/src/api/relationshipTypes.js` with the four verbs, and the vocabulary offered where a label is
+  typed — a suggestion list on each of the six inputs, filtered by `scope` so a group label is never offered a
+  member role, reusing the tag-suggestion pattern already in `client/src/components/EntityEditor.vue:286`
+  (keyboard-navigable, dismissible, and a typed label that matches nothing still saves verbatim). Plus a settings
+  group to add, rename and delete a type, as `TagSettings.vue` is for tags, gated on `canWrite`. Two server gaps
+  the screen exposes: `POST` destructures only `{ name, sourceCategory, targetCategory }` (`:33`) and `PUT` the
+  same three (`:65-68`), so **no client can create or change a `group`-scoped type** — accept `scope` on both,
+  validated against the enum, with a 400 and no write for anything else.
+  Files: new `client/src/api/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.vue`,
+  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.vue`,
+  `server/src/routes/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.test.js`, new
+  `client/src/components/RelationshipsSection.test.js`, new `server/tests/http/relationshipTypes.test.js`,
+  `docs/api.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: `POST` accepting `scope: 'group'` and storing it; a scope
+  outside the enum refused 400 with nothing written; `PUT` moving a type's scope; the existing exact-name 409 and
+  the `warning` unchanged; and another workspace's type still 404 on `PUT` and `DELETE`. `cd client && yarn test
+  --run` with cases for: a group-label input offering only `group`-scoped names and a member input only
+  `member`-scoped ones; a label that matches nothing submitted as typed; the settings rows adding, renaming and
+  deleting; a refused write leaving the row and saying why; and no write control for a viewer. `cd client && yarn
+  build`.
+  Out of scope: narrowing suggestions by the pair's `sourceCategory`/`targetCategory` (the fields exist and the
+  filter is its own item); a rename cascading onto the labels already stored on groups and members, which needs
+  the audit vocabulary relationship writes do not have (KOL-149's own out-of-scope records why); inverse-name
+  pairs and directionality; and the generator's prompt, which already reads this collection.
+
+- [ ] **(KOL-160) The generator promises a draft list and a way back into a draft; neither exists** [proposed]
+  The generating screen tells the user "Closing this panel won't cancel it — the draft will be waiting in your
+  list" (`client/src/components/generator/GeneratorOverlay.vue:32-34`), and the applied screen tells them "{n}
+  failed. Reopen the draft to see why." (`:55`). There is no list and no way to reopen. `GET /drafts` is finished —
+  newest first, `discarded` filtered out, items and raw text projected away because "the list view only needs
+  counts", and a lazy sweep that marks an abandoned `generating` row failed before it answers
+  (`server/src/routes/drafts.js:102-118`, `expireStuckGenerations` at `:83`) — and `DELETE /drafts/:id` is a
+  deliberate soft discard, "the row is the training corpus" (`:869-884`). `client/src/api/drafts.js` wraps both
+  (`listDrafts` `:24`, `discardDraft` `:27`) and **nothing calls either**: the drafts API's only callers are
+  `useDraftReview.js`, which loads one draft by the id the stream just produced, and the overlay itself. A review
+  interrupted by a closed tab, a reload, or a generation that outlives its connection — the case the copy
+  describes — is unreachable; a half-reviewed draft can never be finished; and nothing can discard one.
+  Build: a drafts list as the generator overlay's own first stage (`stage` already switches
+  `input | generating | review | applied | failed`, `GeneratorOverlay.vue:83`), rendering what `GET /drafts`
+  returns — created date, source filename or producer, status, and the item counts the route is projected for —
+  with a row opening the existing `DraftReview` by id, a discard per row behind a confirm, and `generating` and
+  `failed` rows shown as what they are rather than as reviewable. The allowance line stays where it is. Tiered
+  client logging (`DRAFT_LOG_LEVEL`, default light) naming which draft was opened or discarded and from which row,
+  because this is the one surface whose entire content is a session that has already ended.
+  Files: new `client/src/components/generator/DraftList.vue`,
+  `client/src/components/generator/GeneratorOverlay.vue`, `client/src/composables/useDraftReview.js` (opening by
+  an id the list supplies rather than one a stream just produced), new
+  `client/src/components/generator/DraftList.test.js`, `client/src/components/WikiLayout.test.js`, `docs/api.md`
+  (the `/drafts` list contract), `docs/generator-v1-plan.md` ("Remaining work"), the Decision Log.
+  Verify: `cd client && yarn test --run` with cases for: rows newest-first from `listDrafts` with their counts and
+  status; a row opening `DraftReview` with that draft's id; a discard removing that row and no other; a refused
+  discard leaving the row with the reason beside it; a `generating` row offering no review; the empty state for a
+  workspace that has never generated; and no discard control where `canWrite` is false. `cd client && yarn build`;
+  `cd server && yarn test` unchanged — no server file is touched.
+  Out of scope: paging the list (the route caps at 50 and documents it); resuming a generation whose stream is
+  gone, since the sweep marking it failed is the honest answer; `GET /drafts/:id/export`, which is the
+  training-data path and not a user one; and any change to what `GET /drafts` returns.
+
+- [ ] **(KOL-161) A write to a subgroup leaves the parent group's panels stale: entityIds flattens downward only** [proposed]
+  The third finding of the KOL-149 review (`ops/routine/reviews/KOL-149.graded.json`), unfixed.
+  `flattenEntityIds` walks a group's subgroups downward and stops (`server/src/lib/relationshipEvents.js:149-176`);
+  its contract is "every entity reachable through `group`", but the entities a write changes a *panel* for are not
+  only the ones below it. `resolveGroupLabels` traverses upward (`server/src/lib/relationshipResolver.js:186-188`,
+  `:201-224`): an entity that is a direct member of a parent group P is shown P's labeled subgroup S expanded
+  inline, members and all (`processGroup`'s `expandedSubGroups`, `:150-170`). Add, relabel or remove a member of S
+  and the frame's `entityIds` names S's members and never that entity; `groupTouchesPanel`
+  (`client/src/components/WikiLayout.vue:1786-1792`) then matches the frame's group id against the top-level
+  `_id`s in `shown.relationships`, which hold P and not S — so the open panel goes on rendering S's old member list
+  under P, with nothing on screen to say it is stale. That is precisely the case the frame exists for.
+  Build: walk upward as well as down — the groups holding this group as a member, transitively, each contributing
+  its own entity members — on the three rules the downward walk already states and for the same reasons:
+  workspace-scoped, so a parent outside the workspace contributes nothing; one query per level, so a group with no
+  parents costs no query; cycle-guarded by the visited set, because the model permits A → B → A; and bounded by
+  `MAX_SUBGROUP_DEPTH` (`:86`), with the existing light-tier line saying when a walk stopped short and `entityIds`
+  is therefore incomplete. The alternative — teaching the client to match `expandedSubGroups` ids too — is worse:
+  the frame's documented contract is the entities whose panels the write changes, and three listeners would each
+  have to re-derive it.
+  Files: `server/src/lib/relationshipEvents.js`, `server/tests/http/relationshipEvents.test.js`, `docs/api.md`
+  (the `entityIds` description in the frame list).
+  Verify: `cd server && yarn test` with cases for: a member added to S naming P's own entity members in
+  `entityIds`; two levels up (P nested in a grandparent) reaching the grandparent's members; a cycle P → S → P
+  terminating with each entity named once; a parent in another workspace contributing nothing; a group with no
+  parents producing exactly today's set, so the downward behaviour is unchanged; and the depth cap logging a short
+  `entityIds` instead of looping. Then `cd server && node --check src/index.js`. `cd client && yarn test --run`
+  and `cd client && yarn build` unchanged — no client file is touched.
+  Out of scope: that review's other two findings, both closed by KOL-157; a `ChangeLog` trail for relationship
+  writes; `Last-Event-ID` resumption; and any change to the three frame names.
+
+- [ ] **(KOL-162) The role gate stops at the entity panel: the generator, Tags, Recently deleted and Import still show every control** [proposed]
+  KOL-150 derived `canWrite` from this session's workspace role and gated the entity panel with it, leaving the
+  settings panels out of scope because "each has its own role story and its own refusals". These are those
+  stories, and every one of them is a control a viewer or a non-owner is shown and then refused. The sidebar's
+  `Draft` button (`client/src/components/EntitySidebar.vue:36`) sits two lines below the `+ New` KOL-150 gated
+  (`:12`) and is ungated, while `/drafts` is mounted behind `requireWriteRole` (`server/src/app.js:206`) — so a
+  viewer opens the generator, pastes a document, and is refused 403 at the end of it. `TagSettings`
+  (`client/src/components/WikiLayout.vue:506-509`) takes no role at all and offers rename, merge and delete, all
+  behind `requireWriteRole` (`app.js:176`). `RecentlyDeleted`'s restore
+  (`client/src/components/RecentlyDeleted.vue:46`, `:54`) posts to the rollback route, which carries
+  `requireWriteRole` on the route itself (`server/src/routes/changelog.js:197`). And Import
+  (`WikiLayout.vue:483-500`) is owner-only on the server (`requireWorkspaceRole('owner')`,
+  `server/src/routes/import.js:102`) while the control is shown to every member — its own note already says "Only
+  the workspace owner can import", which is a sentence that belongs where a hidden control was.
+  Build: pass `canWrite` to the generator entry point, `TagSettings` and `RecentlyDeleted`, and gate Import on the
+  owner test the Workspace and Collaborators groups already make (`workspace?.role === 'owner'`,
+  `WikiLayout.vue:157`, `:239`, `:293`), hoisted into one `isOwner` computed beside `canWrite` (`:820`) rather
+  than a fifth inline comparison. An unknown role stays permissive, exactly as `canWrite` already decides and for
+  the same reason. Export stays open to every role: it is a read. Each hidden group keeps a one-line reason in its
+  place, the way the Workspace group already says "Only an owner can rename this workspace. Your role here is
+  {{ role }}" (`:173`) — a control that silently vanishes is a product that looks broken.
+  Files: `client/src/components/EntitySidebar.vue`, `client/src/components/WikiLayout.vue`,
+  `client/src/components/TagSettings.vue`, `client/src/components/RecentlyDeleted.vue`,
+  `client/src/components/EntitySidebar.test.js`, `client/src/components/WikiLayout.test.js`,
+  `client/src/components/TagSettings.test.js`, `client/src/components/RecentlyDeleted.test.js`, `docs/api.md` (the
+  client half of the role column).
+  Verify: `cd client && yarn test --run` with cases for: a viewer rendering no `Draft` button, no tag
+  rename/merge/delete, no restore and no Import row; an editor rendering the first three and not Import; an owner
+  rendering all four; the explanatory line present wherever a group is hidden; every control still rendered while
+  the role is unknown; and KOL-150's existing cases unchanged. `cd client && yarn build`; `cd server && yarn test`
+  unchanged — no server file is touched.
+  Out of scope: the server's codes and copy; Export, a read every role may do; the groups that are already
+  owner-gated; `POST /chat`, left ungated on purpose by KOL-113; and client-side validation of anything the server
+  refuses for a reason other than a role.
+
+- [ ] **(KOL-163) A workspace with collaborators has no way to see what they changed** [proposed]
+  Invites shipped (KOL-124), so a workspace holds an owner, editors and viewers — and the only history any of them
+  can read is one entity at a time (`GET /entities/:id/history`, `server/src/routes/changelog.js:99`) plus the
+  restorable-deletions list (`GET /deleted`, `:131`). Every entity write already records who made it and how:
+  `ChangeLog` carries `actorId`, `actorType` ∈ `user` | `mcp` | `generator`, `actorLabel`, the fields and blocks
+  that changed, and an `origin` naming the draft, item and producer a generated write came from
+  (`server/src/models/ChangeLog.js:11-27`). None of it is readable across a workspace, so "what happened here
+  since Tuesday" means opening entities one at a time and guessing which ones — and a graph an agent maintains,
+  which is the product's whole positioning, has no page that shows what the agent did.
+  Build: `GET /activity` on the changelog router, which is mounted at `/` so a new **GET** needs nothing beyond
+  the mount's `requireAuth` + `resolveWorkspace` (the router's header records why a *write* added there has to
+  repeat `requireWriteRole`): workspace-scoped, newest first, projected without `snapshot` — a snapshot is a whole
+  entity and a page of 50 would carry 50 of them, which is why `GET /deleted` already projects — paged on the
+  `_id` cursor `idCursor` reads for the two paged routes (`server/src/lib/searchFilter.js`, KOL-092), with
+  `boundedInteger` on `?limit=` and `?actorType=` / `?changeType=` typed at the edge the same way, so a value
+  nobody wrote is no filter rather than a filter the caller wrote. The client half goes beside Recently deleted:
+  rows naming the actor, what changed, the entity and when; a row opening that entity; a generated row saying
+  which producer and draft it came from; and the 30-day horizon stated in the panel rather than discovered, since
+  the TTL is still 30 days and lifting it is its own decision (KOL-019).
+  Files: `server/src/routes/changelog.js`, new `client/src/api/activity.js`, new
+  `client/src/components/ActivityFeed.vue`, `client/src/components/WikiLayout.vue`, new
+  `server/tests/http/activity.test.js`, new `client/src/components/ActivityFeed.test.js`, `docs/api.md`,
+  `docs/data-model.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a page newest-first with no `snapshot` on any row; a second
+  page continuing on the cursor with no row repeated or dropped across the boundary; another workspace's entries
+  absent for a user who is a member of both; `?actorType=generator` returning only generated writes and
+  `?changeType=deleted` only deletions; an array or object `?limit=` / `?after=` read as no filter; and a viewer
+  able to read it, because it is a read. `cd client && yarn test --run` with cases for the rows and their actor
+  labels, a generated row naming its producer and draft, a row opening its entity, the empty state, and a page
+  boundary that repeats nothing. `cd client && yarn build`.
+  Out of scope: a compound index on `{ workspaceId, _id }` — the `_id` cursor is what bounds a page, and an index
+  on the deployed cluster is not this item's to change; relationship-group and open-question writes, which have no
+  `ChangeLog` row at all (KOL-149's and KOL-104's out-of-scope record why); lifting the 30-day TTL (KOL-019);
+  live-updating the feed on `entity:*` frames; and rollback from the feed, which already exists per entity.
 
 ## Blocked Items
 
