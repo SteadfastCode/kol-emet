@@ -1,0 +1,105 @@
+{
+  "item": "KOL-154",
+  "repo": "kol-emet",
+  "mergeSha": "2d0dc5d08bf41d5bdf48b4898a3e1aee330ce9d0",
+  "completedAtUtc": "2026-11-26T00:13:44.737Z",
+  "completeRunId": "2026-11-25T23:51:05.064Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:15:49.507Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 23328,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/api.md",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 8676,
+      "contextBytes": 0,
+      "promptTokens": 3475,
+      "completionTokens": 96,
+      "latencyMs": 14618,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/workspace.js"
+      ],
+      "part": null,
+      "bytes": 5193,
+      "contextBytes": 7307,
+      "promptTokens": 4269,
+      "completionTokens": 78,
+      "latencyMs": 13635,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/invites.test.js"
+      ],
+      "part": null,
+      "bytes": 9459,
+      "contextBytes": 0,
+      "promptTokens": 3651,
+      "completionTokens": 99,
+      "latencyMs": 12725,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/workspace.js:385"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. However, additional context is needed to fully understand the implementation details of `membersOf` and `updateOne` functions. · No real defects found in the provided diff. However, additional information about the `notTheLastOwner` function is needed to fully understand and verify the change. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 22397,
+    "completionTokens": 661
+  },
+  "latencyMs": 89399
+}

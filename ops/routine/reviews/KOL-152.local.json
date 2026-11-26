@@ -1,0 +1,255 @@
+{
+  "item": "KOL-152",
+  "repo": "kol-emet",
+  "mergeSha": "f2023a631404d67b2ca5aa83ad06570638d591d2",
+  "completedAtUtc": "2026-11-25T21:23:16.342Z",
+  "completeRunId": "2026-11-25T21:07:43.150Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:13:20.269Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 84427,
+  "contextFiles": 7,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/EntitySidebar.vue"
+      ],
+      "part": null,
+      "bytes": 2389,
+      "contextBytes": 9905,
+      "promptTokens": 4548,
+      "completionTokens": 109,
+      "latencyMs": 18647,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/OpenQuestionPanel.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12368,
+      "contextBytes": 0,
+      "promptTokens": 4565,
+      "completionTokens": 128,
+      "latencyMs": 17270,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/OpenQuestionPanel.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 10186,
+      "contextBytes": 0,
+      "promptTokens": 3884,
+      "completionTokens": 185,
+      "latencyMs": 17901,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/OpenQuestionPanel.vue"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 12306,
+      "contextBytes": 0,
+      "promptTokens": 4454,
+      "completionTokens": 123,
+      "latencyMs": 16630,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/OpenQuestionPanel.vue"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11868,
+      "contextBytes": 0,
+      "promptTokens": 5026,
+      "completionTokens": 222,
+      "latencyMs": 23827,
+      "findings": 0,
+      "needs": 6,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js"
+      ],
+      "part": null,
+      "bytes": 10181,
+      "contextBytes": 0,
+      "promptTokens": 3899,
+      "completionTokens": 286,
+      "latencyMs": 25506,
+      "findings": 0,
+      "needs": 10,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.vue",
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 11388,
+      "contextBytes": 0,
+      "promptTokens": 4220,
+      "completionTokens": 74,
+      "latencyMs": 13321,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/wishlist.md"
+      ],
+      "part": null,
+      "bytes": 1171,
+      "contextBytes": 3190,
+      "promptTokens": 2425,
+      "completionTokens": 127,
+      "latencyMs": 10322,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 6605,
+      "contextBytes": 0,
+      "promptTokens": 2769,
+      "completionTokens": 119,
+      "latencyMs": 10661,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 6561,
+      "contextBytes": 0,
+      "promptTokens": 2786,
+      "completionTokens": 110,
+      "latencyMs": 10349,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/components/OpenQuestionPanel.vue:270"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/components/OpenQuestionPanel.test.js:102"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional context is needed to fully understand and verify the implementation of `getOpenQuestionPage` and `setOpenQuestionStatus`. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the implementation of `OpenQuestionPanel` and its integration with `useKeyboardShortcuts`. The needs list includes reading the relevant Vue component and composable file. · The diff introduces a new test file for the OpenQuestionPanel component, covering various scenarios such as handling questions attached to no entity, resolving and reopening questions, handling live frames, and ensuring proper behavior when a write is refused. The code appears to be well-structured and comprehensive in its testing approach. · The diff introduces a new component `OpenQuestionPanel.vue` for displaying open questions in the workspace. The component uses server-side filtering and pagination, and it handles status changes and entity opening. However, there are no apparent defects in the provided diff. · The diff introduces a new component `OpenQuestionPanel.vue` for displaying open questions in a workspace. The component includes functions for loading, reloading, setting status, opening entities, toggling question status, and applying frames from other tabs or AI clients. The style section defines the component's appearance. · No real defects found. However, additional context is needed to fully verify the implementation. · No real defects found. However, additional information is needed to verify the functionality of `applyFrame` in `OpenQuestionPanel.vue`. · The diff updates the wishlist document to reflect the addition of a workspace-wide open questions panel. The changes include adding a new entry for the feature, detailing its functionality and noting that creating a question from it is still in progress. No code changes are included in this diff. · The diff does not provide enough context to determine if there are any real defects. It mentions the existence of `getOpenQuestionPage` and `setOpenQuestionStatus`, but their implementation details are not provided in the given diff. · No real defects found in the provided diff. However, additional information is needed to fully understand and verify the implementation of `getOpenQuestionPage` and `setOpenQuestionStatus`.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 75842,
+    "completionTokens": 2791
+  },
+  "latencyMs": 327047
+}

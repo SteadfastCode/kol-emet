@@ -1,0 +1,256 @@
+{
+  "item": "KOL-151",
+  "repo": "kol-emet",
+  "mergeSha": "8a342cf1cfbe6f9d1951a3f77932fae418f84253",
+  "completedAtUtc": "2026-11-25T15:33:03.477Z",
+  "completeRunId": "2026-11-25T15:13:43.132Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:07:53.062Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 79271,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue",
+        "client/src/composables/useEntityTypes.js"
+      ],
+      "part": null,
+      "bytes": 10761,
+      "contextBytes": 0,
+      "promptTokens": 4243,
+      "completionTokens": 72,
+      "latencyMs": 31636,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEntityTypes.test.js",
+        "client/src/composables/useEvents.js",
+        "client/src/composables/useEvents.test.js"
+      ],
+      "part": null,
+      "bytes": 11444,
+      "contextBytes": 0,
+      "promptTokens": 4516,
+      "completionTokens": 155,
+      "latencyMs": 16874,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 9276,
+      "contextBytes": 0,
+      "promptTokens": 3771,
+      "completionTokens": 144,
+      "latencyMs": 14217,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md",
+        "server/src/routes/changelog.js"
+      ],
+      "part": null,
+      "bytes": 9039,
+      "contextBytes": 2865,
+      "promptTokens": 4213,
+      "completionTokens": 115,
+      "latencyMs": 14245,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/entityTypes.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11278,
+      "contextBytes": 0,
+      "promptTokens": 4291,
+      "completionTokens": 70,
+      "latencyMs": 12693,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/entityTypes.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3307,
+      "contextBytes": 7105,
+      "promptTokens": 4059,
+      "completionTokens": 160,
+      "latencyMs": 16371,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 4147,
+      "contextBytes": 7703,
+      "promptTokens": 4244,
+      "completionTokens": 123,
+      "latencyMs": 15272,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 11874,
+      "contextBytes": 0,
+      "promptTokens": 4374,
+      "completionTokens": 265,
+      "latencyMs": 22849,
+      "findings": 0,
+      "needs": 9,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 4535,
+      "contextBytes": 7310,
+      "promptTokens": 4315,
+      "completionTokens": 272,
+      "latencyMs": 23190,
+      "findings": 0,
+      "needs": 8,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/rollback.test.js"
+      ],
+      "part": null,
+      "bytes": 4280,
+      "contextBytes": 7642,
+      "promptTokens": 4253,
+      "completionTokens": 104,
+      "latencyMs": 14598,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/entityTypes.js:169"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "server/src/routes/entityTypes.js:96"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. However, additional context is needed to ensure the correctness of the `applyEntityTypeUpdate` function. · The diff introduces a new test file for `useEntityTypes` and updates the `useEvents` composable to handle `entity-type:updated` frames. The changes aim to ensure that entity type renames are properly logged, broadcasted, and handled by clients. However, the implementation details of `logUpdate` and `MAX_AFFECTED` are not provided in the diff, so further verification is needed. · The diff introduces a bounded cascade for entity type renames, ensuring that the operation is limited to 200 entities and writes one ChangeLog entry per moved entity. It also adds frames for `entity:updated` and `entity-type:updated` to notify clients of changes. The needs list includes symbols that are used but not defined in the provided diff. · The diff introduces a bounded cascade for entity type renaming, including logging and broadcasting. However, the implementation details are not fully visible in the provided diff. Further review is needed to ensure that all parts of the change are correctly implemented. · No real defects found in the provided diff. However, additional information about the `log` function is needed to ensure complete understanding. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `movedBy`, `relabel`, `logEach`, and `broadcastTypeRenamed` functions. · The diff introduces new test cases for entity type renaming, including logging, bounding, and broadcasting. However, it does not show the implementation of `logEach` or `broadcastTypeRenamed`, which are necessary to ensure that the rename operation behaves as expected. · The diff adds tests for the rename functionality, including audit trail and frames. It does not introduce any new defects based on the provided information. · The diff adds tests for the entity type renaming functionality, including cases where the rename is over the limit, no entities are moved, and a case-only rename. The tests check that the correct number of ChangeLog entries are created, frames are sent correctly, and the response status is as expected. · The diff does not contain any real defects. However, to fully verify the changes, additional information about the `renameType` function and the `history` function is needed.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 83248,
+    "completionTokens": 2853
+  },
+  "latencyMs": 340069
+}

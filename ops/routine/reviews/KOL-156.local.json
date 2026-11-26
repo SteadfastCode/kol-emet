@@ -1,0 +1,131 @@
+{
+  "item": "KOL-156",
+  "repo": "kol-emet",
+  "mergeSha": "29e41810caad0f8149582f8d1ebf6d2cdd40e9ea",
+  "completedAtUtc": "2026-11-26T00:29:31.325Z",
+  "completeRunId": "2026-11-25T23:51:05.064Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:18:06.973Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 48416,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/BlockList.vue",
+        "client/src/components/EntityDetail.vue",
+        "client/src/components/EntityHeader.test.js",
+        "client/src/components/EntityHeader.vue"
+      ],
+      "part": null,
+      "bytes": 11784,
+      "contextBytes": 0,
+      "promptTokens": 3887,
+      "completionTokens": 82,
+      "latencyMs": 15231,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue",
+        "client/src/components/blocks/AttributeBlock.vue",
+        "client/src/components/blocks/QuoteBlock.vue"
+      ],
+      "part": null,
+      "bytes": 12804,
+      "contextBytes": 0,
+      "promptTokens": 4133,
+      "completionTokens": 110,
+      "latencyMs": 17329,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/blocks/TextBlock.test.js",
+        "client/src/components/blocks/TextBlock.vue",
+        "client/src/components/blocks/TimelineEventBlock.vue"
+      ],
+      "part": null,
+      "bytes": 13061,
+      "contextBytes": 0,
+      "promptTokens": 4215,
+      "completionTokens": 133,
+      "latencyMs": 18840,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/lib/inlineEdit.js",
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 10767,
+      "contextBytes": 0,
+      "promptTokens": 3439,
+      "completionTokens": 152,
+      "latencyMs": 17327,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional information about `commitInlineEdit` from `lib/inlineEdit.js` is needed to fully understand and verify the changes. · The diff introduces changes to handle refused writes in inline block and header editors, ensuring that the user's typed input is not discarded. However, there are no real defects identified in the provided diff. · The diff introduces a new test file for the TextBlock component and updates the TextBlock.vue and TimelineEventBlock.vue files to handle save operations more robustly. The changes ensure that the editor remains open if the save operation is refused, preserving the user's input. However, without seeing the implementation of `commitInlineEdit` in `lib/inlineEdit.js`, it's not possible to fully verify the correctness of these changes. · The change introduces a new file `inlineEdit.js` to handle the logic of inline editing and ensure that editors do not close prematurely when a write is refused. The diff includes changes to the `kol_emet_spec.md` file to document this behavior. However, without seeing the implementation details of the `emit` function in the relevant Vue components, it's unclear if the change fully addresses the issue.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 30824,
+    "completionTokens": 981
+  },
+  "latencyMs": 137242
+}

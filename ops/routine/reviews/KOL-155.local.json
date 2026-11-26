@@ -1,0 +1,116 @@
+{
+  "item": "KOL-155",
+  "repo": "kol-emet",
+  "mergeSha": "d665234f11f585c54937b21fcdb6e4dd177cf157",
+  "completedAtUtc": "2026-11-26T03:18:22.800Z",
+  "completeRunId": "2026-11-26T03:03:36.374Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:20:53.602Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 23764,
+  "contextFiles": 0,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 1,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 1890,
+      "contextBytes": 0,
+      "promptTokens": 1381,
+      "completionTokens": 67,
+      "latencyMs": 6763,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 2,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 13936,
+      "contextBytes": 0,
+      "promptTokens": 4527,
+      "completionTokens": 100,
+      "latencyMs": 16102,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "FEATURES.md"
+      ],
+      "part": {
+        "index": 3,
+        "total": 3,
+        "oversized": false
+      },
+      "bytes": 8203,
+      "contextBytes": 0,
+      "promptTokens": 3049,
+      "completionTokens": 91,
+      "latencyMs": 13150,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "server/src/routes/changelog.js:99"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds a new workqueue item to FEATURES.md, but the `<orchestrator>` placeholder needs to be resolved. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify certain parts of the code. · The diff introduces new features and updates existing ones, but does not introduce any clear defects based on the provided information.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 17521,
+    "completionTokens": 646
+  },
+  "latencyMs": 77343
+}

@@ -1,0 +1,87 @@
+{
+  "item": "KOL-153",
+  "repo": "kol-emet",
+  "mergeSha": "f60a50663dfa014e38e595f1e0726999c6a94c81",
+  "completedAtUtc": "2026-11-26T00:01:49.098Z",
+  "completeRunId": "2026-11-25T23:51:05.064Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:14:19.992Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 19209,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "docs/architecture.md",
+        "server/src/lib/mcpFailure.js"
+      ],
+      "part": null,
+      "bytes": 7576,
+      "contextBytes": 0,
+      "promptTokens": 3314,
+      "completionTokens": 113,
+      "latencyMs": 14748,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/unit/mcpFailure.test.js"
+      ],
+      "part": null,
+      "bytes": 11633,
+      "contextBytes": 0,
+      "promptTokens": 4292,
+      "completionTokens": 83,
+      "latencyMs": 13735,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found. However, additional context is needed to fully verify the changes. · No real defects found in the provided diff. However, additional information about `MCP_RECORD_LIMITS` is needed to ensure that all assertions and logic are correctly implemented.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 14950,
+    "completionTokens": 448
+  },
+  "latencyMs": 59642
+}

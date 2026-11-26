@@ -1,0 +1,105 @@
+{
+  "item": "KOL-157",
+  "repo": "kol-emet",
+  "mergeSha": "b8b1fe89bcd247fecb0793f154cc289c52d0f578",
+  "completedAtUtc": "2026-11-26T01:25:06.648Z",
+  "completeRunId": "2026-11-26T01:13:43.129Z",
+  "reviewRunId": "2026-11-26T08:02:11.491Z",
+  "reviewedAtUtc": "2026-11-26T08:19:36.208Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 25295,
+  "contextFiles": 3,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/components/GraphView.test.js"
+      ],
+      "part": null,
+      "bytes": 9762,
+      "contextBytes": 0,
+      "promptTokens": 3494,
+      "completionTokens": 126,
+      "latencyMs": 15943,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/GraphView.vue",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 10287,
+      "contextBytes": 0,
+      "promptTokens": 3612,
+      "completionTokens": 171,
+      "latencyMs": 18735,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 5246,
+      "contextBytes": 0,
+      "promptTokens": 2030,
+      "completionTokens": 127,
+      "latencyMs": 11653,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": false,
+      "evidence": null
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": false,
+      "evidence": null
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds tests to ensure that the zoom, pan, and force layout are preserved during an in-place reload. However, it does not provide any changes to the `initGraph` function itself, which is responsible for handling the reload logic. To fully address the issue described in the change description, the `initGraph` function needs to be reviewed and updated to preserve the zoom/pan/layout. · The change aims to preserve zoom, pan, and layout during an in-place reload. It introduces a mechanism to carry over node positions and the zoom transform from the previous drawing to the new one. However, without seeing the full context of how `simulation`, `nodeData`, and `linkData` are used elsewhere, it's not clear if this change fully addresses the issue. · The change aims to preserve zoom, pan, and layout during an in-place reload in the GraphView component. However, without seeing the implementation details of `initGraph` and `svg.call(zoom)`, it's unclear if the changes fully address the issue described.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 17879,
+    "completionTokens": 802
+  },
+  "latencyMs": 89119
+}
