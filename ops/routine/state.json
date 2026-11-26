@@ -65,7 +65,7 @@
     "KOL-156": {
       "order": 4,
       "title": "Inline block and header editors close and discard the user's typed input on a refused write.",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-156",

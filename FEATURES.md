@@ -69,18 +69,6 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [x] **(KOL-156) Inline block and header editors close and discard the user's typed input on a refused write.**
-  Found by the grader of KOL-150 (medium, client/src/components/blocks/TextBlock.vue:78). Inline
-  block and header editors close and discard the user's typed input on a refused write. `await
-  emit('save', …)` awaits `undefined` (Vue's `emit` returns no handler result), so
-  `isEditing.value = false` runs before `onEntityUpdated`'s `await editEntity(...)` settles — same
-  pattern at `client/src/components/EntityHeader.vue:498`. After this change a refused block or
-  header save (403 NOT_WORKSPACE_EDITOR when the role answered `viewer` after first paint, a 400
-  from `blockDataError` on a gallery URL, a 409) raises the new toast, but the
-  markdown/title/summary the user typed is already gone and the block reverts to the stored
-  content. Pre-existing, and the item's "leaves the editor open with the user's input intact"
-  holds only for the new-entity panel; the new tests cover only that panel, so nothing pins the
-  block/header case.
 - [ ] **(KOL-157) The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.**
   Found by the grader of KOL-149 (medium, client/src/components/GraphView.vue:195). The in-place
   reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent. `initGraph`
@@ -141,6 +129,18 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-156) Inline block and header editors close and discard the user's typed input on a refused write.** (routine 2026-11-25, 29e4181)
+  Found by the grader of KOL-150 (medium, client/src/components/blocks/TextBlock.vue:78). Inline
+  block and header editors close and discard the user's typed input on a refused write. `await
+  emit('save', …)` awaits `undefined` (Vue's `emit` returns no handler result), so
+  `isEditing.value = false` runs before `onEntityUpdated`'s `await editEntity(...)` settles — same
+  pattern at `client/src/components/EntityHeader.vue:498`. After this change a refused block or
+  header save (403 NOT_WORKSPACE_EDITOR when the role answered `viewer` after first paint, a 400
+  from `blockDataError` on a gallery URL, a 409) raises the new toast, but the
+  markdown/title/summary the user typed is already gone and the block reverts to the stored
+  content. Pre-existing, and the item's "leaves the editor open with the user's input intact"
+  holds only for the new-entity panel; the new tests cover only that panel, so nothing pins the
+  block/header case.
 - [x] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write** (routine 2026-11-25, 2d0dc5d)
   KOL-134 and KOL-141 moved the last-owner floor into the write filter precisely so no membership answer comes
   from a read-derived branch. One branch is left: `PATCH /workspace/members/:userId` short-circuits on
