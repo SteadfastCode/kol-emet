@@ -2544,6 +2544,133 @@ describe('WikiLayout refused entity writes', () => {
 });
 
 /**
+ * A refused write from the detail panel's own inline editors, end to end (KOL-156).
+ *
+ * The group above pins the toast and the *editor* panel, whose open/closed state belongs to this
+ * layout and is therefore only set after the await. The two editors inside the detail panel — a
+ * block's pencil and the header's — close themselves, and `await emit('save', …)` awaited
+ * `undefined`: Vue's `emit` returns no handler result, so each one closed in the same tick the
+ * request was sent, and the refusal arrived as a toast over a block that had already reverted to
+ * its stored content. The markdown, the title and the summary were gone, which is exactly what the
+ * toast promises is not the case.
+ *
+ * So this group mounts the panel for real — EntityDetail, BlockList, the text block and the header
+ * — over the same stubbed `editEntity`, and drives the pencil, the textarea and Save the way a
+ * user does. What each editor does on its own is pinned in blocks/TextBlock.test.js and
+ * EntityHeader.test.js; what is pinned here is the chain between them and the request:
+ * block editor → BlockList → EntityDetail → onEntityUpdated, as the templates actually wire it.
+ *
+ * Falsification: drop the `return false` from `onEntityUpdated`'s catch and both refused cases
+ * fail, because the chain reports a refusal as a save; close either editor unconditionally and
+ * they fail on the text that is no longer there.
+ */
+describe('WikiLayout refused writes from the panel’s inline editors', () => {
+  const refusal = (status, error) => Object.assign(new Error(error), { status, body: { error } });
+
+  const STORED = 'The stored paragraph.';
+  const PANEL_ENTITY = {
+    _id: 'e1', title: 'Engine', category: 'Worlds', summary: 'fixture',
+    tags: [], relationships: [], open_questions: [],
+    blocks: [{ _id: 'b1', type: 'text', order: 0, data: { markdown: STORED } }],
+  };
+
+  beforeEach(() => {
+    localStorage.setItem('INLINE_EDIT_LOG_LEVEL', 'off');
+    localStorage.setItem('OPEN_QUESTION_LOG_LEVEL', 'off');
+    localStorage.setItem('HISTORY_LOG_LEVEL', 'off');
+    entities.length = 0;
+    entities.push({ _id: 'e1', title: 'Engine', category: 'Worlds', summary: 'fixture', tags: [] });
+    addToast.mockClear();
+  });
+
+  /** The layout with the real detail panel open on `PANEL_ENTITY`. */
+  async function openPanel() {
+    const stubs = { ...SHELL_STUBS, BreadcrumbBar: true, RelationshipsSection: true };
+    delete stubs.EntityDetail;
+    const wrapper = mount(WikiLayout, { global: { stubs } });
+    await flushPromises();
+    wrapper.findComponent(EntitySidebar).vm.$emit('select', PANEL_ENTITY._id, PANEL_ENTITY.title);
+    stubbedEntities.last.selectedEntity.value = { ...PANEL_ENTITY };
+    await flushPromises();
+    return wrapper;
+  }
+
+  /** Opens the text block's editor and rewrites the paragraph in it. */
+  async function typeInBlock(wrapper, markdown) {
+    await wrapper.get('.text-block .block-toolbar .icon-btn').trigger('click');
+    await wrapper.get('.text-block textarea').setValue(markdown);
+    await wrapper.get('.text-block .block-edit-actions .primary').trigger('click');
+    await flushPromises();
+  }
+
+  it('a refused block save says so and leaves the block editor open with the markdown that was typed', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.editEntity.mockRejectedValue(refusal(403, 'NOT_WORKSPACE_EDITOR'));
+
+    await typeInBlock(wrapper, 'A paragraph nobody wants to type twice.');
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toContain('not saved');
+    expect(addToast.mock.calls[0][0].message).toContain('read-only');
+
+    expect(wrapper.find('.text-block .block-edit').exists()).toBe(true);
+    expect(wrapper.get('.text-block textarea').element.value).toBe('A paragraph nobody wants to type twice.');
+    // Not reverted to what is stored, which is what the editor closing would have shown.
+    expect(wrapper.find('.text-block .markdown-body').exists()).toBe(false);
+  });
+
+  it('a block save that lands sends the block and closes its editor', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.editEntity.mockResolvedValue({ ...PANEL_ENTITY });
+
+    await typeInBlock(wrapper, 'The rewritten paragraph.');
+
+    expect(addToast).not.toHaveBeenCalled();
+    expect(stubbedEntities.last.editEntity).toHaveBeenCalledWith('e1', {
+      blocks: [{ _id: 'b1', type: 'text', order: 0, data: { markdown: 'The rewritten paragraph.' } }],
+    });
+    expect(wrapper.find('.text-block .block-edit').exists()).toBe(false);
+  });
+
+  it('a refused header save keeps the header form and the title that was typed', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.editEntity.mockRejectedValue(refusal(409, 'DUPLICATE'));
+
+    await wrapper.get('button[title="Edit header"]').trigger('click');
+    await wrapper.get('input.edit-title').setValue('Engine No. 2');
+    await wrapper.get('.edit-actions .primary').trigger('click');
+    await flushPromises();
+
+    expect(addToast).toHaveBeenCalledTimes(1);
+    expect(addToast.mock.calls[0][0].message).toContain('not saved');
+    expect(addToast.mock.calls[0][0].message).toContain('DUPLICATE');
+
+    expect(wrapper.find('.header-edit').exists()).toBe(true);
+    expect(wrapper.get('input.edit-title').element.value).toBe('Engine No. 2');
+    // The header's save carries the blocks as they stand, so a 409 on the title
+    // must not be mistaken for a block write either.
+    expect(stubbedEntities.last.editEntity).toHaveBeenCalledWith('e1', {
+      title: 'Engine No. 2', category: 'Worlds', summary: 'fixture', tags: [],
+      blocks: PANEL_ENTITY.blocks,
+    });
+  });
+
+  it('a header save that lands closes the form', async () => {
+    const wrapper = await openPanel();
+    stubbedEntities.last.editEntity.mockResolvedValue({ ...PANEL_ENTITY, title: 'Engine No. 2' });
+
+    await wrapper.get('button[title="Edit header"]').trigger('click');
+    await wrapper.get('input.edit-title').setValue('Engine No. 2');
+    await wrapper.get('.edit-actions .primary').trigger('click');
+    await flushPromises();
+
+    expect(addToast).not.toHaveBeenCalled();
+    expect(wrapper.find('.header-edit').exists()).toBe(false);
+  });
+});
+
+
+/**
  * The workspace-wide open-question panel (KOL-152). What the panel itself does with a page, a
  * filter or a frame is pinned in OpenQuestionPanel.test.js; what is pinned here is the layout's
  * half of it, which is four things:

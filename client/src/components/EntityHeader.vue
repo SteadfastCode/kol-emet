@@ -169,6 +169,7 @@ import {
   deleteOpenQuestion,
 } from '../api/openQuestions.js';
 import PencilIcon from './icons/PencilIcon.vue';
+import { commitInlineEdit } from '../lib/inlineEdit.js';
 
 /**
  * The entity's header, and its open questions (KOL-104).
@@ -230,8 +231,20 @@ const props = defineProps({
   entity: Object,
   /** Whether this entity can be written — its header and its open questions. See above. */
   canWrite: { type: Boolean, default: true },
+  /**
+   * The page's save for the header's form (`PUT /entities/:id`), as a function
+   * prop rather than an emit (KOL-156): the form closes itself, so it needs to
+   * know whether the write landed, and `emit` returns no handler result.
+   * `@save="…"` on this component still fills it in. Resolves `true` when the
+   * entity was written; anything else leaves the form open holding the title,
+   * the type, the summary and the tags as typed. See lib/inlineEdit.js.
+   *
+   * The open-question writes below do not go through it — they are their own
+   * routes, and they already keep a refused row's text where it was typed.
+   */
+  onSave: Function,
 });
-const emit = defineEmits(['save', 'set-tag']);
+defineEmits(['set-tag']);
 
 const isEditing = ref(false);
 const isSaving = ref(false);
@@ -495,13 +508,21 @@ function cancelEdit() { isEditing.value = false; }
 async function save() {
   isSaving.value = true;
   try {
-    await emit('save', {
-      title: form.title.trim(),
-      category: form.category,
-      summary: form.summary.trim(),
-      tags: form.tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
-    });
-    isEditing.value = false;
+    const landed = await commitInlineEdit(
+      props.onSave,
+      {
+        title: form.title.trim(),
+        category: form.category,
+        summary: form.summary.trim(),
+        tags: form.tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
+      },
+      `header of ${props.entity?._id ?? '(no entity)'}`,
+    );
+    // Only a write that landed closes the form. A refused one (a role that
+    // answered `viewer` after the first paint, a 409, a 400 from the block
+    // validator over the blocks sent with it) leaves it open with what was
+    // typed in it — WikiLayout says what the refusal was, in a toast.
+    if (landed) isEditing.value = false;
   } finally {
     isSaving.value = false;
   }

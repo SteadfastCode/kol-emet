@@ -892,7 +892,10 @@ function writeRefusalReason(err) {
  * `useFilters` reports a failed search on.
  *
  * The caller keeps its panel and its input: there is nothing to retype, and the
- * message says what to fix.
+ * message says what to fix. For the inline editors inside the detail panel
+ * that means the `false` `onEntityUpdated` returns below (KOL-156) — a toast
+ * over a block that had already reverted to its stored content was the one
+ * place this promise was not kept.
  */
 function reportWriteRefused({ what, source }, err) {
   addToast({
@@ -1595,6 +1598,11 @@ function onCrumbClick(index) {
  * fields the user typed; a failed delete does not close the entity it failed to
  * delete), and it does not rethrow — there is nobody above to handle it, and a
  * rejection is what this was.
+ *
+ * Leaving the panel alone is enough only for the panels *this* function owns.
+ * The detail panel's inline editors — a block's, the header's — close
+ * themselves, so `onEntityUpdated` also hands back whether the write landed
+ * (KOL-156); it is the one of the three with a caller that needs an answer.
  */
 async function onEntitySaved(data) {
   let entity;
@@ -1609,14 +1617,26 @@ async function onEntitySaved(data) {
   openEntry(entity._id, entity.title);
 }
 
+/**
+ * Every entity update the detail panel asks for — the header's form, a block
+ * editor, a deleted or added block.
+ *
+ * It **reports whether the write landed** (KOL-156), because the panel's two
+ * inline editors close themselves: they are not panels this function can leave
+ * open, as `onEntitySaved` does for the editor above, so the only thing that
+ * can keep a refused save's typed text on screen is this answer travelling
+ * back down. `true` only after `editEntity` returned; `false` on every
+ * refusal, alongside the toast. See lib/inlineEdit.js for the chain.
+ */
 async function onEntityUpdated(id, data) {
   try {
     await editEntity(id, data);
   } catch (err) {
     reportWriteRefused({ what: 'Your change was not saved', source: `an edit of ${id} → PUT /entities/:id` }, err);
-    return;
+    return false;
   }
   writeLog('normal', `updated ${id} (source: an edit in the detail panel)`);
+  return true;
 }
 
 async function onEntityDeleted(id) {
