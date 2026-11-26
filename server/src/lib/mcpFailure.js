@@ -59,6 +59,28 @@
  * arrived. The caps are on the *record*: the JSON-RPC error body still answers
  * the client with the `id` it sent, verbatim, because that is what lets the
  * client match the answer to its call.
+ *
+ * `source` was the exception (KOL-153), and the field that looks least like the
+ * caller's: at most call sites it is a sentence written here. But two build it
+ * out of caller text — `/mcp`'s `session_missing` branch interpolates
+ * `req.body.method`, the same value `rpc` cuts to 64, and the bridge's
+ * `toolFailure` puts free-string tool arguments in it — so a ~100 kB `method`
+ * wrote a ~100 kB line through the one field the caps had skipped, and the
+ * promise above ("these plus a few hundred characters of this module's own")
+ * was not true of the record this module built. Behind a bearer that is an
+ * authenticated caller; with the gate open (`MCP_BEARER_TOKEN` unset outside
+ * production, the dev configuration) `session_missing` is reachable with no
+ * credential at all. `source` now has a ceiling like every other
+ * caller-reachable field — generous, because it is a sentence and not an
+ * identifier — and carries the same `…(+N)` marker when it is cut.
+ *
+ * `extra` is spread *before* the fields that have a ceiling, not after. A call
+ * site that passed `rpc`, `tool`, `requestId` or `source` through `extra` would
+ * otherwise put an uncapped value straight into a capped field, which was the
+ * one way left out of the caps inside this function. It is a reordering and not
+ * a removal: a field the body said nothing about is still filled from `extra`
+ * if a call site named it — the bridge records the tool it refused that way —
+ * only now it passes through the cap on its way in, like the body's own.
  */
 
 /** What the client should do about it; see the header. */
@@ -134,11 +156,18 @@ export const shortSession = (id) => (id ? `${String(id).slice(0, 8)}…` : null)
 
 /**
  * Ceilings, in characters, for the fields of a record whose content the caller
- * chooses (KOL-146; see the header). Each is generous for the honest case — a
- * real `user-agent` is well under 200 characters, a client announces a name and
- * a semver, a JSON-RPC method is `tools/call`, and an id is an id — and
- * together they are what bounds the record: a refusal line is these plus a few
- * hundred characters of this module's own, however large the request was.
+ * chooses or can reach (KOL-146, KOL-153; see the header). Each is generous for
+ * the honest case — a real `user-agent` is well under 200 characters, a client
+ * announces a name and a semver, a JSON-RPC method is `tools/call`, and an id
+ * is an id — and together they are what bounds the record: a refusal line is
+ * these plus a few hundred characters of this module's own, however large the
+ * request was.
+ *
+ * `source` is the one entry that is a sentence rather than an identifier, so it
+ * gets several times the room: the longest one this codebase writes is under
+ * 150 characters, and a call site that interpolates a method name, a session
+ * id, a timestamp or an error message into one should still be recorded whole.
+ * 512 leaves that margin and still bounds the line.
  */
 export const MCP_RECORD_LIMITS = Object.freeze({
   requestId: 64,
@@ -147,6 +176,7 @@ export const MCP_RECORD_LIMITS = Object.freeze({
   ip: 64,
   rpc: 64,
   tool: 64,
+  source: 512,
 });
 
 /** The marker a cut value carries, naming how many characters went missing. */
@@ -229,15 +259,24 @@ export function mcpLogRecord({ event, endpoint, req, status = null, code = null,
     code,
     reason,
     retry,
+    // `extra` comes before the fields that have a ceiling, so a call site that
+    // names one of them cannot hand the record an uncapped value for it
+    // (KOL-153). Where the body carried nothing for such a field the value from
+    // `extra` is still used — the bridge names the tool it refused that way,
+    // and a batch body has no single tool of its own — but it arrives through
+    // the same cap as the body's. `event` leads the line either way, which is
+    // how these are grepped.
+    ...extra,
     // `rpc`, `tool` and `requestId` come off the body the caller sent; capped
     // here so every record is bounded wherever it is logged from (KOL-146).
-    rpc: clip(rpc, MCP_RECORD_LIMITS.rpc),
-    tool: clip(tool, MCP_RECORD_LIMITS.tool),
-    requestId: requestIdView(id),
+    rpc: clip(rpc ?? extra.rpc, MCP_RECORD_LIMITS.rpc),
+    tool: clip(tool ?? extra.tool, MCP_RECORD_LIMITS.tool),
+    requestId: requestIdView(id ?? extra.requestId),
     session: shortSession(req.headers?.['mcp-session-id']),
     caller: callerView(req),
-    source,
-    ...extra,
+    // Mostly this module's own sentence, but two call sites build it from the
+    // caller's text, so it is capped with the rest (KOL-153).
+    source: clip(source, MCP_RECORD_LIMITS.source),
   });
 }
 

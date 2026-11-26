@@ -6,8 +6,12 @@
  * actually runs, and on `/mcp` the bearer gate refuses *with* it before any
  * credential has been accepted. Several of its fields are the caller's own
  * text: the JSON-RPC `id`, the `user-agent` header, the `clientInfo` a
- * handshake announces, the method and tool names, and the address (`trust
- * proxy` is set). The app parses bodies at `express.json()`'s ~100 kB default,
+ * handshake announces, the method and tool names, the address (`trust proxy` is
+ * set) — and `source` (KOL-153), which reads like this module's own sentence
+ * and mostly is, except that `/mcp`'s `session_missing` branch interpolates
+ * `req.body.method` into it and the bridge's `toolFailure` puts free-string
+ * tool arguments in it. The app parses bodies at `express.json()`'s ~100 kB
+ * default,
  * so before the caps an unauthenticated `POST /mcp` carrying
  * `{"id": "<100 kB of chosen text>"}` wrote 100 kB of a stranger's prose into
  * the deployed log on every request — where the old 401 path printed one fixed
@@ -53,6 +57,24 @@
  *     `mcpLogRecord`                                long-tool cases fail
  *   - the clip moved into `rpcView` (so the      -> the response-body case
  *     response body is capped too)                  fails
+ *   - the `source` clip removed from             -> the 100 kB source case, the
+ *     `mcpLogRecord` (KOL-153)                       session_missing case and
+ *                                                    the all-fields-huge case
+ *                                                    fail, on size and marker
+ *   - `...extra` moved back after the capped     -> the extra-collision case
+ *     fields                                         and the bridge case fail:
+ *                                                    a 100 kB `tool` passed in
+ *                                                    `extra` lands in the line
+ *                                                    whole
+ *   - `extra` dropped from the capped fields'    -> the bridge case fails: a
+ *     fallback                                       record whose body names
+ *                                                    no tool of its own loses
+ *                                                    the tool name
+ *   - any ceiling edited                         -> the pinned-ceilings case
+ *                                                    fails; the record size
+ *                                                    here is measured against
+ *                                                    those numbers, not
+ *                                                    derived from them
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_MCP_FAILURE_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -126,7 +148,7 @@ function record(label, req, fields = UNAUTHORIZED) {
   assert.doesNotMatch(line, /\n/, `${label}: a record must be one line`);
   let parsed;
   assert.doesNotThrow(() => { parsed = JSON.parse(line); }, `${label}: a record must parse as JSON: ${line.slice(0, 200)}`);
-  assert.equal(parsed.event, 'mcp_request_refused', `${label}: the record must keep its event`);
+  assert.equal(parsed.event, fields.event, `${label}: the record must keep the event it was built with`);
   return { r: parsed, bytes, line };
 }
 
@@ -168,7 +190,7 @@ describe('a caller-chosen value cannot choose how much of the log it gets (KOL-1
         jsonrpc: '2.0', id: { nested: HUGE }, method: HUGE,
         params: { name: HUGE, clientInfo: { name: HUGE, version: HUGE } },
       },
-    }));
+    }), { ...UNAUTHORIZED, source: HUGE });
 
     assert.ok(
       bytes < MAX_RECORD_BYTES,
@@ -178,6 +200,12 @@ describe('a caller-chosen value cannot choose how much of the log it gets (KOL-1
     for (const [field, value] of Object.entries({ requestId: r.requestId, rpc: r.rpc, ua: r.caller.ua, client: r.caller.client, ip: r.caller.ip })) {
       assert.ok(String(value).length < 300, `${field} came through at ${String(value).length} characters: ${String(value).slice(0, 80)}`);
     }
+    // `source` has a sentence's room rather than an identifier's, so it is
+    // measured against its own ceiling instead of the 300 above.
+    assert.ok(
+      r.source.length < MCP_RECORD_LIMITS.source + 20,
+      `source came through at ${r.source.length} characters`,
+    );
     assert.equal(r.caller.auth, 'bearer', 'the presentation of the credential, never its value');
     assert.doesNotMatch(r.caller.auth, /x{10}/, 'no field may carry the token it rejected');
   });
@@ -217,6 +245,118 @@ describe('a caller-chosen value cannot choose how much of the log it gets (KOL-1
       assert.ok(bytes < MAX_RECORD_BYTES, `a ${label} id must not inflate the record: ${bytes} bytes`);
       assert.doesNotMatch(r.requestId, /x/, `a ${label} id must not carry the caller's content`);
     }
+  });
+});
+
+/**
+ * The sentence `/mcp` builds when a request carries no session id and is not an
+ * initialize call, copied from `routes/mcp.js` rather than imported: the point
+ * of the case is that a call site is free to interpolate the caller's text into
+ * `source`, and the record is bounded anyway because the cap lives where the
+ * record is built.
+ */
+const sessionMissingSource = (method) =>
+  `no mcp-session-id header and the request was ${method ? `method "${method}"` : 'not a JSON-RPC request'}, not initialize`;
+
+/** The longest `source` this codebase actually writes (routes/bridge.js). */
+const REAL_SOURCE = 'this endpoint is stateless (sessionIdGenerator: undefined); it issues and validates no session id, so the header was ignored and the request served';
+
+describe('source is a caller-reachable field too (KOL-153)', () => {
+  test('a 100,000-character source is cut to its own ceiling, marked, and the record stays small', () => {
+    const { r, bytes } = record('100k source', fakeReq({
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_entity' } },
+    }), { ...UNAUTHORIZED, source: HUGE });
+
+    assertCut('100k source', 'source', r.source, MCP_RECORD_LIMITS.source, { from: HUGE.length });
+    assert.ok(
+      bytes < MAX_RECORD_BYTES,
+      `a refusal record must stay under ${MAX_RECORD_BYTES} bytes whatever its source said, got ${bytes}`,
+    );
+    // The cap must not cost the record the fields that make it worth reading.
+    assert.equal(r.tool, 'get_entity');
+    assert.equal(r.reason, 'unauthorized');
+  });
+
+  test("a 100 kB JSON-RPC method cannot reach the log through /mcp's session_missing sentence", () => {
+    // The hole: `rpc` cut this method to 64 characters while the same value,
+    // interpolated into `source` by the call site, went in whole.
+    const { r, bytes } = record('session_missing', fakeReq({
+      body: { jsonrpc: '2.0', id: 1, method: HUGE },
+    }), {
+      event: 'mcp_request_refused', endpoint: '/mcp', status: 400, code: -32001,
+      reason: 'session_missing', retry: 'reinitialize', source: sessionMissingSource(HUGE),
+    });
+
+    const full = sessionMissingSource(HUGE);
+    const kept = MCP_RECORD_LIMITS.source;
+    assert.equal(
+      r.source, `${full.slice(0, kept)}${clipMark(full.length - kept)}`,
+      'the sentence keeps its head — the part that says which branch refused — and names what went',
+    );
+    assert.match(r.source, /^no mcp-session-id header /, 'a reader must still be able to tell which refusal this was');
+    assert.ok(bytes < MAX_RECORD_BYTES, `got ${bytes} bytes for a ${HUGE.length}-character method`);
+    assertCut('session_missing', 'rpc', r.rpc, MCP_RECORD_LIMITS.rpc, { from: HUGE.length });
+    log('normal', `session_missing: source cut from ${full.length} to ${r.source.length} (source: MCP_RECORD_LIMITS.source over the call site's interpolated method)`);
+  });
+
+  test('a source this module wrote passes through byte-identical', () => {
+    for (const [label, source] of [
+      ['short', 'Authorization header absent'],
+      ['longest real', REAL_SOURCE],
+      ['at the ceiling', 'y'.repeat(MCP_RECORD_LIMITS.source)],
+    ]) {
+      const { r } = record(`honest source (${label})`, fakeReq({ body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } }), { ...UNAUTHORIZED, source });
+      assert.equal(r.source, source, `${label}: a source that fits is the source that was passed`);
+      assert.equal(
+        Buffer.byteLength(r.source, 'utf8'), Buffer.byteLength(source, 'utf8'),
+        `${label}: byte-identical, not merely equal after some normalisation`,
+      );
+      assert.doesNotMatch(r.source, /…\(\+/, `${label}: an uncut source must carry no marker`);
+    }
+    assert.ok(REAL_SOURCE.length < MCP_RECORD_LIMITS.source, `the ceiling must stay generous next to real sources (${REAL_SOURCE.length} characters)`);
+  });
+
+  test('extra cannot hand the record an uncapped rpc, tool or requestId', () => {
+    const { r, bytes } = record('extra collision', fakeReq({
+      body: { jsonrpc: '2.0', id: 'req-7', method: 'tools/call', params: { name: 'get_entity' } },
+    }), { ...UNAUTHORIZED, extra: { rpc: HUGE, tool: HUGE, requestId: HUGE, liveSessions: 3 } });
+
+    assert.equal(r.rpc, 'tools/call', 'the body is the authority for a field that has a ceiling');
+    assert.equal(r.tool, 'get_entity');
+    assert.equal(r.requestId, 'req-7');
+    assert.equal(r.liveSessions, 3, 'extra still adds context beside the capped fields');
+    assert.ok(bytes < MAX_RECORD_BYTES, `a colliding extra must not inflate the record: ${bytes} bytes`);
+    assert.doesNotMatch(JSON.stringify(r), /x{300}/, 'nothing passed in extra may land in the line whole');
+  });
+
+  test('extra still fills a capped field the body carried nothing for, through the same cap', () => {
+    // How the bridge records a tool that refused its arguments: the tool name
+    // comes from the handler, and a batch body has no single tool of its own.
+    const { r } = record('bridge tool failure', fakeReq({
+      body: [{ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'bridge_send' } }],
+    }), {
+      event: 'bridge_tool_failed', endpoint: '/bridge/mcp', status: 200, code: null,
+      reason: 'tool_arguments_refused', retry: null,
+      source: 'kind "command" needs command.name', extra: { tool: 'bridge_send' },
+    });
+    assert.equal(r.event, 'bridge_tool_failed');
+    assert.equal(r.tool, 'bridge_send', 'a refusal record must not lose the tool it refused');
+
+    const { r: huge, bytes } = record('bridge tool failure (huge)', fakeReq({ body: null }), {
+      event: 'bridge_tool_failed', endpoint: '/bridge/mcp', status: 200, code: null,
+      reason: 'tool_arguments_refused', retry: null, source: 'refused', extra: { tool: HUGE },
+    });
+    assertCut('bridge tool failure (huge)', 'tool', huge.tool, MCP_RECORD_LIMITS.tool, { from: HUGE.length });
+    assert.ok(bytes < MAX_RECORD_BYTES, `got ${bytes} bytes`);
+  });
+
+  test('the ceilings are the numbers this file measured the record against', () => {
+    // Pinned as literals: every size assertion above is checked against
+    // MAX_RECORD_BYTES, which was computed by hand from these. A ceiling raised
+    // without re-checking that number would pass every other case here.
+    assert.deepEqual({ ...MCP_RECORD_LIMITS }, {
+      requestId: 64, ua: 200, client: 80, ip: 64, rpc: 64, tool: 64, source: 512,
+    });
   });
 });
 
