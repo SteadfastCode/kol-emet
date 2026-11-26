@@ -62,13 +62,13 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-154": {
+    "KOL-156": {
       "order": 4,
-      "title": "A role change that changes nothing answers 200 with a role read before the write",
-      "status": "done",
+      "title": "Inline block and header editors close and discard the user's typed input on a refused write.",
+      "status": "claimed",
       "attempts": 1,
       "cluster": null,
-      "branch": "routine/item/KOL-154",
+      "branch": "routine/item/KOL-156",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -76,30 +76,12 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-11-26T00:03:04.081Z",
+      "claimedAtUtc": "2026-11-26T00:14:25.241Z",
       "runId": "2026-11-25T23:51:05.064Z",
       "lastFail": null
     },
-    "KOL-156": {
-      "order": 5,
-      "title": "Inline block and header editors close and discard the user's typed input on a refused write.",
-      "status": "pending",
-      "attempts": 0,
-      "cluster": null,
-      "branch": null,
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
-      "lastFail": null
-    },
     "KOL-157": {
-      "order": 6,
+      "order": 5,
       "title": "The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.",
       "status": "pending",
       "attempts": 0,
@@ -117,7 +99,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 7,
+      "order": 6,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -135,7 +117,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 8,
+      "order": 7,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -153,7 +135,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 9,
+      "order": 8,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -171,7 +153,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 10,
+      "order": 9,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -186,6 +168,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-154": {
+      "order": null,
+      "title": "A role change that changes nothing answers 200 with a role read before the write",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-154",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-26T00:03:04.081Z",
+      "runId": "2026-11-25T23:51:05.064Z",
       "lastFail": null
     },
     "KOL-153": {

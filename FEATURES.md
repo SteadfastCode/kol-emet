@@ -69,7 +69,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-156) Inline block and header editors close and discard the user's typed input on a refused write.**
+- [x] **(KOL-156) Inline block and header editors close and discard the user's typed input on a refused write.**
   Found by the grader of KOL-150 (medium, client/src/components/blocks/TextBlock.vue:78). Inline
   block and header editors close and discard the user's typed input on a refused write. `await
   emit('save', …)` awaits `undefined` (Vue's `emit` returns no handler result), so
