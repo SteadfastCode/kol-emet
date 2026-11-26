@@ -71,10 +71,16 @@ const emit = defineEmits(['close', 'open-entry']);
  * related.
  *   light   — every graph drawn and what asked for it (a mount, or a `group:*`
  *             frame in another tab — KOL-149), every load dropped for a newer
- *             one, and a walk that stopped partway: which page failed, how many
- *             groups had arrived, and the status it failed with
- *   normal  — light, plus the load that landed, with its group and entity counts
- *   verbose — normal, plus the page size asked for and the edge count built
+ *             one, a walk that stopped partway (which page failed, how many
+ *             groups had arrived, and the status it failed with), and what each
+ *             redraw carried over from the drawing it replaced: the zoom
+ *             transform and how many node positions survived (KOL-157), which
+ *             is the only way to tell a redraw that kept the viewer's place
+ *             from one that silently reset it
+ *   normal  — light, plus the load that landed, with its group and entity
+ *             counts, and the first draw
+ *   verbose — normal, plus the page size asked for, the edge count built, and
+ *             the nodes a redraw added or dropped
  */
 const LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
 
@@ -139,6 +145,21 @@ watch(simParams, applySimParams, { deep: true });
 let simulation = null;
 let resizeObserver = null;
 
+/**
+ * Whether this component has drawn once already, i.e. whether the next
+ * `initGraph` is a redraw rather than a first draw (KOL-157). It decides the
+ * alpha the force simulation resumes at: a first draw has no layout to keep and
+ * starts hot at d3's default 1, while a redraw is landing under a viewer who is
+ * reading the drawing and resumes at `REDRAW_ALPHA` — enough to settle the
+ * nodes the frame added, not enough to throw the rest across the canvas.
+ *
+ * Not derivable from `simulation`, which is nulled at the top of every
+ * `initGraph`, nor from the carried positions, which are empty when the first
+ * draw had no nodes.
+ */
+let hasDrawn = false;
+const REDRAW_ALPHA = 0.3;
+
 function truncate(str, max = 18) {
   return str.length > max ? str.slice(0, max - 1) + '…' : str;
 }
@@ -151,7 +172,12 @@ function getNodeStroke(category) {
   return styleFor(category, NODE_FALLBACK).color;
 }
 
-function initGraph() {
+/**
+ * Draws (or redraws) the graph into the `<svg>`. `source` is what asked, and is
+ * only used for the log lines — a redraw that kept the viewer's place and a
+ * redraw that quietly reset it are the same picture from the outside.
+ */
+function initGraph(source = 'a draw') {
   const container = containerRef.value;
   if (!container) return;
 
@@ -160,8 +186,29 @@ function initGraph() {
   // each call below makes new ones. Without this a tab left open through a
   // dozen relationship writes would be running a dozen force simulations over
   // the same SVG.
-  if (simulation) { simulation.stop(); simulation = null; }
   if (resizeObserver) { resizeObserver.disconnect(); resizeObserver = null; }
+
+  // Where each node had got to, read off the simulation before it is dropped
+  // (KOL-157). The node copies further down come from `nodeData`, which carries
+  // no x/y, so without this the force layout restarts from d3's opening
+  // phyllotaxis spiral on every `group:*` frame and the whole drawing
+  // rearranges itself under a viewer who only wanted one edge added.
+  //
+  // `fx`/`fy` are deliberately *not* carried. They are null except during a
+  // drag, and that drag's `end` handler is bound to the node element this
+  // redraw is about to remove — it would clear the pin on the old datum and
+  // leave the new one fixed in place for good. So a redraw landing mid-drag
+  // keeps the node's position and drops the pin, which is recoverable.
+  const carriedPositions = new Map();
+  if (simulation) {
+    for (const n of simulation.nodes()) {
+      if (Number.isFinite(n.x) && Number.isFinite(n.y)) {
+        carriedPositions.set(n.id, { x: n.x, y: n.y, vx: n.vx ?? 0, vy: n.vy ?? 0 });
+      }
+    }
+    simulation.stop();
+    simulation = null;
+  }
 
   const { width, height } = container.getBoundingClientRect();
   // Subtract toolbar height (~42px)
@@ -194,9 +241,28 @@ function initGraph() {
     .on('zoom', (event) => g.attr('transform', event.transform));
   svg.call(zoom);
 
-  // Deep-copy node/link data so D3 can mutate x/y on them
-  const nodes = nodeData.value.map(n => ({ ...n }));
+  // d3-zoom keeps its gesture state in a `__zoom` property on the element it
+  // was called on — the `<svg>`, which `selectAll('*').remove()` above does not
+  // touch — and `svg.call(zoom)` reads that same property back as the new
+  // behaviour's starting transform (d3-zoom/src/zoom.js: `defaultTransform`).
+  // So after a redraw the zoom behaviour still holds the viewer's transform
+  // while the rebuilt `<g>` has none: the drawing snaps to identity and the next
+  // wheel or drag jumps by the stale delta. Putting that transform back on the
+  // new `<g>` is what actually makes the redraw keep the zoom and the pan
+  // (KOL-157); read *after* `svg.call(zoom)`, so it is this element's own
+  // property and not a parent's, and identity on a first draw.
+  const carriedTransform = d3.zoomTransform(svgRef.value);
+  g.attr('transform', carriedTransform);
+
+  // Deep-copy node/link data so D3 can mutate x/y on them, seeded with where
+  // the previous drawing left each node (KOL-157). A node the frame added has
+  // no entry and is placed by d3 as usual.
+  const nodes = nodeData.value.map(n => {
+    const at = carriedPositions.get(n.id);
+    return at ? { ...n, ...at } : { ...n };
+  });
   const links = linkData.value.map(l => ({ ...l }));
+  const keptPositions = nodes.filter(n => carriedPositions.has(n.id)).length;
 
   const nodeById = new Map(nodes.map(n => [n.id, n]));
 
@@ -227,6 +293,14 @@ function initGraph() {
     .force('x', d3.forceX(width / 2).strength(0.06))
     .force('y', d3.forceY(svgH / 2).strength(0.06))
     .force('collision', d3.forceCollide().radius(collide));
+
+  // A redraw resumes warm rather than hot (KOL-157). `d3.forceSimulation`
+  // starts at alpha 1, which re-runs the whole layout from the top: carrying
+  // the positions across would only decide where the rearrangement *starts*.
+  // `REDRAW_ALPHA` is the figure the resize handler below already uses for the
+  // same reason — the drawing stays where the viewer left it while the nodes
+  // the frame added find a place.
+  if (hasDrawn) simulation.alpha(REDRAW_ALPHA);
 
   // ── Links ────────────────────────────────────────────────────────────────
   const linkGroup = g.append('g').attr('class', 'links');
@@ -380,9 +454,17 @@ function initGraph() {
       .force('center', d3.forceCenter(w / 2, sh / 2))
       .force('x', d3.forceX(w / 2).strength(0.06))
       .force('y', d3.forceY(sh / 2).strength(0.06))
-      .alpha(0.3).restart();
+      .alpha(REDRAW_ALPHA).restart();
   });
   resizeObserver.observe(container);
+
+  if (hasDrawn) {
+    log('light', `redrew in place (source: ${source}) — kept zoom k=${carriedTransform.k.toFixed(3)} x=${Math.round(carriedTransform.x)} y=${Math.round(carriedTransform.y)} and ${keptPositions} of ${nodes.length} node position(s), resuming the layout at alpha ${simulation.alpha()}`);
+    log('verbose', `${nodes.length - keptPositions} node(s) had no previous position and were placed by the force layout; ${carriedPositions.size - keptPositions} previous position(s) belonged to nodes that are gone`);
+  } else {
+    log('normal', `first draw (source: ${source}) — ${nodes.length} node(s) laid out from scratch at zoom k=${carriedTransform.k.toFixed(3)}`);
+  }
+  hasDrawn = true;
 }
 
 /**
@@ -423,9 +505,11 @@ let loadSeq = 0;
  * Callable more than once (KOL-149) — `reload` below is what a relationship
  * frame in another tab reaches, and it redraws this graph in place rather than
  * remounting the component, which would throw away the zoom, the pan and the
- * force layout the viewer is reading. `source` says what asked, because a
- * reload that never happened and a reload that drew the same thing are the same
- * picture from the outside.
+ * force layout the viewer is reading. Not remounting is only half of keeping
+ * them: `initGraph` rebuilds the whole `<svg>`, so the transform and the node
+ * positions are carried across it by hand (KOL-157). `source` says what asked,
+ * because a reload that never happened and a reload that drew the same thing
+ * are the same picture from the outside.
  */
 async function loadGraph(source) {
   const seq = (loadSeq += 1);
@@ -508,7 +592,7 @@ async function loadGraph(source) {
       log('light', `did not draw a graph load (source: ${source}) — a newer one started while it was rendering`);
       return;
     }
-    initGraph();
+    initGraph(source);
   } catch (err) {
     if (seq !== loadSeq) return;
     fetchError.value = err.message;
