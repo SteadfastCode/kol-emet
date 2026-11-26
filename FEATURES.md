@@ -69,7 +69,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-157) The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.**
+- [x] **(KOL-157) The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.**
   Found by the grader of KOL-149 (medium, client/src/components/GraphView.vue:195). The in-place
   reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent. `initGraph`
   runs `svg.selectAll('*').remove()` and rebuilds a fresh `<g>` with no transform, while d3-zoom's
