@@ -568,6 +568,41 @@ Import from the `world_train_wiki.html` artifact — 18 entries built and catego
       re-read on the refusal path, for the status code only: the write has already refused itself,
       so a stale answer there can mislabel a refusal but never cause one, and answering 404 "not a
       member" about a member who is plainly still there would be the lie the old branch told.
+    - **And the one membership answer still coming from a read is a write too (decided
+      2026-11-25, KOL-154).** KOL-134 and KOL-141 moved the floor into the write precisely so no
+      membership answer came from a read-derived branch; one was left. `PATCH
+      /workspace/members/:userId` short-circuited on `member.role === role` — the role this
+      request's own `membersOf()` read had just shown — and answered `200 { userId, role }` without
+      writing anything. Two owners, one browser demoting a member to `editor` while another
+      promotes the same member to `owner`: the promotion reads `owner`, finds nothing to do, and
+      reports success over a member who is by then an editor. **No invariant is breached**, because
+      nothing is written — but on a product where the answer is what the UI shows, a 200 naming a
+      state the database does not hold is a lie with a stale read behind it, and it is the exact
+      shape KOL-141 set out to remove. So it is a write like any other: one `updateOne` whose
+      filter names the workspace, the member **and the role they must still hold**, re-asserting
+      that role on that member and nothing else (`timestamps: false`, so a request that changed
+      nothing does not restamp the workspace — the role change below is an update pipeline, which
+      Mongoose does not stamp either). A match answers the role that write matched; **no match
+      means the role moved under the request**, so it is re-read and answered as it now stands —
+      still 200, still `{ userId, role }`, nothing written — rather than echoed back off the body,
+      and a membership that went in the same window is the same 404 every other path reports.
+      `refusalFor` is deliberately not reused on that path: its third outcome is the floor, which
+      cannot be what refused this write, and answering 409 `LAST_OWNER` about a role that merely
+      moved would be a different lie in the same place. The floor goes into the filter on exactly
+      KOL-141's terms (the role the **body** asks for decides, so `owner` carries none) and cannot
+      fire here — the filter already pins the member to a non-owner role wherever the floor is in
+      it, and a member who does not hold `owner` is never the last one who does — but it is in the
+      filter rather than reasoned away, because the pin is what makes that reasoning hold and the
+      next write to touch `members` should find the floor on every one of them. Five cases in
+      `server/tests/http/invites.test.js` (the unchanged role writing nothing extra; the last owner
+      re-asserted as `owner`, which an unconditional floor would refuse; the swap between the read
+      and the write, through the real routes with KOL-134's race hook; a member promoted to last
+      owner in between, answered as the owner they now are; and a membership removed in between,
+      answered 404), with the 400 and both 404s unchanged and no client change — `setMemberRole`
+      already re-reads the member list either way (KOL-150). **Out of scope:** `DELETE
+      /workspace/members/:userId`, whose read-derived branch KOL-134 already closed; optimistic
+      concurrency (an `If-Match` or version token on a membership) as a general mechanism; and any
+      change to the role vocabulary or the floor itself.
   - **Inviting a co-owner is allowed**, which is what makes the last-owner rule a floor rather than
     a wall — without it, no workspace could ever change hands even a little. Transferring ownership
     outright is still out of scope, as is seat billing and per-entity permission.

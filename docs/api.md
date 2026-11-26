@@ -1067,7 +1067,7 @@ record is worse than a failure. The bulk equivalent is
 | POST | `/workspace/invites` | Invite an address (KOL-124). Body `{ email, role? }`; `role` defaults to `editor`. **Owners only.** 201 with `{ _id, email, role, invitedBy, createdAt }`; **200** with the same row when that address was already invited (the role is updated rather than a second invite written). 400 `INVALID_EMAIL` / `INVALID_ROLE`, 409 `ALREADY_A_MEMBER`. **No mail is sent and no link is minted**, and the answer says nothing about whether the address has an account |
 | GET | `/workspace/invites` | The addresses waiting on this workspace, oldest first, each `{ _id, email, role, invitedBy, createdAt }`. **Any member** |
 | DELETE | `/workspace/invites/:inviteId` | Withdraw one. **Owners only.** 204; 404 for an id that is not an invite of *this* workspace (never 403); 400 `INVALID_ID` |
-| PATCH | `/workspace/members/:userId` | Change a member's role. Body `{ role }`. **Owners only.** 200 `{ userId, role }`; 400 `INVALID_ROLE`; 404 for a user who is not a member; **409 `LAST_OWNER`** when it would leave the workspace without an owner, writing nothing — judged at the moment of the write and never from the role this request read on the member, so of two simultaneous demotions the second is the one refused |
+| PATCH | `/workspace/members/:userId` | Change a member's role. Body `{ role }`. **Owners only.** 200 `{ userId, role }`; 400 `INVALID_ROLE`; 404 for a user who is not a member; **409 `LAST_OWNER`** when it would leave the workspace without an owner, writing nothing — judged at the moment of the write and never from the role this request read on the member, so of two simultaneous demotions the second is the one refused. **A role a member already holds is a write too** (KOL-154): it is re-asserted with that role in the write's own filter, so `role` in the answer is the role the database held at the moment of the write and not an echo of the body — a role another request moved in between is reported **as it now stands** (still 200, nothing written), and a membership that went in between is the same 404 as above |
 | DELETE | `/workspace/members/:userId` | Remove a membership. **Owners only.** 204; 404 for a non-member; **409 `LAST_OWNER`** on the same terms as `PATCH`. Their content stays — it belongs to the workspace — and they lose access on their next request |
 
 Registration has created a workspace since tenancy landed, and until KOL-071 nothing read its name
@@ -1215,6 +1215,19 @@ exercised only by tests. The routes are split across two mounts: the owner's hal
   unguarded — and a removal carries the floor unconditionally. Which refusal a no-match was (404
   for a workspace or membership that is gone, 409 for the floor) is re-read afterwards, for the
   status code only: by then the write has refused itself, so nothing was written either way.
+- **And a role change that changes nothing answers from a write too** (KOL-154). A `PATCH` to the
+  role a member already holds used to short-circuit on the route's own read and answer `200
+  { role }` without writing — the last membership answer in the product that came from a
+  read-derived branch. With two owners, one browser promoting a member to `owner` (the role the
+  read showed) while another demoted them to `editor`, the promotion reported success over a member
+  who was by then an editor: no invariant lost, since nothing was written, but a 200 naming a state
+  the database does not hold. It is now one `updateOne` whose filter names the workspace, the member
+  **and the role they must still hold**, with the floor on KOL-141's terms. A match answers that
+  role; no match means it moved under the request, so the role is re-read and answered **as it now
+  stands** — still 200, still `{ userId, role }`, nothing written — and a membership that went in
+  the same window is the 404 it would be on any other path. The floor cannot fire here (the filter
+  pins the member to a non-owner role wherever the floor is in it), and it is in the filter anyway,
+  because the pin is what makes that true.
 - **A removed member loses access on their next request.** Nothing is cleared from their session:
   `resolveWorkspace` re-reads the membership list every time, so their selection of that workspace
   stops resolving and falls back to one they are still in (see [Workspaces](#workspaces)). Their
