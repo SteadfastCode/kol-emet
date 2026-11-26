@@ -1799,7 +1799,9 @@ function groupTouchesPanel({ group, groupId, entityIds }) {
  * group list once on mount — a group created, relabelled, reordered or deleted
  * elsewhere left it drawing edges that no longer exist, with nothing on screen
  * to say so. It reloads itself rather than being remounted, so the viewer keeps
- * their zoom, pan and layout. **The panel refetches only when the frame touches
+ * their zoom, pan and layout — not for free: not remounting was only half of it,
+ * and `GraphView` carries all three across its own rebuild (KOL-157).
+ * **The panel refetches only when the frame touches
  * it**: `RelationshipsSection` renders the groups the server resolved for that
  * one entity (`GET /entities/:id`), so the refresh is a refetch of the entity
  * on screen, and a frame about entities nobody is looking at has nothing to
