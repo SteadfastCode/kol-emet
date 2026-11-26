@@ -65,34 +65,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes**
-  KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
-  "these plus a few hundred characters of this module's own, however large the request was"
-  (`server/src/lib/mcpFailure.js:54-61`). It is not: `source` is passed through verbatim (`:239`) while `rpc`,
-  `tool` and `requestId` are clipped against `MCP_RECORD_LIMITS` (`:143-150`), and `source` is built from caller
-  text at two call sites. `routes/mcp.js:760` interpolates `req.body.method` into it — the same value `rpc` clips
-  to 64 — on the `session_missing` path, so a ~100 kB `method` writes a ~100 kB log line; and the bridge's
-  `toolFailure` (`routes/bridge.js:228-234`) puts free-string tool arguments in it (`:271`, `:274`, `:443`, `:526`,
-  all `z.string()` with no `max`). On a deployed box both paths sit behind a bearer, so the unauthenticated hole
-  KOL-146 targeted is genuinely closed; in the dev/open gate configuration (`MCP_TOKEN` unset, non-production,
-  which is the configuration the gate's own Decision Log entry blesses) `session_missing` is reachable with no
-  credential and the record is unbounded again. Latent beside it: `...extra` spreads *after* `rpc`, `tool` and
-  `requestId` (`:240`), so a future call site that passes one of those keys in `extra` silently replaces the capped
-  value with an uncapped one — no live bug today, since every caller passes literals and counts.
-  Build: a `source` limit in `MCP_RECORD_LIMITS` (generous — `source` is a sentence, not an identifier — and clipped
-  with the same `…(+N)` marker, so an operator can tell a value this module shortened from one that arrived short),
-  and `...extra` spread *before* the capped fields so a key collision cannot uncap one. The cap belongs in
-  `mcpLogRecord` where the record is built, not at the call sites, which is the rule the module header already
-  states.
-  Files: `server/src/lib/mcpFailure.js`, `server/tests/unit/mcpFailure.test.js`.
-  Verify: `cd server && yarn test` with cases for: a 100 kB `source` producing a record bounded by the limit and
-  carrying the `…(+N)` marker with the right count; a short `source` passing through byte-identical; `extra`
-  carrying `rpc`/`tool`/`requestId` no longer overriding the capped field; and the existing caps unchanged.
-  Then `node --check src/index.js`. `cd client && yarn build` and `cd client && yarn test --run` unchanged — no
-  client file is touched.
-  Out of scope: `z.string().max()` on the bridge's tool arguments (the arguments are the bridge's contract, and
-  capping the record is what bounds the log); the JSON-RPC error body, which still echoes the caller's `id`
-  verbatim on purpose; and any change to which requests are refused.
 
 - [ ] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write**
   KOL-134 and KOL-141 moved the last-owner floor into the write filter precisely so no membership answer comes
@@ -198,6 +170,34 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes** (routine 2026-11-25, f60a506)
+  KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
+  "these plus a few hundred characters of this module's own, however large the request was"
+  (`server/src/lib/mcpFailure.js:54-61`). It is not: `source` is passed through verbatim (`:239`) while `rpc`,
+  `tool` and `requestId` are clipped against `MCP_RECORD_LIMITS` (`:143-150`), and `source` is built from caller
+  text at two call sites. `routes/mcp.js:760` interpolates `req.body.method` into it — the same value `rpc` clips
+  to 64 — on the `session_missing` path, so a ~100 kB `method` writes a ~100 kB log line; and the bridge's
+  `toolFailure` (`routes/bridge.js:228-234`) puts free-string tool arguments in it (`:271`, `:274`, `:443`, `:526`,
+  all `z.string()` with no `max`). On a deployed box both paths sit behind a bearer, so the unauthenticated hole
+  KOL-146 targeted is genuinely closed; in the dev/open gate configuration (`MCP_TOKEN` unset, non-production,
+  which is the configuration the gate's own Decision Log entry blesses) `session_missing` is reachable with no
+  credential and the record is unbounded again. Latent beside it: `...extra` spreads *after* `rpc`, `tool` and
+  `requestId` (`:240`), so a future call site that passes one of those keys in `extra` silently replaces the capped
+  value with an uncapped one — no live bug today, since every caller passes literals and counts.
+  Build: a `source` limit in `MCP_RECORD_LIMITS` (generous — `source` is a sentence, not an identifier — and clipped
+  with the same `…(+N)` marker, so an operator can tell a value this module shortened from one that arrived short),
+  and `...extra` spread *before* the capped fields so a key collision cannot uncap one. The cap belongs in
+  `mcpLogRecord` where the record is built, not at the call sites, which is the rule the module header already
+  states.
+  Files: `server/src/lib/mcpFailure.js`, `server/tests/unit/mcpFailure.test.js`.
+  Verify: `cd server && yarn test` with cases for: a 100 kB `source` producing a record bounded by the limit and
+  carrying the `…(+N)` marker with the right count; a short `source` passing through byte-identical; `extra`
+  carrying `rpc`/`tool`/`requestId` no longer overriding the capped field; and the existing caps unchanged.
+  Then `node --check src/index.js`. `cd client && yarn build` and `cd client && yarn test --run` unchanged — no
+  client file is touched.
+  Out of scope: `z.string().max()` on the bridge's tool arguments (the arguments are the bridge's contract, and
+  capping the record is what bounds the log); the JSON-RPC error body, which still echoes the caller's `id`
+  verbatim on purpose; and any change to which requests are refused.
 - [x] **(KOL-152) The workspace's open questions have a paged API and no screen** (routine 2026-11-25, f2023a6)
   `GET /open-questions` answers the whole workspace's questions newest-first, with `?status=open|resolved` and a
   bare-id cursor (`server/src/routes/openQuestions.js:85`, KOL-092), and `client/src/api/openQuestions.js` wraps it
