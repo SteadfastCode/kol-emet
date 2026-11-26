@@ -1,0 +1,72 @@
+{
+  "item": "KOL-156",
+  "repo": "kol-emet",
+  "mergeSha": "29e41810caad0f8149582f8d1ebf6d2cdd40e9ea",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-26T10:21:54.282Z",
+  "gradedAtUtc": "2026-11-26T10:31:20.108Z",
+  "independent": [
+    {
+      "file": "client/src/components/BlockList.vue",
+      "line": 58,
+      "severity": "low",
+      "summary": "Pre-existing: GalleryBlock is the one block type with no inline editor at all — it declares `canEdit` but never renders a pencil and emits no `save`, so BlockList's `@save=\"data => saveBlock(block, data)\"` on it is dead wiring (and now lands as a stray `onSave` DOM-event listener on its root). Since EntityEditor only opens for new entities (WikiLayout.vue:1550 `mode: 'editor'` is reached only via openEditor/openNewEntity), a gallery block added to an existing entity through \"+ Add block\" can never be given images from the UI; it renders \"No images yet.\" permanently and can only be deleted. This change converted the four editable block types to the `onSave` function-prop convention and left gallery as the odd one out, which also makes the item's cited refusal scenario (\"a 400 from blockDataError on a gallery URL\" raised by a block editor) unreachable from a block editor."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "No authentication or authorization logic changes — `canWrite`/`canEdit`/`blockEditable` gating and the server-side role check are untouched; only the client's UI reaction to an already-refused write changed."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling; the only new logging (`inlineEdit.js` verbose tier) emits user-typed block/header content and is gated off below verbose."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, pricing- or quota-related appears in the diff."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change removes a data-loss path rather than adding one; the `deleteBlock` edit in EntityDetail.vue is a pure emit→function-prop invocation refactor with identical delete semantics."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No new or altered outbound calls — the only request involved is the app's own `PUT /entities/:id` via the existing `editEntity`, whose call site is unchanged."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, build/deploy config, migrations or dependency changes; the only non-code edit is a Decision Log paragraph in kol_emet_spec.md."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found nothing, and there is genuinely almost nothing to find — the function-prop conversion is complete and consistent, the chain returns `true` only after `editEntity` resolves, and all 52+123 affected client tests pass — so its clean pass and correct triage are defensible, though it missed the one real (pre-existing) gap that GalleryBlock has no inline editor at all.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 2.0735309999999996,
+  "numTurns": 26,
+  "durationMs": 300874,
+  "sessionId": "f09a29e1-d7ce-4d19-9dc8-6dbe880824e3"
+}

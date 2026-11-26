@@ -1,0 +1,63 @@
+{
+  "item": "KOL-157",
+  "repo": "kol-emet",
+  "mergeSha": "b8b1fe89bcd247fecb0793f154cc289c52d0f578",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-26T10:21:54.282Z",
+  "gradedAtUtc": "2026-11-26T10:26:19.188Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "Only GraphView drawing/zoom/layout code, its test, a WikiLayout comment and a spec Decision Log entry change — no auth, session or permission logic is touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env/config handling appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No pricing, billing or payment code is involved."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The only removal is the pre-existing in-DOM `svg.selectAll('*').remove()`; no data, file or DB deletion is added or changed."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The diff changes no request code — the existing `/entities` and `/relationship-groups` calls are internal and untouched (the test only varies a stubbed fixture)."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, build, CI or deploy config; the `kol_emet_spec.md` change is a Decision Log entry, not a release artifact."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model reported no defects and an all-clear triage, which matches my own reading — the three carries (transform read after `svg.call(zoom)`, x/y seeded by id, warm alpha) are correct and the 13 tests pass — but with zero findings and no evidence it is an unearned pass rather than a demonstrated one.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 0.8778940000000002,
+  "numTurns": 6,
+  "durationMs": 146485,
+  "sessionId": "3b4371ae-7e7d-4729-ba8f-4ed625bbd8e0"
+}

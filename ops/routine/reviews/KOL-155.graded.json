@@ -1,0 +1,63 @@
+{
+  "item": "KOL-155",
+  "repo": "kol-emet",
+  "mergeSha": "d665234f11f585c54937b21fcdb6e4dd177cf157",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-26T10:21:54.282Z",
+  "gradedAtUtc": "2026-11-26T10:23:52.656Z",
+  "independent": [],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The commit adds only markdown to FEATURES.md (228 insertions, one file); server/src/routes/changelog.js:99 is not in the diff, so no auth or role-gating code is touched — the filed items merely describe future auth work."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens or env handling appear in the diff; the filed items explicitly skip anything needing a credential."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, allowance or generator-spend code is changed; KOL-160 even states the allowance line stays as is."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The change is additive markdown only — no deletions, migrations or data-touching code."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No HTTP client, provider SDK or outbound call is added or modified."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, package manifest, deploy config or release-notes file is touched; FEATURES.md is the internal workqueue."
+    }
+  ],
+  "missed": [],
+  "summary": "The local model correctly found no defects — the change is an accurate, well-grounded backlog audit (ids 158–164 are next free, the renewal is a verbatim copy dated commit-day + 7, all six candidates verified unbuilt against the tree, only FEATURES.md touched) — but it wrongly marked auth as touched on a docs-only diff, citing a file the diff never changes.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 0,
+    "independent": 0,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.073499,
+  "numTurns": 15,
+  "durationMs": 113033,
+  "sessionId": "ba78eb86-ede6-4d12-95a2-2515785ed101"
+}
