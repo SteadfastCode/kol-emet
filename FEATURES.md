@@ -66,7 +66,7 @@ registration, or removes a feature.
 
 
 
-- [ ] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write**
+- [x] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write**
   KOL-134 and KOL-141 moved the last-owner floor into the write filter precisely so no membership answer comes
   from a read-derived branch. One branch is left: `PATCH /workspace/members/:userId` short-circuits on
   `member.role === role` and returns `res.json({ userId, role })` without writing anything
