@@ -97,8 +97,12 @@ stateless and ignores a session id it is sent, recording that as
 arguments records `bridge_tool_failed` with its tool name.
 
 Every field of that record the *caller* chooses is capped where the record is built (KOL-146): the
-JSON-RPC `id`, the `user-agent`, the announced `clientInfo`, the method and tool names, and the
-address (`trust proxy` is set, so a forwarding header can supply it). A value that was cut carries
+JSON-RPC `id`, the `user-agent`, the announced `clientInfo`, the method and tool names, the
+address (`trust proxy` is set, so a forwarding header can supply it) — and `source` itself
+(KOL-153), which is this module's sentence at most call sites but is built out of the caller's text
+at two: `/mcp`'s `session_missing` branch interpolates the JSON-RPC method into it, and a bridge
+tool failure puts its arguments in it. `source` gets a sentence's ceiling rather than an
+identifier's, several times the longest one this codebase writes. A value that was cut carries
 the marker `…(+N)`, N being the characters dropped, so an operator can tell a value the server
 shortened from one the caller sent short; an `id` that is neither a string nor a number is recorded
 as its type (`<object>`, `<array>`) rather than stringified whole, because an id that is an object
@@ -109,7 +113,10 @@ at `express.json()`'s ~100 kB default: uncapped, an unauthenticated `POST /mcp` 
 old bare 401 printed one fixed line. The caps are on the record only — the error body still echoes
 the `id` the caller sent, which is how a client matches an answer to its call. Ceilings live in
 `MCP_RECORD_LIMITS` ([`lib/mcpFailure.js`](../server/src/lib/mcpFailure.js)); the `verbose` tier's
-payload logging is opt-in and deliberately uncapped, since the payload is the point of it.
+payload logging is opt-in and deliberately uncapped, since the payload is the point of it. A call
+site's `extra` is spread *before* the fields that have a ceiling, so naming one of them there fills
+it only when the body carried nothing for it, and through the same cap — it cannot replace a capped
+value with an uncapped one.
 
 The root [`.mcp.json`](../.mcp.json) points Claude Code at the local dev endpoint
 (`http://localhost:3004/mcp`) via the HTTP transport. (The old standalone stdio package and its
