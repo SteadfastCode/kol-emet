@@ -374,7 +374,70 @@ router.patch('/members/:userId', requireWorkspaceRole('owner'), async (req, res,
     }
 
     if (member.role === role) {
-      log('normal', `PATCH /workspace/members/${req.params.userId} changed nothing: already ${role} in workspace ${req.workspaceId} (source: user ${req.actingUserId})`);
+      // A request that changes nothing is still a write (KOL-154).
+      //
+      // This branch used to answer `200 { role }` straight off the read above,
+      // which left it the one membership answer in the product that came from a
+      // read-derived branch — the exact shape KOL-134 and KOL-141 moved the
+      // floor into the write to remove. Two owners, one browser demoting this
+      // member to `editor` while another promotes the same member to `owner`:
+      // the promotion reads `owner`, finds nothing to do, writes nothing, and
+      // answers `200 { role: 'owner' }` over a member who is now an editor. No
+      // invariant is lost, because nothing is written — but on a product where
+      // the answer is what the UI shows, a 200 naming a state the database does
+      // not hold is a lie with a stale read behind it.
+      //
+      // So it is a write like any other, and the role it reports is the one
+      // that write matched. The filter names the workspace, the member, and
+      // **the role they must still hold** — the equality this request read a
+      // moment ago, re-asserted by MongoDB at the moment of the write instead
+      // of trusted from the read. The update sets that same role back on that
+      // same member: nothing moves, which is the point, and `timestamps: false`
+      // keeps a request that changed nothing from restamping the document (the
+      // write below is an update pipeline, which Mongoose does not stamp
+      // either, so both paths touch exactly what they mean to).
+      //
+      // The floor goes in on precisely KOL-141's terms — the role the body asks
+      // for decides, never the one a read saw. It cannot fire on this path: the
+      // filter already pins the member to a non-owner role wherever the floor
+      // is in it, and a member who does not hold `owner` is never the last one
+      // who does. It is in the filter rather than reasoned away, because the
+      // next write to touch `members` should find the floor on every one of
+      // them, and because the pin is what makes the reasoning hold.
+      const { matchedCount } = await Workspace.updateOne(
+        {
+          _id: req.workspaceId,
+          members: { $elemMatch: { userId: member.userId, role } },
+          ...(role === 'owner' ? {} : notTheLastOwner(member.userId)),
+        },
+        { $set: { 'members.$[m].role': role } },
+        { arrayFilters: [{ 'm.userId': member.userId }], timestamps: false },
+      );
+
+      if (!matchedCount) {
+        // No match, so nothing was written and the equality this request read is
+        // gone: the member holds some other role now, or the membership — or the
+        // workspace — is no longer there. The role as it now stands is the only
+        // honest answer, so it is re-read, never echoed back off the body.
+        //
+        // `refusalFor` is deliberately not reused here. Its third outcome is the
+        // floor, which cannot be what refused this write, and answering 409
+        // `LAST_OWNER` about a role that merely moved would be a different lie
+        // in the same place. The two 404s it would have reported are the two
+        // this path reports itself, on the same terms as the read above.
+        const after = await membersOf(req.workspaceId);
+        const now = after ? membershipOf(after, member.userId) : null;
+
+        if (!now) {
+          log('light', `refused PATCH /workspace/members/${req.params.userId} to ${role} with 404 and wrote nothing: ${after ? `user ${req.params.userId} is no longer a member of workspace ${req.workspaceId}` : `workspace ${req.workspaceId} is no longer there`} (source: a re-read after the unchanged-role write matched nothing; this request's own read saw them as ${member.role ?? 'no role'})`);
+          return res.status(404).json({ error: 'Not found' });
+        }
+
+        log('light', `PATCH /workspace/members/${req.params.userId} changed nothing in workspace ${req.workspaceId} and wrote nothing: they are ${now.role ?? 'no role'}, not the ${role} this request read on them, so that is the role the answer carries (source: a re-read after the write's own filter matched nothing, user ${req.actingUserId})`);
+        return res.json({ userId: member.userId, role: now.role ?? null });
+      }
+
+      log('light', `PATCH /workspace/members/${req.params.userId} changed nothing in workspace ${req.workspaceId}: still ${role} (source: the write's own filter matched at the moment of the write, not this request's read; user ${req.actingUserId}, role ${req.workspaceRole})`);
       return res.json({ userId: member.userId, role });
     }
 

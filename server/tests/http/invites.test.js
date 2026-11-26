@@ -32,7 +32,11 @@
  *     **And whether that filter is in the write at all is not decided by a
  *     read** (KOL-141): a member read as an editor who is the workspace's only
  *     owner by the time the write runs is refused too, because only the role
- *     the body asks for — never the one a read saw — decides.
+ *     the body asks for — never the one a read saw — decides. **And the one
+ *     answer left that still came from a read is a write too** (KOL-154): a
+ *     PATCH to the role a member already holds re-asserts it with that role in
+ *     the write's own filter, so a role that moved under the request is
+ *     answered as it now stands rather than echoed back off the body.
  *   - **A removed member loses access on their next request**, because
  *     `resolveWorkspace` re-reads the membership list every time: the entity
  *     they created in that workspace is 404 to them afterwards and their
@@ -59,7 +63,13 @@
  * behind the route's own `member.role === 'owner'` and the promoted-editor
  * cases land, leaving a workspace nobody can ever manage again; drop
  * `MOVE_OWNER_ID_TO_AN_OWNER` and both "ownerId follows the role" cases fail,
- * as does "a demoted owner can still delete their account".
+ * as does "a demoted owner can still delete their account". Answer the
+ * unchanged-role branch from `member.role` instead of from what its own write
+ * matched and all three raced KOL-154 cases fail: two report a role the
+ * database does not hold, and the third answers 200 with a role for a
+ * membership that is gone. Drop the role from that write's filter and the
+ * swap case fails on the stored role instead — the role the body asked for is
+ * then written straight over the concurrent change.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_INVITES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -154,6 +164,16 @@ async function storedMembers(workspaceId) {
 async function storedRole(workspaceId, userId) {
   const doc = await storedMembers(workspaceId);
   return doc?.members.find(m => String(m.userId) === String(userId))?.role ?? null;
+}
+
+/**
+ * The workspace's own `updatedAt`, for the one write that must not move it: a
+ * role change that changes nothing re-asserts the role and restamps nothing
+ * (KOL-154).
+ */
+async function stampOf(workspaceId) {
+  const doc = await Workspace.findById(workspaceId).select('updatedAt').lean();
+  return doc?.updatedAt ?? null;
 }
 
 /** An owner who has invited `invitee` at `role`, with the invite id. */
@@ -798,6 +818,127 @@ describe('the floor is the write, not a check in front of it (KOL-134)', () => {
     assert.equal(await storedRole(owner.workspaceId, editor.userId), 'owner');
     assert.equal(stored.members.filter(m => m.role === 'owner').length, 1);
     assert.equal(String(stored.ownerId), editor.userId);
+  });
+});
+
+describe('a role change that changes nothing is a write (KOL-154)', () => {
+  test('a PATCH to the role a member already has answers 200 with that role, and moves nothing', async () => {
+    const { owner, invitee } = await sharedWorkspace('editor');
+    const before = await storedMembers(owner.workspaceId);
+    const stampedBefore = await stampOf(owner.workspaceId);
+
+    const res = await send(owner, 'PATCH', `/workspace/members/${invitee.userId}`, { role: 'editor' });
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(
+      { userId: String(res.body.userId), role: res.body.role },
+      { userId: invitee.userId, role: 'editor' },
+      'the response shape is the one every client already reads',
+    );
+
+    // Nothing extra: the same rows, the same roles, in the same order, and the
+    // same ownerId — a re-assertion, not a second membership or a restamp.
+    const after = await storedMembers(owner.workspaceId);
+    assert.deepEqual(
+      after.members.map(m => `${m.userId}:${m.role}`),
+      before.members.map(m => `${m.userId}:${m.role}`),
+    );
+    assert.equal(String(after.ownerId), String(before.ownerId));
+    assert.equal(String(await stampOf(owner.workspaceId)), String(stampedBefore),
+      'a request that changed nothing restamped the workspace');
+  });
+
+  test('the last owner re-asserted as owner is a 200, not the floor', async () => {
+    // The floor goes into this write on KOL-141's terms — only the role the
+    // body asks for decides — and `owner` is the one role that carries none.
+    // Spread unconditionally instead, this request would be refused 409 for
+    // asking that the only owner stay the owner.
+    const owner = await register('owner');
+
+    const res = await send(owner, 'PATCH', `/workspace/members/${owner.userId}`, { role: 'owner' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.role, 'owner');
+    assert.equal(await storedRole(owner.workspaceId, owner.userId), 'owner');
+  });
+
+  test('the role swapped between the read and the write: the answer is the role the database holds', async () => {
+    // The item itself. Two owners, one browser promoting this member to `owner`
+    // — the role they already hold, so nothing to do — while another demotes
+    // the same member to `editor`. Answered off the read, the promotion reports
+    // `200 { role: 'owner' }` over a member who is by then an editor.
+    const { owner, coOwners: [coOwner, target] } = await coOwnedWorkspace(2);
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        const demotion = await send(coOwner, 'PATCH', `/workspace/members/${target.userId}`, { role: 'editor' });
+        assert.equal(demotion.status, 200, 'the demotion is legitimate: two owners remain');
+      },
+      () => send(owner, 'PATCH', `/workspace/members/${target.userId}`, { role: 'owner' }),
+    );
+
+    assert.equal(res.status, 200, 'nothing was written and nothing was refused: the shape stays as it was');
+    assert.equal(res.body.role, 'editor',
+      'the answer must be the role the database holds, not the one the body asked for');
+    assert.equal(String(res.body.userId), target.userId);
+    assert.equal(await storedRole(owner.workspaceId, target.userId), 'editor',
+      'the unchanged-role path must not write a role back over a concurrent change');
+  });
+
+  test('a member promoted to last owner in between is answered as the owner they now are', async () => {
+    // The floor's shape on this path: the request reads an `editor` and asks
+    // for `editor`, so it carries the floor — and by the time it writes, that
+    // editor is the only owner the workspace has. The write's filter pins the
+    // role it read, so it matches nothing, writes nothing, and the answer is
+    // re-read rather than echoed: `owner`, which is what they are.
+    const { owner, coOwners: [coOwner] } = await coOwnedWorkspace(1);
+    const editor = await register('editor');
+    await accepted(owner, editor, 'editor');
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        for (const [who, role] of [[editor, 'owner'], [owner, 'editor'], [coOwner, 'editor']]) {
+          const step = await send(coOwner, 'PATCH', `/workspace/members/${who.userId}`, { role });
+          assert.equal(step.status, 200, `${who.label} → ${role} should be legitimate: another owner remains`);
+        }
+      },
+      () => send(owner, 'PATCH', `/workspace/members/${editor.userId}`, { role: 'editor' }),
+    );
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.role, 'owner',
+      'answering `editor` here would report a demotion of the only owner this workspace has');
+
+    const stored = await storedMembers(owner.workspaceId);
+    assert.equal(await storedRole(owner.workspaceId, editor.userId), 'owner');
+    assert.equal(stored.members.filter(m => m.role === 'owner').length, 1,
+      'a workspace with no owner can never be renamed, invited into or managed again, by anyone');
+    assert.equal(String(stored.ownerId), editor.userId);
+
+    const rename = await send(editor, 'PATCH', '/workspace', { name: 'Still manageable' });
+    assert.equal(rename.status, 200, 'the surviving owner must still be able to manage the workspace');
+  });
+
+  test('a membership removed between the read and the write is a 404, not a role', async () => {
+    const { owner, coOwners: [coOwner] } = await coOwnedWorkspace(1);
+    const editor = await register('editor');
+    await accepted(owner, editor, 'editor');
+
+    const res = await withARaceAfterTheRead(
+      owner.workspaceId,
+      async () => {
+        const removal = await send(coOwner, 'DELETE', `/workspace/members/${editor.userId}`);
+        assert.equal(removal.status, 204, 'removing an editor is legitimate: both owners remain');
+      },
+      () => send(owner, 'PATCH', `/workspace/members/${editor.userId}`, { role: 'editor' }),
+    );
+
+    assert.equal(res.status, 404, 'there is no role to report for a membership that is no longer there');
+    assert.equal(res.body.error, 'Not found');
+    assert.equal(await storedRole(owner.workspaceId, editor.userId), null,
+      'the refused re-assertion wrote the membership back');
   });
 });
 
