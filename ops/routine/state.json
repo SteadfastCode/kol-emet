@@ -65,7 +65,7 @@
     "KOL-157": {
       "order": 4,
       "title": "The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-157",
