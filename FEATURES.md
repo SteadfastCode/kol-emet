@@ -66,35 +66,6 @@ registration, or removes a feature.
 
 
 
-- [x] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write**
-  KOL-134 and KOL-141 moved the last-owner floor into the write filter precisely so no membership answer comes
-  from a read-derived branch. One branch is left: `PATCH /workspace/members/:userId` short-circuits on
-  `member.role === role` and returns `res.json({ userId, role })` without writing anything
-  (`server/src/routes/workspace.js:376-379`), where `member` comes from this request's own `membersOf()` read
-  (`:367`). Two owners, one browser demoting a member to `editor` while another promotes the same member to
-  `owner`: the promoting request reads `owner`, takes the shortcut, writes nothing, and answers
-  `200 {role: 'owner'}` — the client is told the promotion succeeded and the member is an editor. No invariant is
-  breached, since nothing is written, but on a product where the answer is what the UI shows, a 200 that reports a
-  state the database does not hold is a lie with a stale read behind it, and it is the exact shape KOL-141 set out
-  to remove.
-  Build: make the no-op path a write like any other — one `updateOne` whose filter names the workspace, the member
-  and the role it must still have, with the floor filter applied as KOL-141 left it, answering from what the write
-  matched rather than from the read. A filter that matches nothing means the member's role moved under the
-  request: answer the role as it now stands (a re-read, which is the only honest answer) rather than echoing the
-  request. Keep the response shape and the 400/404 refusals exactly as they are, so no client changes, and keep
-  the light-tier line that says a request changed nothing — with the source of the role it reports.
-  Files: `server/src/routes/workspace.js`, `server/tests/http/invites.test.js` or
-  `server/tests/lib/ownerFloor.test.js` (whichever file owns the member-role cases), `docs/api.md` (the
-  `PATCH /workspace/members/:userId` contract for the unchanged-role case), the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a PATCH to the role a member already has answering 200 with that
-  role and writing nothing extra; a PATCH racing a concurrent change — the role swapped between the read and the
-  write, driven by stubbing or by writing directly in the test — answering the role the database actually holds
-  rather than the one asked for; the owner floor still refusing the demotion of a last owner, including through
-  this path; and the 400 `INVALID_ROLE` and both 404s unchanged. Then `node --check src/index.js`.
-  `cd client && yarn test --run` and `cd client && yarn build` unchanged — no client file is touched.
-  Out of scope: `DELETE /workspace/members/:userId`, whose read-derived branch KOL-134 already addressed;
-  optimistic concurrency (an `If-Match`/version token on a membership) as a general mechanism; and any change to
-  the role vocabulary or the floor itself.
 
 ## Proposed
 
@@ -170,6 +141,35 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-154) A role change that changes nothing answers 200 with a role read before the write** (routine 2026-11-25, 2d0dc5d)
+  KOL-134 and KOL-141 moved the last-owner floor into the write filter precisely so no membership answer comes
+  from a read-derived branch. One branch is left: `PATCH /workspace/members/:userId` short-circuits on
+  `member.role === role` and returns `res.json({ userId, role })` without writing anything
+  (`server/src/routes/workspace.js:376-379`), where `member` comes from this request's own `membersOf()` read
+  (`:367`). Two owners, one browser demoting a member to `editor` while another promotes the same member to
+  `owner`: the promoting request reads `owner`, takes the shortcut, writes nothing, and answers
+  `200 {role: 'owner'}` — the client is told the promotion succeeded and the member is an editor. No invariant is
+  breached, since nothing is written, but on a product where the answer is what the UI shows, a 200 that reports a
+  state the database does not hold is a lie with a stale read behind it, and it is the exact shape KOL-141 set out
+  to remove.
+  Build: make the no-op path a write like any other — one `updateOne` whose filter names the workspace, the member
+  and the role it must still have, with the floor filter applied as KOL-141 left it, answering from what the write
+  matched rather than from the read. A filter that matches nothing means the member's role moved under the
+  request: answer the role as it now stands (a re-read, which is the only honest answer) rather than echoing the
+  request. Keep the response shape and the 400/404 refusals exactly as they are, so no client changes, and keep
+  the light-tier line that says a request changed nothing — with the source of the role it reports.
+  Files: `server/src/routes/workspace.js`, `server/tests/http/invites.test.js` or
+  `server/tests/lib/ownerFloor.test.js` (whichever file owns the member-role cases), `docs/api.md` (the
+  `PATCH /workspace/members/:userId` contract for the unchanged-role case), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a PATCH to the role a member already has answering 200 with that
+  role and writing nothing extra; a PATCH racing a concurrent change — the role swapped between the read and the
+  write, driven by stubbing or by writing directly in the test — answering the role the database actually holds
+  rather than the one asked for; the owner floor still refusing the demotion of a last owner, including through
+  this path; and the 400 `INVALID_ROLE` and both 404s unchanged. Then `node --check src/index.js`.
+  `cd client && yarn test --run` and `cd client && yarn build` unchanged — no client file is touched.
+  Out of scope: `DELETE /workspace/members/:userId`, whose read-derived branch KOL-134 already addressed;
+  optimistic concurrency (an `If-Match`/version token on a membership) as a general mechanism; and any change to
+  the role vocabulary or the floor itself.
 - [x] **(KOL-153) `source` is the one field in an MCP refusal record that is still as long as the caller likes** (routine 2026-11-25, f60a506)
   KOL-146 capped every caller-chosen field in `mcpLogRecord` and its module header now promises a refusal line is
   "these plus a few hundred characters of this module's own, however large the request was"
