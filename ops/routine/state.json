@@ -57,31 +57,13 @@
       "priority": false,
       "distribute": null,
       "coldReview": false,
-      "notBefore": "2026-11-28",
+      "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
       "lastFail": null
     },
-    "KOL-157": {
-      "order": 4,
-      "title": "The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-157",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-11-26T01:14:50.088Z",
-      "runId": "2026-11-26T01:13:43.129Z",
-      "lastFail": null
-    },
     "KOL-014": {
-      "order": 5,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -99,7 +81,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 6,
+      "order": 5,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -117,7 +99,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 7,
+      "order": 6,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -135,7 +117,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 8,
+      "order": 7,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -150,6 +132,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-157": {
+      "order": null,
+      "title": "The in-place reload does not actually preserve zoom/pan/layout, and leaves d3-zoom inconsistent.",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-157",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-26T01:14:50.088Z",
+      "runId": "2026-11-26T01:13:43.129Z",
       "lastFail": null
     },
     "KOL-156": {
