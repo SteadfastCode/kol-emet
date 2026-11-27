@@ -44,26 +44,8 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-155": {
-      "order": 3,
-      "title": "Backlog audit: file new candidates under Proposed",
-      "status": "done",
-      "attempts": 1,
-      "cluster": null,
-      "branch": "routine/item/KOL-155",
-      "dependsOn": [],
-      "needsHuman": false,
-      "proposed": false,
-      "priority": false,
-      "distribute": null,
-      "coldReview": false,
-      "notBefore": null,
-      "claimedAtUtc": "2026-11-26T03:04:28.900Z",
-      "runId": "2026-11-26T03:03:36.374Z",
-      "lastFail": null
-    },
     "KOL-164": {
-      "order": 4,
+      "order": 3,
       "title": "Backlog audit: file new candidates under Proposed",
       "status": "pending",
       "attempts": 0,
@@ -81,7 +63,7 @@
       "lastFail": null
     },
     "KOL-014": {
-      "order": 5,
+      "order": 4,
       "title": "Per-user MCP identity instead of the global Settings.mcpUserId singleton",
       "status": "pending",
       "attempts": 0,
@@ -99,7 +81,7 @@
       "lastFail": null
     },
     "KOL-018": {
-      "order": 6,
+      "order": 5,
       "title": "Post-trial self-hosted fallback",
       "status": "pending",
       "attempts": 0,
@@ -117,7 +99,7 @@
       "lastFail": null
     },
     "KOL-019": {
-      "order": 7,
+      "order": 6,
       "title": "Lift the ChangeLog 30-day TTL for versioned workspaces",
       "status": "pending",
       "attempts": 0,
@@ -135,7 +117,7 @@
       "lastFail": null
     },
     "KOL-125": {
-      "order": 8,
+      "order": 7,
       "title": "A local model is configured by a URL, not an API key: Ollama as a first-class provider",
       "status": "pending",
       "attempts": 0,
@@ -153,7 +135,7 @@
       "lastFail": null
     },
     "KOL-158": {
-      "order": 9,
+      "order": 8,
       "title": "Entity types have four verbs, a rename cascade, and no screen",
       "status": "pending",
       "attempts": 0,
@@ -171,7 +153,7 @@
       "lastFail": null
     },
     "KOL-159": {
-      "order": 10,
+      "order": 9,
       "title": "The relationship vocabulary is seeded, read by the generator, and offered to nobody",
       "status": "pending",
       "attempts": 0,
@@ -189,7 +171,7 @@
       "lastFail": null
     },
     "KOL-160": {
-      "order": 11,
+      "order": 10,
       "title": "The generator promises a draft list and a way back into a draft; neither exists",
       "status": "pending",
       "attempts": 0,
@@ -207,7 +189,7 @@
       "lastFail": null
     },
     "KOL-161": {
-      "order": 12,
+      "order": 11,
       "title": "A write to a subgroup leaves the parent group's panels stale: entityIds flattens downward only",
       "status": "pending",
       "attempts": 0,
@@ -225,7 +207,7 @@
       "lastFail": null
     },
     "KOL-162": {
-      "order": 13,
+      "order": 12,
       "title": "The role gate stops at the entity panel: the generator, Tags, Recently deleted and Import still show every control",
       "status": "pending",
       "attempts": 0,
@@ -243,7 +225,7 @@
       "lastFail": null
     },
     "KOL-163": {
-      "order": 14,
+      "order": 13,
       "title": "A workspace with collaborators has no way to see what they changed",
       "status": "pending",
       "attempts": 0,
@@ -258,6 +240,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-155": {
+      "order": null,
+      "title": "Backlog audit: file new candidates under Proposed",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-155",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-26T03:04:28.900Z",
+      "runId": "2026-11-26T03:03:36.374Z",
       "lastFail": null
     },
     "KOL-157": {
