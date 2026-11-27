@@ -1,0 +1,79 @@
+{
+  "item": "KOL-152",
+  "repo": "kol-emet",
+  "mergeSha": "f2023a631404d67b2ca5aa83ad06570638d591d2",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-27T05:25:41.106Z",
+  "gradedAtUtc": "2026-11-27T05:34:33.496Z",
+  "independent": [
+    {
+      "file": "client/src/components/OpenQuestionPanel.vue",
+      "line": 344,
+      "severity": "low",
+      "summary": "Mid-walk pages clobber local patches: each page does `rows.value = [...collected]` from a `collected` array that `applyFrame` and `toggleStatus` never touch, so a `question:*` frame applied — or a resolve/reopen the user clicks — after the first page has painted but before the walk finishes is silently reverted when the next page lands (needs >200 questions in the workspace to reach a second page). The row then shows a status the server no longer holds, and under the Open pill a question resolved mid-walk reappears."
+    },
+    {
+      "file": "client/src/components/OpenQuestionPanel.vue",
+      "line": 131,
+      "severity": "low",
+      "summary": "A first page that fails while a status pill is down renders the filtered empty state as well as the failure banner: the `v-else-if=\"status !== 'all'\"` branch precedes the `!loadError` guard, so with `rows` empty and `loadError` set the panel asserts \"No open questions / Nothing in this workspace is marked open\" — a claim about the workspace the server never made, which is exactly the confusion the Decision Log's three-nothings rule says must not happen (the unfiltered case is guarded correctly)."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change adds role-gated behaviour — `canWrite` from `GET /workspace` hides the resolve control because `PUT /open-questions/:id` answers 403 NOT_WORKSPACE_EDITOR for a viewer — plus a test for it, so authorization is genuinely touched (cited line is off, but that does not matter)."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env vars or key handling anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "No billing, pricing, quota or AI-spend code is touched; the panel reads and writes question status only."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The only write is the single-field status `PUT`; `question:deleted` merely drops a row from a local array, and no delete, migration or data-loss path is added."
+    },
+    {
+      "key": "externalApi",
+      "correct": false,
+      "reason": "No external or third-party API is involved — the panel calls the app's own existing `/open-questions` route through the pre-existing `getOpenQuestionPage` wrapper, and the cited test line is just a cursor assertion on a mock."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, migration or release tooling is touched; the only non-code edits are docs and the Decision Log."
+    }
+  ],
+  "missed": [
+    1,
+    2
+  ],
+  "summary": "The local review found nothing and its triage was right on five of six categories (wrongly calling the app's own REST route an external API), so it missed both of the real — if minor — defects: the mid-walk clobber of frame and write patches, and the filtered empty state shown over a failed first page.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 2,
+    "independent": 2,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.6022664999999998,
+  "numTurns": 16,
+  "durationMs": 183812,
+  "sessionId": "3939b721-f9f7-454a-bc66-9ed85c0f2f65"
+}

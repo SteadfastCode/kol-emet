@@ -1,0 +1,72 @@
+{
+  "item": "KOL-153",
+  "repo": "kol-emet",
+  "mergeSha": "f60a50663dfa014e38e595f1e0726999c6a94c81",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-27T05:25:41.106Z",
+  "gradedAtUtc": "2026-11-27T05:31:29.641Z",
+  "independent": [
+    {
+      "file": "server/tests/unit/mcpFailure.test.js",
+      "line": 119,
+      "severity": "low",
+      "summary": "The caps are applied in UTF-16 code units (`clip` uses `text.length`) while the bound the tests assert is in bytes (`MAX_RECORD_BYTES = 2048`, and the same literal in server/tests/http/mcp.test.js:742). Every hostile case is built from ASCII ('x'/'z' repeats), so the new 512-char `source` ceiling is never exercised with multi-byte text: a `session_missing` request whose `method` is ~500 BMP multi-byte characters (3 bytes each) yields ~1.5 kB of `source` alone, and combined with a maxed `ua`/`client`/`ip`/`rpc`/`requestId` the record reaches ~2.9 kB — past the ceiling the test file claims holds 'whatever the request was'. The module's own promise is phrased in characters, so this is a pre-existing char-vs-byte mismatch the new 512 ceiling widens rather than a new unbounded hole; the record is still bounded, just at a larger constant than the tests pin."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The diff changes only how the refusal log record is assembled plus docs/tests; no credential check, gate, or session validation logic is altered."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No secret or token handling changes — `callerView`'s `auth` field (presentation only, never the value) is untouched."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing billing-, pricing-, or quota-related is in the diff."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "No deletes, migrations, or data-mutating code paths; the change only clips a string and reorders object keys in a log line."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are added or changed; the MCP endpoint's wire behaviour is unchanged."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bump, deploy config, env var, or dependency change."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model's 'no defects' verdict is essentially right — the change does what KOL-153 promises and its tests are real — though it did no visible verification and missed the one minor residual issue (character-based caps measured against a byte ceiling the tests only probe with ASCII); its triage is fully correct.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.3230989999999998,
+  "numTurns": 13,
+  "durationMs": 162632,
+  "sessionId": "3f485e91-fd74-49a8-8454-fbb3c96a7269"
+}

@@ -1,0 +1,72 @@
+{
+  "item": "KOL-154",
+  "repo": "kol-emet",
+  "mergeSha": "2d0dc5d08bf41d5bdf48b4898a3e1aee330ce9d0",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-27T05:25:41.106Z",
+  "gradedAtUtc": "2026-11-27T05:28:46.970Z",
+  "independent": [
+    {
+      "file": "server/tests/http/invites.test.js",
+      "line": 851,
+      "severity": "low",
+      "summary": "The test 'the last owner re-asserted as owner is a 200, not the floor' claims in its comment that spreading the floor unconditionally would make this request a 409, but it would not: an unconditional `notTheLastOwner(owner)` makes the $elemMatch+floor filter match nothing (owners=[owner], so neither `|owners \\ {owner}| >= 1` nor `|owners| == 0` holds), the no-match branch re-reads the member, finds them still `owner`, and answers the same `200 {role:'owner'}` with the same stored role. Only a log line differs, so the test passes with or without the `role === 'owner' ? {} :` conditional and does not pin the behaviour it says it pins."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": false,
+      "reason": "The diff rewrites an owner-gated membership-role endpoint and puts the last-owner authorization floor into a new write filter, so authorization/permission logic is squarely touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, or config secrets appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff touches billing, allowances, or usage metering."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff does add a new mutating write to the persisted `members` array (`$set` on `members.$[m].role`) where the branch previously wrote nothing, so a data-mutation path is genuinely touched."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "No outbound calls or third-party integrations are involved; the only I/O is MongoDB."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "Only route code, tests, api.md and the spec change — no version bump, migration, or deploy config."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local model found nothing and its one substantive triage call was defensible, but it missed the toothless floor-conditional sentinel test and wrongly judged an owner-gated role-management change as not touching auth.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 5
+  },
+  "costUsd": 1.5983545,
+  "numTurns": 19,
+  "durationMs": 180672,
+  "sessionId": "5fa6812a-cd1f-4363-99a3-ce34bac6c44b"
+}
