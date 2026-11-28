@@ -62,13 +62,13 @@
       "runId": null,
       "lastFail": null
     },
-    "KOL-159": {
+    "KOL-165": {
       "order": 4,
-      "title": "The relationship vocabulary is seeded, read by the generator, and offered to nobody",
-      "status": "done",
-      "attempts": 1,
+      "title": "PUT /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can sile…",
+      "status": "pending",
+      "attempts": 0,
       "cluster": null,
-      "branch": "routine/item/KOL-159",
+      "branch": null,
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -76,8 +76,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": "2026-11-28T03:54:27.997Z",
-      "runId": "2026-11-28T03:34:50.861Z",
+      "claimedAtUtc": null,
+      "runId": null,
       "lastFail": null
     },
     "KOL-014": {
@@ -222,6 +222,24 @@
       "notBefore": null,
       "claimedAtUtc": null,
       "runId": null,
+      "lastFail": null
+    },
+    "KOL-159": {
+      "order": null,
+      "title": "The relationship vocabulary is seeded, read by the generator, and offered to nobody",
+      "status": "done",
+      "attempts": 1,
+      "cluster": null,
+      "branch": "routine/item/KOL-159",
+      "dependsOn": [],
+      "needsHuman": false,
+      "proposed": false,
+      "priority": false,
+      "distribute": null,
+      "coldReview": false,
+      "notBefore": null,
+      "claimedAtUtc": "2026-11-28T03:54:27.997Z",
+      "runId": "2026-11-28T03:34:50.861Z",
       "lastFail": null
     },
     "KOL-158": {

@@ -66,6 +66,20 @@ registration, or removes a feature.
 
 ## Proposed
 
+- [ ] **(KOL-165) PUT /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can sile…**
+  Found by the grader of KOL-159 (medium, server/src/routes/relationshipTypes.js:162). PUT
+  /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can
+  silently create two types with the same name in one workspace — exactly the `owns`/`Owns` drift
+  the vocabulary exists to prevent. POST refuses it with 409 and `routes/entityTypes.js` does the
+  same clash check on its PUT (entityTypes.js:411), but this route only builds `update` and calls
+  findOneAndUpdate. The diff's own docs now claim the opposite (`docs/api.md`: PUT applies the
+  "same checks as POST"), `client/src/api/relationshipTypes.js` and `RelationshipTypeSettings.vue`
+  document a cross-scope 409 as "the only thing that explains a refused rename", and
+  `RelationshipTypeSettings.test.js` pins the refused-rename UI against a stubbed 409 the server
+  can never send — so the one UI path that would surface the duplicate is dead code. Failure:
+  rename "Owns" to "owned by" when a member-scoped "owned by" already exists → 200, the suggestion
+  list now offers the same word twice from two rows, and the next rename of either is
+  indistinguishable.
 - [ ] **(KOL-014) Per-user MCP identity instead of the global Settings.mcpUserId singleton** [needs-human]
   Today `POST /authorize` (`server/src/routes/oauth.js`) overwrites the single `Settings.mcpUserId` and `/oauth/token` hands every
   connector the same `MCP_BEARER_TOKEN` — a second user authorizing the Claude.ai connector re-points everyone's MCP traffic at their

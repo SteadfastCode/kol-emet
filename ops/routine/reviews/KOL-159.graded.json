@@ -1,0 +1,72 @@
+{
+  "item": "KOL-159",
+  "repo": "kol-emet",
+  "mergeSha": "48ce907f9ea3957ae8071736138e19755d6f0578",
+  "localPromptVersion": "v6",
+  "localModel": "qwen2.5-coder:14b",
+  "grader": "claude-opus-5",
+  "effort": "high",
+  "gradePromptVersion": "g1",
+  "gradeRunId": "2026-11-28T08:34:58.258Z",
+  "gradedAtUtc": "2026-11-28T08:59:50.742Z",
+  "independent": [
+    {
+      "file": "server/src/routes/relationshipTypes.js",
+      "line": 162,
+      "severity": "medium",
+      "summary": "PUT /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can silently create two types with the same name in one workspace — exactly the `owns`/`Owns` drift the vocabulary exists to prevent. POST refuses it with 409 and `routes/entityTypes.js` does the same clash check on its PUT (entityTypes.js:411), but this route only builds `update` and calls findOneAndUpdate. The diff's own docs now claim the opposite (`docs/api.md`: PUT applies the \"same checks as POST\"), `client/src/api/relationshipTypes.js` and `RelationshipTypeSettings.vue` document a cross-scope 409 as \"the only thing that explains a refused rename\", and `RelationshipTypeSettings.test.js` pins the refused-rename UI against a stubbed 409 the server can never send — so the one UI path that would surface the duplicate is dead code. Failure: rename \"Owns\" to \"owned by\" when a member-scoped \"owned by\" already exists → 200, the suggestion list now offers the same word twice from two rows, and the next rename of either is indistinguishable."
+    }
+  ],
+  "grades": [],
+  "triageGrades": [
+    {
+      "key": "auth",
+      "correct": true,
+      "reason": "The change gates the new settings group on `canWrite`, maps 401/403 to user-facing messages, and the server tests assert cross-tenant 404s on PUT/DELETE, so permissions are genuinely touched."
+    },
+    {
+      "key": "secrets",
+      "correct": true,
+      "reason": "No credentials, tokens, env secrets or auth material appear anywhere in the diff."
+    },
+    {
+      "key": "money",
+      "correct": true,
+      "reason": "Nothing in the diff involves billing, pricing, quotas or paid API usage."
+    },
+    {
+      "key": "destructive",
+      "correct": true,
+      "reason": "The diff adds `deleteRelationshipType` plus an armed two-click Remove in the settings rows, i.e. a new data-deleting path."
+    },
+    {
+      "key": "externalApi",
+      "correct": true,
+      "reason": "The HTTP contract itself changes — POST/PUT now read `scope` (documented in docs/api.md) and a new client module calls four endpoints — so the API-surface category is touched, even if the calls are to this app's own server."
+    },
+    {
+      "key": "release",
+      "correct": true,
+      "reason": "No version bumps, deploy/config changes or migrations; pre-existing rows just keep the model's `member` default."
+    }
+  ],
+  "missed": [
+    1
+  ],
+  "summary": "The local review found nothing and missed the one real defect — a rename path with no duplicate-name check that the new screen exposes and the new docs misdescribe — though its six triage answers were all right about what the change touches.",
+  "counts": {
+    "findings": 0,
+    "confirmed": 0,
+    "falsePositive": 0,
+    "duplicate": 0,
+    "unverifiable": 0,
+    "missed": 1,
+    "independent": 1,
+    "triageChecked": 6,
+    "triageCorrect": 6
+  },
+  "costUsd": 1.847773,
+  "numTurns": 15,
+  "durationMs": 252463,
+  "sessionId": "e1df2ece-da56-4dd4-9ffc-bad392fc3ba0"
+}
