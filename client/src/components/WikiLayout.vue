@@ -515,6 +515,15 @@
           />
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">Relationship types</div>
+          <!-- The label vocabulary's only screen (KOL-159), directly under Entity types: the two
+               are the workspace's own vocabulary, one for what a thing is and one for how two of
+               them are related. Mounted only while Settings shows, and it fetches on mount —
+               nothing else in the app holds this collection, so there is no shared copy to patch
+               and no `changed` for the layout to act on: a type's name is never on an entity. -->
+          <RelationshipTypeSettings v-if="settingsVisible" :can-write="canWrite" />
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">Tags</div>
           <!-- Counts come from the entity list already loaded here, not a route of their own;
                a rename or removal touches many entities, so the list is refetched after one. -->
@@ -596,6 +605,7 @@ import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
 import EntityTypeSettings from './EntityTypeSettings.vue';
+import RelationshipTypeSettings from './RelationshipTypeSettings.vue';
 import {
   changePassword,
   changePasswordWithPasskey,

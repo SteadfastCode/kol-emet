@@ -308,12 +308,29 @@ nothing, and the tab that asked is excluded by its `x-sse-client-id`.
 
 ## Relationship types
 
+The per-workspace vocabulary of relationship *labels*. `scope` splits it in two, because a
+relationship carries labels in two places and they are different vocabularies: a **`group`**-scoped
+name labels the whole relationship ("Marriage", "Depends on") and a **`member`**-scoped one labels
+one end of it ("Wife", "Dependency"). `member` is the model's default. The generator reads both
+halves to name the edges it proposes (`lib/generator.js`), and `client/src/api/relationshipTypes.js`
+offers each half on the label fields of the matching position
+(`client/src/components/RelationshipsSection.vue`), with
+`client/src/components/RelationshipTypeSettings.vue` as the vocabulary's screen in Settings. See
+[RelationshipType](data-model.md#relationshiptype).
+
+Labels stored on groups and members are plain strings: renaming or deleting a type changes what is
+*offered* from then on and touches nothing already written.
+
 | Method | Route | Description |
 |--------|-------|-------------|
-| GET | `/relationship-types` | List the label vocabulary |
-| POST | `/relationship-types` | Create a type. 400 if a non-null `sourceCategory`/`targetCategory` is not an entity type in the workspace. |
-| PUT | `/relationship-types/:id` | Update a type (same check) |
+| GET | `/relationship-types` | List the label vocabulary, sorted by `name`. `?q=` fuzzy-filters by name (trigram similarity ≥ 0.3, or a substring match). |
+| POST | `/relationship-types` | Create `{ name, scope?, sourceCategory?, targetCategory? }`. A blank `name` is 400; it is trimmed. **`scope` must be `group` or `member`** — anything else is 400 and nothing is written; omitted leaves the model's `member` default. 409 on an existing name (case-insensitive, **across scopes**: one workspace cannot hold a name as both a group label and a member role), with the row that holds it as `existing`. A near-duplicate name still creates, with a `warning`. 400 if a non-null `sourceCategory`/`targetCategory` is not an entity type in the workspace. |
+| PUT | `/relationship-types/:id` | Update any of `name`, `scope`, `sourceCategory`, `targetCategory` (same checks as `POST`; the `scope` 400 is answered before the query, so a refused body writes neither the scope nor a name sent with it). Nothing cascades onto stored labels. |
 | DELETE | `/relationship-types/:id` | Delete a type |
+
+`POST` and `PUT` read `scope` as of KOL-159. Before that both destructured `{ name, sourceCategory,
+targetCategory }` only, so **every type any client created took the `member` default whatever it
+sent**, and a `group`-scoped type was reachable only through `lib/workspaceSeeder.js`.
 
 ## Entity types
 

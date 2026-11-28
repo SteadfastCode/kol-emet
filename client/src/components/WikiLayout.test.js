@@ -262,9 +262,12 @@ describe('WikiLayout settings', () => {
     // Collaborators follows Workspace, because it is about the same workspace (KOL-124).
     // "Invitations for you" would sit between them, and is absent here: this account has none.
     // Entity types sits directly above Tags: both are the workspace's own vocabulary (KOL-158).
+    // Relationship types went between them for the same reason (KOL-159): one vocabulary for what
+    // a thing is, one for how two of them are related, one for what they are filed under.
     expect(titles).toEqual([
       'Workspace', 'Collaborators', 'Account', 'Password', 'Passkeys', 'Recently deleted',
-      'Export workspace', 'Import workspace', 'Entity types', 'Tags', 'Delete account',
+      'Export workspace', 'Import workspace', 'Entity types', 'Relationship types', 'Tags',
+      'Delete account',
     ]);
   });
 

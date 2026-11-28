@@ -11,7 +11,13 @@
       <!-- Group label row — always show when canEdit so actions are accessible -->
       <div v-if="group.label || canEdit" class="group-label-row">
         <template v-if="editingGroupId === group._id">
-          <input v-model="groupLabelDraft" class="input input-sm" placeholder="Group label (optional)" />
+          <LabelSuggestInput
+            v-model="groupLabelDraft"
+            class="group-label-input"
+            :options="groupLabels"
+            placeholder="Group label (optional)"
+            aria-label="Group label"
+          />
           <div class="row-actions" style="margin-top: 4px;">
             <button class="btn-sm" @click="cancelGroupEdit">Cancel</button>
             <button class="btn-sm primary" :disabled="groupLabelSaving" @click="saveGroupLabel(group._id)">
@@ -35,10 +41,12 @@
 
         <!-- Entity member: edit row -->
         <div v-if="item.type === 'entity' && editingKey === rowKey(group._id, item.coMember.refId)" class="rel-edit-row">
-          <input
+          <LabelSuggestInput
             v-model="editDraft.label"
-            class="input input-sm"
+            class="member-label-input"
+            :options="memberRoles"
             placeholder="Label (optional)"
+            aria-label="Member label"
           />
           <textarea
             v-model="editDraft.notes"
@@ -188,7 +196,13 @@
         </div>
         <div class="form-field">
           <label class="field-label">Link label <span class="field-hint">(optional — if set, sub-group shows as a row; if omitted, members merge into parent)</span></label>
-          <input v-model="linkSubGroupLinkLabel" class="input input-sm" placeholder="e.g. Inhabitant (singular)" />
+          <LabelSuggestInput
+            v-model="linkSubGroupLinkLabel"
+            class="subgroup-link-label-input"
+            :options="memberRoles"
+            placeholder="e.g. Inhabitant (singular)"
+            aria-label="Link label"
+          />
         </div>
         <div class="row-actions">
           <button class="btn-sm" @click="cancelLinkSubGroup">Cancel</button>
@@ -228,7 +242,13 @@
 
         <div class="form-field">
           <label class="field-label">Their label</label>
-          <input v-model="addToGroupForm.label" class="input input-sm" placeholder="e.g. sibling (optional)" />
+          <LabelSuggestInput
+            v-model="addToGroupForm.label"
+            class="add-member-label-input"
+            :options="memberRoles"
+            placeholder="e.g. sibling (optional)"
+            aria-label="New member's label"
+          />
         </div>
 
         <div class="form-field">
@@ -282,17 +302,35 @@
       <div class="form-row">
         <div class="form-field">
           <label class="field-label">Your label</label>
-          <input v-model="newForm.myLabel" class="input input-sm" placeholder="e.g. father" />
+          <LabelSuggestInput
+            v-model="newForm.myLabel"
+            class="new-my-label-input"
+            :options="memberRoles"
+            placeholder="e.g. father"
+            aria-label="Your label"
+          />
         </div>
         <div class="form-field">
           <label class="field-label">Their label</label>
-          <input v-model="newForm.theirLabel" class="input input-sm" placeholder="e.g. son" />
+          <LabelSuggestInput
+            v-model="newForm.theirLabel"
+            class="new-their-label-input"
+            :options="memberRoles"
+            placeholder="e.g. son"
+            aria-label="Their label"
+          />
         </div>
       </div>
 
       <div class="form-field">
         <label class="field-label">Group label</label>
-        <input v-model="newForm.groupLabel" class="input input-sm" placeholder="e.g. parentage (optional)" />
+        <LabelSuggestInput
+          v-model="newForm.groupLabel"
+          class="new-group-label-input"
+          :options="groupLabels"
+          placeholder="e.g. parentage (optional)"
+          aria-label="Group label for the new relationship"
+        />
       </div>
 
       <div class="form-field">
@@ -315,8 +353,10 @@
 </template>
 
 <script setup>
-import { ref, computed, inject } from 'vue';
+import { ref, computed, inject, onMounted } from 'vue';
 import { createGroup, updateGroupLabel, addMember, updateMember, removeMember, reorderMembers, deleteGroup, addSubGroup, removeSubGroup } from '../api/relationshipGroups.js';
+import { getRelationshipTypes } from '../api/relationshipTypes.js';
+import LabelSuggestInput from './LabelSuggestInput.vue';
 
 const props = defineProps({
   entity: Object,
@@ -339,6 +379,66 @@ const emit = defineEmits(['refresh']);
 
 const entities = inject('entities', ref([]));
 const followLink = inject('followLink', () => {});
+
+/* ── The workspace's label vocabulary ─────────────────────────────────────────
+ * `/relationship-types` is the vocabulary every label field in this section now
+ * offers (KOL-159). Until then it had **no client caller at all**: the types
+ * `workspaceSeeder.js` puts in every new workspace — and of which it says
+ * "without them the relationship picker is empty and the core feature of the
+ * product looks broken on first use" — were read only by the generator, while
+ * the person who owns them typed every label free-hand and the graph collected
+ * `owns`, `Owns` and `owned by` as three unrelated labels.
+ *
+ * Split by `scope`, because a relationship carries labels in two places and
+ * they are different vocabularies: a GROUP is a "Marriage", a MEMBER of it is a
+ * "Wife". So a group-label field is never offered a member role, and the model
+ * has carried the discriminator for exactly this since it was added.
+ *
+ * The fetch is **best-effort and once per mount**: a workspace's vocabulary is
+ * small enough to arrive whole, filtering a list already in hand is what makes
+ * a keystroke free, and if the request fails there is simply no list — every
+ * field still saves what was typed into it. The section is remounted with each
+ * entity, which is what keeps the list current without a shared store.
+ */
+
+const relationshipTypes = ref([]);
+
+const LABEL_LEVELS = { off: 0, light: 1, normal: 2, verbose: 3 };
+
+function vocabLog(level, msg) {
+  let configured = null;
+  try { configured = localStorage.getItem('RELATIONSHIP_TYPE_LOG_LEVEL'); } catch { /* storage blocked */ }
+  if ((LABEL_LEVELS[configured] ?? LABEL_LEVELS.light) >= LABEL_LEVELS[level]) {
+    console.log(`[relationshipTypes/section:${level}] ${msg}`);
+  }
+}
+
+onMounted(async () => {
+  try {
+    const fetched = await getRelationshipTypes();
+    relationshipTypes.value = Array.isArray(fetched) ? fetched : [];
+    vocabLog('normal', `loaded ${relationshipTypes.value.length} relationship type(s) for the label fields (source: GET /relationship-types on mount)`);
+    vocabLog('verbose', `vocabulary: ${relationshipTypes.value.map(t => `${t.name} (${t.scope})`).join(', ') || '(none)'}`);
+  } catch (err) {
+    vocabLog('light', `GET /relationship-types failed, so this section offers no label suggestions (typed labels still save): ${err.status ?? 'no status'} ${err.message}`);
+  }
+});
+
+/** The names a GROUP label can take — "Marriage", "Depends on". */
+const groupLabels = computed(() => namesWithScope('group'));
+
+/**
+ * The names a MEMBER's label can take — "Wife", "Dependency". `member` is the
+ * model's default, so a row with no scope at all belongs here.
+ */
+const memberRoles = computed(() => namesWithScope('member'));
+
+function namesWithScope(scope) {
+  return relationshipTypes.value
+    .filter(t => (scope === 'group' ? t?.scope === 'group' : t?.scope !== 'group'))
+    .map(t => t?.name)
+    .filter(name => typeof name === 'string' && name.trim());
+}
 
 // ─── Pluralization ────────────────────────────────────────────────────────────
 
@@ -905,6 +1005,12 @@ async function saveNew() {
   font-size: 12px;
   padding: 5px 8px;
 }
+
+/* Each label field is now a LabelSuggestInput, whose root is the box its
+   suggestion list is positioned against (KOL-159). The root takes the place the
+   bare input had in each layout; `.group-label-row` is the one of them that
+   lays its children out in a row, so the field has to claim the space there. */
+.group-label-row .group-label-input { flex: 1; min-width: 0; }
 
 .block-textarea {
   width: 100%;

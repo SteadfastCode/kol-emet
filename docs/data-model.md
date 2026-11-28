@@ -127,13 +127,15 @@ Design notes:
 
 ## RelationshipType
 
-The controlled vocabulary the editor autocompletes against (via Fuse.js on the client). Optionally
-scoped to source/target categories.
+The controlled vocabulary the label fields suggest from
+(`client/src/components/RelationshipsSection.vue`, KOL-159) and the generator names its edges with.
+Optionally scoped to source/target categories.
 
 ```js
 {
   _id:            ObjectId,
   name:           String,        // required, trimmed
+  scope:          'group' | 'member',   // default 'member'
   sourceCategory: String | null,
   targetCategory: String | null,
   workspaceId:    ObjectId | null,
@@ -141,6 +143,12 @@ scoped to source/target categories.
   updatedAt:      Date,
 }
 ```
+
+`scope` is which of a relationship's two label positions the name belongs to, and they are different
+vocabularies: a **group** label names the whole relationship ("Marriage", "Depends on") and a
+**member** label names one end of it ("Wife", "Dependency"). `member` is the default because it is
+the larger vocabulary and the one pre-discriminator rows were mostly used for. A label field offers
+only its own position's half, so a group label is never offered a member role.
 
 `sourceCategory`/`targetCategory` are entity type names. When set, they must name a type in the
 workspace's [registry](#entitytype), and they count as uses of that type.
