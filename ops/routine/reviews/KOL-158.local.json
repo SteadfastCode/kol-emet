@@ -1,0 +1,311 @@
+{
+  "item": "KOL-158",
+  "repo": "kol-emet",
+  "mergeSha": "b523f6517a88968cb35888df561dbad9a8de7d29",
+  "completedAtUtc": "2026-11-28T03:53:10.604Z",
+  "completeRunId": "2026-11-28T03:34:50.861Z",
+  "reviewRunId": "2026-11-28T08:01:10.864Z",
+  "reviewedAtUtc": "2026-11-28T08:25:53.236Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 101408,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/entityTypes.js"
+      ],
+      "part": null,
+      "bytes": 3031,
+      "contextBytes": 3173,
+      "promptTokens": 3095,
+      "completionTokens": 109,
+      "latencyMs": 14008,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityTypeSettings.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11555,
+      "contextBytes": 0,
+      "promptTokens": 4603,
+      "completionTokens": 139,
+      "latencyMs": 17156,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityTypeSettings.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 3729,
+      "contextBytes": 6725,
+      "promptTokens": 4090,
+      "completionTokens": 110,
+      "latencyMs": 14157,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityTypeSettings.vue"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11538,
+      "contextBytes": 0,
+      "promptTokens": 4602,
+      "completionTokens": 141,
+      "latencyMs": 17350,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/EntityTypeSettings.vue"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 7007,
+      "contextBytes": 0,
+      "promptTokens": 3708,
+      "completionTokens": 141,
+      "latencyMs": 14470,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 6853,
+      "contextBytes": 0,
+      "promptTokens": 3212,
+      "completionTokens": 128,
+      "latencyMs": 12112,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEntityTypes.js",
+        "client/src/composables/useEntityTypes.test.js"
+      ],
+      "part": null,
+      "bytes": 10674,
+      "contextBytes": 0,
+      "promptTokens": 4336,
+      "completionTokens": 84,
+      "latencyMs": 13426,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/composables/useEvents.js",
+        "client/src/composables/useEvents.test.js"
+      ],
+      "part": null,
+      "bytes": 9783,
+      "contextBytes": 0,
+      "promptTokens": 4102,
+      "completionTokens": 93,
+      "latencyMs": 13259,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md"
+      ],
+      "part": null,
+      "bytes": 6000,
+      "contextBytes": 5495,
+      "promptTokens": 4538,
+      "completionTokens": 107,
+      "latencyMs": 15432,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 7792,
+      "contextBytes": 0,
+      "promptTokens": 3307,
+      "completionTokens": 97,
+      "latencyMs": 10993,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/entityTypes.js"
+      ],
+      "part": null,
+      "bytes": 8644,
+      "contextBytes": 0,
+      "promptTokens": 3767,
+      "completionTokens": 70,
+      "latencyMs": 10885,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 7323,
+      "contextBytes": 0,
+      "promptTokens": 3438,
+      "completionTokens": 122,
+      "latencyMs": 12426,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/entityTypes.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 8164,
+      "contextBytes": 0,
+      "promptTokens": 3612,
+      "completionTokens": 131,
+      "latencyMs": 13461,
+      "findings": 0,
+      "needs": 3,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/components/EntityTypeSettings.vue:264"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "client/src/api/entityTypes.js:42"
+    },
+    "externalApi": {
+      "touched": false,
+      "evidence": null
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "The diff adds the missing verbs for entity types in the client API and introduces a new component `EntityTypeSettings.vue`. The server-side routes need to broadcast events for created and deleted entity types. The needs list includes reading the implementation of `broadcastTypeRenamed` from `server/src/routes/entityTypes.js`. · No real defects found in the provided diff. However, additional information is needed to verify the functionality of `loadEntityTypes`, `applyEntityTypeCreated`, and `applyEntityTypeDeleted`. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the functionality of `applyEntityTypeCreated` and `applyEntityTypeDeleted`. · The diff introduces a new component for managing entity types, but some functions used in the script setup are not defined in the provided diff. Further review is needed to ensure all dependencies are correctly implemented. · The new component `EntityTypeSettings.vue` is added, but it relies on functions from `client/src/api/entityTypes.js` that are not included in the diff. These functions need to be defined or imported to ensure the component works correctly. · The diff adds new event handlers for entity type creation and deletion in the client, but it does not show how these handlers are implemented or where they are called. The `applyEntityTypeCreated` and `applyEntityTypeDeleted` functions need to be defined and used correctly. · No real defects found. The change adds the necessary functions and tests for entity type creation and deletion, but requires verification of the `broadcastTypeRenamed` function in the server code. · No real defects found. However, additional information is needed to ensure the correctness of the implementation. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `broadcastTypeRenamed` and `applyEntityTypeUpdate`. · The diff does not contain any real defects. However, there are some symbols that need to be reviewed for context. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `requireActor`. · The diff introduces new functions for listening to SSE frames and parsing them. It also updates the test setup to include these functionalities. However, it does not provide the implementation details of `addClient` and `removeClient`, which are required to fully understand the changes. · No real defects found in the provided diff. However, additional context is needed for symbols `createType`, `postEntity`, and `typeNamed` to ensure complete understanding.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 99117,
+    "completionTokens": 3246
+  },
+  "latencyMs": 372405
+}

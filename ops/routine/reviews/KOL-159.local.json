@@ -1,0 +1,337 @@
+{
+  "item": "KOL-159",
+  "repo": "kol-emet",
+  "mergeSha": "48ce907f9ea3957ae8071736138e19755d6f0578",
+  "completedAtUtc": "2026-11-28T04:10:53.449Z",
+  "completeRunId": "2026-11-28T03:34:50.861Z",
+  "reviewRunId": "2026-11-28T08:01:10.864Z",
+  "reviewedAtUtc": "2026-11-28T08:33:01.155Z",
+  "model": "qwen2.5-coder:14b",
+  "promptVersion": "v6",
+  "diffBytes": 111817,
+  "contextFiles": 12,
+  "excluded": [],
+  "chunks": [
+    {
+      "files": [
+        "client/src/api/relationshipTypes.js"
+      ],
+      "part": null,
+      "bytes": 4561,
+      "contextBytes": 0,
+      "promptTokens": 2722,
+      "completionTokens": 71,
+      "latencyMs": 10961,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/LabelSuggestInput.vue"
+      ],
+      "part": null,
+      "bytes": 8695,
+      "contextBytes": 0,
+      "promptTokens": 3935,
+      "completionTokens": 108,
+      "latencyMs": 13088,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipTypeSettings.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11330,
+      "contextBytes": 0,
+      "promptTokens": 4545,
+      "completionTokens": 76,
+      "latencyMs": 13750,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipTypeSettings.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4162,
+      "contextBytes": 6596,
+      "promptTokens": 4182,
+      "completionTokens": 353,
+      "latencyMs": 26538,
+      "findings": 0,
+      "needs": 9,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipTypeSettings.vue"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11326,
+      "contextBytes": 0,
+      "promptTokens": 4549,
+      "completionTokens": 169,
+      "latencyMs": 18467,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipTypeSettings.vue"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 7424,
+      "contextBytes": 0,
+      "promptTokens": 3845,
+      "completionTokens": 190,
+      "latencyMs": 17297,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipsSection.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11331,
+      "contextBytes": 0,
+      "promptTokens": 4572,
+      "completionTokens": 96,
+      "latencyMs": 14817,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipsSection.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 2642,
+      "contextBytes": 5016,
+      "promptTokens": 3439,
+      "completionTokens": 181,
+      "latencyMs": 15287,
+      "findings": 0,
+      "needs": 5,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "client/src/components/RelationshipsSection.vue",
+        "client/src/components/WikiLayout.test.js",
+        "client/src/components/WikiLayout.vue"
+      ],
+      "part": null,
+      "bytes": 11351,
+      "contextBytes": 0,
+      "promptTokens": 4377,
+      "completionTokens": 81,
+      "latencyMs": 13317,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "docs/api.md",
+        "docs/data-model.md"
+      ],
+      "part": null,
+      "bytes": 4507,
+      "contextBytes": 6280,
+      "promptTokens": 4217,
+      "completionTokens": 115,
+      "latencyMs": 14618,
+      "findings": 0,
+      "needs": 2,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "kol_emet_spec.md"
+      ],
+      "part": null,
+      "bytes": 10186,
+      "contextBytes": 0,
+      "promptTokens": 3857,
+      "completionTokens": 85,
+      "latencyMs": 12021,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/src/routes/relationshipTypes.js"
+      ],
+      "part": null,
+      "bytes": 8975,
+      "contextBytes": 0,
+      "promptTokens": 3922,
+      "completionTokens": 68,
+      "latencyMs": 11275,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/relationshipTypes.test.js"
+      ],
+      "part": {
+        "index": 1,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 11378,
+      "contextBytes": 0,
+      "promptTokens": 4466,
+      "completionTokens": 95,
+      "latencyMs": 14315,
+      "findings": 0,
+      "needs": 1,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    },
+    {
+      "files": [
+        "server/tests/http/relationshipTypes.test.js"
+      ],
+      "part": {
+        "index": 2,
+        "total": 2,
+        "oversized": false
+      },
+      "bytes": 4941,
+      "contextBytes": 6455,
+      "promptTokens": 4440,
+      "completionTokens": 173,
+      "latencyMs": 18391,
+      "findings": 0,
+      "needs": 4,
+      "critiqued": 0,
+      "dropped": 0,
+      "triaged": true,
+      "retry": false,
+      "error": null
+    }
+  ],
+  "findings": [],
+  "triage": {
+    "auth": {
+      "touched": true,
+      "evidence": "client/src/components/RelationshipTypeSettings.test.js:240"
+    },
+    "secrets": {
+      "touched": false,
+      "evidence": null
+    },
+    "money": {
+      "touched": false,
+      "evidence": null
+    },
+    "destructive": {
+      "touched": true,
+      "evidence": "client/src/components/RelationshipTypeSettings.test.js:120"
+    },
+    "externalApi": {
+      "touched": true,
+      "evidence": "client/src/components/RelationshipsSection.test.js:103"
+    },
+    "release": {
+      "touched": false,
+      "evidence": null
+    }
+  },
+  "summary": "No real defects found in the provided diff. However, additional information is needed to verify the implementation of `sseClientId`. · The new LabelSuggestInput component is introduced, but it needs to be integrated into the RelationshipsSection.vue and WikiLayout.vue files for it to be used. · No real defects found in the provided diff. However, additional information about the `RelationshipTypeSettings` component is needed to ensure complete understanding. · The diff introduces a new test file for the RelationshipTypeSettings component, but it relies on several symbols and functions that are not defined in the provided context. These include `button`, `itemFor`, `flushPromises`, `open`, `calls`, `MARRIAGE`, `WIFE`, `CREW`, and `names`. To fully understand and verify the correctness of these tests, we need to see the definitions of these symbols. · The diff introduces a new component for managing relationship types, but it relies on several API functions that are not defined in the provided diff. These functions need to be reviewed to ensure they handle the expected data and errors correctly. · The diff introduces a new component for managing relationship types, but it relies on several symbols that are not defined in the provided diff. These symbols need to be checked for their existence and correct implementation. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the changes. · No real defects found in the provided diff. However, additional context is needed to fully understand and verify the functionality of the code. · No real defects found in the provided diff. However, additional information about the `LabelSuggestInput` component is needed to ensure proper integration and functionality. · The change introduces new functionality for managing relationship types, including client-side API calls and components. However, there are some missing pieces that need to be reviewed or implemented. · No real defects found in the provided diff. However, additional information is needed to verify the implementation of `requireWriteRole` in `client/src/components/RelationshipTypeSettings.vue`. · No real defects found. However, additional information is needed to verify the implementation of `RelationshipType` model. · The diff introduces a new test file for relationship types, but it does not include the implementation of the PUT endpoint. The needs list includes the PUT endpoint in `server/src/routes/relationshipTypes.js` to ensure that the tests can be fully verified. · No real defects found in the provided diff. The code appears to be adding tests for relationship type operations, including validation of scope and handling of duplicate names. However, some symbols used in the test file are not defined within the provided context or diff.",
+  "errors": [],
+  "usage": {
+    "promptTokens": 112302,
+    "completionTokens": 3717
+  },
+  "latencyMs": 427652
+}
