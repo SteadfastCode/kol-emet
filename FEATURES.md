@@ -62,43 +62,6 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [x] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen**
-  Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
-  "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
-  `?q=` fuzzy filter (`server/src/routes/entityTypes.js:263`), creates with an exact-name 409 and a near-duplicate
-  `warning` that still creates (`:284`), updates name, icon, colour and order with KOL-151's per-entity `ChangeLog`
-  cascade behind it (`:325`), and deletes with a 409 while anything names the type plus a second 409 that keeps a
-  workspace's last type (`:425`). `client/src/api/entityTypes.js` exports exactly one function — `getEntityTypes`
-  (`:21`) — and `useEntityTypes` reads it once per mount (`client/src/components/WikiLayout.vue:1507`). So a
-  workspace's vocabulary is whatever its template seeded, and a user who wants a vertical of their own, which is
-  the entire reason the hardcoded enum was dropped, can neither add a type, rename one, recolour a pill, reorder
-  them, nor remove one nothing uses. The only client that can change a type today is an MCP connector.
-  Build: the three missing verbs in `client/src/api/entityTypes.js`, and an `EntityTypeSettings.vue` beside
-  `TagSettings.vue` in the settings panel — rows of name, icon, colour swatch and order, an add form, inline
-  rename, delete — with every refusal shown where it happened rather than swallowed (KOL-150's rule): the in-use
-  409 names the entities still holding the type, the last-type 409 says why, and the create `warning` reads as a
-  warning beside a row that *was* created. Gated on `canWrite` (`WikiLayout.vue:820`). Plus the two frames the
-  screen needs and the routes do not send: create and delete broadcast nothing, where a rename emits
-  `entity-type:updated` (`broadcastTypeRenamed`, `server/src/routes/entityTypes.js:239`, called only from `:407`),
-  so a type added or removed in another tab leaves exactly the stale-pill failure KOL-151 closed for renames. Add
-  `entity-type:created` and `entity-type:deleted` on the same terms — workspace-scoped, writer excluded — and the
-  handlers beside `applyEntityTypeUpdate` (`client/src/composables/useEntityTypes.js:83`).
-  Files: `client/src/api/entityTypes.js`, new `client/src/components/EntityTypeSettings.vue`,
-  `client/src/components/WikiLayout.vue`, `client/src/composables/useEntityTypes.js`,
-  `client/src/composables/useEvents.js`, `server/src/routes/entityTypes.js`, new
-  `client/src/components/EntityTypeSettings.test.js`, `client/src/composables/useEntityTypes.test.js`,
-  `client/src/composables/useEvents.test.js`, `server/tests/http/entityTypes.test.js`, `docs/api.md` (the
-  `/entity-types` table and the `/events` frame list), the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a create emitting one `entity-type:created` and a delete one
-  `entity-type:deleted`, both workspace-scoped and excluding the writing client; no frame at all from a refused
-  write (409 duplicate name, 409 in use, 409 last type); and the rename frame unchanged. `cd client && yarn test
-  --run` with cases for: the list in `order` then name; an add posting the trimmed name and appending the row; a
-  rename refused 409 leaving the old name on screen with the server's sentence beside it; a delete refused while
-  in use naming the count; the near-duplicate `warning` rendered as a warning, not an error; the two frames adding
-  and removing a row with no refetch; and no write control for a viewer. `cd client && yarn build`.
-  Out of scope: a field schema per type (the roadmap keeps it as "an optional light field-schema later");
-  reassigning entities when a type is deleted (the 409 stands); drag-to-reorder, since the `order` number is
-  editable; icon artwork; and the `?q=` filter, which a registry this size does not need.
 
 - [ ] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody**
   `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
@@ -324,6 +287,43 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen** (routine 2026-11-27, b523f65)
+  Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
+  "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
+  `?q=` fuzzy filter (`server/src/routes/entityTypes.js:263`), creates with an exact-name 409 and a near-duplicate
+  `warning` that still creates (`:284`), updates name, icon, colour and order with KOL-151's per-entity `ChangeLog`
+  cascade behind it (`:325`), and deletes with a 409 while anything names the type plus a second 409 that keeps a
+  workspace's last type (`:425`). `client/src/api/entityTypes.js` exports exactly one function — `getEntityTypes`
+  (`:21`) — and `useEntityTypes` reads it once per mount (`client/src/components/WikiLayout.vue:1507`). So a
+  workspace's vocabulary is whatever its template seeded, and a user who wants a vertical of their own, which is
+  the entire reason the hardcoded enum was dropped, can neither add a type, rename one, recolour a pill, reorder
+  them, nor remove one nothing uses. The only client that can change a type today is an MCP connector.
+  Build: the three missing verbs in `client/src/api/entityTypes.js`, and an `EntityTypeSettings.vue` beside
+  `TagSettings.vue` in the settings panel — rows of name, icon, colour swatch and order, an add form, inline
+  rename, delete — with every refusal shown where it happened rather than swallowed (KOL-150's rule): the in-use
+  409 names the entities still holding the type, the last-type 409 says why, and the create `warning` reads as a
+  warning beside a row that *was* created. Gated on `canWrite` (`WikiLayout.vue:820`). Plus the two frames the
+  screen needs and the routes do not send: create and delete broadcast nothing, where a rename emits
+  `entity-type:updated` (`broadcastTypeRenamed`, `server/src/routes/entityTypes.js:239`, called only from `:407`),
+  so a type added or removed in another tab leaves exactly the stale-pill failure KOL-151 closed for renames. Add
+  `entity-type:created` and `entity-type:deleted` on the same terms — workspace-scoped, writer excluded — and the
+  handlers beside `applyEntityTypeUpdate` (`client/src/composables/useEntityTypes.js:83`).
+  Files: `client/src/api/entityTypes.js`, new `client/src/components/EntityTypeSettings.vue`,
+  `client/src/components/WikiLayout.vue`, `client/src/composables/useEntityTypes.js`,
+  `client/src/composables/useEvents.js`, `server/src/routes/entityTypes.js`, new
+  `client/src/components/EntityTypeSettings.test.js`, `client/src/composables/useEntityTypes.test.js`,
+  `client/src/composables/useEvents.test.js`, `server/tests/http/entityTypes.test.js`, `docs/api.md` (the
+  `/entity-types` table and the `/events` frame list), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a create emitting one `entity-type:created` and a delete one
+  `entity-type:deleted`, both workspace-scoped and excluding the writing client; no frame at all from a refused
+  write (409 duplicate name, 409 in use, 409 last type); and the rename frame unchanged. `cd client && yarn test
+  --run` with cases for: the list in `order` then name; an add posting the trimmed name and appending the row; a
+  rename refused 409 leaving the old name on screen with the server's sentence beside it; a delete refused while
+  in use naming the count; the near-duplicate `warning` rendered as a warning, not an error; the two frames adding
+  and removing a row with no refetch; and no write control for a viewer. `cd client && yarn build`.
+  Out of scope: a field schema per type (the roadmap keeps it as "an optional light field-schema later");
+  reassigning entities when a type is deleted (the 409 stands); drag-to-reorder, since the `order` number is
+  editable; icon artwork; and the `?q=` filter, which a registry this size does not need.
 - [x] **(KOL-155) Backlog audit: file new candidates under Proposed** (routine 2026-11-25, d665234)
   A standing upkeep item, last on purpose: it runs only when nothing above it is claimable. Candidate sources, in
   order: `docs/roadmap.md`, `docs/build-plan.md`, `docs/generator-v1-plan.md` "Remaining work", `docs/wishlist.md`,

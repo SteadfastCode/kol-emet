@@ -65,7 +65,7 @@
     "KOL-158": {
       "order": 4,
       "title": "Entity types have four verbs, a rename cascade, and no screen",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-158",
