@@ -66,7 +66,7 @@ registration, or removes a feature.
 
 ## Proposed
 
-- [ ] **(KOL-165) PUT /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can sile…**
+- [x] **(KOL-165) PUT /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can sile…**
   Found by the grader of KOL-159 (medium, server/src/routes/relationshipTypes.js:162). PUT
   /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can
   silently create two types with the same name in one workspace — exactly the `owns`/`Owns` drift
