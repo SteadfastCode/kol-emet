@@ -65,7 +65,7 @@
     "KOL-165": {
       "order": 4,
       "title": "PUT /relationship-types/:id has no exact-name check, so the new Settings screen's Rename can sile…",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-165",
