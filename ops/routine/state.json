@@ -65,7 +65,7 @@
     "KOL-159": {
       "order": 4,
       "title": "The relationship vocabulary is seeded, read by the generator, and offered to nobody",
-      "status": "claimed",
+      "status": "done",
       "attempts": 1,
       "cluster": null,
       "branch": "routine/item/KOL-159",

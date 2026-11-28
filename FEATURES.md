@@ -63,46 +63,6 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [x] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody**
-  `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
-  "These matter most: without them the relationship picker is empty and the core feature of the product looks
-  broken on first use." There is no picker. `/relationship-types` has all four verbs with a `?q=` fuzzy filter and
-  a near-duplicate warning (`server/src/routes/relationshipTypes.js:8`, `:32`, `:62`, `:85`) and **no client
-  caller at all**: there is no `client/src/api/relationshipTypes.js`, and the string `relationship-types` does not
-  appear anywhere under `client/src`. Every label is typed free-hand into one of six inputs that offer an example
-  placeholder and nothing else — the group label on an existing group (`RelationshipsSection.vue:14`) and on a new
-  one (`:295`), the two ends of a new relationship (`:285`, `:289`), a member added to a group (`:231`), and a
-  subgroup link (`:191`), all in `client/src/components/RelationshipsSection.vue`. So the Software Architecture template's
-  *depends-on*, *owned-by* and *calls* sit in the database where nobody can read them, and a graph accumulates
-  `owns`, `Owns` and `owned by` as three unrelated labels. The model is built for the picker that is missing:
-  `scope` ∈ `group` | `member` exists because "a relationship carries labels in two places, and they are different
-  vocabularies" (`server/src/models/RelationshipType.js:9-23`), and the generator already splits the two to name
-  its edges (`server/src/lib/generator.js:184-186`) — the vocabulary shapes generated output while the user who
-  owns it cannot see it.
-  Build: `client/src/api/relationshipTypes.js` with the four verbs, and the vocabulary offered where a label is
-  typed — a suggestion list on each of the six inputs, filtered by `scope` so a group label is never offered a
-  member role, reusing the tag-suggestion pattern already in `client/src/components/EntityEditor.vue:286`
-  (keyboard-navigable, dismissible, and a typed label that matches nothing still saves verbatim). Plus a settings
-  group to add, rename and delete a type, as `TagSettings.vue` is for tags, gated on `canWrite`. Two server gaps
-  the screen exposes: `POST` destructures only `{ name, sourceCategory, targetCategory }` (`:33`) and `PUT` the
-  same three (`:65-68`), so **no client can create or change a `group`-scoped type** — accept `scope` on both,
-  validated against the enum, with a 400 and no write for anything else.
-  Files: new `client/src/api/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.vue`,
-  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.vue`,
-  `server/src/routes/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.test.js`, new
-  `client/src/components/RelationshipsSection.test.js`, new `server/tests/http/relationshipTypes.test.js`,
-  `docs/api.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: `POST` accepting `scope: 'group'` and storing it; a scope
-  outside the enum refused 400 with nothing written; `PUT` moving a type's scope; the existing exact-name 409 and
-  the `warning` unchanged; and another workspace's type still 404 on `PUT` and `DELETE`. `cd client && yarn test
-  --run` with cases for: a group-label input offering only `group`-scoped names and a member input only
-  `member`-scoped ones; a label that matches nothing submitted as typed; the settings rows adding, renaming and
-  deleting; a refused write leaving the row and saying why; and no write control for a viewer. `cd client && yarn
-  build`.
-  Out of scope: narrowing suggestions by the pair's `sourceCategory`/`targetCategory` (the fields exist and the
-  filter is its own item); a rename cascading onto the labels already stored on groups and members, which needs
-  the audit vocabulary relationship writes do not have (KOL-149's own out-of-scope records why); inverse-name
-  pairs and directionality; and the generator's prompt, which already reads this collection.
 
 ## Proposed
 
@@ -287,6 +247,46 @@ registration, or removes a feature.
 
 ## Completed Items
 
+- [x] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody** (routine 2026-11-27, 48ce907)
+  `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
+  "These matter most: without them the relationship picker is empty and the core feature of the product looks
+  broken on first use." There is no picker. `/relationship-types` has all four verbs with a `?q=` fuzzy filter and
+  a near-duplicate warning (`server/src/routes/relationshipTypes.js:8`, `:32`, `:62`, `:85`) and **no client
+  caller at all**: there is no `client/src/api/relationshipTypes.js`, and the string `relationship-types` does not
+  appear anywhere under `client/src`. Every label is typed free-hand into one of six inputs that offer an example
+  placeholder and nothing else — the group label on an existing group (`RelationshipsSection.vue:14`) and on a new
+  one (`:295`), the two ends of a new relationship (`:285`, `:289`), a member added to a group (`:231`), and a
+  subgroup link (`:191`), all in `client/src/components/RelationshipsSection.vue`. So the Software Architecture template's
+  *depends-on*, *owned-by* and *calls* sit in the database where nobody can read them, and a graph accumulates
+  `owns`, `Owns` and `owned by` as three unrelated labels. The model is built for the picker that is missing:
+  `scope` ∈ `group` | `member` exists because "a relationship carries labels in two places, and they are different
+  vocabularies" (`server/src/models/RelationshipType.js:9-23`), and the generator already splits the two to name
+  its edges (`server/src/lib/generator.js:184-186`) — the vocabulary shapes generated output while the user who
+  owns it cannot see it.
+  Build: `client/src/api/relationshipTypes.js` with the four verbs, and the vocabulary offered where a label is
+  typed — a suggestion list on each of the six inputs, filtered by `scope` so a group label is never offered a
+  member role, reusing the tag-suggestion pattern already in `client/src/components/EntityEditor.vue:286`
+  (keyboard-navigable, dismissible, and a typed label that matches nothing still saves verbatim). Plus a settings
+  group to add, rename and delete a type, as `TagSettings.vue` is for tags, gated on `canWrite`. Two server gaps
+  the screen exposes: `POST` destructures only `{ name, sourceCategory, targetCategory }` (`:33`) and `PUT` the
+  same three (`:65-68`), so **no client can create or change a `group`-scoped type** — accept `scope` on both,
+  validated against the enum, with a 400 and no write for anything else.
+  Files: new `client/src/api/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.vue`,
+  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.vue`,
+  `server/src/routes/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.test.js`, new
+  `client/src/components/RelationshipsSection.test.js`, new `server/tests/http/relationshipTypes.test.js`,
+  `docs/api.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: `POST` accepting `scope: 'group'` and storing it; a scope
+  outside the enum refused 400 with nothing written; `PUT` moving a type's scope; the existing exact-name 409 and
+  the `warning` unchanged; and another workspace's type still 404 on `PUT` and `DELETE`. `cd client && yarn test
+  --run` with cases for: a group-label input offering only `group`-scoped names and a member input only
+  `member`-scoped ones; a label that matches nothing submitted as typed; the settings rows adding, renaming and
+  deleting; a refused write leaving the row and saying why; and no write control for a viewer. `cd client && yarn
+  build`.
+  Out of scope: narrowing suggestions by the pair's `sourceCategory`/`targetCategory` (the fields exist and the
+  filter is its own item); a rename cascading onto the labels already stored on groups and members, which needs
+  the audit vocabulary relationship writes do not have (KOL-149's own out-of-scope records why); inverse-name
+  pairs and directionality; and the generator's prompt, which already reads this collection.
 - [x] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen** (routine 2026-11-27, b523f65)
   Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
   "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
