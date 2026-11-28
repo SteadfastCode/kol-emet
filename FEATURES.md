@@ -62,11 +62,84 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
+- [ ] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen**
+  Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
+  "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
+  `?q=` fuzzy filter (`server/src/routes/entityTypes.js:263`), creates with an exact-name 409 and a near-duplicate
+  `warning` that still creates (`:284`), updates name, icon, colour and order with KOL-151's per-entity `ChangeLog`
+  cascade behind it (`:325`), and deletes with a 409 while anything names the type plus a second 409 that keeps a
+  workspace's last type (`:425`). `client/src/api/entityTypes.js` exports exactly one function — `getEntityTypes`
+  (`:21`) — and `useEntityTypes` reads it once per mount (`client/src/components/WikiLayout.vue:1507`). So a
+  workspace's vocabulary is whatever its template seeded, and a user who wants a vertical of their own, which is
+  the entire reason the hardcoded enum was dropped, can neither add a type, rename one, recolour a pill, reorder
+  them, nor remove one nothing uses. The only client that can change a type today is an MCP connector.
+  Build: the three missing verbs in `client/src/api/entityTypes.js`, and an `EntityTypeSettings.vue` beside
+  `TagSettings.vue` in the settings panel — rows of name, icon, colour swatch and order, an add form, inline
+  rename, delete — with every refusal shown where it happened rather than swallowed (KOL-150's rule): the in-use
+  409 names the entities still holding the type, the last-type 409 says why, and the create `warning` reads as a
+  warning beside a row that *was* created. Gated on `canWrite` (`WikiLayout.vue:820`). Plus the two frames the
+  screen needs and the routes do not send: create and delete broadcast nothing, where a rename emits
+  `entity-type:updated` (`broadcastTypeRenamed`, `server/src/routes/entityTypes.js:239`, called only from `:407`),
+  so a type added or removed in another tab leaves exactly the stale-pill failure KOL-151 closed for renames. Add
+  `entity-type:created` and `entity-type:deleted` on the same terms — workspace-scoped, writer excluded — and the
+  handlers beside `applyEntityTypeUpdate` (`client/src/composables/useEntityTypes.js:83`).
+  Files: `client/src/api/entityTypes.js`, new `client/src/components/EntityTypeSettings.vue`,
+  `client/src/components/WikiLayout.vue`, `client/src/composables/useEntityTypes.js`,
+  `client/src/composables/useEvents.js`, `server/src/routes/entityTypes.js`, new
+  `client/src/components/EntityTypeSettings.test.js`, `client/src/composables/useEntityTypes.test.js`,
+  `client/src/composables/useEvents.test.js`, `server/tests/http/entityTypes.test.js`, `docs/api.md` (the
+  `/entity-types` table and the `/events` frame list), the Decision Log.
+  Verify: `cd server && yarn test` with cases for: a create emitting one `entity-type:created` and a delete one
+  `entity-type:deleted`, both workspace-scoped and excluding the writing client; no frame at all from a refused
+  write (409 duplicate name, 409 in use, 409 last type); and the rename frame unchanged. `cd client && yarn test
+  --run` with cases for: the list in `order` then name; an add posting the trimmed name and appending the row; a
+  rename refused 409 leaving the old name on screen with the server's sentence beside it; a delete refused while
+  in use naming the count; the near-duplicate `warning` rendered as a warning, not an error; the two frames adding
+  and removing a row with no refetch; and no write control for a viewer. `cd client && yarn build`.
+  Out of scope: a field schema per type (the roadmap keeps it as "an optional light field-schema later");
+  reassigning entities when a type is deleted (the 409 stands); drag-to-reorder, since the `order` number is
+  editable; icon artwork; and the `?q=` filter, which a registry this size does not need.
 
-
-
-
-
+- [ ] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody**
+  `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
+  "These matter most: without them the relationship picker is empty and the core feature of the product looks
+  broken on first use." There is no picker. `/relationship-types` has all four verbs with a `?q=` fuzzy filter and
+  a near-duplicate warning (`server/src/routes/relationshipTypes.js:8`, `:32`, `:62`, `:85`) and **no client
+  caller at all**: there is no `client/src/api/relationshipTypes.js`, and the string `relationship-types` does not
+  appear anywhere under `client/src`. Every label is typed free-hand into one of six inputs that offer an example
+  placeholder and nothing else — the group label on an existing group (`RelationshipsSection.vue:14`) and on a new
+  one (`:295`), the two ends of a new relationship (`:285`, `:289`), a member added to a group (`:231`), and a
+  subgroup link (`:191`), all in `client/src/components/RelationshipsSection.vue`. So the Software Architecture template's
+  *depends-on*, *owned-by* and *calls* sit in the database where nobody can read them, and a graph accumulates
+  `owns`, `Owns` and `owned by` as three unrelated labels. The model is built for the picker that is missing:
+  `scope` ∈ `group` | `member` exists because "a relationship carries labels in two places, and they are different
+  vocabularies" (`server/src/models/RelationshipType.js:9-23`), and the generator already splits the two to name
+  its edges (`server/src/lib/generator.js:184-186`) — the vocabulary shapes generated output while the user who
+  owns it cannot see it.
+  Build: `client/src/api/relationshipTypes.js` with the four verbs, and the vocabulary offered where a label is
+  typed — a suggestion list on each of the six inputs, filtered by `scope` so a group label is never offered a
+  member role, reusing the tag-suggestion pattern already in `client/src/components/EntityEditor.vue:286`
+  (keyboard-navigable, dismissible, and a typed label that matches nothing still saves verbatim). Plus a settings
+  group to add, rename and delete a type, as `TagSettings.vue` is for tags, gated on `canWrite`. Two server gaps
+  the screen exposes: `POST` destructures only `{ name, sourceCategory, targetCategory }` (`:33`) and `PUT` the
+  same three (`:65-68`), so **no client can create or change a `group`-scoped type** — accept `scope` on both,
+  validated against the enum, with a 400 and no write for anything else.
+  Files: new `client/src/api/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.vue`,
+  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.vue`,
+  `server/src/routes/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.test.js`, new
+  `client/src/components/RelationshipsSection.test.js`, new `server/tests/http/relationshipTypes.test.js`,
+  `docs/api.md`, the Decision Log.
+  Verify: `cd server && yarn test` with cases for: `POST` accepting `scope: 'group'` and storing it; a scope
+  outside the enum refused 400 with nothing written; `PUT` moving a type's scope; the existing exact-name 409 and
+  the `warning` unchanged; and another workspace's type still 404 on `PUT` and `DELETE`. `cd client && yarn test
+  --run` with cases for: a group-label input offering only `group`-scoped names and a member input only
+  `member`-scoped ones; a label that matches nothing submitted as typed; the settings rows adding, renaming and
+  deleting; a refused write leaving the row and saying why; and no write control for a viewer. `cd client && yarn
+  build`.
+  Out of scope: narrowing suggestions by the pair's `sourceCategory`/`targetCategory` (the fields exist and the
+  filter is its own item); a rename cascading onto the labels already stored on groups and members, which needs
+  the audit vocabulary relationship writes do not have (KOL-149's own out-of-scope records why); inverse-name
+  pairs and directionality; and the generator's prompt, which already reads this collection.
 
 ## Proposed
 
@@ -113,85 +186,6 @@ registration, or removes a feature.
   `cd client && yarn build`.
   Out of scope: shipping, packaging or pulling models for Ollama; a per-workspace default provider (it is per request
   today); the Responses-API/MCP relay path (Ollama advertises no `responsesApi`); and any change to what `steadfast` is.
-
-- [ ] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen** [proposed]
-  Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
-  "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
-  `?q=` fuzzy filter (`server/src/routes/entityTypes.js:263`), creates with an exact-name 409 and a near-duplicate
-  `warning` that still creates (`:284`), updates name, icon, colour and order with KOL-151's per-entity `ChangeLog`
-  cascade behind it (`:325`), and deletes with a 409 while anything names the type plus a second 409 that keeps a
-  workspace's last type (`:425`). `client/src/api/entityTypes.js` exports exactly one function — `getEntityTypes`
-  (`:21`) — and `useEntityTypes` reads it once per mount (`client/src/components/WikiLayout.vue:1507`). So a
-  workspace's vocabulary is whatever its template seeded, and a user who wants a vertical of their own, which is
-  the entire reason the hardcoded enum was dropped, can neither add a type, rename one, recolour a pill, reorder
-  them, nor remove one nothing uses. The only client that can change a type today is an MCP connector.
-  Build: the three missing verbs in `client/src/api/entityTypes.js`, and an `EntityTypeSettings.vue` beside
-  `TagSettings.vue` in the settings panel — rows of name, icon, colour swatch and order, an add form, inline
-  rename, delete — with every refusal shown where it happened rather than swallowed (KOL-150's rule): the in-use
-  409 names the entities still holding the type, the last-type 409 says why, and the create `warning` reads as a
-  warning beside a row that *was* created. Gated on `canWrite` (`WikiLayout.vue:820`). Plus the two frames the
-  screen needs and the routes do not send: create and delete broadcast nothing, where a rename emits
-  `entity-type:updated` (`broadcastTypeRenamed`, `server/src/routes/entityTypes.js:239`, called only from `:407`),
-  so a type added or removed in another tab leaves exactly the stale-pill failure KOL-151 closed for renames. Add
-  `entity-type:created` and `entity-type:deleted` on the same terms — workspace-scoped, writer excluded — and the
-  handlers beside `applyEntityTypeUpdate` (`client/src/composables/useEntityTypes.js:83`).
-  Files: `client/src/api/entityTypes.js`, new `client/src/components/EntityTypeSettings.vue`,
-  `client/src/components/WikiLayout.vue`, `client/src/composables/useEntityTypes.js`,
-  `client/src/composables/useEvents.js`, `server/src/routes/entityTypes.js`, new
-  `client/src/components/EntityTypeSettings.test.js`, `client/src/composables/useEntityTypes.test.js`,
-  `client/src/composables/useEvents.test.js`, `server/tests/http/entityTypes.test.js`, `docs/api.md` (the
-  `/entity-types` table and the `/events` frame list), the Decision Log.
-  Verify: `cd server && yarn test` with cases for: a create emitting one `entity-type:created` and a delete one
-  `entity-type:deleted`, both workspace-scoped and excluding the writing client; no frame at all from a refused
-  write (409 duplicate name, 409 in use, 409 last type); and the rename frame unchanged. `cd client && yarn test
-  --run` with cases for: the list in `order` then name; an add posting the trimmed name and appending the row; a
-  rename refused 409 leaving the old name on screen with the server's sentence beside it; a delete refused while
-  in use naming the count; the near-duplicate `warning` rendered as a warning, not an error; the two frames adding
-  and removing a row with no refetch; and no write control for a viewer. `cd client && yarn build`.
-  Out of scope: a field schema per type (the roadmap keeps it as "an optional light field-schema later");
-  reassigning entities when a type is deleted (the 409 stands); drag-to-reorder, since the `order` number is
-  editable; icon artwork; and the `?q=` filter, which a registry this size does not need.
-
-- [ ] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody** [proposed]
-  `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
-  "These matter most: without them the relationship picker is empty and the core feature of the product looks
-  broken on first use." There is no picker. `/relationship-types` has all four verbs with a `?q=` fuzzy filter and
-  a near-duplicate warning (`server/src/routes/relationshipTypes.js:8`, `:32`, `:62`, `:85`) and **no client
-  caller at all**: there is no `client/src/api/relationshipTypes.js`, and the string `relationship-types` does not
-  appear anywhere under `client/src`. Every label is typed free-hand into one of six inputs that offer an example
-  placeholder and nothing else — the group label on an existing group (`RelationshipsSection.vue:14`) and on a new
-  one (`:295`), the two ends of a new relationship (`:285`, `:289`), a member added to a group (`:231`), and a
-  subgroup link (`:191`), all in `client/src/components/RelationshipsSection.vue`. So the Software Architecture template's
-  *depends-on*, *owned-by* and *calls* sit in the database where nobody can read them, and a graph accumulates
-  `owns`, `Owns` and `owned by` as three unrelated labels. The model is built for the picker that is missing:
-  `scope` ∈ `group` | `member` exists because "a relationship carries labels in two places, and they are different
-  vocabularies" (`server/src/models/RelationshipType.js:9-23`), and the generator already splits the two to name
-  its edges (`server/src/lib/generator.js:184-186`) — the vocabulary shapes generated output while the user who
-  owns it cannot see it.
-  Build: `client/src/api/relationshipTypes.js` with the four verbs, and the vocabulary offered where a label is
-  typed — a suggestion list on each of the six inputs, filtered by `scope` so a group label is never offered a
-  member role, reusing the tag-suggestion pattern already in `client/src/components/EntityEditor.vue:286`
-  (keyboard-navigable, dismissible, and a typed label that matches nothing still saves verbatim). Plus a settings
-  group to add, rename and delete a type, as `TagSettings.vue` is for tags, gated on `canWrite`. Two server gaps
-  the screen exposes: `POST` destructures only `{ name, sourceCategory, targetCategory }` (`:33`) and `PUT` the
-  same three (`:65-68`), so **no client can create or change a `group`-scoped type** — accept `scope` on both,
-  validated against the enum, with a 400 and no write for anything else.
-  Files: new `client/src/api/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.vue`,
-  `client/src/components/RelationshipsSection.vue`, `client/src/components/WikiLayout.vue`,
-  `server/src/routes/relationshipTypes.js`, new `client/src/components/RelationshipTypeSettings.test.js`, new
-  `client/src/components/RelationshipsSection.test.js`, new `server/tests/http/relationshipTypes.test.js`,
-  `docs/api.md`, the Decision Log.
-  Verify: `cd server && yarn test` with cases for: `POST` accepting `scope: 'group'` and storing it; a scope
-  outside the enum refused 400 with nothing written; `PUT` moving a type's scope; the existing exact-name 409 and
-  the `warning` unchanged; and another workspace's type still 404 on `PUT` and `DELETE`. `cd client && yarn test
-  --run` with cases for: a group-label input offering only `group`-scoped names and a member input only
-  `member`-scoped ones; a label that matches nothing submitted as typed; the settings rows adding, renaming and
-  deleting; a refused write leaving the row and saying why; and no write control for a viewer. `cd client && yarn
-  build`.
-  Out of scope: narrowing suggestions by the pair's `sourceCategory`/`targetCategory` (the fields exist and the
-  filter is its own item); a rename cascading onto the labels already stored on groups and members, which needs
-  the audit vocabulary relationship writes do not have (KOL-149's own out-of-scope records why); inverse-name
-  pairs and directionality; and the generator's prompt, which already reads this collection.
 
 - [ ] **(KOL-160) The generator promises a draft list and a way back into a draft; neither exists** [proposed]
   The generating screen tells the user "Closing this panel won't cancel it — the draft will be waiting in your
