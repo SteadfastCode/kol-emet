@@ -21,7 +21,14 @@
  * `client/src/components/RelationshipsSection.vue`, a type in the wrong scope
  * is a type offered in the wrong place.
  *
- * Five properties:
+ * KOL-165 then closed the half of that gap the same diff opened: `PUT` had
+ * **no exact-name check at all**, so the new settings screen's Rename could put
+ * a second "owned by" into a workspace that already had one — the `owns`/`Owns`
+ * drift the vocabulary exists to prevent, arriving through the one screen built
+ * to manage it, while `POST` refused the same name with a 409 and `docs/api.md`
+ * claimed `PUT` applied the "same checks as `POST`".
+ *
+ * Six properties:
  *
  *   - `POST` **stores** the scope it was given, in the response *and* in the
  *     collection, and a body with no scope still gets the 'member' default.
@@ -31,18 +38,28 @@
  *     `runValidators`, which would answer 500 for a caller's mistake.
  *   - `PUT` **moves a type between scopes**, which is the write that repairs
  *     everything created before KOL-159.
- *   - The two rules this item deliberately left alone still hold: the
- *     exact-name 409 is **across scopes** (a workspace cannot hold "Owner" as
- *     both a group label and a member role) and carries `existing`, and a
- *     near-duplicate name still **creates** with a `warning` beside it.
+ *   - The two rules KOL-159 deliberately left alone still hold: the exact-name
+ *     409 is **across scopes** (a workspace cannot hold "Owner" as both a group
+ *     label and a member role) and carries `existing`, and a near-duplicate
+ *     name still **creates** with a `warning` beside it.
+ *   - A **rename** is refused by that same exact-name 409 (KOL-165), across
+ *     scopes and case-insensitively, writing nothing — not the name, and not a
+ *     scope sent in the same body. It excludes the row being renamed, so a
+ *     change of case alone on its own name still saves; it is exact, so a
+ *     near-duplicate rename still saves; a blank or non-string name is the same
+ *     `400 Name is required` `POST` gives; and a foreign id is still 404 even
+ *     when the name sent with it clashes in the caller's *own* workspace.
  *   - Another workspace's type is **404 on PUT and on DELETE**, and is still
  *     there afterwards.
  *
  * Falsification: drop `readScope` from `POST` and the first group fails with
  * every type on 'member'; drop it from `PUT` and the scope never moves; return
  * the 400 after the write and the "nothing written" assertions fail; make the
- * 409 per-scope and the cross-scope case fails; drop `workspaceId` from either
- * `:id` filter and the cross-tenant group answers 200.
+ * 409 per-scope and the cross-scope cases fail; drop the clash check from `PUT`
+ * and the whole KOL-165 group answers 200; compare the whole workspace instead
+ * of excluding the row being renamed and the case-only rename fails; use
+ * `findSimilar` for it and the near-duplicate rename fails; read the row after
+ * the clash check instead of before and the foreign-id case answers 409.
  *
  * ─── Tiered debug logging ────────────────────────────────────────────────────
  * TEST_RELATIONSHIP_TYPES_LOG_LEVEL = off | light | normal | verbose (default light)
@@ -265,6 +282,95 @@ describe('what KOL-159 left exactly as it was', () => {
     assert.match(near.body.warning, /Similar types exist: .*Navigator of/);
     assert.equal(near.body.scope, 'group', 'the warning does not cost it the scope it asked for');
     assert.ok(await stored(near.body._id), 'the type was created — the warning is a warning');
+  });
+});
+
+describe('a rename into a name the workspace already holds (KOL-165)', () => {
+  test('is 409 with the row that holds it, and writes nothing', async () => {
+    const held = await createType(alice, { name: 'Cartographer of', scope: 'member' });
+    const renaming = await createType(alice, { name: 'Dockmaster of', scope: 'member' });
+
+    // Case-insensitive, like POST's: "owns" and "Owns" are the same word to a
+    // vocabulary whose whole job is to stop a workspace collecting both.
+    const refused = probed(alice, `PUT /relationship-types/${renaming._id} name "cartographer of"`,
+      await alice.agent.put(`/relationship-types/${renaming._id}`).send({ name: 'cartographer of' }));
+
+    assert.equal(refused.status, 409);
+    assert.equal(refused.body.error, 'Relationship type already exists');
+    assert.equal(refused.body.existing.name, 'Cartographer of', 'the 409 names the row that holds the name');
+    assert.equal(String(refused.body.existing._id), String(held._id));
+
+    const after = await stored(renaming._id);
+    assert.equal(after.name, 'Dockmaster of', 'the refused rename is not written');
+    assert.equal((await stored(held._id)).name, 'Cartographer of', 'and the row that holds the name is untouched');
+  });
+
+  test('is across scopes, and the scope in the same body is not written either', async () => {
+    await createType(alice, { name: 'Guild charter', scope: 'group' });
+    const member = await createType(alice, { name: 'Cooper of', scope: 'member' });
+
+    // One workspace cannot hold a name as both a group label and a member role,
+    // so a rename cannot reach a name by changing scope in the same breath.
+    const refused = probed(alice, `PUT /relationship-types/${member._id} name "guild charter" scope group`,
+      await alice.agent.put(`/relationship-types/${member._id}`).send({ name: 'guild charter', scope: 'group' }));
+
+    assert.equal(refused.status, 409);
+    assert.equal(refused.body.existing.scope, 'group');
+
+    const after = await stored(member._id);
+    assert.deepEqual([after.name, after.scope], ['Cooper of', 'member'],
+      'a refused rename writes neither the name nor the scope sent with it');
+  });
+
+  test('excludes the row being renamed, so a change of case alone on its own name saves', async () => {
+    const own = await createType(alice, { name: 'Lamplighter of', scope: 'member' });
+
+    const saved = probed(alice, `PUT /relationship-types/${own._id} name "lamplighter OF"`,
+      await alice.agent.put(`/relationship-types/${own._id}`).send({ name: 'lamplighter OF' }));
+
+    assert.equal(saved.status, 200, 'a row may not clash with itself');
+    assert.equal(saved.body.name, 'lamplighter OF');
+    assert.equal((await stored(own._id)).name, 'lamplighter OF');
+  });
+
+  test('is exact, so a near-duplicate rename still saves', async () => {
+    await createType(alice, { name: 'Beekeeper of', scope: 'member' });
+    const renaming = await createType(alice, { name: 'Apiarist of', scope: 'member' });
+
+    // The near-duplicate rule is a warning on POST and the check here is the
+    // exact one: a vocabulary that refused every similar rename could not be
+    // corrected a letter at a time.
+    const saved = await alice.agent.put(`/relationship-types/${renaming._id}`).send({ name: 'Beekeper of' });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal((await stored(renaming._id)).name, 'Beekeper of');
+  });
+
+  test('a blank or non-string name is 400, and writes nothing', async () => {
+    const type = await createType(alice, { name: 'Ropemaker of', scope: 'group' });
+
+    for (const name of ['   ', '', null, 42]) {
+      const refused = probed(alice, `PUT /relationship-types/${type._id} name ${JSON.stringify(name)}`,
+        await alice.agent.put(`/relationship-types/${type._id}`).send({ name, scope: 'member' }));
+
+      assert.equal(refused.status, 400, `name ${JSON.stringify(name)} must be a 400, never a 500`);
+      assert.equal(refused.body.error, 'Name is required');
+      const after = await stored(type._id);
+      assert.deepEqual([after.name, after.scope], ['Ropemaker of', 'group'],
+        'the refused body writes neither the name nor the scope sent with it');
+    }
+  });
+
+  test("a foreign id is still 404, even when the name clashes in the caller's own workspace", async () => {
+    // The row is read before any name is compared: a 409 for an id bob does not
+    // own would answer a rename of a row that is not there to rename.
+    await createType(bob, { name: 'Shared word', scope: 'member' });
+
+    const refused = probed(bob, `PUT /relationship-types/${aliceSecret._id} name "Shared word"`,
+      await bob.agent.put(`/relationship-types/${aliceSecret._id}`).send({ name: 'Shared word' }));
+
+    assert.equal(refused.status, 404);
+    assert.equal(refused.body.error, 'Not found');
+    assert.equal((await stored(aliceSecret._id)).name, 'Sworn enemy of');
   });
 });
 

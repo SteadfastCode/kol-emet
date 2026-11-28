@@ -22,11 +22,28 @@ import { similarity, findSimilar } from '../lib/similarity.js';
  * enum is the whole contract here, and a mongoose ValidationError would answer
  * 500 for what is a caller's mistake.
  *
- * Unchanged on purpose: the exact-name 409 is **across scopes**, so one
- * workspace cannot hold "Owner" as both a group label and a member role; and
- * the near-duplicate `findSimilar` warning still creates the type. Both are
- * what `routes/entityTypes.js` does one route over, and KOL-159 left them as
- * they were.
+ * The exact-name 409 is **across scopes**, so one workspace cannot hold "Owner"
+ * as both a group label and a member role; and the near-duplicate `findSimilar`
+ * warning still creates the type. Both are what `routes/entityTypes.js` does
+ * one route over.
+ *
+ * **`PUT` runs that same exact-name check (KOL-165).** Until then only `POST`
+ * did: `PUT` built an `update` and called `findOneAndUpdate`, so a rename could
+ * put a second "owned by" into a workspace that already had one — the
+ * `owns`/`Owns` drift this vocabulary exists to prevent, arriving through the
+ * one screen built to manage it, and leaving two rows offering the same word
+ * with no way to tell which of them the next rename moves. Three details, each
+ * matching `routes/entityTypes.js` one route over:
+ *   - the row is read **before** any name is compared, so a foreign or unknown
+ *     id is 404 and a 409 is never the answer for a row the caller does not own;
+ *   - the clash candidates **exclude the row being renamed**, so a change of
+ *     case alone on its own name is a rename and not a clash;
+ *   - a blank or non-string `name` is the same `400 Name is required` `POST`
+ *     gives, rather than a `ValidationError` the error handler turns into a 400
+ *     (or, for a non-string, a `TypeError` and a 500).
+ * There is still **no unique index** behind either check — the model's compound
+ * index is deliberately non-unique, unlike `EntityType`'s — so two concurrent
+ * renames can both pass it. See the KOL-165 Decision Log entry.
  *
  * A foreign or malformed id is 404, never 403 or 400, as everywhere else:
  * nothing may confirm that an id exists in another workspace.
@@ -148,7 +165,7 @@ router.post('/', async (req, res, next) => {
 // PUT /relationship-types/:id
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, sourceCategory, targetCategory } = req.body;
+    const { name, sourceCategory, targetCategory } = req.body ?? {};
 
     // Before the update, so a bad scope writes nothing at all — not the scope,
     // and not a name or a category sent in the same body (KOL-159).
@@ -159,19 +176,59 @@ router.put('/:id', async (req, res, next) => {
     }
 
     const update = {};
-    if (name !== undefined) update.name = name.trim();
     if (scope.scope !== undefined) update.scope = scope.scope;
     if (sourceCategory !== undefined) update.sourceCategory = sourceCategory;
     if (targetCategory !== undefined) update.targetCategory = targetCategory;
 
+    // The same 400 POST gives for a name that is not a name, and for the same
+    // reason the scope 400 is here: `.trim()` on a non-string is a 500 for what
+    // is a caller's mistake, and a blank one is a ValidationError reported as
+    // the driver's rather than as the route's (KOL-165).
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        log('light', `PUT /relationship-types/${req.params.id} refused 400: Name is required (source: the request body's name, ${JSON.stringify(name)})`);
+        return res.status(400).json({ error: 'Name is required' });
+      }
+      update.name = name.trim();
+    }
+
+    // The row as it stands, read before anything is written: a foreign or
+    // unknown id is 404 before any name is compared, so the exact-name 409
+    // below can never be the answer for a row the caller does not own. A
+    // malformed id still casts here exactly as it did on the update it replaces.
+    const current = await RelationshipType.findOne({
+      _id: req.params.id,
+      workspaceId: req.workspaceId,
+    });
+    if (!current) {
+      log('light', `PUT /relationship-types/${req.params.id} refused 404: no such type in workspace ${req.workspaceId}`);
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    // Exact match check — across scopes, as on POST, and excluding the row
+    // being renamed so that a change of case alone on its own name is a rename
+    // and not a clash with itself (KOL-165).
+    if (update.name !== undefined) {
+      const others = await RelationshipType.find({
+        workspaceId: req.workspaceId,
+        _id: { $ne: current._id },
+      });
+      const clash = others.find(t => t.name.toLowerCase() === update.name.toLowerCase());
+      if (clash) {
+        log('light', `PUT /relationship-types/${current._id} "${current.name}" → "${update.name}" refused 409: "${clash.name}" (${clash.scope}) already holds the name (source: the request body's name)`);
+        return res.status(409).json({ error: 'Relationship type already exists', existing: clash });
+      }
+    }
+
     // runValidators so a category the workspace has no type for is refused
     // here as it is on create.
     const type = await RelationshipType.findOneAndUpdate(
-      { _id: req.params.id, workspaceId: req.workspaceId },
+      { _id: current._id, workspaceId: req.workspaceId },
       update,
       { new: true, runValidators: true }
     );
     if (!type) {
+      // Deleted between the read above and this write.
       log('light', `PUT /relationship-types/${req.params.id} refused 404: no such type in workspace ${req.workspaceId}`);
       return res.status(404).json({ error: 'Not found' });
     }
