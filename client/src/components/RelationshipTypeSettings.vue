@@ -143,7 +143,11 @@ import {
  *   cannot hold "Owner" as both a group label and a member role — so its
  *   sentence is the only thing that explains a refused rename, and it lands
  *   beside the row, which goes on showing its **stored** name and scope. A
- *   refused write keeps its editor open with what was typed (KOL-156).
+ *   refused write keeps its editor open with what was typed (KOL-156). The
+ *   server only learned to run that check on a *rename* in KOL-165: until then
+ *   `PUT /relationship-types/:id` had no exact-name check at all and this path
+ *   was unreachable, so Rename could quietly put a second "owned by" in a
+ *   workspace that already had one.
  *
  *   **The near-duplicate `warning` is a warning.** `POST /relationship-types`
  *   creates the type *and* says a similar name exists, which is the whole point

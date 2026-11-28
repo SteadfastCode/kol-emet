@@ -79,6 +79,15 @@ export const createRelationshipType = (type) =>
  * Updates any of `name`, `scope`, `sourceCategory` and `targetCategory` → the
  * updated row.
  *
+ * Refused the same way a create is (KOL-165): **409** when another type in the
+ * workspace already holds the name — case-insensitive, **in either scope**, and
+ * carrying that row as `existing` — which is what `RelationshipTypeSettings.vue`
+ * shows beside the row it refused to rename; 400 for a blank name or a `scope`
+ * outside `SCOPES`; 404 for an id this workspace does not own, answered before
+ * any name is compared. Nothing is written by any of them. A change of case
+ * alone on the row's own name is a rename, not a clash. The near-duplicate
+ * `warning` is a create-only thing: a rename is not warned about.
+ *
  * Nothing cascades: the labels already stored on groups and members are plain
  * strings and keep the old name (see the KOL-159 Decision Log entry — a cascade
  * needs an audit trail relationship writes do not have).
