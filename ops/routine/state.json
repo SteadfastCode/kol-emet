@@ -65,10 +65,10 @@
     "KOL-158": {
       "order": 4,
       "title": "Entity types have four verbs, a rename cascade, and no screen",
-      "status": "pending",
-      "attempts": 0,
+      "status": "claimed",
+      "attempts": 1,
       "cluster": null,
-      "branch": null,
+      "branch": "routine/item/KOL-158",
       "dependsOn": [],
       "needsHuman": false,
       "proposed": false,
@@ -76,8 +76,8 @@
       "distribute": null,
       "coldReview": false,
       "notBefore": null,
-      "claimedAtUtc": null,
-      "runId": null,
+      "claimedAtUtc": "2026-11-28T03:36:13.997Z",
+      "runId": "2026-11-28T03:34:50.861Z",
       "lastFail": null
     },
     "KOL-159": {

@@ -62,7 +62,7 @@ registration, or removes a feature.
   `node <orchestrator> lint kol-emet --worktree` exits 0 (the `<orchestrator>` path is the one this runbook names
   for `diff-policy`).
 
-- [ ] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen**
+- [x] **(KOL-158) Entity types have four verbs, a rename cascade, and no screen**
   Phase 6's headline — user-defined entity types per workspace, the change `docs/roadmap.md` calls the one that
   "unblocks every vertical" — is finished on the server and unreachable in a browser. `/entity-types` lists with a
   `?q=` fuzzy filter (`server/src/routes/entityTypes.js:263`), creates with an exact-name 409 and a near-duplicate
