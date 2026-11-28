@@ -503,6 +503,18 @@
           <p v-if="importError" class="settings-error" role="alert">{{ importError }}</p>
         </div>
         <div class="settings-group">
+          <div class="settings-group-title">Entity types</div>
+          <!-- The registry's only screen (KOL-158). Mounted only while Settings shows, like the
+               groups above, but it fetches nothing: it reads and patches the shared registry
+               `useEntityTypes` already holds, which is what repaints the pills behind Settings.
+               `changed` fires for a rename alone — the one write here that moves entities. -->
+          <EntityTypeSettings
+            v-if="settingsVisible"
+            :can-write="canWrite"
+            @changed="onEntityTypesChanged"
+          />
+        </div>
+        <div class="settings-group">
           <div class="settings-group-title">Tags</div>
           <!-- Counts come from the entity list already loaded here, not a route of their own;
                a rename or removal touches many entities, so the list is refetched after one. -->
@@ -583,6 +595,7 @@ import AccountDeletion from './AccountDeletion.vue';
 import PasskeySettings from './PasskeySettings.vue';
 import RecentlyDeleted from './RecentlyDeleted.vue';
 import TagSettings from './TagSettings.vue';
+import EntityTypeSettings from './EntityTypeSettings.vue';
 import {
   changePassword,
   changePasswordWithPasskey,
@@ -626,7 +639,9 @@ const {
 } = useFilters(entities, { search: searchEntities });
 const { breadcrumbs, startNavigation, pushCrumb, navigateToIndex } = useNavigation();
 const { addToast } = useToasts();
-const { loadEntityTypes, applyEntityTypeUpdate } = useEntityTypes();
+const {
+  loadEntityTypes, applyEntityTypeUpdate, applyEntityTypeCreated, applyEntityTypeDeleted,
+} = useEntityTypes();
 
 // Applying is the only point at which a draft reaches the graph, so this is
 // where the entity list has to be refetched.
@@ -708,6 +723,20 @@ function closeSettings() {
  */
 function onEntityRestored() {
   loadEntities('Settings → Recently deleted restore');
+}
+
+/**
+ * A type was renamed from the Entity types group (KOL-158). The group patches
+ * the shared registry itself, so the pills are already right; what is stale
+ * here is the entity list — a rename moves every entity's `category` on the
+ * server (KOL-151) — and a category filter standing on the old name, which
+ * would now match nothing. The same two repairs the `entity-type:updated`
+ * frame makes in another tab, which this tab is excluded from because it is
+ * the one that wrote.
+ */
+function onEntityTypesChanged({ from, to } = {}) {
+  loadEntities('Settings → Entity types renamed');
+  if (from && to && activeCat.value === from) setCat(to);
 }
 
 /**
@@ -1972,6 +2001,34 @@ useEvents({
       actorType:  actor?.type ?? 'system',
       message:    `renamed the "${from}" type to "${to}"${moved ? `, moving ${moved} entit${moved === 1 ? 'y' : 'ies'}` : ''}`,
       changeType: 'updated',
+    });
+  },
+
+  // The registry's other two writes (KOL-158), now that it has a screen. Each
+  // patches the shared list — the pills, the pickers and every category colour
+  // read it — and neither touches an entity: a create moves nothing, and a
+  // delete is refused while anything still names the type. The one thing a
+  // delete can leave behind is a filter standing on a pill that no longer
+  // exists, which would read as a workspace that lost its entities, so it goes
+  // back to All.
+  onEntityTypeCreated({ entityType, actor }) {
+    applyEntityTypeCreated(entityType, 'an entity-type:created frame');
+    addToast({
+      actorLabel: actor?.label ?? 'Entity types',
+      actorType:  actor?.type ?? 'system',
+      message:    `added the "${entityType?.name}" entity type`,
+      changeType: 'created',
+    });
+  },
+
+  onEntityTypeDeleted({ entityTypeId, entityType, actor }) {
+    applyEntityTypeDeleted(entityTypeId ?? entityType?._id, 'an entity-type:deleted frame');
+    if (entityType?.name && activeCat.value === entityType.name) setCat('All');
+    addToast({
+      actorLabel: actor?.label ?? 'Entity types',
+      actorType:  actor?.type ?? 'system',
+      message:    `removed the "${entityType?.name}" entity type`,
+      changeType: 'deleted',
     });
   },
 

@@ -43,6 +43,16 @@
  *   layout decides whether the panel on screen is affected, and every frame
  *   redraws the graph (components/WikiLayout.vue pins that half).
  *
+ *   **An added or removed entity type reaches this tab too** (KOL-158). KOL-151
+ *   left the registry's other two writes unbroadcast because neither can strand
+ *   a name a tab is filtering on — true, and beside the point once the registry
+ *   has a screen. `EntityTypeSettings.vue` makes a create and a delete ordinary
+ *   browser writes, so a tab that heard neither frame would offer a category
+ *   picker missing the option another tab just added and render a pill for a
+ *   type that is gone. `entity-type:created` and `entity-type:deleted` each have
+ *   to call their handler once with the whole row, and the delete with the id
+ *   that is gone.
+ *
  *   **A renamed entity type reaches this tab** (KOL-151). A type rename moves
  *   every entity that held the old name, and the per-entity `entity:updated`
  *   frames it also sends say the rows moved without ever saying where the *name*
@@ -56,7 +66,7 @@
  * Falsification: drop the two bulk-write `onFrame` registrations and the first
  * group fails; drop the three `question:*` ones and the open-question group
  * fails; drop the three `group:*` ones and the relationship group fails; drop
- * the `entity-type:updated` one and the entity-type group fails; read
+ * any of the three `entity-type:*` ones and an entity-type group fails; read
  * `es.readyState` instead of `e.data` on the error path and the stop cases
  * reconnect; keep the fixed 3000 ms and the backoff case fails; log `e.data` at
  * the light tier and the last case fails.
@@ -383,6 +393,82 @@ describe('a renamed entity type', () => {
 
     expect(logged.join('\n')).not.toContain('People');
     expect(logged.join('\n')).not.toContain('Characters');
+  });
+});
+
+describe('an added or removed entity type', () => {
+  // KOL-158. The registry's other two writes, unbroadcast until it had a screen:
+  // `EntityTypeSettings.vue` makes a create and a delete ordinary browser writes,
+  // and `useEntityTypes` loads the registry once on mount and nothing else
+  // fetches it — so a tab that heard neither frame would offer a category picker
+  // missing the option another tab just added and render a pill for a type that
+  // is gone, with only a reload to repair it.
+  const TYPE = {
+    _id: 't3',
+    name: 'Airships',
+    icon: '🎈',
+    color: { bg: '#111111', text: '#EEEEEE' },
+    order: 2,
+  };
+
+  it('reaches this tab through entity-type:created, once, with the whole row', () => {
+    const onEntityTypeCreated = vi.fn();
+    wrapper = connected({ onEntityTypeCreated });
+
+    latest().frame('entity-type:created', {
+      entityType: TYPE,
+      actor: { label: 'alice@example.test', type: 'user' },
+    });
+
+    expect(onEntityTypeCreated).toHaveBeenCalledTimes(1);
+    const payload = onEntityTypeCreated.mock.calls[0][0];
+    // The whole row, so the shared registry is patched rather than refetched —
+    // a new pill is painted and a picker gains its option from the frame alone.
+    expect(payload.entityType).toEqual(TYPE);
+    expect(payload.actor).toEqual({ label: 'alice@example.test', type: 'user' });
+  });
+
+  it('reaches this tab through entity-type:deleted, once, naming the id that is gone', () => {
+    const onEntityTypeDeleted = vi.fn();
+    wrapper = connected({ onEntityTypeDeleted });
+
+    latest().frame('entity-type:deleted', {
+      entityTypeId: 't3',
+      entityType: TYPE,
+      actor: { label: 'alice@example.test', type: 'user' },
+    });
+
+    expect(onEntityTypeDeleted).toHaveBeenCalledTimes(1);
+    const payload = onEntityTypeDeleted.mock.calls[0][0];
+    // The id is what the listener drops; the row is what it can say went, and
+    // its name is what a category filter standing on it is set to.
+    expect(payload.entityTypeId).toBe('t3');
+    expect(payload.entityType.name).toBe('Airships');
+  });
+
+  it('neither stands in for the other, nor for the rename frame', () => {
+    const onEntityTypeCreated = vi.fn();
+    const onEntityTypeUpdated = vi.fn();
+    const onEntityTypeDeleted = vi.fn();
+    wrapper = connected({ onEntityTypeCreated, onEntityTypeUpdated, onEntityTypeDeleted });
+
+    latest().frame('entity-type:created', { entityType: TYPE });
+    latest().frame('entity-type:updated', { entityType: TYPE, from: 'Airships', to: 'Dirigibles' });
+    latest().frame('entity-type:deleted', { entityTypeId: 't3', entityType: TYPE });
+
+    expect(onEntityTypeCreated).toHaveBeenCalledTimes(1);
+    expect(onEntityTypeUpdated).toHaveBeenCalledTimes(1);
+    expect(onEntityTypeDeleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries no payload at the default log tier', () => {
+    wrapper = connected({ onEntityTypeCreated: vi.fn(), onEntityTypeDeleted: vi.fn() });
+    logged = [];
+
+    latest().frame('entity-type:created', { entityType: TYPE });
+    latest().frame('entity-type:deleted', { entityTypeId: 't3', entityType: TYPE });
+
+    expect(logged.join('\n')).not.toContain('Airships');
   });
 });
 

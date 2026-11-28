@@ -326,11 +326,19 @@ The client and the MCP/chat category lists move onto the registry in later Phase
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/entity-types` | List the workspace's types, sorted by `order` then `name`. `?q=` fuzzy-filters by name. |
-| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. Any non-blank `name` (trimmed) is allowed, and entities can use it at once; a blank one is 400. 409 on an existing name (case-insensitive). A near-duplicate still creates, with a `warning`. `order` defaults to after the last type. |
+| POST | `/entity-types` | Create `{ name, icon?, color?: { bg, text }, order? }`. Any non-blank `name` (trimmed) is allowed, and entities can use it at once; a blank one is 400. 409 on an existing name (case-insensitive). A near-duplicate still creates, with a `warning`. `order` defaults to after the last type. Broadcasts [`entity-type:created`](#the-frames). |
 | PUT | `/entity-types/:id` | Update any of `name` (non-blank, trimmed), `icon`, `color` (either half), `order`. 409 if another type has the new name (case-insensitive). A rename, including a change of case alone, cascades: every entity `category` and relationship type `sourceCategory`/`targetCategory` in the workspace that held the old name takes the new one, and the response adds `relabelled: { entities, sourceCategories, targetCategories }`. **413** past `MAX_AFFECTED` moved entities (see below). The steps are ordered, not transactional; if the cascade fails the type keeps its new name and the answer is 500, and renaming it back repairs the data. |
-| DELETE | `/entity-types/:id` | Delete. 409 with the same counts while anything names the type, and 409 for the workspace's last type. |
+| DELETE | `/entity-types/:id` | Delete. 409 with the same counts while anything names the type, and 409 for the workspace's last type. Broadcasts [`entity-type:deleted`](#the-frames). |
 
-A foreign or malformed id is 404.
+A foreign or malformed id is 404. All three writes take `requireActor`, so every
+`entity-type:*` frame names who made the change.
+
+`client/src/components/EntityTypeSettings.vue` is the browser's caller for all four verbs
+(KOL-158) — the Entity types group in Settings. It reads the shared registry
+`client/src/composables/useEntityTypes.js` holds rather than fetching, patches that one copy from
+each response and each frame, and shows every refusal above beside the row it is about: the in-use
+409's counts, the last-type 409's sentence, and the create's near-duplicate `warning` as a warning,
+since that type *was* created. Writes are gated on the workspace role (see [Roles](#roles)).
 
 ### A rename leaves a trail, and it is bounded
 
@@ -1388,6 +1396,8 @@ non-empty workspace are each their own item.
 | `group:updated` | every `/relationship-groups` write that changes a group's own row — label, members, order, a member's label, a subgroup link | `{ group, entityIds }` | as above |
 | `group:deleted` | `DELETE /relationship-groups/:id`, and the member removal that leaves a group with fewer than 2 entity members | `{ groupId, group, entityIds }` | as above, or if the panel is showing that group |
 | `entity-type:updated` | the rename half of `PUT /entity-types/:id` | `{ entityType, from, to, relabelled, actor }` | patches its copy of the registry, and moves a category filter standing on `from` to `to` |
+| `entity-type:created` | `POST /entity-types` | `{ entityType, actor }` | adds the row to its copy of the registry |
+| `entity-type:deleted` | `DELETE /entity-types/:id` | `{ entityTypeId, entityType, actor }` | drops the row, and moves a category filter standing on it back to *All* |
 | `draft:applied` | `POST /drafts/:id/apply` | `{ draftId, applied, failed, blocked, skipped, actor }` | refetches the list |
 | `workspace:imported` | `POST /import` | `{ version, imported, actor }` | refetches the list |
 | `error` | the server, before it closes a stream | `{ error, limit? }` | see *Ending a stream* below |
@@ -1438,8 +1448,20 @@ nothing else ever fetched it, so this frame is the only thing that can tell it. 
 the **whole row** (`_id`, `name`, `icon`, `color`, `order`), so the client patches rather than
 refetches, and **both names**, because the old one is what the other tab has on screen. Sent for a
 rename only: an icon or colour edit moves no entity and changes no name, and `relabelled` is the
-same count the response carries. No frame for a create or a delete of a type yet — neither can
-strand a name a tab is filtering on.
+same count the response carries.
+
+`entity-type:created` and `entity-type:deleted` (KOL-158) are the same registry's other two writes.
+KOL-151 left them unbroadcast because neither can strand a name a tab is filtering on — true, and
+beside the point once the registry had a screen: `EntityTypeSettings.vue` makes a create and a
+delete ordinary browser writes, and a tab that heard neither would offer a category picker missing
+the option another tab just added and render a pill for a type that is gone, with only a reload to
+repair it. Each carries the **whole row** on the rename frame's terms, so all three patch that one
+list rather than refetching, and a delete carries `entityTypeId` beside the row the way
+`entity:deleted` and `group:deleted` do: the id is what a listener drops, and the row is what it can
+say went. Both are sent **after** the write, so none of the refusals — the duplicate name, the
+in-use 409, the last-type 409, the 413 — broadcasts anything at all. A metadata-only `PUT` (an icon,
+a colour, an `order`) still sends no frame: that is KOL-151's rule unchanged, and the gap it leaves
+is noted in the Decision Log.
 
 Not broadcast yet, and deliberately: the **MCP** relationship tools (`add_relationship`,
 `add_member_to_relationship`, `update_group_label`, `remove_relationship`,

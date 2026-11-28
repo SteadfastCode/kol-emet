@@ -23,13 +23,15 @@ export let sseClientId = null;
  *   `question:*` frames here (KOL-116), and the three `group:*` ones (KOL-149):
  *   an open question and a relationship group are each their own document on
  *   their own route, so nothing about either rides along with an entity's frame.
- *   `entity-type:updated` (KOL-151) is the same rule for the one write that
+ *   The three `entity-type:*` frames (KOL-151, KOL-158) are the same rule for the writes that
  *   changes what a *category name means*: a type rename moves every entity that
  *   held it, and the per-entity `entity:updated` frames say the rows moved
  *   without ever saying where the name went — so a tab that heard only those
  *   kept rendering the old pill, filtering on a name no entity had any more.
  *   `useEntityTypes` loads the registry once on mount and nothing else fetched
- *   it, so this frame is the only thing that can tell it.
+ *   it, so these frames are the only thing that can tell it — which is why the
+ *   create and the delete joined the rename here (KOL-158) the moment the
+ *   registry got a screen a user could add and remove types from.
  *
  *   **A frame the server wrote is a stop, not a retry.** An `EventSource`
  *   reports two unrelated things as `error`: a transport failure (no `data`),
@@ -132,6 +134,10 @@ export const STOP_REASONS = Object.freeze({
  * @param {(payload: object) => void} [handlers.onGroupDeleted]      `{ groupId, group, entityIds }`
  * @param {(payload: object) => void} [handlers.onEntityTypeUpdated] a type was renamed:
  *   `{ entityType, from, to, relabelled, actor }`
+ * @param {(payload: object) => void} [handlers.onEntityTypeCreated] a type was added:
+ *   `{ entityType, actor }`
+ * @param {(payload: object) => void} [handlers.onEntityTypeDeleted] a type was removed:
+ *   `{ entityTypeId, entityType, actor }`
  * @param {(ended: {reason: string, message: string, limit: number|null}) => void} [handlers.onStreamEnded]
  *   the server ended this stream for good; nothing will reconnect
  */
@@ -148,6 +154,8 @@ export function useEvents({
   onGroupUpdated,
   onGroupDeleted,
   onEntityTypeUpdated,
+  onEntityTypeCreated,
+  onEntityTypeDeleted,
   onStreamEnded,
 } = {}) {
   let es = null;
@@ -289,12 +297,25 @@ export function useEvents({
     onFrame('group:deleted', (p) => `group ${p.groupId}`,
       (p) => onGroupDeleted?.(p));
 
-    // Entity types (KOL-151). One frame for the rename cascade's own subject —
-    // the type — beside the per-entity `entity:updated` the same write sends.
-    // The old name is in the payload because that is what this tab has on
-    // screen: a pill, and possibly the category filter it is set to.
+    // Entity types (KOL-151, KOL-158). One frame for the rename cascade's own
+    // subject — the type — beside the per-entity `entity:updated` the same
+    // write sends. The old name is in the payload because that is what this tab
+    // has on screen: a pill, and possibly the category filter it is set to.
+    //
+    // The create and the delete are the same registry's other two writes
+    // (KOL-158). KOL-151 left them unbroadcast because neither can strand a
+    // name a tab is filtering on — true, and beside the point once the registry
+    // has a screen: `EntityTypeSettings.vue` makes both ordinary browser
+    // writes, and a tab that heard neither would offer a category picker
+    // missing an option and render a pill for a type that is gone, since
+    // `useEntityTypes` loads the registry once on mount. Each carries the whole
+    // row, so all three patch that one list rather than refetching it.
     onFrame('entity-type:updated', (p) => `entity type ${p.entityType?._id}, ${p.relabelled?.entities ?? 0} entity(ies) moved`,
       (p) => onEntityTypeUpdated?.(p));
+    onFrame('entity-type:created', (p) => `entity type ${p.entityType?._id}`,
+      (p) => onEntityTypeCreated?.(p));
+    onFrame('entity-type:deleted', (p) => `entity type ${p.entityTypeId}`,
+      (p) => onEntityTypeDeleted?.(p));
 
     socket.addEventListener('error', (e) => handleError(e, socket));
   }

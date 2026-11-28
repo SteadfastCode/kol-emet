@@ -59,6 +59,14 @@ import { broadcast } from '../lib/broadcaster.js';
  *     Relationship-type ends keep moving as they do today, with no entry of
  *     their own: that collection has no history anywhere (see
  *     `lib/relationshipEvents.js` for the same note one collection over).
+ *   - **A create and a delete each send their own frame** (KOL-158), on the
+ *     rename frame's terms: the whole row, workspace-scoped, and excluding the
+ *     tab that asked. KOL-151 left these out because neither can strand a name
+ *     a tab is filtering on — true, and beside the point once the registry has
+ *     a *screen* (`client/src/components/EntityTypeSettings.vue`): a tab loads
+ *     the registry on mount and nothing else fetches it, so a type added or
+ *     removed elsewhere leaves a picker missing an option and a pill for a type
+ *     that is gone. Sent after the write, so every refusal below sends nothing.
  *   - A type that anything in the workspace still names — an entity's
  *     category, or a relationship type's source/target category — cannot be
  *     deleted (409, with the counts): deleting would strand those names.
@@ -78,8 +86,8 @@ import { broadcast } from '../lib/broadcaster.js';
  *   off     — nothing
  *   light   — every rename cascade: who renamed what, and what it relabelled,
  *             or the step it failed at; every rename refused over the bound,
- *             with the count and the limit; the `entity-type:updated` frame and
- *             the client excluded from it; and any entity left on the old name
+ *             with the count and the limit; every `entity-type:*` frame and the
+ *             client excluded from it; and any entity left on the old name
  *             by a write that landed mid-cascade
  *   normal  — light, plus each create and delete, and the per-entity changelog
  *             pass with its failures
@@ -226,6 +234,21 @@ async function logEach(before, actor, clientId, source) {
 }
 
 /**
+ * A registry row as every frame below carries it: the whole of what the client
+ * renders a pill, a picker entry and a settings row from, so a listening tab
+ * patches its copy of the registry rather than refetching it.
+ */
+function typeRow(type) {
+  return {
+    _id: String(type._id),
+    name: type.name,
+    icon: type.icon ?? null,
+    color: { bg: type.color?.bg ?? null, text: type.color?.text ?? null },
+    order: type.order,
+  };
+}
+
+/**
  * The one frame a rename sends for the type itself: enough for a listening tab
  * to repaint its pills, its filters and its category pickers from the payload
  * alone. `from` and `to` are both there because the *old* name is what a tab
@@ -238,19 +261,53 @@ async function logEach(before, actor, clientId, source) {
  */
 function broadcastTypeRenamed(type, { workspaceId, from, to, relabelled, actor, excludeClientId, source }) {
   broadcast('entity-type:updated', {
-    entityType: {
-      _id: String(type._id),
-      name: type.name,
-      icon: type.icon ?? null,
-      color: { bg: type.color?.bg ?? null, text: type.color?.text ?? null },
-      order: type.order,
-    },
+    entityType: typeRow(type),
     from,
     to,
     relabelled,
     actor: { label: actor.label, type: actor.type },
   }, { workspaceId, excludeClientId });
   log('light', `entity-type:updated ${type._id} "${from}" → "${to}" → workspace ${workspaceId}${excludeClientId ? `, excluding client ${excludeClientId}` : ' (no client excluded)'} (source: ${source})`);
+}
+
+/**
+ * The other two frames of the registry's own vocabulary (KOL-158).
+ *
+ * KOL-151 added the rename frame and left these out, on the reasoning that
+ * "neither can strand a name a tab is filtering on" — true of the name, and
+ * beside the point once a *screen* exists. Until KOL-158 the only client that
+ * could add or remove a type was an MCP connector, so the registry a tab had
+ * loaded on mount could only ever go stale by a rename. `EntityTypeSettings`
+ * makes a create and a delete ordinary browser writes, and without these two
+ * frames they leave exactly the failure the rename frame closed: the other tab
+ * renders a pill for a type that is gone and offers a picker that is missing
+ * the one just added, and only a reload repairs it — the registry is loaded
+ * once, on mount (`client/src/composables/useEntityTypes.js`).
+ *
+ * On the rename frame's terms exactly, because it is the same list being
+ * patched: the whole row, workspace-scoped, and excluding the tab that asked —
+ * it has the response. A delete carries `entityTypeId` beside the row, the way
+ * `entity:deleted` and `group:deleted` do: the id is what a listener drops, and
+ * the row is what it can say about what went.
+ *
+ * Both are sent *after* the write, so every refusal above them — the duplicate
+ * name, the in-use 409, the last-type 409 — broadcasts nothing at all.
+ */
+function broadcastTypeCreated(type, { workspaceId, actor, excludeClientId, source }) {
+  broadcast('entity-type:created', {
+    entityType: typeRow(type),
+    actor: { label: actor.label, type: actor.type },
+  }, { workspaceId, excludeClientId });
+  log('light', `entity-type:created ${type._id} "${type.name}" → workspace ${workspaceId}${excludeClientId ? `, excluding client ${excludeClientId}` : ' (no client excluded)'} (source: ${source})`);
+}
+
+function broadcastTypeDeleted(type, { workspaceId, actor, excludeClientId, source }) {
+  broadcast('entity-type:deleted', {
+    entityTypeId: String(type._id),
+    entityType: typeRow(type),
+    actor: { label: actor.label, type: actor.type },
+  }, { workspaceId, excludeClientId });
+  log('light', `entity-type:deleted ${type._id} "${type.name}" → workspace ${workspaceId}${excludeClientId ? `, excluding client ${excludeClientId}` : ' (no client excluded)'} (source: ${source})`);
 }
 
 /** Loads a type in the caller's workspace, or null for a foreign/malformed/missing id. */
@@ -281,7 +338,11 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /entity-types
-router.post('/', async (req, res, next) => {
+//
+// `requireActor` for the frame's sake, as on the two writes below and in
+// routes/tags.js: `entity-type:created` names who added the type, because the
+// other tab shows it in a toast beside the row it just gained.
+router.post('/', requireActor, async (req, res, next) => {
   try {
     const { name, icon = null, color = null, order } = req.body ?? {};
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -306,7 +367,16 @@ router.post('/', async (req, res, next) => {
     });
 
     log('normal', `created entity type ${type._id} "${type.name}" in workspace ${req.workspaceId} (source: POST /entity-types)`);
+    broadcastTypeCreated(type, {
+      workspaceId: req.workspaceId,
+      actor: req.actor,
+      excludeClientId: req.headers['x-sse-client-id'] ?? null,
+      source: `POST /entity-types by ${req.actor.label} in workspace ${req.workspaceId}`,
+    });
+
     const response = { ...type.toObject() };
+    // The near-duplicate warning is for the caller that chose the name, not for
+    // another tab: the row it warns about is in the frame either way.
     if (similar.length) response.warning = `Similar types exist: ${similar.join(', ')}`;
     res.status(201).json(response);
   } catch (err) {
@@ -422,7 +492,9 @@ router.put('/:id', requireActor, async (req, res, next) => {
 });
 
 // DELETE /entity-types/:id
-router.delete('/:id', async (req, res, next) => {
+//
+// `requireActor` for the frame, as on the two writes above.
+router.delete('/:id', requireActor, async (req, res, next) => {
   try {
     const type = await findOwn(req);
     if (!type) return res.status(404).json({ error: 'Not found' });
@@ -436,6 +508,12 @@ router.delete('/:id', async (req, res, next) => {
 
     await EntityType.deleteOne({ _id: type._id, workspaceId: req.workspaceId });
     log('normal', `deleted entity type ${type._id} "${type.name}" in workspace ${req.workspaceId} (source: DELETE /entity-types)`);
+    broadcastTypeDeleted(type, {
+      workspaceId: req.workspaceId,
+      actor: req.actor,
+      excludeClientId: req.headers['x-sse-client-id'] ?? null,
+      source: `DELETE /entity-types/${type._id} by ${req.actor.label} in workspace ${req.workspaceId}`,
+    });
     res.status(204).send();
   } catch (err) {
     next(err);
