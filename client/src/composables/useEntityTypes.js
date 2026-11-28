@@ -18,6 +18,13 @@ import { getEntityTypes } from '../api/entityTypes.js';
  * whole row, so the shared list is **patched rather than refetched** — the
  * pills, the pickers and the category colours all read this one list, and a
  * request per frame would buy nothing the frame has not already said.
+ * `applyEntityTypeCreated` and `applyEntityTypeDeleted` are the same half of
+ * the other two frames (KOL-158), which exist because the registry now has a
+ * screen (`components/EntityTypeSettings.vue`): a type added or removed in
+ * another tab used to leave this one offering a picker without it and a pill
+ * for a type that is gone. All three are also what the *writing* tab applies
+ * to its own response — it is excluded from its own frames — so one screen's
+ * write repaints every pill in the layout without a refetch.
  *
  * An empty registry (a workspace that predates it and was never backfilled with
  * server/scripts/seed-entity-types.js) leaves the pills and pickers empty: the
@@ -30,7 +37,7 @@ import { getEntityTypes } from '../api/entityTypes.js';
  *   light   — a failed load, or one that found no types, naming what asked; and
  *             every frame that could not be applied, with why
  *   normal  — light, plus each load and how many types it brought, and each
- *             frame applied: which row changed, from what source
+ *             frame or own write applied: which row changed, from what source
  *   verbose — normal, plus the names in order
  */
 
@@ -91,8 +98,74 @@ function applyEntityTypeUpdate(row, source = 'unknown') {
   const was = idx === -1 ? null : types.value[idx].name;
   const next = idx === -1 ? [...types.value, row] : types.value.map((t, i) => (i === idx ? row : t));
 
-  types.value = next.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name).localeCompare(String(b.name)));
+  types.value = sorted(next);
   log('normal', `applied an entity type update: ${id} ${was === null ? 'was not in this tab\'s list, appended' : `"${was}" →`} "${row.name}" (source: ${source})`);
+  return true;
+}
+
+/** The server's own key: `order`, then name — the order `GET /entity-types` gives. */
+function sorted(rows) {
+  return [...rows].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name).localeCompare(String(b.name)));
+}
+
+/**
+ * Adds a row to the shared list — from an `entity-type:created` frame, or from
+ * this tab's own `POST /entity-types` once it has answered (KOL-158).
+ *
+ * The other half of `applyEntityTypeDeleted` below, and the reason both exist:
+ * until the registry had a screen, a tab's copy of it could only go stale by a
+ * rename, so the rename frame was the only one KOL-151 needed. Now that a
+ * create and a delete are ordinary browser writes, a tab that heard neither
+ * would offer a category picker missing the option another tab just added and
+ * render a pill for a type that is gone — the registry is loaded once, on
+ * mount. Patched from the payload, which carries the whole row, so no frame
+ * costs a request.
+ *
+ * Idempotent on `_id`: a row already here is replaced rather than doubled, so
+ * the writing tab applying its own response and a frame arriving for the same
+ * row cannot leave two.
+ *
+ * `source` names the caller, for the log. Returns whether anything changed.
+ */
+function applyEntityTypeCreated(row, source = 'unknown') {
+  if (!row?._id) {
+    log('light', `ignored an entity type create with no _id (source: ${source})`);
+    return false;
+  }
+
+  const id = String(row._id);
+  const seen = types.value.some(t => String(t._id) === id);
+  types.value = sorted(seen ? types.value.map(t => (String(t._id) === id ? row : t)) : [...types.value, row]);
+  log('normal', `applied an entity type create: ${id} "${row.name}"${seen ? ' (already in this tab\'s list, replaced)' : ''} (source: ${source})`);
+  return true;
+}
+
+/**
+ * Drops a row from the shared list — from an `entity-type:deleted` frame, or
+ * from this tab's own `DELETE /entity-types/:id` once it has answered.
+ *
+ * A delete the server allowed is a type nothing in the workspace names (it is
+ * 409 otherwise), so there is no entity on screen to repaint; what is left
+ * stale is the pill and the picker, and dropping the row is the whole of the
+ * repair. A row this tab never had is not a failure — a type created and
+ * deleted again while this tab was open — so it is logged and reported false.
+ */
+function applyEntityTypeDeleted(id, source = 'unknown') {
+  if (!id) {
+    log('light', `ignored an entity type delete with no id (source: ${source})`);
+    return false;
+  }
+
+  const wanted = String(id);
+  const kept = types.value.filter(t => String(t._id) !== wanted);
+  if (kept.length === types.value.length) {
+    log('light', `an entity type delete named ${wanted}, which is not in this tab's list (source: ${source})`);
+    return false;
+  }
+
+  const was = types.value.find(t => String(t._id) === wanted)?.name;
+  types.value = kept;
+  log('normal', `applied an entity type delete: ${wanted} "${was}" (source: ${source})`);
   return true;
 }
 
@@ -108,5 +181,8 @@ export function useEntityTypes() {
     return { bg: c?.bg || fallback.bg, color: c?.text || fallback.color };
   }
 
-  return { types, names, styleFor, loadEntityTypes, applyEntityTypeUpdate };
+  return {
+    types, names, styleFor, loadEntityTypes,
+    applyEntityTypeUpdate, applyEntityTypeCreated, applyEntityTypeDeleted,
+  };
 }

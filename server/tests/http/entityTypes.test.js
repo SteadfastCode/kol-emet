@@ -42,6 +42,15 @@
  *   both excluding the tab that asked. Without the second one the other tab
  *   went on rendering a pill no entity carried any more.
  *
+ * The group after it covers what a **create and a delete** now leave behind
+ * (KOL-158): one frame each, on the same terms, and *no* frame from any of the
+ * three refusals — the duplicate name, the in-use count, the workspace's last
+ * type. KOL-151 left those two writes unbroadcast because neither can strand a
+ * name a tab is filtering on; that stopped being the whole story once the
+ * registry got a screen a user adds and removes types from
+ * (`client/src/components/EntityTypeSettings.vue`), since the browser loads the
+ * registry once on mount and nothing else fetches it.
+ *
  * Falsification for that group: drop `logEach` and the per-entity counts go to
  * zero; make it fire-and-forget and they go flaky; drop the `movedBy` bound and
  * the 413 case fails; drop `broadcastTypeRenamed` and the frame cases fail with
@@ -182,6 +191,66 @@ function probed(who, what, res) {
   log('normal', `${who.email} ${what} → ${res.status} ${JSON.stringify(res.body)}`);
   return res;
 }
+
+/**
+ * ─── Listening to the fan-out ───────────────────────────────────────────────
+ * Shared by the two frame groups at the bottom — the rename's (KOL-151) and the
+ * create's and delete's (KOL-158) — because both ask the same question of the
+ * same broadcaster: which clients received the frame, and which did not.
+ */
+
+/** Every client registered by the current test, dropped in afterEach. */
+let connected = [];
+let clientCounter = 0;
+
+/** One SSE frame as the broadcaster wrote it. */
+function parseFrame(chunk) {
+  const event = /^event: (.*)$/m.exec(chunk)?.[1] ?? null;
+  const raw = /^data: (.*)$/m.exec(chunk)?.[1] ?? null;
+  let data = null;
+  try { data = raw === null ? null : JSON.parse(raw); } catch { data = raw; }
+  return { event, data };
+}
+
+/**
+ * A listener in `who`'s workspace, collecting what it receives. The returned
+ * `clientId` is what a browser would echo back as `X-SSE-Client-Id`.
+ *
+ * `named` reads one frame name only, never "received nothing at all": the
+ * fixture entities are created through `POST /entities`, which logs and
+ * broadcasts `entity:created` fire-and-forget, so one of those can still land
+ * at any point after.
+ */
+function listen(label, who) {
+  const received = [];
+  const clientId = `${label}-${(clientCounter += 1)}`;
+  const added = addClient(clientId, { write: (chunk) => received.push(parseFrame(chunk)) },
+    who.workspaceId, { userId: who.userId });
+  assert.ok(added.accepted, `the broadcaster refused a listener for ${label}: ${JSON.stringify(added)}`);
+  connected.push(clientId);
+  log('normal', `listening as ${clientId} in workspace ${who.workspaceId} (source: addClient)`);
+  return {
+    clientId,
+    named: (event) => {
+      const frames = received.filter(f => f.event === event);
+      for (const frame of frames) log('verbose', `${clientId} received ${frame.event}: ${JSON.stringify(frame.data)}`);
+      return frames;
+    },
+  };
+}
+
+/** Reads back the user id `listen` needs to register a listener for `who`. */
+async function withUserId(who) {
+  who.userId = String((await User.findOne({ email: who.email }).select('_id').lean())._id);
+  return who;
+}
+
+// Every listener any test opened, whichever group it was in. Harmless for the
+// groups that open none.
+afterEach(() => {
+  for (const clientId of connected) removeClient(clientId);
+  connected = [];
+});
 
 before(async () => {
   await db.connect();
@@ -554,46 +623,6 @@ describe("a rename's audit trail and frames (KOL-151)", () => {
   const MOVED = ['The Conductor', 'The Stoker', 'The Signaller'];
   const STAYS = 'The Yard';
 
-  /** Every client registered by the current test, dropped in afterEach. */
-  let connected = [];
-  let clientCounter = 0;
-
-  /** One SSE frame as the broadcaster wrote it. */
-  function parseFrame(chunk) {
-    const event = /^event: (.*)$/m.exec(chunk)?.[1] ?? null;
-    const raw = /^data: (.*)$/m.exec(chunk)?.[1] ?? null;
-    let data = null;
-    try { data = raw === null ? null : JSON.parse(raw); } catch { data = raw; }
-    return { event, data };
-  }
-
-  /**
-   * A listener in `who`'s workspace, collecting what it receives. The returned
-   * `clientId` is what a browser would echo back as `X-SSE-Client-Id`.
-   *
-   * `named` reads one frame name only, never "received nothing at all": the
-   * fixture entities are created through `POST /entities`, which logs and
-   * broadcasts `entity:created` fire-and-forget, so one of those can still land
-   * at any point after.
-   */
-  function listen(label, who) {
-    const received = [];
-    const clientId = `${label}-${(clientCounter += 1)}`;
-    const added = addClient(clientId, { write: (chunk) => received.push(parseFrame(chunk)) },
-      who.workspaceId, { userId: who.userId });
-    assert.ok(added.accepted, `the broadcaster refused a listener for ${label}: ${JSON.stringify(added)}`);
-    connected.push(clientId);
-    log('normal', `listening as ${clientId} in workspace ${who.workspaceId} (source: addClient)`);
-    return {
-      clientId,
-      named: (event) => {
-        const frames = received.filter(f => f.event === event);
-        for (const frame of frames) log('verbose', `${clientId} received ${frame.event}: ${JSON.stringify(frame.data)}`);
-        return frames;
-      },
-    };
-  }
-
   /** The 'updated' entries in `renamer`'s workspace, by entity title, sorted. */
   async function updatedTitles() {
     const docs = await ChangeLog.find({ workspaceId: renamer.workspaceId, changeType: 'updated' })
@@ -609,13 +638,10 @@ describe("a rename's audit trail and frames (KOL-151)", () => {
   }
 
   before(async () => {
-    renamer = await registerUser('renamer@example.test');
-    stranger = await registerUser('rename-stranger@example.test');
-    // registerUser reads the workspace back but not the user; this group needs
-    // the id to register a listener the broadcaster will count.
-    for (const who of [renamer, stranger]) {
-      who.userId = String((await User.findOne({ email: who.email }).select('_id').lean())._id);
-    }
+    // registerUser reads the workspace back but not the user; a listener the
+    // broadcaster will count needs the id, which `withUserId` reads.
+    renamer = await withUserId(await registerUser('renamer@example.test'));
+    stranger = await withUserId(await registerUser('rename-stranger@example.test'));
     assert.notEqual(renamer.workspaceId, stranger.workspaceId);
   });
 
@@ -640,11 +666,6 @@ describe("a rename's audit trail and frames (KOL-151)", () => {
       assert.equal((await postEntity(renamer, 'Characters', title)).status, 201);
     }
     assert.equal((await postEntity(renamer, 'Worlds', STAYS)).status, 201);
-  });
-
-  afterEach(() => {
-    for (const clientId of connected) removeClient(clientId);
-    connected = [];
   });
 
   test('writes one ChangeLog entry per moved entity, pairing the old category with the new', async () => {
@@ -828,5 +849,151 @@ describe("a rename's audit trail and frames (KOL-151)", () => {
     assert.equal(typeFrames[0].data.from, 'Characters');
     assert.equal(typeFrames[0].data.to, 'CHARACTERS');
     assert.equal(other.named('entity:updated').length, MOVED.length);
+  });
+});
+
+describe("a create's and a delete's frames (KOL-158)", () => {
+  /**
+   * The registry's other two writes, which broadcast nothing until the registry
+   * had a screen. KOL-151 gave the rename its frame and left these out, on the
+   * reasoning that "neither can strand a name a tab is filtering on" — true of
+   * the name, and beside the point once a user can add and remove types from
+   * `client/src/components/EntityTypeSettings.vue`: the browser loads the
+   * registry once, when the layout mounts
+   * (`client/src/composables/useEntityTypes.js`), so a type added or removed in
+   * another tab left this one offering a category picker without it and
+   * rendering a pill for a type that is gone, with only a reload to repair it.
+   *
+   * Asserted on the rename frame's terms, since it is the same list being
+   * patched: the whole row, delivered to the workspace and to no other, and
+   * never to the tab that asked — it has the response. Plus the half that is
+   * easy to get wrong in the other direction: **a refused write sends nothing
+   * at all**, which is what putting the broadcast after the write buys, and
+   * which matters here because every refusal this route gives (the duplicate
+   * name, the in-use count, the last type) is one a person will hit while
+   * tidying a vocabulary.
+   *
+   * Falsification: drop either broadcast and its case fails with no frame; move
+   * one above its write and the refusal cases see a frame for something that
+   * never happened; drop `excludeClientId` and the writing tab receives its own
+   * write; drop `workspaceId` and every case fails, since `lib/broadcaster.js`
+   * then delivers to nobody.
+   */
+  let writer;
+  let outsider;
+
+  before(async () => {
+    writer = await withUserId(await registerUser('type-writer@example.test'));
+    outsider = await withUserId(await registerUser('type-outsider@example.test'));
+    assert.notEqual(writer.workspaceId, outsider.workspaceId);
+  });
+
+  /** POSTs a type as `writer`, optionally echoing a client id. */
+  function create(body, clientId = null) {
+    const req = writer.agent.post('/entity-types');
+    if (clientId) req.set('X-SSE-Client-Id', clientId);
+    return req.send(body);
+  }
+
+  /** DELETEs one of `writer`'s types, optionally echoing a client id. */
+  function destroy(typeId, clientId = null) {
+    const req = writer.agent.delete(`/entity-types/${typeId}`);
+    if (clientId) req.set('X-SSE-Client-Id', clientId);
+    return req.send();
+  }
+
+  test('a create sends one entity-type:created, scoped to the workspace and never to the writer', async () => {
+    const writing = listen('type-writer/writing-tab', writer);
+    const other = listen('type-writer/other-tab', writer);
+    const outside = listen('type-outsider/tab', outsider);
+
+    const res = probed(writer, 'POST /entity-types "Airships"', await create({ name: 'Airships', icon: '🎈', color: { bg: '#111111', text: '#EEEEEE' } }, writing.clientId));
+    assert.equal(res.status, 201, JSON.stringify(res.body));
+
+    const frames = other.named('entity-type:created');
+    assert.equal(frames.length, 1, 'exactly one frame for the new type');
+    assert.deepEqual(frames[0].data.entityType, {
+      _id: String(res.body._id),
+      name: 'Airships',
+      icon: '🎈',
+      color: { bg: '#111111', text: '#EEEEEE' },
+      order: res.body.order,
+    }, 'the whole row, so a tab paints the new pill and fills its picker without a refetch');
+    assert.deepEqual(frames[0].data.actor, { label: writer.email, type: 'user' });
+
+    assert.equal(writing.named('entity-type:created').length, 0, 'the writing tab has the response');
+    assert.equal(outside.named('entity-type:created').length, 0, 'another workspace sees nothing');
+  });
+
+  test('a delete sends one entity-type:deleted, scoped to the workspace and never to the writer', async () => {
+    const created = await createType(writer, { name: 'Signals', icon: '🚦' });
+    const writing = listen('type-writer/writing-tab', writer);
+    const other = listen('type-writer/other-tab', writer);
+    const outside = listen('type-outsider/tab', outsider);
+
+    const res = await destroy(created._id, writing.clientId);
+    assert.equal(res.status, 204, JSON.stringify(res.body));
+
+    const frames = other.named('entity-type:deleted');
+    assert.equal(frames.length, 1, 'exactly one frame for the type that went');
+    // The id is what a listener drops; the row is what it can say went, and its
+    // name is what a category filter standing on that pill is set to.
+    assert.equal(frames[0].data.entityTypeId, String(created._id));
+    assert.equal(frames[0].data.entityType.name, 'Signals');
+    assert.equal(frames[0].data.entityType.icon, '🚦');
+    assert.deepEqual(frames[0].data.actor, { label: writer.email, type: 'user' });
+
+    assert.equal(writing.named('entity-type:deleted').length, 0, 'the writing tab has the response');
+    assert.equal(outside.named('entity-type:deleted').length, 0, 'another workspace sees nothing');
+  });
+
+  test('a create refused as a duplicate name sends no frame', async () => {
+    await createType(writer, { name: 'Rolling Stock' });
+    const other = listen('type-writer/other-tab', writer);
+
+    const res = probed(writer, 'POST /entity-types "rolling stock"', await create({ name: 'rolling stock' }));
+    assert.equal(res.status, 409);
+
+    assert.equal(other.named('entity-type:created').length, 0, 'nothing was created, so nothing is announced');
+  });
+
+  test('a delete refused while the type is in use sends no frame', async () => {
+    const inUse = await createType(writer, { name: 'Yards' });
+    assert.equal((await postEntity(writer, 'Yards', 'The Marshalling Yard')).status, 201);
+    const other = listen('type-writer/other-tab', writer);
+
+    const res = probed(writer, 'DELETE in-use "Yards"', await destroy(inUse._id));
+    assert.equal(res.status, 409);
+    assert.equal(res.body.entities, 1, 'the refusal names what still holds the type');
+
+    assert.equal(other.named('entity-type:deleted').length, 0, 'the type is still there, so nothing is announced');
+  });
+
+  test("a delete refused as a workspace's last type sends no frame", async () => {
+    const last = await withUserId(await registerUser('type-last@example.test'));
+    // Directly, as the 'last type' case above does: the route would refuse most
+    // of these deletes, since the starter content uses the types.
+    await EntityType.deleteMany({ workspaceId: last.workspaceId, name: { $ne: 'Timeline' } });
+    const timeline = await typeNamed(last, 'Timeline');
+    const other = listen('type-last/other-tab', last);
+
+    const res = probed(last, 'DELETE last type "Timeline"', await last.agent.delete(`/entity-types/${timeline._id}`));
+    assert.equal(res.status, 409);
+    assert.match(res.body.error, /at least one entity type/);
+
+    assert.equal(other.named('entity-type:deleted').length, 0);
+    assert.ok(await EntityType.findById(timeline._id), 'and the type is still there');
+  });
+
+  test('a rename still sends the rename frame alone, and no create or delete frame', async () => {
+    const type = await createType(writer, { name: 'Sidings' });
+    const other = listen('type-writer/other-tab', writer);
+
+    const res = await writer.agent.put(`/entity-types/${type._id}`).send({ name: 'Loops' });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+
+    assert.equal(other.named('entity-type:updated').length, 1, 'the rename frame is unchanged');
+    assert.equal(other.named('entity-type:created').length, 0, 'a rename creates nothing');
+    assert.equal(other.named('entity-type:deleted').length, 0, 'and retires no row, only a name');
   });
 });

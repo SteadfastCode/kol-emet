@@ -223,8 +223,13 @@ vi.mock('../composables/useNavigation.js', async () => {
 const { useEvents, addToast } = vi.hoisted(() => ({ useEvents: vi.fn(), addToast: vi.fn() }));
 vi.mock('../composables/useEvents.js', () => ({ useEvents }));
 vi.mock('../composables/useToasts.js', () => ({ useToasts: () => ({ addToast }) }));
-const { loadEntityTypes, applyEntityTypeUpdate } = vi.hoisted(() => ({
-  loadEntityTypes: vi.fn(), applyEntityTypeUpdate: vi.fn(),
+const {
+  loadEntityTypes, applyEntityTypeUpdate, applyEntityTypeCreated, applyEntityTypeDeleted,
+} = vi.hoisted(() => ({
+  loadEntityTypes: vi.fn(),
+  applyEntityTypeUpdate: vi.fn(),
+  applyEntityTypeCreated: vi.fn(),
+  applyEntityTypeDeleted: vi.fn(),
 }));
 vi.mock('../composables/useEntityTypes.js', async () => {
   const { ref } = await import('vue');
@@ -232,7 +237,7 @@ vi.mock('../composables/useEntityTypes.js', async () => {
     useEntityTypes: () => ({
       types: ref([]), names: ref(['Characters', 'Worlds']),
       styleFor: () => ({ bg: '#333', color: '#aaa' }),
-      loadEntityTypes, applyEntityTypeUpdate,
+      loadEntityTypes, applyEntityTypeUpdate, applyEntityTypeCreated, applyEntityTypeDeleted,
     }),
   };
 });
@@ -256,9 +261,10 @@ describe('WikiLayout settings', () => {
     // Import sits directly under Export: they are the two halves of one file format (KOL-077).
     // Collaborators follows Workspace, because it is about the same workspace (KOL-124).
     // "Invitations for you" would sit between them, and is absent here: this account has none.
+    // Entity types sits directly above Tags: both are the workspace's own vocabulary (KOL-158).
     expect(titles).toEqual([
       'Workspace', 'Collaborators', 'Account', 'Password', 'Passkeys', 'Recently deleted',
-      'Export workspace', 'Import workspace', 'Tags', 'Delete account',
+      'Export workspace', 'Import workspace', 'Entity types', 'Tags', 'Delete account',
     ]);
   });
 
