@@ -63,7 +63,7 @@ registration, or removes a feature.
   for `diff-policy`).
 
 
-- [ ] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody**
+- [x] **(KOL-159) The relationship vocabulary is seeded, read by the generator, and offered to nobody**
   `server/src/lib/workspaceSeeder.js:99-100` says of the relationship types it inserts into every new workspace:
   "These matter most: without them the relationship picker is empty and the core feature of the product looks
   broken on first use." There is no picker. `/relationship-types` has all four verbs with a `?q=` fuzzy filter and
